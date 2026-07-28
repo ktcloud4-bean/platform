@@ -32,9 +32,33 @@ config.xml 내보내기 → 마스킹 → 커밋
 | `<system><user><password>` | 비밀번호 해시 |
 | `<cert><prv>` | **TLS 개인키** (base64, 약 4KB) |
 | `<system><user><apikeys>` | API 키 |
+| `<AcmeClient>...<dns_* 자격증명>` | DNS-01 공급자 API 토큰 · 키 · 비밀번호 |
 | `<revision>` | 저장할 때마다 바뀌는 타임스탬프 — 매일 거짓 diff 를 만든다 |
 
 `.gitignore` 가 `*.raw.xml` 을 막고 있다. 원본은 `config.raw.xml` 로 두고, 마스킹한 버전만 `config.xml` 로 커밋한다.
+
+## 저장소 구성과 도구
+
+| 경로 | 역할 |
+|---|---|
+| `config.xml` | 승인해 커밋한 OPNsense 설정 스냅샷 |
+| `scripts/normalize.py` | 원본 XML 에서 변동 노이즈를 제거하고 시크릿을 마스킹하는 변환기 |
+| `scripts/check-drift.sh` | 라이브 설정을 받아 정규화한 뒤 `config.xml` 과 비교하는 실행 진입점 |
+| `tests/test_normalize.py` | 시크릿 마스킹과 노이즈 제거의 회귀 테스트 |
+| [`docs/runbook/`](../../docs/runbook/) | 사람이 판단하며 따라야 할 운영 절차와 검증·복구 기준 |
+
+스크립트는 OPNsense 컴포넌트에만 쓰이므로 `infra/opnsense/scripts/` 가 소유한다. 저장소 공통 도구가 되기 전에는 최상위 `scripts/` 로 올리지 않는다.
+
+저장소 루트에서 실행한다.
+
+```sh
+python3 -m unittest discover -s infra/opnsense/tests -v
+infra/opnsense/scripts/check-drift.sh
+# 라이브 변경이 정당하다고 확인한 뒤에만 실행
+infra/opnsense/scripts/check-drift.sh --update
+```
+
+`README.md` 는 구성과 불변 원칙, 스크립트는 반복 실행 가능한 기계 동작, runbook 은 작업 시점·전제조건·검증·실패 시 복구처럼 사람의 판단이 필요한 절차를 맡는다. runbook 에 스크립트 구현을 복사하지 않고 정확한 경로로 링크한다.
 
 ## 현재 구성
 

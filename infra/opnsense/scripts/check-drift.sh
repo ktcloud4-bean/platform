@@ -12,19 +12,48 @@
 #     export OPN_KEY=...
 #     export OPN_SECRET=...
 #
-# 사용:
-#   ./check-drift.sh              # 차이가 있으면 종료코드 1
-#   ./check-drift.sh --update     # 차이를 Git 사본에 반영 (승인)
-set -uo pipefail
+# 사용 (저장소 루트 기준):
+#   infra/opnsense/scripts/check-drift.sh              # 차이가 있으면 종료코드 1
+#   infra/opnsense/scripts/check-drift.sh --update     # 차이를 Git 사본에 반영 (승인)
+set -euo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+COMPONENT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OPN_URL="${OPN_URL:-https://10.10.10.1}"
-COMMITTED="$HERE/config.xml"
+COMMITTED="$COMPONENT_DIR/config.xml"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-UPDATE=0
-[ "${1:-}" = "--update" ] && UPDATE=1
+usage() {
+  cat <<EOF
+사용법: $0 [--update]
+
+옵션 없이 실행하면 현재 OPNsense 설정과 Git 사본을 비교합니다.
+--update를 지정하면 정규화한 현재 설정으로 Git 사본을 갱신합니다.
+EOF
+}
+
+if [ "$#" -gt 1 ]; then
+  usage >&2
+  exit 2
+fi
+
+case "${1:-}" in
+  "")
+    UPDATE=0
+    ;;
+  --update)
+    UPDATE=1
+    ;;
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
 
 if [ -z "${OPN_KEY:-}" ] || [ -z "${OPN_SECRET:-}" ]; then
   echo "OPN_KEY / OPN_SECRET 환경변수가 필요합니다." >&2
@@ -44,7 +73,7 @@ if ! curl -sf "${CURL_TLS[@]}" -u "$OPN_KEY:$OPN_SECRET" \
 fi
 
 echo "→ 정규화 (revision 제거 · 시크릿 마스킹)"
-python3 "$HERE/normalize.py" "$TMP/live.raw.xml" -o "$TMP/live.xml" || exit 2
+python3 "$SCRIPT_DIR/normalize.py" "$TMP/live.raw.xml" -o "$TMP/live.xml"
 
 if [ ! -f "$COMMITTED" ]; then
   echo "Git 사본이 없습니다. 최초 등록:"
@@ -73,7 +102,8 @@ fi
 cat <<'MSG'
 판단이 필요합니다.
 
-  정당한 변경  → ./check-drift.sh --update 후 커밋 (왜 바꿨는지 메시지에)
+  정당한 변경  → infra/opnsense/scripts/check-drift.sh --update 후 커밋
+                  (왜 바꿨는지 메시지에)
   부당한 변경  → 웹 UI 에서 되돌린 뒤 다시 실행
 
 이 계층은 자동 교정을 하지 않습니다. 탐지는 자동, 교정은 사람이 판단합니다.

@@ -71,4 +71,5 @@ Vault 가 올라가기 전까지는 **private 레포 + 시크릿 필드 제거**
 ## 관련 문서
 
 - [IP · VLAN 대장](docs/ip-plan.md)
+- [운영 runbook 작성 기준](docs/runbook/README.md)
 - 아키텍처 결정(ADR) — Notion `Zero Trust - Bean / 결정 & 리스크 로그`
