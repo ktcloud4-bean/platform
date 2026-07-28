@@ -64,11 +64,11 @@ infra/opnsense/scripts/check-drift.sh --update
 
 | 항목 | 값 |
 |---|---|
-| 호스트명 | `fw01.imcherry5778.xyz` |
+| 호스트명 | `opnsense.imcherry5778.xyz` |
 | **WAN** (`igc1`) | ISP DHCP — 공인 IP |
-| **LAN** (`igc0`) | `10.10.10.1/24` — 랩 네트워크 |
-| **HOME** (`igc2`) | `10.10.60.1/24` — 다운스트림 (프로젝트 범위 외) |
-| `igc3` | 미할당 |
+| `igc0` | 미할당 — RECOVERY 예약 |
+| **LAN** (`igc2`) | `10.10.10.1/24` — 랩 네트워크 · Proxmox 직결 |
+| **HOME** (`igc3`) | `10.10.60.1/24` — 다운스트림 (프로젝트 범위 외) |
 | DNS | Unbound (Override DNS 해제, DNSSEC 활성) |
 | DHCP | **Dnsmasq** — ISC DHCP 는 26.7 에서 폐기됨 |
 
@@ -116,7 +116,7 @@ SSH 공개키는 반드시 **`System → Access → Users → root → Authorize
 | 항목 | 상태 |
 |---|---|
 | SSH `Permit password login` | 해제 (공개키만) |
-| SSH `Listen Interfaces` | **LAN 으로 제한 필요** ← 현재 `All` |
+| SSH `Listen Interfaces` | LAN 으로 제한 |
 | 웹 GUI `Listen Interfaces` | **LAN 으로 제한 필요** ← 현재 `All` |
 | WAN `Block private networks` | 활성 |
 | WAN `Block bogon networks` | 활성 |

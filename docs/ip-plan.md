@@ -6,14 +6,14 @@
 
 ## 1. 인터페이스 구성
 
-OPNsense(`fw01`)가 경계 방화벽이자 랩의 게이트웨이다.
+OPNsense(`opnsense`)가 경계 방화벽이자 랩의 게이트웨이다.
 
 | 인터페이스 | 장치 | 대역 | 역할 |
 |---|---|---|---|
 | **WAN** | `igc1` | ISP DHCP (공인) | 인터넷 상행 |
-| **LAN** | `igc0` | `10.10.10.0/24` | **랩 네트워크** |
-| **HOME** | `igc2` | `10.10.60.0/24` | 다운스트림 네트워크 (프로젝트 범위 외) |
-| — | `igc3` | — | 미할당 (예비) |
+| — | `igc0` | — | RECOVERY 예약 — 별도 설계 전 미할당 |
+| **LAN** | `igc2` | `10.10.10.0/24` | **랩 네트워크 · Proxmox 직결** |
+| **HOME** | `igc3` | `10.10.60.0/24` | 다운스트림 네트워크 (프로젝트 범위 외) |
 
 > `HOME` 은 랩과 무관한 다운스트림 망을 위한 인터페이스다. 이 문서는 **LAN 이하의 랩 네트워크**만 다룬다.
 
@@ -40,7 +40,7 @@ OPNsense(`fw01`)가 경계 방화벽이자 랩의 게이트웨이다.
 
 | IP | 호스트 | Phase 2 이전 대상 |
 |---|---|---|
-| `10.10.10.1` | OPNsense (`fw01`) | 관리(10) — 유지 |
+| `10.10.10.1` | OPNsense (`opnsense`) | 관리(10) — 유지 |
 | `10.10.10.10` | proxmox-01 | 관리(10) — 유지 |
 | `10.10.10.20` | warpgate | 관리(10) — 유지 |
 | `10.10.10.50` | k3s-master | → `10.10.20.10` |
@@ -68,7 +68,7 @@ OPNsense(`fw01`)가 경계 방화벽이자 랩의 게이트웨이다.
 관리형 스위치는 현재 계획에 없다. 프로젝트의 유일한 물리 노드인 Proxmox 를 OPNsense 에 직접 연결한다.
 
 ```
-OPNsense igc0 ── 802.1Q trunk ── Proxmox 물리 NIC ── VLAN-aware vmbr0
+OPNsense igc2 ── 802.1Q trunk ── Proxmox 물리 NIC ── VLAN-aware vmbr0
      VLAN 10 관리                     Proxmox 관리 인터페이스
      VLAN 20 플랫폼                   k3s VM
      VLAN 40 DMZ                      외부 노출 VM
@@ -78,7 +78,8 @@ VLAN 간 라우팅과 방화벽 정책은 OPNsense 가 담당하고, Proxmox 는
 
 - VLAN ID 와 3옥텟을 **일치**시킨다 (`VLAN 20` → `10.10.20.x`). IP만 보고 어느 망인지 알 수 있다.
 - **VLAN 1은 쓰지 않는다** — 네트워크 장비의 기본·native VLAN 과 섞여 의도하지 않은 untagged 트래픽이 들어올 수 있다.
-- **한 번에 전부 만들지 않는다.** 20 → 40 → 10 순으로 하나씩 늘리며 그때마다 통신을 확인한다. 관리 VLAN 10 은 Proxmox 접근 단절 위험이 있으므로 마지막에 옮긴다.
+- 최종 트렁크에는 untagged 네트워크를 섞지 않는다. `igc2` 부모는 미할당으로 두고 VLAN 인터페이스에만 주소를 둔다.
+- Phase 2 전환은 RECOVERY 또는 OOB 접근을 확보한 현장에서 한다. Proxmox 관리와 논리 LAN 을 VLAN 10 으로 함께 전환해 검증한 뒤 플랫폼(20), DMZ(40) 순서로 확장한다.
 
 ### 방화벽 규칙 — 이것이 실제 정책이다
 
@@ -102,7 +103,7 @@ VLAN 을 나눈 것 자체는 아무 의미가 없다. 규칙이 정책이다.
 `imcherry5778.xyz` 를 랩이 온전히 사용한다. 하위 존을 두지 않고 평면으로 쓴다.
 
 ```
-imcherry5778.xyz              OPNsense Domain. 장비는 fw01.imcherry5778.xyz
+imcherry5778.xyz              OPNsense Domain. 장비는 opnsense.imcherry5778.xyz
  ├─ sso.…          Keycloak        내부 — Unbound 가 응답
  ├─ argo.…         Argo CD         내부
  ├─ vault.…        Vault           내부

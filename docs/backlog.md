@@ -12,7 +12,7 @@ VLAN 없이 단일 LAN `10.10.10.0/24` 로 운영 중. Proxmox 설치 후 OPNsen
 
 | 계층 | 상태 |
 |---|---|
-| OPNsense | ✅ 엣지 전환 완료. 공인 IP 직접 수신, 2FA, 관리 포트 LAN 제한, 드리프트 탐지 |
+| OPNsense | ✅ 엣지 전환 완료. 공인 IP 직접 수신, 2FA, 인터페이스 재배치, 드리프트 탐지 |
 | Proxmox | ❌ 미설치 — **다음 마일스톤** |
 | k3s | ❌ |
 | Keycloak · Vault · Harbor | ❌ |
@@ -32,9 +32,12 @@ VLAN 없이 단일 LAN `10.10.10.0/24` 로 운영 중. Proxmox 설치 후 OPNsen
 
 **랩에 있어야 가능**
 
-4. **Proxmox 설치** (`10.10.10.10`) — 랩의 실질적 시작
-5. `infra/proxmox/` OpenTofu 구성
-6. OPNsense–Proxmox 직결 802.1Q 트렁크 → VLAN Phase 2
+4. ~~HOME·LAN 물리 인터페이스 재배치~~ ✅ 링크 · 라우트 · DNS · Tailscale · HTTPS 검증 완료
+5. **Proxmox 설치** (`10.10.10.10`) — 랩의 실질적 시작
+6. `igc0` RECOVERY 인터페이스 설계 · 현장 검증
+7. HOME 광범위 허용 규칙을 목적지·포트 기준 최소 권한으로 교체
+8. `infra/proxmox/` OpenTofu 구성
+9. OPNsense–Proxmox 직결 802.1Q tagged-only 트렁크 → VLAN Phase 2
 
 ---
 
@@ -42,9 +45,9 @@ VLAN 없이 단일 LAN `10.10.10.0/24` 로 운영 중. Proxmox 설치 후 OPNsen
 
 ### 관리형 스위치는 현재 계획에서 제외한다
 
-프로젝트에 연결되는 물리 노드는 Proxmox 한 대뿐이다. OPNsense `igc0` 과 Proxmox 물리 NIC 를 직접 연결하고, 이 링크에서 관리(10)·플랫폼(20)·DMZ(40) VLAN 을 802.1Q 로 전달한다. 관리형 스위치는 VLAN 의 필수 조건이 아니다.
+프로젝트에 연결되는 물리 노드는 Proxmox 한 대뿐이다. OPNsense `igc2` 와 Proxmox 물리 NIC 를 직접 연결하고, 이 링크에서 관리(10)·플랫폼(20)·DMZ(40) VLAN 을 802.1Q 로 전달한다. 관리형 스위치는 VLAN 의 필수 조건이 아니다.
 
-두 번째 Proxmox, 프로젝트용 NAS, VLAN 대응 AP 같은 물리 장비가 추가될 때만 도입을 다시 판단한다. 단일 NIC 에서 관리망을 옮기는 동안 잠기는 것을 피하기 위해 실제 전환은 현장에서 플랫폼(20) → DMZ(40) → 관리(10) 순으로 검증한다.
+두 번째 Proxmox, 프로젝트용 NAS, VLAN 대응 AP 같은 물리 장비가 추가될 때만 도입을 다시 판단한다. 최종 트렁크에는 untagged 네트워크를 섞지 않으며, RECOVERY 또는 OOB 접근을 확보한 뒤 관리(10)를 tagged 로 전환하고 플랫폼(20) → DMZ(40) 순서로 검증한다.
 
 ### DNS 는 OPNsense Unbound 가 담당한다. k3s 에 올리지 않는다
 

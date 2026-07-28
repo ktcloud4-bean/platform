@@ -125,7 +125,7 @@
     </wan>
     <lan>
       <enable>1</enable>
-      <if>igc0</if>
+      <if>igc2</if>
       <ipaddr>10.10.10.1</ipaddr>
       <subnet>24</subnet>
       <ipaddrv6>idassoc6</ipaddrv6>
@@ -152,7 +152,7 @@
       <virtual>1</virtual>
     </lo0>
     <opt1>
-      <if>igc2</if>
+      <if>igc3</if>
       <descr>HOME</descr>
       <enable>1</enable>
       <lock>1</lock>
