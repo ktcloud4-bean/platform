@@ -20,6 +20,7 @@ import xml.etree.ElementTree as ET
 # 값을 통째로 가릴 태그. 하위 요소가 아니라 이 태그의 텍스트가 대상이다.
 SECRET_TAGS = {
     "password",          # 사용자 비밀번호 해시
+    "otp_seed",          # TOTP 시드 — 이게 유출되면 2FA 가 무의미해진다
     "prv",               # 인증서 개인키
     "privatekey",
     "private-key",

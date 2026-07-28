@@ -22,14 +22,14 @@
       <scope>system</scope>
       <expires />
       <authorizedkeys>c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUs0SlVIbkNWb005TGtaaXIvb0loSlpyVzIyOUhuN3lPZFlwcStlUHBTRlE=</authorizedkeys>
-      <otp_seed />
+      <otp_seed>***MASKED***</otp_seed>
       <shell />
       <password>***MASKED***</password>
-      <pwd_changed_at>1785199414.8401</pwd_changed_at>
+      <pwd_changed_at>1785236486.5679</pwd_changed_at>
       <landing_page />
       <comment />
       <email />
-      <apikeys />
+      <apikeys>***MASKED***</apikeys>
       <priv />
       <language />
       <descr>System Administrator</descr>
@@ -44,6 +44,7 @@
       <ssl-ciphers />
       <interfaces>lan</interfaces>
       <compression />
+      <authmode>Local+TOTP</authmode>
     </webgui>
     <disablenatreflection>yes</disablenatreflection>
     <usevirtualterminal>1</usevirtualterminal>
@@ -84,6 +85,15 @@
     <disablereplyto>1</disablereplyto>
     <serialspeed>115200</serialspeed>
     <primaryconsole>video</primaryconsole>
+    <authserver>
+      <refid>6a688fb51bc1a</refid>
+      <type>totp</type>
+      <name>Local+TOTP</name>
+      <otpLength>6</otpLength>
+      <timeWindow />
+      <graceperiod />
+      <passwordFirst />
+    </authserver>
   </system>
   <interfaces>
     <wan>
