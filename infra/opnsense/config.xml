@@ -153,7 +153,7 @@
       <subnet>24</subnet>
     </opt1>
   </interfaces>
-  <dnsmasq version="1.0.9" persisted_at="1785226858.64" description="Dnsmasq DNS and DHCP">
+  <dnsmasq version="1.0.9" persisted_at="1785242548.91" description="Dnsmasq DNS and DHCP">
     <enable>1</enable>
     <regdhcp>0</regdhcp>
     <regdhcpstatic>0</regdhcpstatic>
@@ -214,7 +214,7 @@
     <dhcp_ranges uuid="fcc42885-c74f-499b-9aa9-1281711ab875">
       <interface>lan</interface>
       <set_tag />
-      <start_addr>10.10.10.41</start_addr>
+      <start_addr>10.10.10.100</start_addr>
       <end_addr>10.10.10.245</end_addr>
       <subnet_mask />
       <constructor />

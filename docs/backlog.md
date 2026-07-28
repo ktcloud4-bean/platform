@@ -8,7 +8,7 @@
 
 ## 현재 — Phase 1
 
-VLAN 없이 단일 LAN `10.10.10.0/24` 로 운영 중. 관리형 스위치가 들어오면 Phase 2 로 넘어간다 (`ip-plan.md` 3장).
+VLAN 없이 단일 LAN `10.10.10.0/24` 로 운영 중. Proxmox 설치 후 OPNsense 와 Proxmox 를 직결한 802.1Q 트렁크로 Phase 2 로 넘어간다 (`ip-plan.md` 3장).
 
 | 계층 | 상태 |
 |---|---|
@@ -19,45 +19,29 @@ VLAN 없이 단일 LAN `10.10.10.0/24` 로 운영 중. 관리형 스위치가 �
 
 ---
 
-## 미해결 — Proxmox 이전에 처리
-
-### 1. DHCP 풀이 고정 IP 계획을 침범하고 있다 ★
-
-| | 대역 |
-|---|---|
-| `ip-plan.md` 설계 | `.30~.99` 서비스 고정 / `.100~` 동적 |
-| 실제 Dnsmasq | **`.41~.245`** |
-
-`k3s-master .50`, `worker .51/.52`, `netbird .90` 이 전부 DHCP 풀 안에 들어 있다. Proxmox 가 첫 고정 IP 장비가 되므로 **그 전에** 좁힌다.
-
-`Services → Dnsmasq DNS & DHCP → DHCP ranges` → `.100 ~ .245`
-
-### 2. DHCP 이름 등록이 꺼져 있다
-
-Unbound 가 기본 도메인 질의를 Dnsmasq(`127.0.0.1:53053`)로 위임해 두었으나, Dnsmasq 의 `regdhcp` · `regdhcpstatic` 이 둘 다 `0` 이라 등록되는 이름이 없다. **위임 체인만 있고 내용물이 비어 있는 상태.**
-
-`Services → Dnsmasq DNS & DHCP → General → Register DHCP static mappings`
-
----
-
 ## 다음 순서
 
 **원격에서 가능** — 방화벽·인터페이스를 건드리지 않는다
 
-1. DHCP 범위 축소 ← Proxmox 의 전제 조건
-2. DHCP 정적 매핑 이름 등록
-3. ACME 플러그인 + Cloudflare DNS-01 → 와일드카드 인증서 (`ip-plan.md` 4장)
-4. 위 변경을 `check-drift.sh --update` 후 커밋
+1. ~~DHCP 범위 축소~~ ✅ 라이브 적용 · 런타임 검증 완료 (Git 사본은 3번에서 반영)
+2. ACME 플러그인 + Cloudflare DNS-01 → 와일드카드 인증서 (`ip-plan.md` 4장)
+3. 위 변경을 `check-drift.sh --update` 후 커밋
 
 **랩에 있어야 가능**
 
-5. **Proxmox 설치** (`10.10.10.10`) — 랩의 실질적 시작
-6. `infra/proxmox/` OpenTofu 구성
-7. 관리형 스위치 → VLAN Phase 2
+4. **Proxmox 설치** (`10.10.10.10`) — 랩의 실질적 시작
+5. `infra/proxmox/` OpenTofu 구성
+6. OPNsense–Proxmox 직결 802.1Q 트렁크 → VLAN Phase 2
 
 ---
 
 ## 결정된 것
+
+### 관리형 스위치는 현재 계획에서 제외한다
+
+프로젝트에 연결되는 물리 노드는 Proxmox 한 대뿐이다. OPNsense `igc0` 과 Proxmox 물리 NIC 를 직접 연결하고, 이 링크에서 관리(10)·플랫폼(20)·DMZ(40) VLAN 을 802.1Q 로 전달한다. 관리형 스위치는 VLAN 의 필수 조건이 아니다.
+
+두 번째 Proxmox, 프로젝트용 NAS, VLAN 대응 AP 같은 물리 장비가 추가될 때만 도입을 다시 판단한다. 단일 NIC 에서 관리망을 옮기는 동안 잠기는 것을 피하기 위해 실제 전환은 현장에서 플랫폼(20) → DMZ(40) → 관리(10) 순으로 검증한다.
 
 ### DNS 는 OPNsense Unbound 가 담당한다. k3s 에 올리지 않는다
 
