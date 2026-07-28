@@ -23,10 +23,12 @@ VLAN 없이 단일 LAN `10.10.10.0/24` 로 운영 중. Proxmox 설치 후 OPNsen
 
 **원격에서 가능** — 방화벽·인터페이스를 건드리지 않는다
 
-1. ~~DHCP 범위 축소~~ ✅ 라이브 적용 · 런타임 검증 완료 (Git 사본은 3번에서 반영)
-2. ACME 플러그인 + Cloudflare DNS-01 → 와일드카드 인증서 (`ip-plan.md` 4장)
-   - ✅ `infra/opnsense/scripts/normalize.py` ACME DNS 공급자 자격증명 마스킹 · 회귀 테스트 추가
-3. 위 변경을 `infra/opnsense/scripts/check-drift.sh --update` 후 커밋
+1. ~~DHCP 범위 축소~~ ✅ 라이브 적용 · 런타임 검증 · Git 사본 반영 완료
+2. ~~ACME 플러그인 + Cloudflare DNS-01 → 와일드카드 인증서~~ ✅ (`ip-plan.md` 4장)
+   - ✅ 노출된 ACME 계정 키 교체 · 인증서 재발급 · GUI 적용 완료
+   - ✅ 자동 갱신 설정과 실제 cron 등록 검증 완료
+   - ✅ ACME DNS 자격증명 · 계정 개인키 마스킹과 회귀 테스트 추가
+3. ~~위 변경을 `infra/opnsense/scripts/check-drift.sh --update` 후 커밋~~ ✅ 스냅샷 갱신 · 드리프트 없음 확인
 
 **랩에 있어야 가능**
 

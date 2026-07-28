@@ -2,7 +2,7 @@
   <theme>opnsense</theme>
   <system>
     <optimization>normal</optimization>
-    <hostname>fw01</hostname>
+    <hostname>opnsense</hostname>
     <domain>imcherry5778.xyz</domain>
     <dnsallowoverride>0</dnsallowoverride>
     <dnsallowoverride_exclude />
@@ -39,7 +39,7 @@
     <timeservers>0.opnsense.pool.ntp.org 1.opnsense.pool.ntp.org 2.opnsense.pool.ntp.org 3.opnsense.pool.ntp.org</timeservers>
     <webgui>
       <protocol>https</protocol>
-      <ssl-certref>6a67f861bc5a8</ssl-certref>
+      <ssl-certref>6a68e4faf0cba</ssl-certref>
       <port />
       <ssl-ciphers />
       <interfaces>lan</interfaces>
@@ -73,7 +73,7 @@
     <firmware version="1.0.1" persisted_at="1785198670.57" description="Firmware settings">
       <mirror />
       <flavour />
-      <plugins />
+      <plugins>os-acme-client</plugins>
       <type />
       <subscription />
       <reboot>0</reboot>
@@ -94,6 +94,14 @@
       <graceperiod />
       <passwordFirst />
     </authserver>
+    <dns1gw>none</dns1gw>
+    <dns2gw>none</dns2gw>
+    <dns3gw>none</dns3gw>
+    <dns4gw>none</dns4gw>
+    <dns5gw>none</dns5gw>
+    <dns6gw>none</dns6gw>
+    <dns7gw>none</dns7gw>
+    <dns8gw>none</dns8gw>
   </system>
   <interfaces>
     <wan>
@@ -542,8 +550,22 @@
       <zones />
       <templates />
     </captiveportal>
-    <cron version="1.0.4" persisted_at="1785198671.18" description="Cron settings">
-      <jobs />
+    <cron version="1.0.4" persisted_at="1785257329.81" description="Cron settings">
+      <jobs>
+        <job uuid="3b013954-f3a1-4935-86a3-2268cc1fc126">
+          <origin>AcmeClient</origin>
+          <enabled>1</enabled>
+          <minutes>0</minutes>
+          <hours>0</hours>
+          <days>*</days>
+          <months>*</months>
+          <weekdays>*</weekdays>
+          <who>root</who>
+          <command>acmeclient cron-auto-renew</command>
+          <parameters />
+          <description>AcmeClient Cronjob for Certificate AutoRenewal</description>
+        </job>
+      </jobs>
     </cron>
     <DHCRelay version="1.0.1" persisted_at="1785198671.18" description="DHCRelay configuration" />
     <Netflow version="1.0.1" persisted_at="1785198671.19" description="NetFlow configuration">
@@ -911,7 +933,7 @@
       <rules />
     </TrafficShaper>
     <trust>
-      <general version="1.0.1" persisted_at="1785198672.87" description="Trust general settings">
+      <general version="1.0.2" persisted_at="1785255257.53" description="Trust general settings">
         <store_intermediate_certs>0</store_intermediate_certs>
         <install_crls>0</install_crls>
         <fetch_crls>0</fetch_crls>
@@ -925,7 +947,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785226858.83" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785260298.43" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -939,7 +961,7 @@
         <regdhcpdomain />
         <regdhcpstatic>0</regdhcpstatic>
         <noreglladdr6>0</noreglladdr6>
-        <noregrecords>0</noregrecords>
+        <noregrecords>1</noregrecords>
         <txtsupport>0</txtsupport>
         <cacheflush>0</cacheflush>
         <safesearch>0</safesearch>
@@ -1008,9 +1030,356 @@
           <description>Forward default domain to Dnsmasq DHCP</description>
         </dot>
       </dots>
-      <hosts />
+      <hosts>
+        <host uuid="2e478c63-4ca5-484b-93fe-948c41169445">
+          <enabled>1</enabled>
+          <hostname>opnsense</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <rr>A</rr>
+          <mxprio />
+          <mx />
+          <ttl />
+          <server>10.10.10.1</server>
+          <txtdata />
+          <addptr>1</addptr>
+          <description>OPNsense management</description>
+        </host>
+      </hosts>
       <aliases />
     </unboundplus>
+    <AcmeClient version="4.4.0" persisted_at="1785264667.46" description="A secure ACME Client plugin">
+      <settings>
+        <enabled>1</enabled>
+        <autoRenewal>1</autoRenewal>
+        <UpdateCron>3b013954-f3a1-4935-86a3-2268cc1fc126</UpdateCron>
+        <environment />
+        <challengePort>43580</challengePort>
+        <TLSchallengePort>43581</TLSchallengePort>
+        <restartTimeout>600</restartTimeout>
+        <haproxyIntegration>0</haproxyIntegration>
+        <haproxyAclRef />
+        <haproxyActionRef />
+        <haproxyServerRef />
+        <haproxyBackendRef />
+        <logLevel>normal</logLevel>
+        <showIntro>0</showIntro>
+      </settings>
+      <accounts>
+        <account uuid="f03c6132-ac1c-471e-a288-dd528f34ad5f">
+          <id>6a68f878c31b66.99747930</id>
+          <enabled>1</enabled>
+          <name>letsencrypt-production-rotated-20260729</name>
+          <description>Rotated after account key exposure</description>
+          <email>imcherry5778@gmail.com</email>
+          <ca>letsencrypt</ca>
+          <custom_ca />
+          <eab_kid />
+          <eab_hmac />
+          <key>***MASKED***</key>
+          <statusCode>200</statusCode>
+          <statusLastUpdate>1785264267</statusLastUpdate>
+        </account>
+      </accounts>
+      <certificates>
+        <certificate uuid="dd53d03f-56ee-4107-98e6-08261e086945">
+          <id>6a68e4d2c4cb48.62996381</id>
+          <enabled>1</enabled>
+          <name>*.imcherry5778.xyz</name>
+          <description>Wildcard certificate production</description>
+          <altNames />
+          <account>f03c6132-ac1c-471e-a288-dd528f34ad5f</account>
+          <validationMethod>40ef6b11-f19a-412e-8b41-1ee6e68dc97f</validationMethod>
+          <keyLength>key_ec256</keyLength>
+          <ocsp>0</ocsp>
+          <profile />
+          <restartActions />
+          <autoRenewal>1</autoRenewal>
+          <renewInterval>60</renewInterval>
+          <aliasmode>none</aliasmode>
+          <domainalias />
+          <challengealias />
+          <certRefId>6a68e4faf0cba</certRefId>
+          <lastUpdate>1785264337</lastUpdate>
+          <statusCode>200</statusCode>
+          <statusLastUpdate>1785264337</statusLastUpdate>
+        </certificate>
+      </certificates>
+      <validations>
+        <validation uuid="40ef6b11-f19a-412e-8b41-1ee6e68dc97f">
+          <id>6a68e0fed23ad5.39554480</id>
+          <enabled>1</enabled>
+          <name>cloudflare-dns01</name>
+          <description>Cloudflare DNS-01 validation</description>
+          <method>dns01</method>
+          <http_service>opnsense</http_service>
+          <http_opn_autodiscovery>1</http_opn_autodiscovery>
+          <http_opn_interface />
+          <http_opn_ipaddresses />
+          <http_haproxyInject>1</http_haproxyInject>
+          <http_haproxyFrontends />
+          <tlsalpn_service>acme</tlsalpn_service>
+          <tlsalpn_acme_autodiscovery>1</tlsalpn_acme_autodiscovery>
+          <tlsalpn_acme_interface />
+          <tlsalpn_acme_ipaddresses />
+          <dns_service>dns_cf</dns_service>
+          <dns_sleep>0</dns_sleep>
+          <dns_active24_api_key />
+          <dns_active24_api_secret />
+          <dns_ad_key />
+          <dns_ali_key />
+          <dns_ali_secret />
+          <dns_autodns_user />
+          <dns_autodns_password />
+          <dns_autodns_context />
+          <dns_aws_id />
+          <dns_aws_secret />
+          <dns_azuredns_subscriptionid />
+          <dns_azuredns_tenantid />
+          <dns_azuredns_appid />
+          <dns_azuredns_clientsecret />
+          <dns_azuredns_managedidentity>0</dns_azuredns_managedidentity>
+          <dns_bunny_api_key />
+          <dns_cf_email />
+          <dns_cf_key />
+          <dns_cf_token>***MASKED***</dns_cf_token>
+          <dns_cf_account_id>726d79b04d953d983f8483354fff1bb9</dns_cf_account_id>
+          <dns_cf_zone_id>88a4ef16a8b524e9a4a048017423862a</dns_cf_zone_id>
+          <dns_cloudns_auth_id />
+          <dns_cloudns_sub_auth_id />
+          <dns_cloudns_auth_password />
+          <dns_cx_key />
+          <dns_cx_secret />
+          <dns_cyon_user />
+          <dns_cyon_password />
+          <dns_da_key />
+          <dns_da_insecure>1</dns_da_insecure>
+          <dns_ddnss_token />
+          <dns_dgon_key />
+          <dns_dnsexit_auth_user />
+          <dns_dnsexit_auth_pass />
+          <dns_dnsexit_api />
+          <dns_dnshome_password />
+          <dns_dnshome_subdomain />
+          <dns_dnsimple_token />
+          <dns_dnsservices_user />
+          <dns_dnsservices_password />
+          <dns_doapi_token />
+          <dns_do_pid />
+          <dns_do_password />
+          <dns_domeneshop_token />
+          <dns_domeneshop_secret />
+          <dns_dp_id />
+          <dns_dp_key />
+          <dns_dh_key />
+          <dns_duckdns_token />
+          <dns_dyn_customer />
+          <dns_dyn_user />
+          <dns_dyn_password />
+          <dns_dynu_clientid />
+          <dns_dynu_secret />
+          <dns_freedns_user />
+          <dns_freedns_password />
+          <dns_fornex_api_key />
+          <dns_gandi_livedns_key />
+          <dns_gandi_livedns_token />
+          <dns_gcloud_key />
+          <dns_googledomains_access_token />
+          <dns_googledomains_zone />
+          <dns_gd_key />
+          <dns_gd_secret />
+          <dns_hostingde_server />
+          <dns_hostingde_apiKey />
+          <dns_he_user />
+          <dns_he_password />
+          <dns_he_ddns_key />
+          <dns_infoblox_credentials />
+          <dns_infoblox_server />
+          <dns_inwx_user />
+          <dns_inws_password />
+          <dns_inwx_password />
+          <dns_inwx_shared_secret />
+          <dns_ionos_prefix />
+          <dns_ionos_secret />
+          <dns_ipv64_token />
+          <dns_ispconfig_user />
+          <dns_ispconfig_password />
+          <dns_ispconfig_api />
+          <dns_ispconfig_insecure>1</dns_ispconfig_insecure>
+          <dns_jd_id />
+          <dns_jd_region />
+          <dns_jd_secret />
+          <dns_joker_username />
+          <dns_joker_password />
+          <dns_kinghost_username />
+          <dns_kinghost_password />
+          <dns_knot_server />
+          <dns_knot_key />
+          <dns_lexicon_provider>cloudflare</dns_lexicon_provider>
+          <dns_lexicon_user />
+          <dns_lexicon_token />
+          <dns_limacity_apikey />
+          <dns_linode_key />
+          <dns_linode_v4_key />
+          <dns_loopia_api>https://api.loopia.se/RPCSERV</dns_loopia_api>
+          <dns_loopia_user />
+          <dns_loopia_password />
+          <dns_lua_email />
+          <dns_lua_key />
+          <dns_miab_user />
+          <dns_miab_password />
+          <dns_miab_server />
+          <dns_me_key />
+          <dns_me_secret />
+          <dns_mydnsjp_masterid />
+          <dns_mydnsjp_password />
+          <dns_mythic_beasts_key />
+          <dns_mythic_beasts_secret />
+          <dns_namecheap_user />
+          <dns_namecheap_api />
+          <dns_namecheap_sourceip />
+          <dns_namecom_user />
+          <dns_namecom_token />
+          <dns_namesilo_key />
+          <dns_nederhost_key />
+          <dns_netcup_cid />
+          <dns_netcup_key />
+          <dns_netcup_pw />
+          <dns_njalla_token />
+          <dns_nsone_key />
+          <dns_nsupdate_server />
+          <dns_nsupdate_zone />
+          <dns_nsupdate_key />
+          <dns_oci_cli_user />
+          <dns_oci_cli_tenancy />
+          <dns_oci_cli_region />
+          <dns_oci_cli_key />
+          <dns_online_key />
+          <dns_opnsense_host>localhost</dns_opnsense_host>
+          <dns_opnsense_port>443</dns_opnsense_port>
+          <dns_opnsense_key />
+          <dns_opnsense_token />
+          <dns_opnsense_insecure>0</dns_opnsense_insecure>
+          <dns_ovh_app_key />
+          <dns_ovh_app_secret />
+          <dns_ovh_consumer_key />
+          <dns_ovh_endpoint />
+          <dns_pleskxml_user />
+          <dns_pleskxml_pass />
+          <dns_pleskxml_uri />
+          <dns_pdns_url />
+          <dns_pdns_serverid />
+          <dns_pdns_token />
+          <dns_porkbun_key />
+          <dns_porkbun_secret />
+          <dns_sl_key />
+          <dns_sl_apiver />
+          <dns_sl_token_lifetime />
+          <dns_sl_account_id />
+          <dns_sl_project_name />
+          <dns_sl_login_name />
+          <dns_sl_password />
+          <dns_selfhost_user />
+          <dns_selfhost_password />
+          <dns_selfhost_map />
+          <dns_servercow_username />
+          <dns_servercow_password />
+          <dns_simply_api_key />
+          <dns_simply_account_name />
+          <dns_spaceship_api_key />
+          <dns_spaceship_api_secret />
+          <dns_spaceship_root_domain />
+          <dns_technitium_token />
+          <dns_technitium_hostname />
+          <dns_transip_username />
+          <dns_transip_key />
+          <dns_transip_token_global_key>***MASKED***</dns_transip_token_global_key>
+          <dns_timeweb_token />
+          <dns_udr_user />
+          <dns_udr_password />
+          <dns_uno_key />
+          <dns_uno_user />
+          <dns_vscale_key />
+          <dns_vultr_key />
+          <dns_yandex_token />
+          <dns_zilore_key />
+          <dns_zm_key />
+          <dns_gdnsdk_user />
+          <dns_gdnsdk_password />
+          <dns_acmedns_user />
+          <dns_acmedns_password />
+          <dns_acmedns_subdomain />
+          <dns_acmedns_updateurl />
+          <dns_acmedns_baseurl />
+          <dns_acmeproxy_endpoint />
+          <dns_acmeproxy_username />
+          <dns_acmeproxy_password />
+          <dns_variomedia_key />
+          <dns_schlundtech_user />
+          <dns_schlundtech_password />
+          <dns_easydns_apitoken />
+          <dns_easydns_apikey />
+          <dns_euserv_user />
+          <dns_euserv_password />
+          <dns_leaseweb_key />
+          <dns_cn_user />
+          <dns_cn_password />
+          <dns_arvan_token />
+          <dns_artfiles_username />
+          <dns_artfiles_password />
+          <dns_hetzner_token />
+          <dns_hetznercloud_token />
+          <dns_hexonet_login />
+          <dns_hexonet_password />
+          <dns_1984hosting_user />
+          <dns_1984hosting_password />
+          <dns_kas_login />
+          <dns_kas_authdata />
+          <dns_kas_authtype>plain</dns_kas_authtype>
+          <dns_desec_token />
+          <dns_desec_name />
+          <dns_infomaniak_token />
+          <dns_zone_username />
+          <dns_zone_key />
+          <dns_dynv6_token />
+          <dns_cpanel_user />
+          <dns_cpanel_token />
+          <dns_cpanel_hostname />
+          <dns_regru_username />
+          <dns_regru_password />
+          <dns_nic_username />
+          <dns_nic_password />
+          <dns_nic_client />
+          <dns_nic_secret />
+          <dns_websupport_api_key />
+          <dns_websupport_api_secret />
+          <dns_world4you_username />
+          <dns_world4you_password />
+          <dns_aurora_key />
+          <dns_aurora_secret />
+          <dns_conoha_user />
+          <dns_conoha_password />
+          <dns_conoha_tenantid />
+          <dns_conoha_idapi>https://identity.xxxx.conoha.io/v2.0</dns_conoha_idapi>
+          <dns_constellix_key />
+          <dns_constellix_secret />
+          <dns_exoscale_key />
+          <dns_exoscale_secret />
+          <dns_internetbs_key />
+          <dns_internetbs_password />
+          <dns_pointhq_key />
+          <dns_pointhq_email />
+          <dns_rackspace_user />
+          <dns_rackspace_key />
+          <dns_rage4_token />
+          <dns_rage4_user />
+          <dns_mijnhost_api_key />
+          <dns_scaleway_token />
+          <dns_zoneedit_id />
+          <dns_zoneedit_token />
+        </validation>
+      </validations>
+      <actions />
+    </AcmeClient>
   </OPNsense>
   <hasync version="1.0.2" persisted_at="1785198670.63" description="HA sync">
     <disablepreempt>0</disablepreempt>
@@ -1043,8 +1412,24 @@
     <csr />
     <prv>***MASKED***</prv>
   </cert>
+  <cert uuid="75a77282-19b1-416e-a999-c12fa76a1d74">
+    <refid>6a68e4faf0cba</refid>
+    <descr>*.imcherry5778.xyz (ACME Client)</descr>
+    <caref>6a68e4fae15a8</caref>
+    <crt>LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURrVENDQXhpZ0F3SUJBZ0lTQmFFMkJjWlRsTkVXN2w1OXhlVWlvUU8xTUFvR0NDcUdTTTQ5QkFNRE1ETXgKQ3pBSkJnTlZCQVlUQWxWVE1SWXdGQVlEVlFRS0V3MU1aWFFuY3lCRmJtTnllWEIwTVF3d0NnWURWUVFERXdOWgpSVEV3SGhjTk1qWXdOekk0TVRjME56QTBXaGNOTWpZeE1ESTJNVGMwTnpBeldqQWRNUnN3R1FZRFZRUUREQklxCkxtbHRZMmhsY25KNU5UYzNPQzU0ZVhvd1dUQVRCZ2NxaGtqT1BRSUJCZ2dxaGtqT1BRTUJCd05DQUFUV3B6RmkKV2RBR2VZTnRYOHZueisrRmtsaU1ZWTkyOHZQNiszRXVLY2FQajJsQUdpZGk2MDB5QjB6cWQrWEZwclIzTnZmZApUb1Mwa2RGQ3dra2g2NXErbzRJQ0lEQ0NBaHd3RGdZRFZSMFBBUUgvQkFRREFnZUFNQk1HQTFVZEpRUU1NQW9HCkNDc0dBUVVGQndNQk1Bd0dBMVVkRXdFQi93UUNNQUF3SFFZRFZSME9CQllFRkh4WFllREh1bmNzVVFEQU55STEKYkM0TUM2RFpNQjhHQTFVZEl3UVlNQmFBRkxzZ3lrY0wvdGZsblBtUENTcWpqRGRGc2J6WU1ETUdDQ3NHQVFVRgpCd0VCQkNjd0pUQWpCZ2dyQmdFRkJRY3dBb1lYYUhSMGNEb3ZMM2xsTVM1cExteGxibU55TG05eVp5OHdIUVlEClZSMFJCQll3RklJU0tpNXBiV05vWlhKeWVUVTNOemd1ZUhsNk1CTUdBMVVkSUFRTU1Bb3dDQVlHWjRFTUFRSUIKTUM0R0ExVWRId1FuTUNVd0k2QWhvQitHSFdoMGRIQTZMeTk1WlRFdVl5NXNaVzVqY2k1dmNtY3ZOVFF1WTNKcwpNSUlCREFZS0t3WUJCQUhXZVFJRUFnU0IvUVNCK2dENEFIY0F5emozRllsOGhLRkVYMXZCM2Z2SmJ2S2FXYzFICkNta0ZoYkRMRk1NVVdPY0FBQUdmcWd2b3dnQUFCQU1BU0RCR0FpRUEyWk9SdUlUSm1CMndNc2FOMitnNnN5anMKV3dRSU9TNWF1Vjd6VDIzZ2djQUNJUUN6aldrNWdsa2svdzZrOXhvcHpPb1pEVkxHSXU4ZXVoWTBjK0JXb1BMTQpCd0I5QUd6K1VCbERxRjZwRnJ4UzBUUGszTWtlOFVFY2ZTV0VJTkZ6Z0o0WUdPczZBQUFCbjZvTDdIZ0FDQUFBCkJRQVlIZFRvQkFNQVJqQkVBaUIwT1Z2cEh0MytmS2Q3YUxkT1JncWdFNCsyQjlaaUM1dlROMnQxOW1GQjdBSWcKWGVSNnJSckE5bGNBdGJQOVFsMUlDU0tvWjJuUDhsSXg0Q2lWU05GSVNRZ3dDZ1lJS29aSXpqMEVBd01EWndBdwpaQUl3UTZUNnIxSWdocHFlZHJMeDRrSVhoZXFkMmdWMWhGcGJLWnFsQjVJZWNQUzRmS2NFalViOXBBMFhqT2VjClJ0bTZBakJzb2FUc0g3RXAyL3E0Wm5FNTdjdlFsT0VrRi9sclM1bmVuaEE0cXYrL2VWV2RjclFhbUt2ZnVGZjYKcU1jd21Gcz0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=</crt>
+    <csr />
+    <prv>***MASKED***</prv>
+  </cert>
   <ppps>
     <ppp />
   </ppps>
   <syslog />
+  <ca uuid="92eb0c25-4845-4ce9-bec0-ff32803e664f">
+    <refid>6a68e4fae15a8</refid>
+    <descr>YE1 (ACME Client)</descr>
+    <crt>Ci0tLS0tQkVHSU4gQ0VSVElGSUNBVEUtLS0tLQpNSUlDaXpDQ0FoR2dBd0lCQWdJUVhkMXczVEg0QWNoY0dHcDZCTGdLL2pBS0JnZ3Foa2pPUFFRREF6QXVNUXN3CkNRWURWUVFHRXdKVlV6RU5NQXNHQTFVRUNoTUVTVk5TUnpFUU1BNEdBMVVFQXhNSFVtOXZkQ0JaUlRBZUZ3MHkKTlRBNU1ETXdNREF3TURCYUZ3MHlPREE1TURJeU16VTVOVGxhTURNeEN6QUpCZ05WQkFZVEFsVlRNUll3RkFZRApWUVFLRXcxTVpYUW5jeUJGYm1OeWVYQjBNUXd3Q2dZRFZRUURFd05aUlRFd2RqQVFCZ2NxaGtqT1BRSUJCZ1VyCmdRUUFJZ05pQUFRSFpWQjEvbWltbGEyaGZTdXJ5bFNjalBNWmFPSlhMei9ObkFjMnN5bG04V0R5aFU5Q2NwK3oKQVNRaTV2U3dHR0pqU0drbGtEOWZkUFI4R3B5RElPSWpDRWZybmJ0L3YrWlNFUExMRUdiYU02RWNjRGJON3A5eAp0ZUltMkF2ZityeWpnZTR3Z2Vzd0RnWURWUjBQQVFIL0JBUURBZ0dHTUJNR0ExVWRKUVFNTUFvR0NDc0dBUVVGCkJ3TUJNQklHQTFVZEV3RUIvd1FJTUFZQkFmOENBUUF3SFFZRFZSME9CQllFRkxzZ3lrY0wvdGZsblBtUENTcWoKakRkRnNiellNQjhHQTFVZEl3UVlNQmFBRktQSUpscU9vVXpRTldQOG15UElPcTVXODA5V01ESUdDQ3NHQVFVRgpCd0VCQkNZd0pEQWlCZ2dyQmdFRkJRY3dBb1lXYUhSMGNEb3ZMM2xsTG1rdWJHVnVZM0l1YjNKbkx6QVRCZ05WCkhTQUVEREFLTUFnR0JtZUJEQUVDQVRBbkJnTlZIUjhFSURBZU1CeWdHcUFZaGhab2RIUndPaTh2ZVdVdVl5NXMKWlc1amNpNXZjbWN2TUFvR0NDcUdTTTQ5QkFNREEyZ0FNR1VDTVFEZ2pVRWFoRlQvaDNEUmFrcWlQWnBMdlBnZgpad2t0NksyRU9NbWgxbnZFemw4M2VNTFljb2Q0R0NsM2IwSjFObjBDTUJOWW1FUUpiNENFRzVXb09lN2FSbi9MClZLdTZzYUhtSEV5bkk3eXNJUGQ4elFzSzFIZG1obEhLbHc5WjVHcEd2QT09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0KCi0tLS0tQkVHSU4gQ0VSVElGSUNBVEUtLS0tLQpNSUlDcGpDQ0FpdWdBd0lCQWdJUkFJY2haZncwdHVYN3FLM1ZzM0JmdFRvd0NnWUlLb1pJemowRUF3TXdUekVMCk1Ba0dBMVVFQmhNQ1ZWTXhLVEFuQmdOVkJBb1RJRWx1ZEdWeWJtVjBJRk5sWTNWeWFYUjVJRkpsYzJWaGNtTm8KSUVkeWIzVndNUlV3RXdZRFZRUURFd3hKVTFKSElGSnZiM1FnV0RJd0hoY05Nall3TlRFek1EQXdNREF3V2hjTgpNekl3T1RBeU1qTTFPVFU1V2pBdU1Rc3dDUVlEVlFRR0V3SlZVekVOTUFzR0ExVUVDaE1FU1ZOU1J6RVFNQTRHCkExVUVBeE1IVW05dmRDQlpSVEIyTUJBR0J5cUdTTTQ5QWdFR0JTdUJCQUFpQTJJQUJEd1MvNnZocmNWcWNiQm8KK3dnZEkzZnduOXg3RE5KSk9ZL2xUT3RpMHZrd3VSTjg3UmhFaFRIMTdFN1h5RmpXc1BZaElQdC93ek9xeFRkMgpiKzRaSk55OUlEMDRZeXdGOVU1emFzRFZ5R1NORXJWTnR6OHVTR2g1aXpXODdqNzdHYU9CNnpDQjZEQU9CZ05WCkhROEJBZjhFQkFNQ0FRWXdFd1lEVlIwbEJBd3dDZ1lJS3dZQkJRVUhBd0V3RHdZRFZSMFRBUUgvQkFVd0F3RUIKL3pBZEJnTlZIUTRFRmdRVW84Z21XbzZoVE5BMVkveWJJOGc2cmxielQxWXdId1lEVlIwakJCZ3dGb0FVZkVLVwpydDVMU0R2Nmt2aWVqTTl0aTZseU41VXdNZ1lJS3dZQkJRVUhBUUVFSmpBa01DSUdDQ3NHQVFVRkJ6QUNoaFpvCmRIUndPaTh2ZURJdWFTNXNaVzVqY2k1dmNtY3ZNQk1HQTFVZElBUU1NQW93Q0FZR1o0RU1BUUlCTUNjR0ExVWQKSHdRZ01CNHdIS0Fhb0JpR0ZtaDBkSEE2THk5NE1pNWpMbXhsYm1OeUxtOXlaeTh3Q2dZSUtvWkl6ajBFQXdNRAphUUF3WmdJeEFNVTE5V0N0bXhWTkQ4VUhCWlJvbWE0OVo3alBzNjREbWEwZVR1MU9DaFZiQi8ySjdHVjNudllLCkF4NTR1azFHOVFJeEFPMG1pTFZKdThQTE5pWFhYa2lFL2dzSzNDVFJURi9hZW80Yk1YNDJadzQwY3NSVTZBQzIKNmhTVzEvSVdhYXM2ZGc9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCgotLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS0KTUlJRWNEQ0NBbGlnQXdJQkFnSVFiSThkeHlmSEVYOTdyNFU2eVlENXpUQU5CZ2txaGtpRzl3MEJBUXNGQURCUApNUXN3Q1FZRFZRUUdFd0pWVXpFcE1DY0dBMVVFQ2hNZ1NXNTBaWEp1WlhRZ1UyVmpkWEpwZEhrZ1VtVnpaV0Z5ClkyZ2dSM0p2ZFhBeEZUQVRCZ05WQkFNVERFbFRVa2NnVW05dmRDQllNVEFlRncweU5qQTFNVE13TURBd01EQmEKRncwek1qQTVNREl5TXpVNU5UbGFNRTh4Q3pBSkJnTlZCQVlUQWxWVE1Ta3dKd1lEVlFRS0V5QkpiblJsY201bApkQ0JUWldOMWNtbDBlU0JTWlhObFlYSmphQ0JIY205MWNERVZNQk1HQTFVRUF4TU1TVk5TUnlCU2IyOTBJRmd5Ck1IWXdFQVlIS29aSXpqMENBUVlGSzRFRUFDSURZZ0FFelp2Vm40Q0RDdXdKU3ZNV1NqNWN6M2VzM21jRkRSMEgKdHR3VysxcUxGTnZpY1dERXVrV1ZFWW1PNmdiZjl5b1dIS1M1eGNVeTRBUGdIb0lZT0l2WFJkZ0thbTdtQUhmNwpBbEY5SXRnS2JwcGJkOS93K2tIc09keDF5bWdIREIvcW80SDFNSUh5TUE0R0ExVWREd0VCL3dRRUF3SUJCakFkCkJnTlZIU1VFRmpBVUJnZ3JCZ0VGQlFjREFRWUlLd1lCQlFVSEF3SXdEd1lEVlIwVEFRSC9CQVV3QXdFQi96QWQKQmdOVkhRNEVGZ1FVZkVLV3J0NUxTRHY2a3ZpZWpNOXRpNmx5TjVVd0h3WURWUjBqQkJnd0ZvQVVlYlJaNW51Mgo1ZVFCYzRBSWlNZ2FXUGJwbTI0d01nWUlLd1lCQlFVSEFRRUVKakFrTUNJR0NDc0dBUVVGQnpBQ2hoWm9kSFJ3Ck9pOHZlREV1YVM1c1pXNWpjaTV2Y21jdk1CTUdBMVVkSUFRTU1Bb3dDQVlHWjRFTUFRSUJNQ2NHQTFVZEh3UWcKTUI0d0hLQWFvQmlHRm1oMGRIQTZMeTk0TVM1akxteGxibU55TG05eVp5OHdEUVlKS29aSWh2Y05BUUVMQlFBRApnZ0lCQUQyL2U5ZnJtTXhOcENWMDNxVUhlZ2crTVYyd3o5NjQ0WW9YZHF0SDhSeVdZY0JPN3hmampHRVhkVTFlCi9vME9rRUZpeW5VQ09TSWsvdkxMbzd0dHo2Q1BBZU5sV2ZDMFhOa29HZVdnSzZqalh2b3pCYUd1R0g1bjBVZm8Kc2hNZVdUdVVScU5ONUcwMHNTWERUQnJwcDIrbWd2ZFpRamI4SzExVFlNQTI1UUErWUhOZmJJRUwwQm5pQWhLUwoyZ3NuSmpTenJkWkxJK0VaN1NFeXFkUjJya2pkMUt1dExEVStuM1RGeXhqbmlaVkd1cjRZbGhNUDNtWS9kVjk1CklydUFra2pPWmllcjZoR0JkRWdaWFh2YUN6OXU5aVZFYWRzSUU3NXBBR0w4b0hWNXZ4ZEFSRGlvdFJwdWwxSU4KL1Vad3pBYnJmVUZjdzFIa0FjWUQvbWxaZm5RMmllQ0YyTVM3ajNWaHY3SlBES3A0NWZteWttellOU3J1bVJXMAp1cEZGS0RCT29GN2hzT2I3b0x5SFMrVWZ0NmpPVWZPcm9najhZVXgzOGhLYjJLMjByNDJPZ3NTZERkeGRlWVdjCk1TM1NiNm13SmVTWkVZeEoyZ2FYbkRTUGFLaGhyTmtZd2xqeVZReXI0TnErTUVKeXRYTlRuSHFhQWNyTndabFYKcGNKTDFLQm5Nck1qUDdlYW52VXdMM0ZZajNjRjE3anRib0x0N2dMb2k0KzJyV1pGdm4rdzU0am1kL0ZJdWhoWgpjRWFVL3d2VTZCVU5NdGNWcXVWR0hwN2l0UWVEdGg1aitYTDNqNFdKMlNBQnd6VWw2T2VZZGdwSXQvSVRaYStwClRUMG1RL3I1WHlBNE1FQWlhYm43WEpqdkNFUmxGMmRjbjJ3cUp3K0NyZVRra1EyUgotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==</crt>
+    <prv />
+    <serial />
+    <caref />
+  </ca>
 </opnsense>

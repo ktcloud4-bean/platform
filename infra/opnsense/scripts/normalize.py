@@ -54,6 +54,16 @@ ACME_DNS_SECRET_SUFFIXES = (
     "_credentials",
 )
 
+# ACME 계정의 개인키는 일반적인 <key> 태그에 저장된다. <key> 는 다른
+# 컴포넌트에서 비밀이 아닌 값으로도 쓰일 수 있으므로 태그명만으로 가리지
+# 않고, os-acme-client 계정 경로에서만 마스킹한다.
+ACME_ACCOUNT_KEY_PATH = (
+    "acmeclient",
+    "accounts",
+    "account",
+    "key",
+)
+
 # 통째로 제거할 태그. 내용이 매번 바뀌어 diff 노이즈만 만든다.
 DROP_TAGS = {
     "revision",          # 저장 시각 · 변경자 IP · 변경 페이지
@@ -72,13 +82,21 @@ def is_secret_tag(tag: str) -> bool:
     )
 
 
-def scrub(elem: ET.Element) -> None:
+def is_secret_path(path: tuple[str, ...]) -> bool:
+    """요소 경로가 문맥상 비밀인 필드를 가리키는지 판단한다."""
+    normalized = tuple(part.casefold() for part in path)
+    return normalized[-len(ACME_ACCOUNT_KEY_PATH):] == ACME_ACCOUNT_KEY_PATH
+
+
+def scrub(elem: ET.Element, path: tuple[str, ...] = ()) -> None:
     """트리를 순회하며 시크릿을 가리고 노이즈 태그를 제거한다."""
+    current_path = (*path, elem.tag)
     for child in list(elem):
         if child.tag in DROP_TAGS:
             elem.remove(child)
             continue
-        if is_secret_tag(child.tag):
+        child_path = (*current_path, child.tag)
+        if is_secret_tag(child.tag) or is_secret_path(child_path):
             # 원래 값이 있었는지 여부는 유지한다.
             # 빈 태그를 마스킹하면 "값이 생겼다"는 거짓 diff 가 난다.
             if child.text and child.text.strip():
@@ -86,7 +104,7 @@ def scrub(elem: ET.Element) -> None:
             for gc in list(child):
                 child.remove(gc)
             continue
-        scrub(child)
+        scrub(child, current_path)
 
 
 def main() -> int:

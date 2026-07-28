@@ -15,6 +15,52 @@ def scrub_xml(xml: str) -> ET.Element:
 
 
 class NormalizeAcmeSecretsTest(unittest.TestCase):
+    def test_acme_account_private_key_is_masked_by_path(self) -> None:
+        root = scrub_xml(
+            """
+            <opnsense>
+              <OPNsense>
+                <AcmeClient>
+                  <accounts>
+                    <account>
+                      <key>synthetic-acme-account-private-key</key>
+                    </account>
+                  </accounts>
+                </AcmeClient>
+              </OPNsense>
+            </opnsense>
+            """
+        )
+
+        self.assertEqual(root.findtext(".//account/key"), normalize.MASK)
+
+    def test_generic_key_outside_acme_account_is_preserved(self) -> None:
+        root = scrub_xml(
+            """
+            <opnsense>
+              <component><key>non-secret-selector</key></component>
+              <AcmeClient><other><key>non-secret-acme-value</key></other></AcmeClient>
+            </opnsense>
+            """
+        )
+
+        self.assertEqual(root.findtext(".//component/key"), "non-secret-selector")
+        self.assertEqual(
+            root.findtext(".//AcmeClient/other/key"),
+            "non-secret-acme-value",
+        )
+
+    def test_empty_acme_account_private_key_stays_empty(self) -> None:
+        root = scrub_xml(
+            """
+            <AcmeClient>
+              <accounts><account><key /></account></accounts>
+            </AcmeClient>
+            """
+        )
+
+        self.assertIsNone(root.find(".//account/key").text)
+
     def test_cloudflare_credentials_are_masked(self) -> None:
         root = scrub_xml(
             """
