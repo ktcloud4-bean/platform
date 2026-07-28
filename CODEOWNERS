@@ -1,0 +1,22 @@
+# 기본 — 팀장이 모든 변경을 검토한다.
+*                   @imcherry5778
+
+# --- 직무 분리 (SoD) ---
+# 아래 경로는 팀장도 단독으로 머지할 수 없다.
+# 배포하는 사람이 보안 통제를 스스로 풀 수 없게 하기 위한 최소 장치.
+#
+# ⚠️ 해당 디렉터리는 아직 없다. 생기는 순간 규칙이 발동한다.
+
+# 보안 정책 — Kyverno · NetworkPolicy · Cosign 신뢰 설정
+# /policies/        @박재윤-github-id
+
+# Argo CD Application 정의 — 여기를 고칠 수 있으면 무엇이 배포되는지를 지배한다
+# /gitops/argocd/   @imcherry5778 @박재윤-github-id
+
+
+# --- TODO ---
+# 팀원 GitHub 계정 확인 후 주석 해제:
+#   박수근 (AWS 플랫폼) · 이진희 (모니터링) · 박재윤 (AWS 보안) · 정주헌 (플랫폼·E2E)
+#
+# CODEOWNERS 가 실제로 강제되려면 branch protection 에서
+# "Require review from Code Owners" + "Do not allow bypassing" 을 켜야 한다.

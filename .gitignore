@@ -1,0 +1,42 @@
+# --- 시크릿이 섞이는 파일 ---
+# OPNsense config.xml 에는 비밀번호 해시 · API 키 · VPN 키가 평문으로 들어간다.
+# 반드시 normalize 스크립트로 마스킹한 버전만 커밋할 것.
+infra/opnsense/config.raw.xml
+infra/opnsense/*.raw.xml
+
+# 자격증명 일반
+.env
+.env.*
+!.env.example
+*secret*.yaml
+!**/sealed-secret*.yaml
+*.pem
+*.key
+*.p12
+*.pfx
+kubeconfig
+*.kubeconfig
+.sops.yaml.bak
+
+# --- IaC 상태 ---
+# tofu state 에는 자원 속성이 평문으로 남는다. 원격 백엔드로 옮기기 전까지 커밋 금지.
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Ansible
+*.retry
+ansible/inventory/hosts.local
+
+# --- 편집기 / OS ---
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# --- 임시 ---
+*.bak
+*.tmp
+tmp/
