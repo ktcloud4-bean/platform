@@ -1,145 +1,136 @@
-# IP · VLAN 대장
+# IP · VLAN · DNS 계획
 
-이 문서가 **주소 배정의 단일 진실 원천**이다. 장비를 추가하거나 IP를 바꾸면 여기부터 고치고 커밋한다.
+이 문서는 네트워크 주소의 단일 진실 원천이다. `LIVE`는 검증된 현재값, `RESERVED`는 설치 전 예약, `TARGET`은 전환 후 목표다.
 
----
+## 물리 인터페이스
 
-## 1. 인터페이스 구성
+| OPNsense 장치 | 현재 | 목표 |
+|---|---|---|
+| `igc1` | `LIVE` WAN, ISP DHCP | 유지 |
+| `igc0` | 미할당 | RECOVERY 전용, 현장 검증 후 확정 |
+| `igc2` | `LIVE` untagged LAN | Proxmox 직결 tagged-only 802.1Q trunk |
+| `igc3` | `LIVE` HOME | 유지, 프로젝트 범위 밖 |
 
-OPNsense(`opnsense`)가 경계 방화벽이자 랩의 게이트웨이다.
+트렁크 전환 전까지 `igc2`는 Phase 1 LAN이다. 전환 후에는 부모 인터페이스에 주소를 두지 않고 VLAN 인터페이스만 사용한다.
 
-| 인터페이스 | 장치 | 대역 | 역할 |
+## 주소 규칙
+
+랩은 `10.10.0.0/16` 안에서 VLAN ID와 세 번째 옥텟을 맞춘다.
+
+| 호스트 부분 | 용도 |
+|---|---|
+| `.1` | OPNsense VLAN gateway |
+| `.2-.9` | 물리 네트워크 장비 예약 |
+| `.10-.49` | 고정 노드·VM |
+| `.50-.99` | VIP·고정 서비스 예약 |
+| `.100-.199` | DHCP가 필요한 VLAN의 동적 범위 |
+| `.200-.254` | 실험·이전용 예약 |
+
+서버 VLAN에는 필요가 확인되기 전까지 DHCP를 만들지 않는다.
+
+## 현재 Phase 1
+
+| 주소 | 대상 | 상태 |
+|---|---|---|
+| `10.10.10.1/24` | `opnsense` LAN gateway | `LIVE` |
+| `10.10.10.10/24` | `proxmox-01` | `RESERVED` |
+
+현재 LAN DHCP는 `10.10.10.100-10.10.10.245`다. 임시 설치 환경의 동적 주소는 문서에 고정 배정으로 올리지 않는다.
+
+## 목표 VLAN
+
+VLAN 번호는 보안 등급 순서가 아니라 역할 식별자다. 실제 신뢰 경계는 방화벽 규칙이 만든다.
+
+| VLAN | 이름 | 대역 | 주 대상 |
 |---|---|---|---|
-| **WAN** | `igc1` | ISP DHCP (공인) | 인터넷 상행 |
-| — | `igc0` | — | RECOVERY 예약 — 별도 설계 전 미할당 |
-| **LAN** | `igc2` | `10.10.10.0/24` | **랩 네트워크 · Proxmox 직결** |
-| **HOME** | `igc3` | `10.10.60.0/24` | 다운스트림 네트워크 (프로젝트 범위 외) |
+| 10 | `MGMT` | `10.10.10.0/24` | OPNsense · Proxmox |
+| 20 | `PLATFORM` | `10.10.20.0/24` | k3s |
+| 30 | `ACCESS` | `10.10.30.0/24` | Warpgate |
+| 40 | `DMZ` | `10.10.40.0/24` | NetBird · 공개 진입면 |
+| 50 | `DATA` | `10.10.50.0/24` | PostgreSQL · MinIO |
+| 60 | `HOME` | `10.10.60.0/24` | 프로젝트 범위 밖 |
 
-> `HOME` 은 랩과 무관한 다운스트림 망을 위한 인터페이스다. 이 문서는 **LAN 이하의 랩 네트워크**만 다룬다.
+### 고정 배정
 
----
-
-## 2. 랩 네트워크 `10.10.0.0/16`
-
-### IP 구획 규칙 (모든 VLAN 공통)
-
-| 범위 | 용도 |
-|---|---|
-| `.1` | 게이트웨이 (OPNsense) |
-| `.2 ~ .9` | 네트워크 장비 (스위치, AP) |
-| `.10 ~ .19` | 하이퍼바이저 (Proxmox) |
-| `.20 ~ .29` | 관리 도구 |
-| `.30 ~ .99` | 서비스 노드 (고정) |
-| `.100 ~` | DHCP 동적 |
-
-### Phase 1 배정 — 단일 LAN `10.10.10.0/24`
-
-**Phase 1 은 VLAN 없이 하나의 대역으로 시작한다.** Proxmox 설치 후 OPNsense–Proxmox 직결 트렁크를 구성하면 Phase 2 로 넘어간다.
-
-**옮길 노드는 높은 번호에 두어 Phase 2 이전을 쉽게 한다.**
-
-| IP | 호스트 | Phase 2 이전 대상 |
+| 주소 | 호스트 | 상태 |
 |---|---|---|
-| `10.10.10.1` | OPNsense (`opnsense`) | 관리(10) — 유지 |
-| `10.10.10.10` | proxmox-01 | 관리(10) — 유지 |
-| `10.10.10.20` | warpgate | 관리(10) — 유지 |
-| `10.10.10.50` | k3s-master | → `10.10.20.10` |
-| `10.10.10.51` | k3s-worker-1 | → `10.10.20.11` |
-| `10.10.10.52` | k3s-worker-2 | → `10.10.20.12` |
-| `10.10.10.90` | netbird-control | → `10.10.40.10` |
+| `10.10.10.1` | `opnsense` | `LIVE`; VLAN 전환 후 VLAN 10 gateway |
+| `10.10.10.10` | `proxmox-01` | `RESERVED` |
+| `10.10.20.1` | OPNsense `PLATFORM` gateway | `TARGET` |
+| `10.10.20.10` | `k3s-01` | `RESERVED` |
+| `10.10.30.1` | OPNsense `ACCESS` gateway | `TARGET` |
+| `10.10.30.10` | `warpgate-01` | `RESERVED` |
+| `10.10.40.1` | OPNsense `DMZ` gateway | `TARGET` |
+| `10.10.40.10` | `netbird-01` | `RESERVED` |
+| `10.10.50.1` | OPNsense `DATA` gateway | `TARGET` |
+| `10.10.50.10` | `postgres-01` | `RESERVED` |
+| `10.10.50.20` | `minio-01` | `RESERVED` |
 
----
+## 물리 토폴로지
 
-## 3. VLAN 계획 (Phase 2 이후)
-
-**신뢰 수준이 다르면 나누고, 같으면 합친다.** 이것이 분할 기준이다.
-
-| VLAN | 이름 | 대역 | 신뢰 | 도입 |
-|---|---|---|---|---|
-| **10** | 관리 | `10.10.10.0/24` | 최상 | Phase 2 |
-| **20** | 플랫폼 | `10.10.20.0/24` | 중간 | Phase 2 |
-| **40** | DMZ | `10.10.40.0/24` | 최하 | Phase 2 |
-| 30 | 워크로드 | `10.10.30.0/24` | 중간 | 예약 |
-| 50 | 스토리지·백업 | `10.10.50.0/24` | 중간 | 예약 |
-| 60 | 다운스트림 | `10.10.60.0/24` | 최하 | 사용 중 (HOME 인터페이스) |
-
-### 물리 토폴로지
-
-관리형 스위치는 현재 계획에 없다. 프로젝트의 유일한 물리 노드인 Proxmox 를 OPNsense 에 직접 연결한다.
-
-```
-OPNsense igc2 ── 802.1Q trunk ── Proxmox 물리 NIC ── VLAN-aware vmbr0
-     VLAN 10 관리                     Proxmox 관리 인터페이스
-     VLAN 20 플랫폼                   k3s VM
-     VLAN 40 DMZ                      외부 노출 VM
+```text
+OPNsense igc2
+    │ tagged-only: VLAN 10, 20, 30, 40, 50
+    │
+Proxmox NIC ── VLAN-aware bridge
+    ├─ Proxmox management: VLAN 10
+    ├─ k3s-01:             VLAN 20
+    ├─ warpgate-01:        VLAN 30
+    ├─ netbird-01:         VLAN 40
+    ├─ postgres-01:        VLAN 50
+    └─ minio-01:           VLAN 50
 ```
 
-VLAN 간 라우팅과 방화벽 정책은 OPNsense 가 담당하고, Proxmox 는 VM 가상 NIC 에 VLAN 태그를 지정한다. 관리형 스위치는 두 번째 Proxmox, 프로젝트용 NAS, VLAN 대응 AP 등 Proxmox 외 물리 장비가 추가될 때만 다시 검토한다.
+- VLAN 1과 native/untagged 트래픽을 최종 트렁크에 사용하지 않는다.
+- 관리 VLAN 전환은 RECOVERY 또는 OOB를 검증한 현장에서만 한다.
+- Proxmox bridge는 VLAN을 전달하고, VLAN 간 라우팅은 OPNsense만 담당한다.
 
-- VLAN ID 와 3옥텟을 **일치**시킨다 (`VLAN 20` → `10.10.20.x`). IP만 보고 어느 망인지 알 수 있다.
-- **VLAN 1은 쓰지 않는다** — 네트워크 장비의 기본·native VLAN 과 섞여 의도하지 않은 untagged 트래픽이 들어올 수 있다.
-- 최종 트렁크에는 untagged 네트워크를 섞지 않는다. `igc2` 부모는 미할당으로 두고 VLAN 인터페이스에만 주소를 둔다.
-- Phase 2 전환은 RECOVERY 또는 OOB 접근을 확보한 현장에서 한다. Proxmox 관리와 논리 LAN 을 VLAN 10 으로 함께 전환해 검증한 뒤 플랫폼(20), DMZ(40) 순서로 확장한다.
+## 목표 방화벽 정책
 
-### 방화벽 규칙 — 이것이 실제 정책이다
+기본값은 VLAN 간 차단이다. 아래 허용은 서비스가 실제로 요구하는 목적지와 포트로 구현한다.
 
-VLAN 을 나눈 것 자체는 아무 의미가 없다. 규칙이 정책이다.
-
-| 출발 → 도착 | 정책 |
-|---|---|
-| 관리(10) → 전부 | 허용 |
-| **플랫폼(20) → 관리(10)** | **차단** ★ |
-| **DMZ(40) → 관리(10)** | **차단** ★ |
-| DMZ(40) → 플랫폼(20) | 필요한 포트만 |
-| 전부 → 인터넷 | 허용 |
-| 전부 → OPNsense 자신 | 차단 (DNS 제외) |
-
-★ 두 줄이 핵심이다. **워크로드가 뚫려도 하이퍼바이저·방화벽에 닿지 못한다.** 나머지 VLAN 을 아무리 늘려도 이 두 줄이 없으면 의미가 없다.
-
----
-
-## 4. 도메인
-
-`imcherry5778.xyz` 를 랩이 온전히 사용한다. 하위 존을 두지 않고 평면으로 쓴다.
-
-```
-imcherry5778.xyz              OPNsense Domain. 장비는 opnsense.imcherry5778.xyz
- ├─ sso.…          Keycloak        내부 — Unbound 가 응답
- ├─ argo.…         Argo CD         내부
- ├─ vault.…        Vault           내부
- ├─ harbor.…       Harbor          내부
- └─ netbird.…      NetBird 컨트롤   외부 노출 — 공인 DNS 에 A 레코드
-```
-
-**Keycloak issuer 는 `sso.imcherry5778.xyz` 로 고정한다.** 한 번 정하면 모든 도구의 SSO 설정에 박혀 바꾸기가 매우 비싸다.
-
-인증서는 **Let's Encrypt DNS-01** 로 `*.imcherry5778.xyz` 와일드카드 한 장을 받는다. 서비스를 외부에 노출하지 않아도 발급되므로, 자체 CA 를 전 장비에 배포하는 작업이 통째로 사라진다. Cloudflare API 토큰은 **이 존에만** 권한을 준다.
-
-### ⚠️ Unbound 가 이 존 전체를 장악한다
-
-OPNsense 의 Domain 에 넣은 값은 **Unbound 의 내부 존**이 된다. 즉 랩 안에서는 `imcherry5778.xyz` 의 **공인 DNS 레코드를 조회하지 못한다.**
-
-랩 밖에만 존재하는 레코드가 필요해지면 Unbound 에 Host Override 를 넣는다
-(`Services → Unbound DNS → Overrides`).
-
----
-
-## 5. 접근 경로
-
-| 대상 | 경로 | Keycloak 의존 |
+| 출발 | 도착 | 정책 |
 |---|---|---|
-| 랩 네트워크 진입 | NetBird | 2단계부터 |
-| 랩 서버 SSH | Warpgate | 있음 |
-| **비상 (SSO·오버레이 붕괴)** | **OOB 콘솔 + 로컬 계정** | **없음** |
+| `PLATFORM` | `MGMT` | 차단 |
+| `DMZ` | `MGMT` | 차단 |
+| `ACCESS` | 관리·플랫폼·데이터 대상 | Warpgate가 중계할 관리 포트만 허용 |
+| `PLATFORM` | `DATA` | 서비스별 PostgreSQL·S3 포트만 허용 |
+| `DMZ` | `PLATFORM` | Keycloak·필수 control API만 허용 |
+| `DMZ` | `DATA` | 기본 차단; 제품 요구가 검증된 경우만 예외 |
+| `DATA` | 인터넷 | 업데이트·AWS S3 등 필요한 egress만 허용 |
+| 외부 | 내부 | 공개하기로 한 Traefik·NetBird endpoint만 허용 |
+| 각 VLAN | OPNsense | DNS·NTP·DHCP 등 기반 포트만 허용; 관리 UI는 차단 |
 
-마지막 줄이 핵심이다. **모든 접근 경로가 Keycloak 에 의존하면 안 된다.**
+초기 구축 중 임시 규칙이 필요하면 설명·만료 조건·삭제 작업 ID를 함께 기록한다. 최종 공개 전에 `vlan-verify` hardened profile과 실제 서비스 통신으로 검증한다.
 
-OOB(out-of-band) 콘솔은 랩 네트워크·오버레이와 **독립된 경로**로 유지한다. 그래야 OPNsense·NetBird·Keycloak 이 모두 죽어도 복구할 수 있다. 구체적 구성은 이 레포 범위 밖이며, 런북에 별도로 관리한다.
+## DNS와 도메인
 
-**OPNsense 에는 오버레이 에이전트를 설치하지 않는다.** 방화벽이 오버레이에 의존하면 오버레이가 죽었을 때 복구 경로가 사라진다.
+랩 도메인은 `imcherry5778.xyz`다. OPNsense Unbound가 내부 응답과 split DNS를 담당하고, Kubernetes CoreDNS는 클러스터 내부 이름만 담당한다.
 
----
+| 이름 | 대상 | 노출 |
+|---|---|---|
+| `opnsense.imcherry5778.xyz` | OPNsense 관리 | 내부 |
+| `proxmox-01.imcherry5778.xyz` | Proxmox 관리 | 내부 |
+| `k3s-01.imcherry5778.xyz` | k3s 노드 | 내부 |
+| `postgres-01.imcherry5778.xyz` | PostgreSQL VM | 내부 |
+| `minio-01.imcherry5778.xyz` | MinIO VM | 내부 |
+| `warpgate-01.imcherry5778.xyz` | Warpgate VM | 내부 |
+| `netbird-01.imcherry5778.xyz` | NetBird VM | 내부 |
+| `sso.imcherry5778.xyz` | Keycloak | 외부 인증 연동 가능 |
+| `access.imcherry5778.xyz` | Pomerium Routes Portal | 보호된 외부 접근 가능 |
+| `argo.imcherry5778.xyz` | Argo CD | Pomerium |
+| `vault.imcherry5778.xyz` | Vault | 내부 관리 경로만 |
+| `git.imcherry5778.xyz` | Gitea | Pomerium |
+| `jenkins.imcherry5778.xyz` | Jenkins | Pomerium |
+| `sonar.imcherry5778.xyz` | SonarQube | Pomerium |
+| `harbor.imcherry5778.xyz` | Harbor | UI는 Pomerium, registry API는 별도 인증 |
+| `awx.imcherry5778.xyz` | AWX | Pomerium |
+| `grafana.imcherry5778.xyz` | Grafana | Pomerium |
+| `netbird.imcherry5778.xyz` | NetBird control plane | 외부 |
+| `warpgate.imcherry5778.xyz` | Warpgate 서비스 | 내부·NetBird 경유 |
+| `postgres.imcherry5778.xyz` | PostgreSQL | 내부, 비 HTTP |
+| `minio.imcherry5778.xyz` | MinIO API | 내부, 비 Pomerium 데이터 경로 |
 
-## 변경 이력
+Keycloak issuer는 `https://sso.imcherry5778.xyz`로 고정한다. k3s 웹 서비스의 내부 레코드는 Traefik 진입 주소를 가리키고, 공개 서비스는 공인 DNS와 Unbound override를 함께 검증한다.
 
-이 문서를 고칠 때는 **무엇을 왜 바꿨는지** 커밋 메시지에 남긴다. 주소 변경은 대개 다른 설정에 연쇄된다.
+공인 인증서는 서비스 계층별로 발급한다. OPNsense의 인증서 개인키를 Proxmox나 k3s로 복사하지 않는다.

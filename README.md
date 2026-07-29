@@ -1,75 +1,67 @@
 # platform
 
-`ktcloud4-bean` 제로 트러스트 플랫폼의 인프라 정의.
+단일 물리 노드에서 제로 트러스트 플랫폼을 재현하는 온프레미스 랩이다. 프로덕션과 비슷한 통제·자동화·복구 절차를 구현하지만, 장비 한 대의 SPOF를 HA로 가장하지 않는다.
 
-## 구조
+## 범위
 
-```
-docs/          IP 대장 · 런북 · 결정 기록
-infra/         k8s 아래 계층 (네트워크 · 하이퍼바이저 · VM · OS)
-```
-
-아래 디렉터리는 **해당 대상이 생길 때** 만든다. 빈 폴더를 미리 두지 않는다.
-
-```
-gitops/        Argo CD 가 읽는 것        ← k3s 구축 후
-policies/      Kyverno · NetworkPolicy   ← Kyverno 도입 후
+```text
+OPNsense → Proxmox → Rocky Linux VM → k3s → 플랫폼 서비스
 ```
 
-## 원칙
+이 저장소가 소유하는 것은 다음과 같다.
 
-### 1. 손으로 만졌으면 그날 Git 에 넣는다
+- OPNsense 구성 스냅샷과 안전한 변경 절차
+- Proxmox 설치 재현성, VM과 OS 자동화
+- k3s GitOps, 통합인증, 접근제어, 공급망 보안
+- 백업·복구와 온프레미스 ↔ AWS 연결
 
-부트스트랩 구간은 손으로 할 수밖에 없다. OPNsense 초기 설치, Proxmox 설치, 첫 VM 템플릿은 UI 로 만든다.
+애플리케이션 소스와 HOME 네트워크의 내부 구성은 범위 밖이다.
 
-**문제는 손으로 만드는 게 아니라, 만진 것을 기록하지 않는 것이다.** 코드로 자동화하는 건 나중에 해도 되지만 기록은 지금부터다.
+## 문서 원본
 
-커밋 메시지에 **왜** 를 남긴다. 3개월 뒤에 규칙만 보고 이유를 추측하게 되면 이미 실패다.
-
-### 2. 계층마다 Git 의 역할이 다르다
-
-| 계층 | 도구 | Git 의 역할 | 어긋나면 |
-|---|---|---|---|
-| OPNsense | `config.xml` 비교 | **기록** | 알림만 → 사람이 UI 에서 교정 |
-| Proxmox VM | OpenTofu | 명령 (실행할 때) | `plan` 이 차이 표시 → 사람이 판단 |
-| 호스트 · VM OS | Ansible + Wazuh FIM | 명령 (주기적) | `--check` 가 차이 표시 → 사람이 판단 |
-| 쿠버네티스 | Argo CD | 명령 (상시) | **자동 교정** (self-heal) |
-
-아래로 갈수록 자동화가 강해지고, 위로 갈수록 "Git 은 기록이고 판단은 사람" 이 된다.
-
-**모든 것을 GitOps 로 관리한다는 말은 현실적으로 성립하지 않는다.** 어느 계층이 어느 등급인지 아는 것이 중요하다 — 모르면 "Git 에 있으니 안전하다" 고 착각하게 된다.
-
-### 3. 베어메탈 계층은 자동 교정하지 않는다
-
-네트워크 설정을 새벽에 자동으로 되돌리면 노드가 고립된다. **탐지는 자동, 교정은 사람이 판단한다.**
-
-드리프트를 발견했을 때 선택은 두 가지다:
-- **코드를 현실에 맞춘다** ← 대부분 이쪽. 사람이 손으로 바꾼 데는 대개 이유가 있다
-- **현실을 코드에 맞춘다** — 이유가 없거나 잘못된 경우
-
-### 4. 레포는 하나로 시작한다
-
-나눌 대상이 생기기 전에 나누지 않는다. 분리 신호가 오면 `git filter-repo` 로 폴더째 떼어낸다 (히스토리 보존).
-
-| 신호 | 분리 대상 |
+| 질문 | 단일 원본 |
 |---|---|
-| Kyverno 를 `Enforce` 로 전환 | `policies` ← 첫 후보 |
-| 감사가 "접근 권한 자체로 분리" 요구 | 해당 영역 |
-| Argo CD 앱 40개 초과, sync 지연 | 클러스터별 |
-| AWS 시작 + 플랫폼/보안 SoD 필요 | `infra-aws-guardrails` |
+| 지금 무엇을 할 수 있는가 | [`docs/backlog.md`](docs/backlog.md) |
+| 무엇을 어디에 두는가 | [`docs/architecture.md`](docs/architecture.md) |
+| IP·VLAN·DNS는 무엇인가 | [`docs/ip-plan.md`](docs/ip-plan.md) |
+| OPNsense를 어떻게 운영하는가 | [`infra/opnsense/README.md`](infra/opnsense/README.md) |
+| 검증된 현장 절차는 무엇인가 | [`docs/runbook/`](docs/runbook/) |
 
-분리를 쉽게 하려면 두 가지만 지킨다.
-- **최상위 폴더 경계를 넘는 파일을 두지 않는다**
-- **커밋 메시지에 범위를 표시한다** — `feat(opnsense):`, `feat(kyverno):`
+같은 값을 두 문서에 적지 않는다. 현재 상태는 백로그, 목표 구조는 아키텍처, 주소는 IP 계획이 소유한다.
+
+## 저장소 구조
+
+```text
+docs/          아키텍처 · 주소 계획 · 백로그 · runbook
+infra/         OPNsense · Proxmox · VM · OS 자동화
+gitops/        Argo CD가 적용할 Kubernetes 선언
+policies/      Kyverno · NetworkPolicy · 서명 검증 정책
+```
+
+`gitops/`와 `policies/`는 해당 기반이 준비되는 백로그 작업에서 만든다. 빈 구조를 미리 만들지 않는다.
+
+## 계층별 Git의 역할
+
+| 계층 | 방식 | 드리프트 처리 |
+|---|---|---|
+| OPNsense | 마스킹한 스냅샷으로 기록 | 알림 후 사람이 승인·교정 |
+| Proxmox VM | OpenTofu | `plan` 검토 후 사람이 적용 |
+| VM OS | Ansible | `--check` 검토 후 사람이 적용 |
+| k3s | Argo CD | 선언 상태로 지속 교정 |
+
+베어메탈을 무인 자동 교정하면 복구 경로까지 끊을 수 있다. 자동화 강도는 계층마다 달라야 한다.
+
+## 운영 원칙
+
+1. UI나 콘솔에서 바꾼 내용도 같은 날 Git에 기록한다.
+2. 복구 경로는 복구 대상과 Keycloak에 의존하지 않는다.
+3. 하나의 물리 노드에 여러 VM을 두는 것은 격리이지 HA가 아니다.
+4. 데이터 백업은 같은 NVMe의 스냅샷만으로 완료 처리하지 않는다.
+5. 서비스는 필요한 시점에 추가하고, 관측 도구 자체가 선행 구축을 막지 않게 한다.
 
 ## 시크릿
 
-`config.xml`, tfstate, kubeconfig 에는 자격증명이 평문으로 들어간다. `.gitignore` 를 먼저 확인하고 커밋한다.
-
-Vault 가 올라가기 전까지는 **private 레포 + 시크릿 필드 제거** 로 운영한다. 완벽한 시크릿 관리를 기다리다 Git 자체를 미루지 않는다.
-
-## 관련 문서
-
-- [IP · VLAN 대장](docs/ip-plan.md)
-- [운영 runbook 작성 기준](docs/runbook/README.md)
-- 아키텍처 결정(ADR) — Notion `Zero Trust - Bean / 결정 & 리스크 로그`
+- Git에는 참조와 정책만 두고 값은 Vault에 둔다.
+- Vault 이전의 부트스트랩 값은 저장소 밖에서 최소 기간만 보관한다.
+- OPNsense 원본 백업, tfstate, kubeconfig, Shamir share와 root token은 Git 금지다.
+- 예제 파일에는 실제와 다른 명백한 자리표시자만 사용한다.

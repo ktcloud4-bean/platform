@@ -1,124 +1,120 @@
-# OPNsense
+# OPNsense 운영
 
-경계 방화벽 · 라우터. 랩 네트워크의 게이트웨이이자 인터넷으로 나가는 유일한 문.
+OPNsense는 경계 방화벽, VLAN router, NAT, 랩 DNS와 네트워크 IDS를 담당한다. 정확한 인터페이스와 주소는 `docs/ip-plan.md`를 참조한다.
 
-## 이 디렉터리의 성격
+## Git 경계
 
-**OPNsense 는 Git 이 바꿀 수 없다.** 설정은 웹 UI 로만 가능하고, 여기 있는 `config.xml` 은 **명령이 아니라 기록**이다.
+`config.xml`은 **마스킹한 드리프트 스냅샷**이며 적용 파일이 아니다.
 
+```text
+사람이 UI 또는 승인된 API로 라이브 변경
+              ↓
+서비스·route·PF·DNS를 라이브 검증
+              ↓
+check-drift.sh --update로 스냅샷 승인
+              ↓
+일반 check-drift.sh로 무변경 확인
 ```
-사람이 UI 에서 변경
-      ↓
-config.xml 내보내기 → 마스킹 → 커밋
-      ↓
-주기적으로 현재 상태와 diff → 차이가 나면 알림
-      ↓
-정당한 변경이면 커밋해 승인 / 아니면 UI 에서 되돌림
-```
 
-이 장치의 실질적 가치는 **"임시" 라고 적어 둔 방화벽 규칙이 몇 년씩 열려 있는 것을 막는 것**이다. 드리프트 탐지가 없으면 그런 규칙은 반드시 영구가 된다.
+- `--update`는 라이브 장비를 바꾸지 않고 저장소 스냅샷만 갱신한다.
+- `config.xml`을 편집해도 OPNsense에 반영되지 않는다.
+- `/usr/local/etc` 같은 생성 파일을 직접 고치면 서비스 재구성 때 사라진다.
+- 베어메탈 드리프트는 자동 교정하지 않는다.
 
-## 설정을 내보내는 법
+## 현재 스냅샷
 
-`System → Configuration → Backups → Download`
+2026-07-29 커밋 기준으로 다음이 기록돼 있다. 변경 전에는 라이브 드리프트를 다시 확인한다.
 
-- **Do not backup RRD data** — 체크. 그래프 데이터를 빼서 파일을 작게 유지한다
-- **Encrypt this configuration file** — 체크하지 않는다. 암호화하면 diff 를 볼 수 없어 드리프트 탐지가 무력화된다
-
-⚠️ **받은 파일을 그대로 커밋하지 말 것.** `config.xml` 에는 다음이 평문으로 들어 있다.
-
-| 위치 | 내용 |
+| 영역 | 기록된 상태 |
 |---|---|
-| `<system><user><password>` | 비밀번호 해시 |
-| `<cert><prv>` | **TLS 개인키** (base64, 약 4KB) |
-| `<system><user><apikeys>` | API 키 |
-| `<AcmeClient>...<dns_* 자격증명>` | DNS-01 공급자 API 토큰 · 키 · 비밀번호 |
-| `<revision>` | 저장할 때마다 바뀌는 타임스탬프 — 매일 거짓 diff 를 만든다 |
+| WAN | ISP DHCP, private·bogon 차단 |
+| LAN/HOME | 물리 재배치 완료; 주소는 IP 계획 참조 |
+| VLAN | 아직 없음; Phase 1 untagged LAN |
+| Web GUI | HTTPS, LAN listen, Local+TOTP |
+| SSH | LAN listen, 공개키 관리 |
+| DNS | Unbound recursion, DNSSEC, forwarding 비활성 |
+| DHCP | Dnsmasq; 로컬 domain record를 Unbound와 연계 |
+| ACME | Cloudflare DNS-01 wildcard, 자동갱신 cron |
+| NAT | automatic outbound NAT |
+| IDS | Suricata 비활성; PCAP alert-only 목표는 `NIDS-01` |
 
-`.gitignore` 가 `*.raw.xml` 을 막고 있다. 원본은 `config.raw.xml` 로 두고, 마스킹한 버전만 `config.xml` 로 커밋한다.
+현재 Phase 1 방화벽 규칙은 최종 VLAN 정책이 아니다. 목표 행렬과 전환 gate는 `docs/ip-plan.md`와 `docs/backlog.md`가 소유한다.
 
-## 저장소 구성과 도구
+## IDS 경계
+
+Suricata는 VLAN과 테스트 VM이 준비된 `NIDS-01`에서 처음 활성화한다. 이 작업은 탐지만 소유하며 방화벽 차단 정책을 함께 바꾸지 않는다.
+
+- 기본 모드는 PCAP alert-only다.
+- WAN이 아니라 실제 내부 자산을 식별할 수 있는 논리 프로젝트 VLAN을 주 관찰 지점으로 쓴다.
+- `PLATFORM`과 `DMZ`부터 시작해 부하와 중복 경보를 확인한 뒤 `ACCESS`, `DATA`, `MGMT`로 넓힌다.
+- `HOME_NET`은 `docs/ip-plan.md`의 프로젝트 VLAN만 참조하고 HOME은 포함하지 않는다.
+- 물리 trunk 부모와 그 VLAN 자식을 동시에 IDS 대상으로 선택하지 않는다.
+- payload 원문 저장은 기본 비활성으로 두고, 로컬 경보는 용량이 제한된 rotation을 유지한다.
+- Wazuh 도입 후에는 OPNsense Wazuh Agent가 IDS 이벤트를 Wazuh에 직접 전달한다. Loki를 중계 경로로 쓰지 않는다.
+
+IPS는 기준선이 아니다. `NIPS-01`이 채택될 때만 정상 트래픽·오탐·처리량·Netmap 부모 인터페이스·hardware offloading·장애와 rollback을 별도로 검증한다. IDS/Wazuh 장애가 PF, DNS, 라우팅이나 로컬 복구를 중단시키면 안 된다.
+
+## 파일
 
 | 경로 | 역할 |
 |---|---|
-| `config.xml` | 승인해 커밋한 OPNsense 설정 스냅샷 |
-| `scripts/normalize.py` | 원본 XML 에서 변동 노이즈를 제거하고 시크릿을 마스킹하는 변환기 |
-| `scripts/check-drift.sh` | 라이브 설정을 받아 정규화한 뒤 `config.xml` 과 비교하는 실행 진입점 |
-| `tests/test_normalize.py` | 시크릿 마스킹과 노이즈 제거의 회귀 테스트 |
-| [`docs/runbook/`](../../docs/runbook/) | 사람이 판단하며 따라야 할 운영 절차와 검증·복구 기준 |
+| `config.xml` | 승인된 마스킹 스냅샷 |
+| `scripts/normalize.py` | 시크릿·변동 노이즈 제거 |
+| `scripts/check-drift.sh` | 라이브 다운로드·정규화·diff |
+| `tests/test_normalize.py` | 마스킹 회귀 테스트 |
 
-스크립트는 OPNsense 컴포넌트에만 쓰이므로 `infra/opnsense/scripts/` 가 소유한다. 저장소 공통 도구가 되기 전에는 최상위 `scripts/` 로 올리지 않는다.
+원본은 `config.raw.xml`처럼 `.gitignore`가 차단하는 이름으로만 저장하고 작업 후 안전하게 폐기한다.
+
+## 사용
 
 저장소 루트에서 실행한다.
 
 ```sh
 python3 -m unittest discover -s infra/opnsense/tests -v
+
+export OPN_KEY='...'
+export OPN_SECRET='...'
 infra/opnsense/scripts/check-drift.sh
-# 라이브 변경이 정당하다고 확인한 뒤에만 실행
+
+# 라이브 차이가 정당하고 런타임 검증까지 끝난 경우만
 infra/opnsense/scripts/check-drift.sh --update
+infra/opnsense/scripts/check-drift.sh
 ```
 
-`README.md` 는 구성과 불변 원칙, 스크립트는 반복 실행 가능한 기계 동작, runbook 은 작업 시점·전제조건·검증·실패 시 복구처럼 사람의 판단이 필요한 절차를 맡는다. runbook 에 스크립트 구현을 복사하지 않고 정확한 경로로 링크한다.
+환경변수 값, 다운로드한 원본 XML과 diff의 시크릿을 셸 기록·CI log·Git에 남기지 않는다.
 
-## 현재 구성
+## 변경 절차
 
-| 항목 | 값 |
-|---|---|
-| 호스트명 | `opnsense.imcherry5778.xyz` |
-| **WAN** (`igc1`) | ISP DHCP — 공인 IP |
-| `igc0` | 미할당 — RECOVERY 예약 |
-| **LAN** (`igc2`) | `10.10.10.1/24` — 랩 네트워크 · Proxmox 직결 |
-| **HOME** (`igc3`) | `10.10.60.1/24` — 다운스트림 (프로젝트 범위 외) |
-| DNS | Unbound (Override DNS 해제, DNSSEC 활성) |
-| DHCP | **Dnsmasq** — ISC DHCP 는 26.7 에서 폐기됨 |
+1. `docs/backlog.md`에서 선행 작업과 `OPNSENSE-LIVE` 잠금을 확인한다.
+2. 일반 drift check로 시작 상태를 확인한다.
+3. UI 또는 공식 API에서 최소 변경만 stage한다.
+4. 적용 전 독립 복구 경로와 rollback 값을 확인한다.
+5. 라이브 API 응답만 보지 말고 interface, route, PF, DNS와 실제 client 요청을 검증한다.
+6. 정당한 최종 상태만 `--update`하고 테스트를 실행한다.
 
-인터페이스 배정 확인은 콘솔의 `1) Assign interfaces`, 물리 포트 대응은 케이블을 뽑았다 꽂아 `status: no carrier` 로 바뀌는 쪽을 보면 된다.
+API 요청 timeout은 성공이나 실패의 증거가 아니다. 인터페이스 전환으로 관리 경로가 끊긴 것일 수 있으므로 OOB에서 라이브 상태를 판정한다.
 
-```sh
-for i in igc0 igc1 igc2 igc3; do printf "%-6s " $i; ifconfig $i | grep -o 'status:.*'; done
-```
+## DNS 경계
 
-## 알아둘 것
+- Unbound는 재귀 해석기이며 외부 forwarding을 사용하지 않는다.
+- Dnsmasq는 DHCP와 동적 로컬 이름을 담당하고 별도 포트에서 Unbound와 연결된다.
+- Kubernetes CoreDNS는 Pod·Service 이름만 담당한다. 랩 DNS를 k3s로 옮기지 않는다.
+- 내부 zone과 같은 공인 이름은 split DNS override를 명시적으로 관리한다.
+- OPNsense wildcard 인증서 개인키를 다른 계층에 배포하지 않는다.
 
-### 파일시스템을 직접 고치면 덮어써진다
+## 패키지와 사용자
 
-OPNsense 는 `config.xml` 에서 설정 파일을 매번 생성한다. `/usr/local/etc/` 를 손으로 고쳐도 서비스 재시작 때 원래대로 돌아간다.
+- 기능은 OPNsense plugin으로만 설치한다. 셸의 임의 `pkg install`은 펌웨어 수명주기에서 유실된다.
+- SSH 공개키는 GUI 사용자 설정에 넣는다. 파일시스템의 `authorized_keys` 직접 편집은 덮어써질 수 있다.
+- 원본 backup에는 사용자 해시, TOTP, API key, DNS token과 TLS private key가 포함된다고 가정한다.
 
-**`ssh-copy-id` 가 동작하지 않는 이유도 같다.** `/root/.ssh/authorized_keys` 에 키를 넣어도, GUI 에서 아무 설정이나 저장하는 순간 config.xml 기준으로 덮어써진다.
+## 복구 독립성
 
-SSH 공개키는 반드시 **`System → Access → Users → root → Authorized keys`** 에 등록한다.
+다음 연동은 하지 않는다.
 
-### 플러그인은 config 에 기록되지만 pkg 는 아니다
+- Keycloak을 OPNsense의 유일한 인증으로 사용
+- Warpgate를 OPNsense의 유일한 관리 경로로 사용
+- OPNsense에 NetBird 같은 overlay agent 설치
+- 원격 세션만 가진 상태에서 관리 IP·물리 할당·기본 방화벽 변경
 
-| 행위 | 기록 | 결과 |
-|---|---|---|
-| 플러그인 설치 (GUI) | ✅ `<firmware><plugins>` | 안전 |
-| `pkg install` (셸) | ❌ | 펌웨어 업그레이드 시 사라짐 |
-| `/usr/local/etc/` 직접 수정 | ❌ | 서비스 재시작 시 덮어써짐 |
-
-필요한 기능이 있으면 플러그인을 찾는다. 없으면 그 기능을 OPNsense 에서 하지 않는 것이 맞다.
-
-### 내장 설정 이력
-
-`System → Configuration → History` 에 변경 이력이 diff 와 함께 보관된다. 원클릭 롤백도 된다.
-
-다만 **장비 안에만** 있어서 디스크가 죽으면 같이 사라진다. Git 과 보완 관계다. `Backups → Backup Count` 를 넉넉히(50 정도) 잡아두면 원격 작업 중 실수했을 때 안전망이 된다.
-
-## 하지 말 것
-
-- **Keycloak SSO 를 붙이지 않는다.** Keycloak 이 죽으면 방화벽에 들어갈 수 없게 된다. 로컬 계정이 break-glass 다.
-- **Warpgate 대상에 넣지 않는다.** 같은 이유 — Warpgate·Keycloak 이 죽었을 때 고쳐야 할 장비다.
-- **오버레이(NetBird) 에이전트를 설치하지 않는다.** 오버레이가 죽으면 복구 경로가 사라진다.
-- **원격에서 LAN IP·인터페이스 배정·방화벽 기본 정책을 바꾸지 않는다.** 되돌릴 수 없다.
-
-## 보안 점검 항목
-
-| 항목 | 상태 |
-|---|---|
-| SSH `Permit password login` | 해제 (공개키만) |
-| SSH `Listen Interfaces` | LAN 으로 제한 |
-| 웹 GUI `Listen Interfaces` | **LAN 으로 제한 필요** ← 현재 `All` |
-| WAN `Block private networks` | 활성 |
-| WAN `Block bogon networks` | 활성 |
-
-WAN 이 공인 IP 이므로 `Listen Interfaces: All` 은 관리 포트가 인터넷 쪽에서도 listen 한다는 뜻이다. 기본 WAN 방화벽 규칙이 차단하고 있으나, 규칙 하나에만 의존하지 않도록 인터페이스를 제한해야 한다.
+OPNsense, Keycloak과 overlay가 동시에 중단돼도 PiKVM/콘솔과 로컬 관리자로 복구할 수 있어야 한다.
