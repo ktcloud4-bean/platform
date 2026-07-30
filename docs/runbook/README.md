@@ -25,3 +25,4 @@ UI 위치나 명령을 추측해 미리 작성하지 않는다. 첫 PoC는 백�
 ## 현재 runbook
 
 - [`opnsense-interface-reassignment.md`](opnsense-interface-reassignment.md) — 2026-07-28 검증된 물리 인터페이스 재할당 절차
+- [`proxmox-manual-install.md`](proxmox-manual-install.md) — 2026-07-30 검증된 Proxmox VE 수동 설치 선택값과 판정

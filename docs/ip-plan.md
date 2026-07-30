@@ -33,7 +33,7 @@
 | 주소 | 대상 | 상태 |
 |---|---|---|
 | `10.10.10.1/24` | `opnsense` LAN gateway | `LIVE` |
-| `10.10.10.10/24` | `proxmox-01` | `RESERVED` |
+| `10.10.10.10/24` | `proxmox-01` | `LIVE` |
 
 현재 LAN DHCP는 `10.10.10.100-10.10.10.245`다. 임시 설치 환경의 동적 주소는 문서에 고정 배정으로 올리지 않는다.
 
@@ -55,7 +55,7 @@ VLAN 번호는 보안 등급 순서가 아니라 역할 식별자다. 실제 신
 | 주소 | 호스트 | 상태 |
 |---|---|---|
 | `10.10.10.1` | `opnsense` | `LIVE`; VLAN 전환 후 VLAN 10 gateway |
-| `10.10.10.10` | `proxmox-01` | `RESERVED` |
+| `10.10.10.10` | `proxmox-01` | `LIVE` |
 | `10.10.20.1` | OPNsense `PLATFORM` gateway | `TARGET` |
 | `10.10.20.10` | `k3s-01` | `RESERVED` |
 | `10.10.30.1` | OPNsense `ACCESS` gateway | `TARGET` |
