@@ -947,7 +947,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785260298.43" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785394217.09" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -1043,6 +1043,84 @@
           <txtdata />
           <addptr>1</addptr>
           <description>OPNsense management</description>
+        </host>
+        <host uuid="f221446c-f5fb-42da-b834-aa553095eb0d">
+          <enabled>1</enabled>
+          <hostname>proxmox-01</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <rr>A</rr>
+          <mxprio />
+          <mx />
+          <ttl />
+          <server>10.10.10.10</server>
+          <txtdata />
+          <addptr>1</addptr>
+          <description>Proxmox management</description>
+        </host>
+        <host uuid="a690c2b5-5600-4a50-8678-953cc14889d2">
+          <enabled>1</enabled>
+          <hostname>k3s-01</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <rr>A</rr>
+          <mxprio />
+          <mx />
+          <ttl />
+          <server>10.10.20.10</server>
+          <txtdata />
+          <addptr>1</addptr>
+          <description>k3s node</description>
+        </host>
+        <host uuid="dac17a53-76f0-4bcb-9c55-7b068a8ed5e4">
+          <enabled>1</enabled>
+          <hostname>warpgate-01</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <rr>A</rr>
+          <mxprio />
+          <mx />
+          <ttl />
+          <server>10.10.30.10</server>
+          <txtdata />
+          <addptr>1</addptr>
+          <description>Warpgate VM</description>
+        </host>
+        <host uuid="5884fb62-8b65-426b-bff6-7992fc361bde">
+          <enabled>1</enabled>
+          <hostname>netbird-01</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <rr>A</rr>
+          <mxprio />
+          <mx />
+          <ttl />
+          <server>10.10.40.10</server>
+          <txtdata />
+          <addptr>1</addptr>
+          <description>NetBird VM</description>
+        </host>
+        <host uuid="293f5697-bba1-4909-96f2-f0a1837c12f3">
+          <enabled>1</enabled>
+          <hostname>postgres-01</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <rr>A</rr>
+          <mxprio />
+          <mx />
+          <ttl />
+          <server>10.10.50.10</server>
+          <txtdata />
+          <addptr>1</addptr>
+          <description>PostgreSQL VM</description>
+        </host>
+        <host uuid="5ea705e2-e841-420c-afc6-0ed8622f6aa7">
+          <enabled>1</enabled>
+          <hostname>minio-01</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <rr>A</rr>
+          <mxprio />
+          <mx />
+          <ttl />
+          <server>10.10.50.20</server>
+          <txtdata />
+          <addptr>1</addptr>
+          <description>MinIO VM</description>
         </host>
       </hosts>
       <aliases />

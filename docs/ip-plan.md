@@ -107,30 +107,32 @@ Proxmox NIC ── VLAN-aware bridge
 
 랩 도메인은 `imcherry5778.xyz`다. OPNsense Unbound가 내부 응답과 split DNS를 담당하고, Kubernetes CoreDNS는 클러스터 내부 이름만 담당한다.
 
-| 이름 | 대상 | 노출 |
-|---|---|---|
-| `opnsense.imcherry5778.xyz` | OPNsense 관리 | 내부 |
-| `proxmox-01.imcherry5778.xyz` | Proxmox 관리 | 내부 |
-| `k3s-01.imcherry5778.xyz` | k3s 노드 | 내부 |
-| `postgres-01.imcherry5778.xyz` | PostgreSQL VM | 내부 |
-| `minio-01.imcherry5778.xyz` | MinIO VM | 내부 |
-| `warpgate-01.imcherry5778.xyz` | Warpgate VM | 내부 |
-| `netbird-01.imcherry5778.xyz` | NetBird VM | 내부 |
-| `sso.imcherry5778.xyz` | Keycloak | 외부 인증 연동 가능 |
-| `access.imcherry5778.xyz` | Pomerium Routes Portal | 보호된 외부 접근 가능 |
-| `argo.imcherry5778.xyz` | Argo CD | Pomerium |
-| `headlamp.imcherry5778.xyz` | Headlamp | Pomerium |
-| `vault.imcherry5778.xyz` | Vault | 내부 관리 경로만 |
-| `git.imcherry5778.xyz` | Gitea | Pomerium |
-| `jenkins.imcherry5778.xyz` | Jenkins | Pomerium |
-| `sonar.imcherry5778.xyz` | SonarQube | Pomerium |
-| `harbor.imcherry5778.xyz` | Harbor | UI는 Pomerium, registry API는 별도 인증 |
-| `awx.imcherry5778.xyz` | AWX | Pomerium |
-| `grafana.imcherry5778.xyz` | Grafana | Pomerium |
-| `netbird.imcherry5778.xyz` | NetBird control plane | 외부 |
-| `warpgate.imcherry5778.xyz` | Warpgate 서비스 | 내부·NetBird 경유 |
-| `postgres.imcherry5778.xyz` | PostgreSQL | 내부, 비 HTTP |
-| `minio.imcherry5778.xyz` | MinIO API | 내부, 비 Pomerium 데이터 경로 |
+| 이름 | 종류 | 대상 | 노출 | 내부 DNS |
+|---|---|---|---|---|
+| `opnsense.imcherry5778.xyz` | canonical host | OPNsense 관리 | 내부 | Unbound 등록 |
+| `proxmox-01.imcherry5778.xyz` | canonical host | Proxmox 관리 | 내부 | Unbound 등록 |
+| `k3s-01.imcherry5778.xyz` | canonical host | k3s 노드 | 내부 | Unbound 등록 |
+| `postgres-01.imcherry5778.xyz` | canonical host | PostgreSQL VM | 내부 | Unbound 등록 |
+| `minio-01.imcherry5778.xyz` | canonical host | MinIO VM | 내부 | Unbound 등록 |
+| `warpgate-01.imcherry5778.xyz` | canonical host | Warpgate VM | 내부 | Unbound 등록 |
+| `netbird-01.imcherry5778.xyz` | canonical host | NetBird VM | 내부 | Unbound 등록 |
+| `sso.imcherry5778.xyz` | service alias | Keycloak | 외부 인증 연동 가능 | 미등록 |
+| `access.imcherry5778.xyz` | service alias | Pomerium Routes Portal | 보호된 외부 접근 가능 | 미등록 |
+| `argo.imcherry5778.xyz` | service alias | Argo CD | Pomerium | 미등록 |
+| `headlamp.imcherry5778.xyz` | service alias | Headlamp | Pomerium | 미등록 |
+| `vault.imcherry5778.xyz` | service alias | Vault | 내부 관리 경로만 | 미등록 |
+| `git.imcherry5778.xyz` | service alias | Gitea | Pomerium | 미등록 |
+| `jenkins.imcherry5778.xyz` | service alias | Jenkins | Pomerium | 미등록 |
+| `sonar.imcherry5778.xyz` | service alias | SonarQube | Pomerium | 미등록 |
+| `harbor.imcherry5778.xyz` | service alias | Harbor | UI는 Pomerium, registry API는 별도 인증 | 미등록 |
+| `awx.imcherry5778.xyz` | service alias | AWX | Pomerium | 미등록 |
+| `grafana.imcherry5778.xyz` | service alias | Grafana | Pomerium | 미등록 |
+| `netbird.imcherry5778.xyz` | service alias | NetBird control plane | 외부 | 미등록 |
+| `warpgate.imcherry5778.xyz` | service alias | Warpgate 서비스 | 내부·NetBird 경유 | 미등록 |
+| `postgres.imcherry5778.xyz` | service alias | PostgreSQL | 내부, 비 HTTP | 미등록 |
+| `minio.imcherry5778.xyz` | service alias | MinIO API | 내부, 비 Pomerium 데이터 경로 | 미등록 |
+
+canonical host의 주소는 이 문서의 고정 배정 표를 참조한다. `Unbound 등록`은 내부 host override 상태이며 공개 DNS 상태와는 별개다. service alias는 해당 서비스와 진입 경로를 검증한 뒤 등록한다.
 
 Keycloak issuer는 `https://sso.imcherry5778.xyz`로 고정한다. k3s 웹 서비스의 내부 레코드는 Traefik 진입 주소를 가리키고, 공개 서비스는 공인 DNS와 Unbound override를 함께 검증한다.
 
