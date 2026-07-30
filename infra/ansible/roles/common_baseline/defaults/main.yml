@@ -1,0 +1,16 @@
+---
+# 게스트 timezone. docs/architecture.md 의 랩 운영 기준값이다.
+system_timezone: Asia/Seoul
+
+# 시간 동기화 대상.
+#
+# NET-03 은 각 project VLAN 에서 해당 VLAN 의 OPNsense gateway UDP 123 만 허용하고
+# 공개 NTP 는 차단한다 (docs/runbook/opnsense-vlan-bootstrap-firewall.md).
+# 게스트의 default route gateway 가 곧 그 주소이므로 라이브 fact 에서 가져온다.
+# 주소를 이 저장소에 중복 고정하지 않기 위한 선택이다. 원본은 docs/ip-plan.md 다.
+#
+# 다른 값이 필요하면 저장소 밖 inventory 에서 chrony_ntp_server 로 덮어쓴다.
+chrony_ntp_server: "{{ ansible_default_ipv4.gateway }}"
+
+# chronyd 가 읽을 source 디렉터리. chrony 4.x 의 sourcedir 지시자를 쓴다.
+chrony_sources_dir: /etc/chrony/sources.d

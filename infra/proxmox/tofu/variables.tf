@@ -80,7 +80,7 @@ variable "vlan_trunk_ready" {
     NET-02·NET-03 완료 여부.
     vmbr0 가 VLAN-aware trunk 이고 목표 VLAN gateway 와 기본 deny 정책이 살아 있어야 true 다.
     false 이면 VM 을 한 대도 선언하지 않는다.
-    현재 vmbr0 는 Phase 1 untagged 이므로 VLAN tag 를 붙여도 통신하지 않는다.
+    NET-02R·NET-03 완료로 vmbr0 는 tagged-only trunk 이며 bridge-vids 에 VLAN 10~50 이 있다.
   EOT
   type        = bool
   default     = false

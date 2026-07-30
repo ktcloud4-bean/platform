@@ -1,16 +1,30 @@
 # Proxmox VM · OpenTofu
 
-검증일: 2026-07-30. 선택 이유·대안·재검토 조건은 [ADR-0008](../../../docs/adr/0008-opentofu-provider-and-state-boundary.md)이 소유한다.
+검증일: 2026-07-31 (`VM-01` 라이브 적용). 선택 이유·대안·재검토 조건은 [ADR-0008](../../../docs/adr/0008-opentofu-provider-and-state-boundary.md)이 소유한다.
 
-## 지금 이 구성이 만드는 것
+## 지금 이 구성이 소유하는 것
 
-**아무것도 만들지 않는다.** 기본값으로 `tofu plan`을 돌리면 리소스가 0개다.
+`VM-01`이 2026-07-31에 VM 5대를 한 번의 apply로 만들었다. state에는 리소스 5개가 있고 `tofu plan`은 무변경이다.
 
-VM 5대는 `OS-01`의 template, `PVE-ACME-01`의 strict TLS와 `NET-02`·`NET-03`의 VLAN이 모두 끝난 뒤 `VM-01`이 한 번의 apply로 만든다. 그때까지 이 구성은 계획만 검증할 수 있다.
+gate 값은 저장소 밖 변수 파일로 주입한다. gate를 비우고 `tofu plan`을 돌리면 여전히 리소스 0개와 `blocked_by`가 나온다. 이것이 선행 조건을 잃었을 때의 정상 동작이다.
 
 ```sh
-tofu plan            # blocked_by 출력으로 무엇이 막고 있는지 확인
+tofu plan                       # gate 값 없이: 리소스 0개 + blocked_by
+tofu plan -var-file=<저장소 밖>  # 현재 운영 상태: No changes
 ```
+
+라이브에서 확정한 gate 값은 다음과 같다. 값 자체는 `terraform.tfvars.example`이 형식만 보여 주고, 실제 파일은 저장소 밖에 mode `0600`으로 둔다.
+
+| 변수 | 값 | 라이브 확인 근거 |
+|---|---|---|
+| `vm_template_id` | `9000` | `qm config 9000`의 `template: 1` |
+| `vlan_trunk_ready` | `true` | `vmbr0` VLAN-aware·`bridge-vids 10 20 30 40 50`, OPNsense VLAN gateway와 `NET-03` PF 24개 |
+| `vm_bios` / `vm_machine` | `seabios` / `pc` | template은 두 필드를 생략한다. 설치본 `QemuServer.pm`의 `bios` 기본값이 `seabios`, `qm showcmd 9000`의 실측 machine이 `pc+pve0`(i440fx) |
+| `cloud_init_interface` | `ide2` | `qm config 9000`의 `ide2: local-lvm:vm-9000-cloudinit` |
+| `agent_enabled` | `true` | `qm config 9000`의 `agent: enabled=1`, 게스트 `qemu-guest-agent` active/enabled |
+| `proxmox_insecure` | `false` | 8006 strict TLS 검증 성공(`ssl_verify_result=0`) |
+
+생략된 template 필드를 기본값이라고 단정하지 않는다. 설치 버전의 schema 기본값과 `qm showcmd`의 실행 계약을 매번 다시 확인한다.
 
 ## 도구와 버전
 
@@ -26,16 +40,62 @@ tofu plan            # blocked_by 출력으로 무엇이 막고 있는지 확인
 
 ## 자격증명
 
-값을 이 저장소에 두지 않는다. 채팅·이슈·커밋 메시지에도 남기지 않는다.
+토큰 값을 **커밋하지 않는다.** 채팅·이슈·커밋 메시지·plan·state·`*.tfvars`·명령 인자에도 남기지 않는다.
+
+값은 `infra/proxmox/.env`에 두고 mode `0600`으로 유지한다. 루트 `.gitignore`가 `.env`를 막고 `!.env.example`만 추적한다. `infra/proxmox/acme`와 같은 규약이다.
 
 ```sh
-export PROXMOX_VE_API_TOKEN='<user>@<realm>!<token-id>=<secret>'
+cp infra/proxmox/.env.example infra/proxmox/.env
+chmod 600 infra/proxmox/.env
+# PROXMOX_VE_API_TOKEN=<user>@<realm>!<token-id>=<uuid> 한 줄만 채운다
 ```
 
-- `PROXMOX_VE_API_TOKEN` 하나면 된다. `.tfvars`에 넣지 않는다.
+파일은 셸로 `source`하지 않는다. 해당 줄만 파싱해 OpenTofu 프로세스 환경으로만 넘긴다.
+
+```sh
+PROXMOX_VE_API_TOKEN="$(grep -E '^PROXMOX_VE_API_TOKEN=' infra/proxmox/.env | cut -d= -f2-)" \
+  tofu plan
+```
+
+- `PROXMOX_VE_API_TOKEN` 하나면 된다.
 - 토큰이 없으면 `plan`이 `Unable to create Proxmox VE API credentials`로 멈춘다. 이것이 정상 동작이다.
 - provider에 `ssh` 블록을 두지 않았다. snippet 업로드나 로컬 파일 import를 쓰지 않으므로 SSH 경로가 필요 없고, 열지 않으면 provider가 호스트 파일시스템에 닿지 못한다.
-- 토큰은 필요한 권한만 준다. `Administrator`나 `root@pam` 토큰을 쓰지 않는다. 필요한 권한 목록은 provider 문서의 role 예시를 그대로 쓰지 말고 실제 plan이 요구하는 것으로 좁힌다.
+- `.gitignore`는 커밋만 막는다. `git clean -xfd`는 이 파일을 지운다. 지웠으면 토큰을 다시 발급한다.
+
+### 전용 주체와 최소 권한
+
+`Administrator`나 `root@pam` 토큰을 쓰지 않는다. `VM-01`이 만든 주체는 다음과 같다.
+
+| 항목 | 값 |
+|---|---|
+| role | `OpenTofuVM` (custom) |
+| user | `opentofu@pve` |
+| ACL | `/` → `OpenTofuVM`, propagate |
+| token | `opentofu@pve!vm01`, `privsep=0` |
+
+권한은 provider 문서의 role 예시가 아니라 이 구성이 실제로 요구하는 것만 담는다. 설치본 `PVE/API2/Qemu.pm`의 `$check_vm_modify_config_perm`에서 설정 항목별로 확인한 값이다.
+
+```text
+VM.Allocate VM.Audit VM.Clone
+VM.Config.CDROM VM.Config.Cloudinit VM.Config.CPU VM.Config.Disk
+VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options
+VM.PowerMgmt VM.GuestAgent.Audit
+Datastore.Audit Datastore.AllocateSpace
+Sys.Audit Sys.Modify
+```
+
+`Sys.Modify`는 `startup` 하나 때문에 필요하다. 그 항목만 `check_full($authuser, "/", ['Sys.Modify'])`를 요구한다. 이 권한은 노드 네트워크 설정까지 열어 주므로, `startup`을 포기하면 함께 뺄 수 있다는 것을 알고 남긴 선택이다.
+
+`Permissions.Modify`·`User.Modify`·`Realm.*`·`Sys.Console`·`Sys.PowerMgmt`·`VM.Migrate`·`VM.Snapshot`·`Datastore.Allocate`는 주지 않는다.
+
+폐기는 역순으로 한다.
+
+```sh
+pveum user token remove opentofu@pve vm01
+pveum acl delete / --user opentofu@pve --role OpenTofuVM
+pveum user delete opentofu@pve
+pveum role delete OpenTofuVM
+```
 
 `initialization.upgrade`와 `cpu.affinity`처럼 `root@pam`만 쓸 수 있는 항목은 이 구성에서 쓰지 않거나 꺼 두었다. API token으로 apply할 수 있게 하기 위한 선택이다.
 
@@ -50,7 +110,7 @@ export PROXMOX_VE_API_TOKEN='<user>@<realm>!<token-id>=<secret>'
 로컬 backend다. 파일은 `terraform.tfstate`이며 Git에서 제외된다.
 
 - **state에는 자원 속성이 평문으로 남는다.** cloud-init 사용자 이름, SSH 공개키, 주소가 들어간다.
-- **복구 지점:** `VM-01` 전까지 state에는 리소스가 없다. 즉 지금 잃을 것이 없고, 파일이 없는 상태가 정상이다. `VM-01`이 처음 apply한 뒤부터는 apply 직후의 `terraform.tfstate`를 저장소 밖에 사본으로 둔다.
+- **복구 지점:** `VM-01`이 2026-07-31에 처음 apply했다. 그 이후 apply마다 직후의 `terraform.tfstate`를 저장소 밖 mode `0600` 사본으로 두고 SHA-256만 작업 기록에 남긴다.
 - **state를 잃으면** VM은 살아 있는데 소유권만 사라진다. 아래 import로 되찾는다.
 
 ## import 경계
@@ -108,7 +168,7 @@ provider 문서는 `size`를 "gigabytes"라고 쓰지만 Proxmox는 이 값을 G
 2. **`OS-01` template VMID** — Proxmox에서 실제 template의 VMID를 읽어 `vm_template_id`에 넣는다. 추측하지 않는다.
 3. **template의 `bios`·`machine`·cloud-init drive 위치** — `vm_bios`·`vm_machine`·`cloud_init_interface`가 template과 다르면 clone이 template 설정을 덮어쓴다. 기본값은 `seabios`·`pc`·`ide2`다.
 4. **template의 qemu-guest-agent** — 부팅 시 자동 기동하지 않으면 `agent_enabled = false`로 둔다. agent 없이 `true`이면 생성·refresh·shutdown이 전부 timeout된다.
-5. **VLAN trunk** — `vmbr0`가 VLAN-aware이고 목표 VLAN gateway와 기본 deny 정책이 살아 있어야 `vlan_trunk_ready = true`다. 현재 `vmbr0`는 Phase 1 untagged이므로 VLAN tag를 붙여도 통신하지 않는다.
+5. **VLAN trunk** — `vmbr0`가 VLAN-aware이고 목표 VLAN gateway와 기본 deny 정책이 살아 있어야 `vlan_trunk_ready = true`다. `NET-02R`·`NET-03` 완료로 현재는 tagged-only trunk이며 `bridge-vids`에 VLAN 10·20·30·40·50이 있다.
 6. **capacity 정지 기준** — `capacity-plan.md`의 재측정 절차를 돌려 어떤 지표도 정지 구간이 아닌지 확인한다.
 7. **SSH 공개키** — `ssh_public_keys`가 비면 생성 후 게스트에 들어갈 방법이 없다. 모듈이 이를 `precondition`으로 막는다.
 

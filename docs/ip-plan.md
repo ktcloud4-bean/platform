@@ -61,14 +61,16 @@ VLAN 번호는 보안 등급 순서가 아니라 역할 식별자다. 실제 신
 | `10.10.10.1` | `opnsense` | `LIVE`; `vlan01` |
 | `10.10.10.10` | `proxmox-01` | `LIVE`; `vmbr0.10` |
 | `10.10.20.1` | OPNsense `PLATFORM` gateway | `LIVE` |
-| `10.10.20.10` | `k3s-01` | `RESERVED` |
+| `10.10.20.10` | `k3s-01` | `LIVE`; VMID 120 |
 | `10.10.30.1` | OPNsense `ACCESS` gateway | `LIVE` |
-| `10.10.30.10` | `warpgate-01` | `RESERVED` |
+| `10.10.30.10` | `warpgate-01` | `LIVE`; VMID 130 |
 | `10.10.40.1` | OPNsense `DMZ` gateway | `LIVE` |
-| `10.10.40.10` | `netbird-01` | `RESERVED` |
+| `10.10.40.10` | `netbird-01` | `LIVE`; VMID 140 |
 | `10.10.50.1` | OPNsense `DATA` gateway | `LIVE` |
-| `10.10.50.10` | `postgres-01` | `RESERVED` |
-| `10.10.50.20` | `minio-01` | `RESERVED` |
+| `10.10.50.10` | `postgres-01` | `LIVE`; VMID 150 |
+| `10.10.50.20` | `minio-01` | `LIVE`; VMID 151 |
+
+2026-07-31 `VM-01`에서 다섯 주소를 cloud-init 고정 배정으로 적용하고 재부팅 후까지 검증해 `RESERVED`에서 `LIVE`로 올렸다. 각 게스트는 자기 VLAN gateway를 default route와 DNS resolver로 쓰고, 실제 source에서 실행한 `vlan-verify bootstrap`이 통과했다. VMID 규칙과 VM 계약은 [`infra/proxmox/tofu/README.md`](../infra/proxmox/tofu/README.md)가 소유한다.
 
 ## 물리 토폴로지
 
