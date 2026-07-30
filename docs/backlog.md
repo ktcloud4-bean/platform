@@ -8,10 +8,11 @@
 |---|---|---|
 | OPNsense | `DONE` | 공인 WAN, 2FA, LAN/HOME 재배치, ACME, 마스킹·드리프트 도구 검증 |
 | Proxmox | `DONE` | 9.2.0 설치, 관리 UI·SSH·스토리지와 재부팅 후 검증; 선택값은 runbook |
+| 자원 예산 | `DONE` | VM 0개 상태의 실측 기준표·과할당 한계·정지 기준; 값은 `capacity-plan.md` |
 | VLAN trunk | `BLOCKED` | RECOVERY 복구 drill과 `vlan-verify` 필요 |
 | VM·k3s·플랫폼 서비스 | `BLOCKED` | VLAN과 VM 기반 작업 필요 |
 
-`PVE-01` 완료로 `CAP-01`·`DNS-01`·`AUTO-01`·`OS-01`·`REC-01`이 열렸고 `NET-01`은 계속 병렬 가능하다. `PVE-LIVE`(`CAP-01`·`OS-01`)와 `OPNSENSE-LIVE`(`DNS-01`·`REC-01`)는 각각 한 번에 하나만 실행한다.
+`CAP-01` 완료로 `IAC-01`에 남은 선행은 `DNS-01` 하나다. 지금 열린 작업은 `DNS-01`·`AUTO-01`·`OS-01`·`REC-01`이고 `NET-01`은 계속 병렬 가능하다. `PVE-LIVE`(`OS-01`)와 `OPNSENSE-LIVE`(`DNS-01`·`REC-01`)는 각각 한 번에 하나만 실행한다.
 
 ## 멀티 에이전트 규칙
 
@@ -55,7 +56,7 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 |---|---|---|---|---|---|
 | `PVE-01 DONE` | Proxmox 수동 설치·선택값 runbook (`docs/runbook/proxmox-manual-install.md`)·재부팅 검증 | 없음 | `PVE-LIVE` | 이후 전체 | 목표 NVMe, 설치 버전·filesystem·storage 선택, `ip-plan` 기반 network 적용 증거, 관리 UI·SSH와 재부팅 후 정상 |
 | `DNS-01 READY` | Unbound에 물리·VM canonical host record 등록 | `PVE-01` | `OPNSENSE-LIVE` | `IAC-01`, 모든 VM | 정·역방향 이름 해석, 미배포 service alias 없음, drift 없음 |
-| `CAP-01 READY` | CPU·RAM·thin storage·호스트 여유 예산 확정 | `PVE-01` | `PVE-LIVE` | `VM-01`, PVC 용량 | 실제 `pvesm`, 메모리와 디스크 기준표; 과할당 한계 기록 |
+| `CAP-01 DONE` | CPU·RAM·thin storage·호스트 여유 예산 확정 (`docs/capacity-plan.md`) | `PVE-01` | `PVE-LIVE` | `VM-01`, PVC 용량 | VM 0개 상태의 `pvesm`·`lvs`·`vgs`·`free`·`lscpu` 실측 기준표, RAM 과할당 금지·thin 프로비저닝 상한·지표별 정지 기준 기록 |
 | `AUTO-01 READY` | 공식 `answer.toml` 템플릿과 자동설치 ISO PoC (`infra/proxmox/installer/`) | `PVE-01` | 없음 | 재설치 | 원본 ISO checksum, 템플릿·생성·검증 절차, Git의 비밀·생성 ISO 부재, 별도 VM/가상 디스크 무인 설치; 실물 디스크 미사용 |
 | `OS-01 READY` | Rocky Linux 9 Minimal cloud-init template·Ansible 공통 baseline | `PVE-01` | `PVE-LIVE` | 모든 VM | clone 후 SSH key, 시간, 저장소, qemu-agent, 재부팅 검증 |
 | `IAC-01 BLOCKED` | OpenTofu provider·state·VM 공통 모듈 (`infra/proxmox/`) | `PVE-01`, `DNS-01`, `CAP-01` | `TOFU-STATE` | `VM-01` | secret 없는 init/validate/plan, state 보관 방식과 import 경계 검증 |
