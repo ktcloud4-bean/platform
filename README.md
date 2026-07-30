@@ -25,6 +25,7 @@ OPNsense → Proxmox → Rocky Linux VM → k3s → 플랫폼 서비스
 | 무엇을 어디에 두는가 | [`docs/architecture.md`](docs/architecture.md) |
 | 왜 그렇게 결정했는가 | [`docs/adr/README.md`](docs/adr/README.md) |
 | IP·VLAN·DNS는 무엇인가 | [`docs/ip-plan.md`](docs/ip-plan.md) |
+| 자원을 얼마나 쓸 수 있는가 | [`docs/capacity-plan.md`](docs/capacity-plan.md) |
 | OPNsense를 어떻게 운영하는가 | [`infra/opnsense/README.md`](infra/opnsense/README.md) |
 | 검증된 현장 절차는 무엇인가 | [`docs/runbook/`](docs/runbook/) |
 

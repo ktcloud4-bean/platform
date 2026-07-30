@@ -141,7 +141,7 @@ efibootmgr | grep -E '^Boot(Order|Current)|^Boot0'
 
 파티션은 `1007 KiB EF02` + `1024 MiB EF00`(`/boot/efi`, vfat) + `930 GiB 8E00`(LVM)이다.
 
-`CAP-01`은 이 값과 20 vCPU · 62 GiB RAM을 기준으로 예산을 정한다. `local-lvm`은 thin 풀이라 과할당이 가능하므로 요청량이 아니라 실제 사용량을 감시한다 ([ADR-0002](../adr/0002-single-node-k3s-and-local-storage.md)).
+이 값과 20 vCPU · 62 GiB RAM을 기준으로 정한 VM별 예산과 정지 기준은 [`capacity-plan.md`](../capacity-plan.md)가 소유한다. `local-lvm`은 thin 풀이라 과할당이 가능하므로 요청량이 아니라 실제 사용량을 감시한다 ([ADR-0002](../adr/0002-single-node-k3s-and-local-storage.md)).
 
 ## 알려진 잔여물
 
