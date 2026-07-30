@@ -1,0 +1,1815 @@
+#!/usr/bin/env python3
+"""네트워크 정책을 계층별 probe로 검증하는 읽기 전용 CLI."""
+
+from __future__ import annotations
+
+import argparse
+import errno
+import ipaddress
+import json
+import secrets
+import socket
+import ssl
+import struct
+import subprocess
+import sys
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Iterable, Mapping, Sequence
+
+
+EXIT_OK = 0
+EXIT_FAILED = 1
+EXIT_USAGE = 2
+EXIT_INCONCLUSIVE = 3
+
+PASS = "PASS"
+FAIL = "FAIL"
+INCONCLUSIVE = "INCONCLUSIVE"
+
+ALLOW = "ALLOW"
+BLOCK = "BLOCK"
+
+SUPPORTED_LAYERS = {"route", "dns", "tcp", "ntp", "ssh", "tls", "http"}
+PHASE1_CHECKS = {"gateway", "dns", "ntp", "proxmox", "external"}
+
+
+class VlanVerifyError(ValueError):
+    """사용자 입력이나 검증 계약이 잘못됐을 때 발생한다."""
+
+
+@dataclass(frozen=True)
+class Profile:
+    name: str
+    scopes: tuple[str, ...]
+    purpose: str
+    claim: str
+    requires_vlan: bool = False
+    requires_allow_and_block: bool = False
+
+
+PROFILES: dict[str, Profile] = {
+    "bootstrap": Profile(
+        name="bootstrap",
+        scopes=("phase1-untagged-lan", "observer", "vlan"),
+        purpose=(
+            "구축 중 필요한 DNS, NTP, 인터넷, 관리 접근과 문서에서 확정한 "
+            "기본 차단을 검증한다."
+        ),
+        claim=(
+            "phase1/observer 실행은 선택한 현재망 회귀 항목만 증명한다. "
+            "vlan 실행의 차단 probe는 별도 허용 출발지의 최신 대조 증거가 필요하다."
+        ),
+    ),
+    "hardened": Profile(
+        name="hardened",
+        scopes=("vlan",),
+        purpose=(
+            "실재하는 VLAN에서 최종 기본 deny와 확인된 명시적 허용을 함께 검증한다."
+        ),
+        claim=(
+            "입력 plan에 적힌 확정 통신만 판정한다. 미배포 서비스나 입력하지 않은 "
+            "통신표까지 검증했다고 주장하지 않는다."
+        ),
+        requires_vlan=True,
+        requires_allow_and_block=True,
+    ),
+}
+
+
+@dataclass(frozen=True)
+class SourceSpec:
+    name: str
+    cidr: str
+    interface: str | None = None
+    vlan_id: int | None = None
+
+    @property
+    def network(self) -> ipaddress.IPv4Network:
+        network = ipaddress.ip_network(self.cidr, strict=False)
+        if network.version != 4:
+            raise VlanVerifyError("현재 vlan-verify는 IPv4 source CIDR만 지원합니다.")
+        return network
+
+
+@dataclass(frozen=True)
+class Probe:
+    probe_id: str
+    layer: str
+    destination_location: str
+    expected: str
+    reason: str
+    destination: str | None = None
+    destination_from: str | None = None
+    address_index: int = 0
+    port: int | None = None
+    query: str | None = None
+    expected_addresses: tuple[str, ...] = ()
+    server_name: str | None = None
+    tls_verify: bool = True
+    ca_file: str | None = None
+    http_path: str = "/"
+    http_status_min: int = 200
+    http_status_max: int = 399
+    dependencies: tuple[str, ...] = ()
+    control_probe: str | None = None
+    enforcement_point: str | None = None
+    category: str | None = None
+
+    @property
+    def protocol(self) -> str:
+        if self.layer == "route":
+            return "IPv4 route"
+        if self.layer == "dns":
+            return f"DNS/UDP/{self.port or 53}"
+        if self.layer == "ntp":
+            return f"NTP/UDP/{self.port or 123}"
+        if self.layer == "tcp":
+            return f"TCP/{self.port}"
+        if self.layer == "ssh":
+            return f"SSH/TCP/{self.port}"
+        if self.layer == "tls":
+            return f"TLS/TCP/{self.port}"
+        if self.layer == "http":
+            return f"HTTPS/TCP/{self.port}"
+        return self.layer
+
+
+@dataclass(frozen=True)
+class Observation:
+    kind: str
+    detail: str
+    data: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Result:
+    probe_id: str
+    layer: str
+    source: str
+    destination_location: str
+    destination: str
+    resolved_destination: str | None
+    protocol: str
+    expected: str
+    reason: str
+    status: str
+    observation: str
+    decision_basis: str
+    detail: str
+    observed_at: str
+    source_address: str | None = None
+    source_interface: str | None = None
+    port: int | None = None
+    data: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "Result":
+        fields = {
+            "probe_id",
+            "layer",
+            "source",
+            "destination_location",
+            "destination",
+            "resolved_destination",
+            "protocol",
+            "expected",
+            "reason",
+            "status",
+            "observation",
+            "decision_basis",
+            "detail",
+            "observed_at",
+            "source_address",
+            "source_interface",
+            "port",
+            "data",
+        }
+        missing = fields - value.keys()
+        if missing:
+            raise VlanVerifyError(
+                "대조 증거 result에 필드가 없습니다: " + ", ".join(sorted(missing))
+            )
+        return cls(**{name: value[name] for name in fields})
+
+
+@dataclass
+class Report:
+    profile: str
+    scope: str
+    profile_claim: str
+    source: SourceSpec
+    selected_checks: tuple[str, ...]
+    started_at: str
+    finished_at: str
+    overall_status: str
+    exit_code: int
+    results: list[Result]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "profile": self.profile,
+            "scope": self.scope,
+            "profile_claim": self.profile_claim,
+            "source": asdict(self.source),
+            "selected_checks": list(self.selected_checks),
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "overall_status": self.overall_status,
+            "exit_code": self.exit_code,
+            "results": [result.to_dict() for result in self.results],
+        }
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def get_profile(name: str) -> Profile:
+    try:
+        return PROFILES[name]
+    except KeyError as exc:
+        raise VlanVerifyError(
+            f"지원하지 않는 profile입니다: {name!r} "
+            f"(허용: {', '.join(sorted(PROFILES))})"
+        ) from exc
+
+
+def _require_text(value: Any, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise VlanVerifyError(f"{field_name}은 비어 있지 않은 문자열이어야 합니다.")
+    return value.strip()
+
+
+def _parse_port(value: Any, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise VlanVerifyError(f"{field_name}은 1..65535 정수여야 합니다.")
+    try:
+        port = int(value)
+    except (TypeError, ValueError) as exc:
+        raise VlanVerifyError(f"{field_name}은 1..65535 정수여야 합니다.") from exc
+    if not 1 <= port <= 65535:
+        raise VlanVerifyError(f"{field_name}은 1..65535 정수여야 합니다.")
+    return port
+
+
+def parse_source(value: Mapping[str, Any]) -> SourceSpec:
+    if not isinstance(value, Mapping):
+        raise VlanVerifyError("source는 JSON object여야 합니다.")
+    source = SourceSpec(
+        name=_require_text(value.get("name"), "source.name"),
+        cidr=_require_text(value.get("cidr"), "source.cidr"),
+        interface=(
+            _require_text(value["interface"], "source.interface")
+            if value.get("interface") is not None
+            else None
+        ),
+        vlan_id=value.get("vlan_id"),
+    )
+    try:
+        source.network
+    except ValueError as exc:
+        raise VlanVerifyError(f"잘못된 source.cidr입니다: {source.cidr}") from exc
+    if source.vlan_id is not None:
+        if isinstance(source.vlan_id, bool) or not isinstance(source.vlan_id, int):
+            raise VlanVerifyError("source.vlan_id는 1..4094 정수여야 합니다.")
+        if not 1 <= source.vlan_id <= 4094:
+            raise VlanVerifyError("source.vlan_id는 1..4094 정수여야 합니다.")
+    return source
+
+
+def parse_probe(value: Mapping[str, Any]) -> Probe:
+    if not isinstance(value, Mapping):
+        raise VlanVerifyError("각 probe는 JSON object여야 합니다.")
+    layer = _require_text(value.get("layer"), "probe.layer").lower()
+    expected = _require_text(value.get("expected"), "probe.expected").upper()
+    dependencies_value = value.get("dependencies", [])
+    if not isinstance(dependencies_value, list) or not all(
+        isinstance(item, str) and item for item in dependencies_value
+    ):
+        raise VlanVerifyError("probe.dependencies는 probe ID 문자열 배열이어야 합니다.")
+    expected_addresses_value = value.get("expected_addresses", [])
+    if not isinstance(expected_addresses_value, list) or not all(
+        isinstance(item, str) and item for item in expected_addresses_value
+    ):
+        raise VlanVerifyError("probe.expected_addresses는 IP 문자열 배열이어야 합니다.")
+    port = value.get("port")
+    if layer == "dns" and port is None:
+        port = 53
+    if layer == "ntp" and port is None:
+        port = 123
+    if port is not None:
+        port = _parse_port(port, "probe.port")
+    try:
+        address_index = int(value.get("address_index", 0))
+        http_status_min = int(value.get("http_status_min", 200))
+        http_status_max = int(value.get("http_status_max", 399))
+    except (TypeError, ValueError) as exc:
+        raise VlanVerifyError(
+            "probe.address_index와 HTTP status 범위는 정수여야 합니다."
+        ) from exc
+    tls_verify_value = value.get("tls_verify", True)
+    if not isinstance(tls_verify_value, bool):
+        raise VlanVerifyError("probe.tls_verify는 JSON boolean이어야 합니다.")
+    return Probe(
+        probe_id=_require_text(value.get("id"), "probe.id"),
+        layer=layer,
+        destination_location=_require_text(
+            value.get("destination_location"), "probe.destination_location"
+        ),
+        expected=expected,
+        reason=_require_text(value.get("reason"), "probe.reason"),
+        destination=(
+            _require_text(value["destination"], "probe.destination")
+            if value.get("destination") is not None
+            else None
+        ),
+        destination_from=(
+            _require_text(value["destination_from"], "probe.destination_from")
+            if value.get("destination_from") is not None
+            else None
+        ),
+        address_index=address_index,
+        port=port,
+        query=(
+            _require_text(value["query"], "probe.query")
+            if value.get("query") is not None
+            else None
+        ),
+        expected_addresses=tuple(expected_addresses_value),
+        server_name=(
+            _require_text(value["server_name"], "probe.server_name")
+            if value.get("server_name") is not None
+            else None
+        ),
+        tls_verify=tls_verify_value,
+        ca_file=(
+            _require_text(value["ca_file"], "probe.ca_file")
+            if value.get("ca_file") is not None
+            else None
+        ),
+        http_path=_require_text(value.get("http_path", "/"), "probe.http_path"),
+        http_status_min=http_status_min,
+        http_status_max=http_status_max,
+        dependencies=tuple(dependencies_value),
+        control_probe=(
+            _require_text(value["control_probe"], "probe.control_probe")
+            if value.get("control_probe") is not None
+            else None
+        ),
+        enforcement_point=(
+            _require_text(value["enforcement_point"], "probe.enforcement_point")
+            if value.get("enforcement_point") is not None
+            else None
+        ),
+        category=(
+            _require_text(value["category"], "probe.category")
+            if value.get("category") is not None
+            else None
+        ),
+    )
+
+
+def load_plan(path: str) -> tuple[str, SourceSpec, list[Probe]]:
+    try:
+        if path == "-":
+            value = json.load(sys.stdin)
+        else:
+            with open(path, encoding="utf-8") as stream:
+                value = json.load(stream)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise VlanVerifyError(f"plan을 읽을 수 없습니다: {exc}") from exc
+    if not isinstance(value, Mapping):
+        raise VlanVerifyError("plan 최상위 값은 JSON object여야 합니다.")
+    if value.get("schema_version") != 1:
+        raise VlanVerifyError("plan.schema_version은 1이어야 합니다.")
+    scope = _require_text(value.get("scope"), "plan.scope")
+    source = parse_source(value.get("source", {}))
+    raw_probes = value.get("probes")
+    if not isinstance(raw_probes, list) or not raw_probes:
+        raise VlanVerifyError("plan.probes는 비어 있지 않은 배열이어야 합니다.")
+    return scope, source, [parse_probe(item) for item in raw_probes]
+
+
+def _same_target(left: Probe, right: Probe) -> bool:
+    return (
+        left.destination == right.destination
+        and left.destination_from == right.destination_from
+        and left.address_index == right.address_index
+        and left.port == right.port
+    )
+
+
+def _same_destination(left: Probe, right: Probe) -> bool:
+    return (
+        left.destination == right.destination
+        and left.destination_from == right.destination_from
+        and left.address_index == right.address_index
+    )
+
+
+def validate_plan(
+    profile: Profile,
+    scope: str,
+    source: SourceSpec,
+    probes: Sequence[Probe],
+) -> None:
+    if scope not in profile.scopes:
+        raise VlanVerifyError(
+            f"profile {profile.name!r}은 scope {scope!r}에서 실행할 수 없습니다. "
+            f"허용 scope: {', '.join(profile.scopes)}"
+        )
+    if scope == "phase1-untagged-lan" and source.vlan_id is not None:
+        raise VlanVerifyError("phase1-untagged-lan source에는 vlan_id를 지정하지 않습니다.")
+    if profile.requires_vlan and source.vlan_id is None:
+        raise VlanVerifyError(
+            "hardened profile은 실재 VLAN 출발지를 증명할 source.vlan_id가 필요합니다."
+        )
+    if not probes:
+        raise VlanVerifyError("probe가 하나 이상 필요합니다.")
+
+    by_id: dict[str, Probe] = {}
+    allow_count = 0
+    block_count = 0
+    for probe in probes:
+        if probe.probe_id in by_id:
+            raise VlanVerifyError(f"중복 probe ID입니다: {probe.probe_id}")
+        if probe.layer not in SUPPORTED_LAYERS:
+            raise VlanVerifyError(
+                f"probe {probe.probe_id}: 지원하지 않는 layer {probe.layer!r}"
+            )
+        if probe.expected not in {ALLOW, BLOCK}:
+            raise VlanVerifyError(
+                f"probe {probe.probe_id}: expected는 ALLOW 또는 BLOCK이어야 합니다."
+            )
+        if (probe.destination is None) == (probe.destination_from is None):
+            raise VlanVerifyError(
+                f"probe {probe.probe_id}: destination과 destination_from 중 하나만 지정하세요."
+            )
+        if probe.destination is not None:
+            try:
+                destination_address = ipaddress.ip_address(probe.destination)
+            except ValueError as exc:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: destination은 IPv4이거나 "
+                    "destination_from DNS probe여야 합니다."
+                ) from exc
+            if destination_address.version != 4:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: 현재 IPv4 destination만 지원합니다."
+                )
+        if probe.address_index < 0:
+            raise VlanVerifyError(
+                f"probe {probe.probe_id}: address_index는 0 이상이어야 합니다."
+            )
+        for dependency in probe.dependencies:
+            if dependency not in by_id:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: dependency {dependency!r}는 앞선 probe여야 합니다."
+                )
+        if probe.destination_from is not None:
+            referenced = by_id.get(probe.destination_from)
+            if referenced is None or referenced.layer != "dns":
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: destination_from은 앞선 DNS probe여야 합니다."
+                )
+            if probe.destination_from not in probe.dependencies:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: destination_from DNS probe를 dependency에 포함하세요."
+                )
+
+        if probe.layer == "route":
+            if probe.expected != ALLOW:
+                raise VlanVerifyError("route 부재는 방화벽 차단 성공으로 판정할 수 없습니다.")
+            if probe.port is not None:
+                raise VlanVerifyError(f"probe {probe.probe_id}: route에는 port를 쓰지 않습니다.")
+        else:
+            route_dependencies = [
+                by_id[item]
+                for item in probe.dependencies
+                if by_id[item].layer == "route" and _same_destination(probe, by_id[item])
+            ]
+            if not route_dependencies:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: 같은 목적지의 앞선 route dependency가 필요합니다."
+                )
+
+        if probe.port is not None and not 1 <= probe.port <= 65535:
+            raise VlanVerifyError(
+                f"probe {probe.probe_id}: port는 1..65535 정수여야 합니다."
+            )
+        if probe.layer in {"tcp", "ssh", "tls", "http"} and probe.port is None:
+            raise VlanVerifyError(f"probe {probe.probe_id}: {probe.layer}에는 port가 필요합니다.")
+        if probe.layer == "dns":
+            if probe.query is None:
+                raise VlanVerifyError(f"probe {probe.probe_id}: dns에는 query가 필요합니다.")
+            if probe.expected != ALLOW:
+                raise VlanVerifyError(
+                    "DNS 무응답만으로 차단을 증명하지 않으므로 DNS BLOCK probe는 지원하지 않습니다."
+                )
+            for expected_address in probe.expected_addresses:
+                try:
+                    parsed_expected = ipaddress.ip_address(expected_address)
+                except ValueError as exc:
+                    raise VlanVerifyError(
+                        f"probe {probe.probe_id}: 잘못된 expected_addresses IP입니다."
+                    ) from exc
+                if parsed_expected.version != 4:
+                    raise VlanVerifyError(
+                        f"probe {probe.probe_id}: expected_addresses는 IPv4만 지원합니다."
+                    )
+        elif probe.expected_addresses:
+            raise VlanVerifyError(
+                f"probe {probe.probe_id}: expected_addresses는 DNS probe에만 씁니다."
+            )
+        if probe.layer in {"tls", "http"} and probe.server_name is None:
+            raise VlanVerifyError(
+                f"probe {probe.probe_id}: TLS SNI/HTTP Host용 server_name이 필요합니다."
+            )
+        if probe.layer in {"ssh", "tls"}:
+            matching_tcp = [
+                by_id[item]
+                for item in probe.dependencies
+                if by_id[item].layer == "tcp" and _same_target(probe, by_id[item])
+            ]
+            if not matching_tcp:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: 같은 대상의 앞선 TCP dependency가 필요합니다."
+                )
+        if probe.layer == "http":
+            matching_tls = [
+                by_id[item]
+                for item in probe.dependencies
+                if by_id[item].layer == "tls" and _same_target(probe, by_id[item])
+            ]
+            if not matching_tls:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: 같은 대상의 앞선 TLS dependency가 필요합니다."
+                )
+            if not 100 <= probe.http_status_min <= probe.http_status_max <= 599:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: HTTP status 범위는 100..599 안이어야 합니다."
+                )
+            if not probe.http_path.startswith("/"):
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: http_path는 /로 시작해야 합니다."
+                )
+            try:
+                probe.http_path.encode("ascii")
+            except UnicodeEncodeError as exc:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: http_path는 ASCII여야 합니다."
+                ) from exc
+
+        if probe.expected == BLOCK:
+            block_count += 1
+            if probe.layer not in {"tcp", "ntp"}:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: BLOCK 판정은 TCP 또는 응답형 UDP(NTP)만 지원합니다."
+                )
+            if not probe.control_probe:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: 열린 서비스 대조 증거 control_probe가 필요합니다."
+                )
+            if not probe.enforcement_point:
+                raise VlanVerifyError(
+                    f"probe {probe.probe_id}: enforcement_point를 명시해야 합니다."
+                )
+            if probe.destination is not None:
+                try:
+                    destination_ip = ipaddress.ip_address(probe.destination)
+                except ValueError:
+                    destination_ip = None
+                if (
+                    destination_ip is not None
+                    and destination_ip in source.network
+                    and probe.enforcement_point.casefold() == "opnsense"
+                ):
+                    raise VlanVerifyError(
+                        f"probe {probe.probe_id}: 같은 source CIDR 트래픽을 OPNsense 차단으로 "
+                        "주장할 수 없습니다. host-or-proxmox 검증으로 분리하세요."
+                    )
+        elif probe.layer != "route":
+            allow_count += 1
+
+        by_id[probe.probe_id] = probe
+
+    if profile.requires_allow_and_block and (allow_count == 0 or block_count == 0):
+        raise VlanVerifyError(
+            "hardened profile은 명시적 ALLOW와 기본 deny BLOCK probe를 모두 포함해야 합니다."
+        )
+
+
+def _encode_dns_name(name: str) -> bytes:
+    labels = name.rstrip(".").encode("idna").split(b".")
+    if not labels or any(not label or len(label) > 63 for label in labels):
+        raise VlanVerifyError(f"잘못된 DNS query 이름입니다: {name!r}")
+    encoded = b"".join(bytes([len(label)]) + label for label in labels) + b"\x00"
+    if len(encoded) > 255:
+        raise VlanVerifyError("DNS query 이름이 너무 깁니다.")
+    return encoded
+
+
+def _skip_dns_name(packet: bytes, offset: int) -> int:
+    seen = 0
+    while True:
+        if offset >= len(packet):
+            raise ValueError("DNS name이 packet 범위를 벗어났습니다.")
+        length = packet[offset]
+        if length & 0xC0 == 0xC0:
+            if offset + 1 >= len(packet):
+                raise ValueError("잘린 DNS compression pointer입니다.")
+            return offset + 2
+        if length == 0:
+            return offset + 1
+        if length & 0xC0:
+            raise ValueError("지원하지 않는 DNS label 형식입니다.")
+        offset += 1 + length
+        seen += 1
+        if seen > 127:
+            raise ValueError("DNS name label이 비정상적으로 많습니다.")
+
+
+def _parse_dns_response(packet: bytes, query_id: int) -> tuple[list[str], bool, int]:
+    if len(packet) < 12:
+        raise ValueError("DNS response header가 잘렸습니다.")
+    response_id, flags, qdcount, ancount, nscount, arcount = struct.unpack(
+        "!HHHHHH", packet[:12]
+    )
+    if response_id != query_id or not flags & 0x8000:
+        raise ValueError("DNS transaction ID 또는 response flag가 맞지 않습니다.")
+    truncated = bool(flags & 0x0200)
+    rcode = flags & 0x000F
+    offset = 12
+    for _ in range(qdcount):
+        offset = _skip_dns_name(packet, offset)
+        if offset + 4 > len(packet):
+            raise ValueError("DNS question이 잘렸습니다.")
+        offset += 4
+    addresses: list[str] = []
+    for _ in range(ancount + nscount + arcount):
+        offset = _skip_dns_name(packet, offset)
+        if offset + 10 > len(packet):
+            raise ValueError("DNS resource record가 잘렸습니다.")
+        rtype, rclass, _ttl, rdlength = struct.unpack("!HHIH", packet[offset : offset + 10])
+        offset += 10
+        if offset + rdlength > len(packet):
+            raise ValueError("DNS rdata가 잘렸습니다.")
+        rdata = packet[offset : offset + rdlength]
+        if rclass == 1 and rtype == 1 and rdlength == 4:
+            addresses.append(socket.inet_ntop(socket.AF_INET, rdata))
+        offset += rdlength
+    return sorted(set(addresses)), truncated, rcode
+
+
+def _socket_error_observation(exc: BaseException) -> Observation:
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return Observation("TIMEOUT", str(exc) or "시간 초과")
+    error_number = getattr(exc, "errno", None)
+    if isinstance(exc, ConnectionRefusedError) or error_number == errno.ECONNREFUSED:
+        return Observation("CONNECTION_REFUSED", str(exc) or "연결 거부")
+    if error_number in {errno.ENETUNREACH, errno.EHOSTUNREACH, errno.EADDRNOTAVAIL}:
+        return Observation("UNREACHABLE", str(exc) or "대상 도달 불가")
+    return Observation("NETWORK_ERROR", f"{type(exc).__name__}: {exc}")
+
+
+class SystemBackend:
+    """로컬 네트워크를 변경하지 않고 socket/ip 조회만 수행한다."""
+
+    def route(self, destination: str, timeout: float) -> Observation:
+        try:
+            completed = subprocess.run(
+                ["ip", "-j", "route", "get", destination],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except FileNotFoundError:
+            return self._route_with_socket(destination)
+        except subprocess.TimeoutExpired:
+            return Observation("ROUTE_ERROR", "ip route get 시간 초과")
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip() or "route 없음"
+            return Observation("ROUTE_MISSING", detail)
+        try:
+            rows = json.loads(completed.stdout)
+            row = rows[0]
+            source = row.get("prefsrc") or row.get("src")
+            interface = row.get("dev")
+            if not source or not interface:
+                raise (KeyError("prefsrc/dev"))
+        except (json.JSONDecodeError, IndexError, KeyError, TypeError) as exc:
+            return Observation("ROUTE_ERROR", f"ip route JSON 해석 실패: {exc}")
+        gateway = row.get("gateway")
+        detail = f"source={source}, interface={interface}"
+        if gateway:
+            detail += f", gateway={gateway}"
+        return Observation(
+            "ROUTE_FOUND",
+            detail,
+            {"source_address": source, "source_interface": interface, "gateway": gateway},
+        )
+
+    def _route_with_socket(self, destination: str) -> Observation:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.connect((destination, 9))
+            source = sock.getsockname()[0]
+        except OSError as exc:
+            return _socket_error_observation(exc)
+        finally:
+            sock.close()
+        return Observation(
+            "ROUTE_FOUND",
+            f"source={source}, interface=unknown (ip 명령 없음)",
+            {"source_address": source, "source_interface": None, "gateway": None},
+        )
+
+    def dns(self, server: str, port: int, query: str, timeout: float) -> Observation:
+        query_id = secrets.randbits(16)
+        question = _encode_dns_name(query) + struct.pack("!HH", 1, 1)
+        packet = struct.pack("!HHHHHH", query_id, 0x0100, 1, 0, 0, 0) + question
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(timeout)
+        try:
+            sock.sendto(packet, (server, port))
+            response, _peer = sock.recvfrom(65535)
+        except OSError as exc:
+            return _socket_error_observation(exc)
+        finally:
+            sock.close()
+        try:
+            addresses, truncated, rcode = _parse_dns_response(response, query_id)
+        except ValueError as exc:
+            return Observation("DNS_ERROR", str(exc))
+        if rcode != 0:
+            return Observation("DNS_ERROR", f"DNS rcode={rcode}", {"rcode": rcode})
+        if truncated:
+            return self._dns_tcp(server, port, packet, query_id, timeout)
+        if not addresses:
+            return Observation("DNS_ERROR", "A answer가 없습니다.", {"addresses": []})
+        return Observation(
+            "DNS_ANSWER", ", ".join(addresses), {"addresses": addresses, "rcode": rcode}
+        )
+
+    def _dns_tcp(
+        self, server: str, port: int, packet: bytes, query_id: int, timeout: float
+    ) -> Observation:
+        try:
+            with socket.create_connection((server, port), timeout=timeout) as sock:
+                sock.settimeout(timeout)
+                sock.sendall(struct.pack("!H", len(packet)) + packet)
+                length_bytes = self._recv_exact(sock, 2)
+                length = struct.unpack("!H", length_bytes)[0]
+                response = self._recv_exact(sock, length)
+        except OSError as exc:
+            return _socket_error_observation(exc)
+        try:
+            addresses, _truncated, rcode = _parse_dns_response(response, query_id)
+        except ValueError as exc:
+            return Observation("DNS_ERROR", str(exc))
+        if rcode != 0 or not addresses:
+            return Observation(
+                "DNS_ERROR", f"DNS/TCP rcode={rcode}, A answer={addresses}",
+                {"rcode": rcode, "addresses": addresses},
+            )
+        return Observation(
+            "DNS_ANSWER",
+            "TCP fallback: " + ", ".join(addresses),
+            {"addresses": addresses, "rcode": rcode},
+        )
+
+    @staticmethod
+    def _recv_exact(sock: socket.socket, length: int) -> bytes:
+        chunks: list[bytes] = []
+        remaining = length
+        while remaining:
+            chunk = sock.recv(remaining)
+            if not chunk:
+                raise ConnectionError("예상보다 일찍 연결이 닫혔습니다.")
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks)
+
+    def tcp(self, destination: str, port: int, timeout: float) -> Observation:
+        try:
+            with socket.create_connection((destination, port), timeout=timeout):
+                return Observation("CONNECTED", "TCP 3-way handshake 성공")
+        except OSError as exc:
+            return _socket_error_observation(exc)
+
+    def ssh(self, destination: str, port: int, timeout: float) -> Observation:
+        try:
+            with socket.create_connection((destination, port), timeout=timeout) as sock:
+                sock.settimeout(timeout)
+                banner = b""
+                while b"\n" not in banner and len(banner) < 255:
+                    chunk = sock.recv(1)
+                    if not chunk:
+                        break
+                    banner += chunk
+        except OSError as exc:
+            return _socket_error_observation(exc)
+        banner_text = banner.rstrip(b"\r\n").decode("ascii", errors="replace")
+        if not banner_text.startswith("SSH-"):
+            return Observation("SSH_ERROR", f"SSH banner가 아닙니다: {banner_text!r}")
+        return Observation("SSH_BANNER", banner_text)
+
+    def ntp(self, destination: str, port: int, timeout: float) -> Observation:
+        request = bytes([0x23]) + bytes(47)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(timeout)
+        try:
+            sock.connect((destination, port))
+            sock.send(request)
+            response = sock.recv(512)
+        except OSError as exc:
+            return _socket_error_observation(exc)
+        finally:
+            sock.close()
+        if len(response) < 48:
+            return Observation("NTP_ERROR", f"NTP response가 너무 짧습니다: {len(response)} bytes")
+        mode = response[0] & 0x07
+        stratum = response[1]
+        if mode not in {4, 5} or stratum == 0:
+            return Observation("NTP_ERROR", f"유효하지 않은 mode={mode}, stratum={stratum}")
+        return Observation(
+            "NTP_RESPONSE", f"mode={mode}, stratum={stratum}", {"mode": mode, "stratum": stratum}
+        )
+
+    @staticmethod
+    def _tls_context(verify: bool, ca_file: str | None) -> ssl.SSLContext:
+        if verify:
+            return ssl.create_default_context(cafile=ca_file)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        return context
+
+    def tls(
+        self,
+        destination: str,
+        port: int,
+        server_name: str,
+        verify: bool,
+        ca_file: str | None,
+        timeout: float,
+    ) -> Observation:
+        context = self._tls_context(verify, ca_file)
+        try:
+            with socket.create_connection((destination, port), timeout=timeout) as raw:
+                raw.settimeout(timeout)
+                with context.wrap_socket(raw, server_hostname=server_name) as wrapped:
+                    cipher = wrapped.cipher()
+                    return Observation(
+                        "TLS_ESTABLISHED",
+                        f"version={wrapped.version()}, cipher={cipher[0] if cipher else 'unknown'}, "
+                        f"certificate_validation={'enabled' if verify else 'disabled'}",
+                        {
+                            "version": wrapped.version(),
+                            "cipher": cipher[0] if cipher else None,
+                            "certificate_validation": verify,
+                        },
+                    )
+        except ssl.SSLCertVerificationError as exc:
+            return Observation("TLS_CERT_INVALID", str(exc))
+        except ssl.SSLError as exc:
+            return Observation("TLS_ERROR", str(exc))
+        except OSError as exc:
+            return _socket_error_observation(exc)
+
+    def http(
+        self,
+        destination: str,
+        port: int,
+        server_name: str,
+        path: str,
+        verify: bool,
+        ca_file: str | None,
+        timeout: float,
+    ) -> Observation:
+        context = self._tls_context(verify, ca_file)
+        request = (
+            f"GET {path} HTTP/1.1\r\n"
+            f"Host: {server_name}\r\n"
+            "User-Agent: vlan-verify/1\r\n"
+            "Connection: close\r\n\r\n"
+        ).encode("ascii")
+        try:
+            with socket.create_connection((destination, port), timeout=timeout) as raw:
+                raw.settimeout(timeout)
+                with context.wrap_socket(raw, server_hostname=server_name) as wrapped:
+                    wrapped.sendall(request)
+                    header = b""
+                    while b"\r\n" not in header and len(header) < 8192:
+                        chunk = wrapped.recv(1024)
+                        if not chunk:
+                            break
+                        header += chunk
+        except ssl.SSLCertVerificationError as exc:
+            return Observation("TLS_CERT_INVALID", str(exc))
+        except ssl.SSLError as exc:
+            return Observation("TLS_ERROR", str(exc))
+        except OSError as exc:
+            return _socket_error_observation(exc)
+        status_line = header.split(b"\r\n", 1)[0].decode("iso-8859-1", errors="replace")
+        parts = status_line.split(" ", 2)
+        if len(parts) < 2 or not parts[1].isdigit():
+            return Observation("HTTP_ERROR", f"HTTP status line 해석 실패: {status_line!r}")
+        status = int(parts[1])
+        return Observation("HTTP_RESPONSE", status_line, {"status": status})
+
+
+def _result(
+    probe: Probe,
+    source: SourceSpec,
+    destination: str,
+    resolved_destination: str | None,
+    status: str,
+    observation: Observation,
+    basis: str,
+    source_address: str | None = None,
+    source_interface: str | None = None,
+) -> Result:
+    return Result(
+        probe_id=probe.probe_id,
+        layer=probe.layer,
+        source=source.name,
+        destination_location=probe.destination_location,
+        destination=destination,
+        resolved_destination=resolved_destination,
+        protocol=probe.protocol,
+        expected=probe.expected,
+        reason=probe.reason,
+        status=status,
+        observation=observation.kind,
+        decision_basis=basis,
+        detail=observation.detail,
+        observed_at=utc_now(),
+        source_address=source_address,
+        source_interface=source_interface,
+        port=probe.port,
+        data=dict(observation.data),
+    )
+
+
+def _dependency_source(
+    probe: Probe, results: Mapping[str, Result]
+) -> tuple[str | None, str | None]:
+    for dependency in probe.dependencies:
+        result = results[dependency]
+        if result.source_address:
+            return result.source_address, result.source_interface
+    return None, None
+
+
+def _resolve_destination(probe: Probe, results: Mapping[str, Result]) -> tuple[str, str]:
+    if probe.destination is not None:
+        try:
+            address = ipaddress.ip_address(probe.destination)
+        except ValueError as exc:
+            raise VlanVerifyError(
+                f"probe {probe.probe_id}: destination은 IP이거나 destination_from이어야 합니다."
+            ) from exc
+        if address.version != 4:
+            raise VlanVerifyError(f"probe {probe.probe_id}: 현재 IPv4 destination만 지원합니다.")
+        return probe.destination, probe.destination
+    assert probe.destination_from is not None
+    referenced = results[probe.destination_from]
+    addresses = referenced.data.get("addresses", [])
+    if not isinstance(addresses, list) or probe.address_index >= len(addresses):
+        raise VlanVerifyError(
+            f"probe {probe.probe_id}: DNS evidence에 address_index {probe.address_index}가 없습니다."
+        )
+    return f"DNS:{probe.destination_from}[{probe.address_index}]", addresses[probe.address_index]
+
+
+def _accepted_control_observation(layer: str) -> str:
+    return "CONNECTED" if layer == "tcp" else "NTP_RESPONSE"
+
+
+def _control_is_valid(
+    probe: Probe,
+    source: SourceSpec,
+    destination: str,
+    evidence: Mapping[str, Result],
+    max_age_seconds: int,
+) -> tuple[bool, str]:
+    assert probe.control_probe is not None
+    control = evidence.get(probe.control_probe)
+    if control is None:
+        return False, f"대조 증거 {probe.control_probe!r}가 없습니다."
+    if control.source == source.name:
+        return False, "차단 출발지와 다른 허용 출발지의 대조 증거가 필요합니다."
+    if control.status != PASS or control.expected != ALLOW:
+        return False, "대조 probe가 ALLOW PASS가 아닙니다."
+    if control.layer != probe.layer or control.protocol != probe.protocol:
+        return False, "대조 probe의 layer/protocol이 차단 probe와 다릅니다."
+    if control.resolved_destination != destination or control.port != probe.port:
+        return False, "대조 probe의 destination/port가 차단 probe와 다릅니다."
+    if control.observation != _accepted_control_observation(probe.layer):
+        return False, "대조 probe가 서비스 응답을 직접 관측하지 않았습니다."
+    try:
+        observed_at = datetime.fromisoformat(control.observed_at)
+        if observed_at.tzinfo is None:
+            raise ValueError("timezone 없음")
+    except ValueError:
+        return False, "대조 증거 observed_at이 timezone 포함 ISO-8601이 아닙니다."
+    age = (datetime.now(timezone.utc) - observed_at.astimezone(timezone.utc)).total_seconds()
+    if age < -60 or age > max_age_seconds:
+        return False, f"대조 증거가 최신이 아닙니다(age={age:.0f}s)."
+    return True, f"{control.source}의 {control.probe_id}가 같은 서비스를 열림으로 확인했습니다."
+
+
+def _evaluate_allow(probe: Probe, observation: Observation) -> tuple[str, str]:
+    kind = observation.kind
+    if probe.layer == "dns":
+        if kind != "DNS_ANSWER":
+            return INCONCLUSIVE, "DNS 실패로 상위 정책을 판정할 수 없습니다."
+        addresses = observation.data.get("addresses", [])
+        missing = sorted(set(probe.expected_addresses) - set(addresses))
+        if missing:
+            return FAIL, f"DNS 응답에 기대 주소가 없습니다: {', '.join(missing)}"
+        return PASS, "DNS server가 유효한 A 응답을 반환했습니다."
+    if probe.layer == "tcp":
+        if kind == "CONNECTED":
+            return PASS, "기대 ALLOW 경로에서 TCP handshake가 성공했습니다."
+        if kind == "TIMEOUT":
+            return FAIL, "기대 ALLOW가 timeout으로 열리지 않았습니다."
+        if kind == "CONNECTION_REFUSED":
+            return INCONCLUSIVE, "경로는 응답했지만 대상 서비스가 열려 있지 않습니다."
+        return INCONCLUSIVE, "TCP 경로 또는 대상 상태를 확정할 수 없습니다."
+    if probe.layer == "ntp":
+        if kind == "NTP_RESPONSE":
+            return PASS, "유효한 NTP server 응답을 받았습니다."
+        if kind == "TIMEOUT":
+            return FAIL, "기대 ALLOW NTP 응답이 timeout됐습니다."
+        if kind == "CONNECTION_REFUSED":
+            return INCONCLUSIVE, "대상 NTP 서비스 부재 또는 reject라 정책을 확정할 수 없습니다."
+        return INCONCLUSIVE, "NTP 응답과 정책을 확정할 수 없습니다."
+    if probe.layer == "ssh":
+        if kind == "SSH_BANNER":
+            return PASS, "TCP와 분리해 SSH protocol banner를 확인했습니다."
+        if kind == "CONNECTION_REFUSED":
+            return INCONCLUSIVE, "SSH 대상 서비스 부재로 정책을 확정할 수 없습니다."
+        if kind == "TIMEOUT":
+            return FAIL, "TCP 이후 SSH protocol banner가 timeout됐습니다."
+        return FAIL, "TCP 이후 SSH protocol 계층 기대를 충족하지 못했습니다."
+    if probe.layer == "tls":
+        if kind == "TLS_ESTABLISHED":
+            return PASS, "TCP와 분리한 TLS handshake가 성공했습니다."
+        if kind == "CONNECTION_REFUSED":
+            return INCONCLUSIVE, "TLS 대상 서비스 부재로 정책을 확정할 수 없습니다."
+        return FAIL, "TCP 이후 TLS 계층 기대를 충족하지 못했습니다."
+    if probe.layer == "http":
+        if kind == "HTTP_RESPONSE":
+            status = observation.data.get("status")
+            if isinstance(status, int) and probe.http_status_min <= status <= probe.http_status_max:
+                return PASS, (
+                    f"HTTP status {status}가 기대 범위 "
+                    f"{probe.http_status_min}..{probe.http_status_max}에 있습니다."
+                )
+            return FAIL, f"HTTP status가 기대 범위를 벗어났습니다: {status}"
+        if kind == "CONNECTION_REFUSED":
+            return INCONCLUSIVE, "HTTP 대상 서비스 부재로 정책을 확정할 수 없습니다."
+        return FAIL, "TLS 이후 HTTP 계층 기대를 충족하지 못했습니다."
+    raise AssertionError(f"지원하지 않는 ALLOW layer: {probe.layer}")
+
+
+def run_plan(
+    profile: Profile,
+    scope: str,
+    source: SourceSpec,
+    probes: Sequence[Probe],
+    backend: Any,
+    evidence: Mapping[str, Result] | None = None,
+    timeout: float = 3.0,
+    control_max_age_seconds: int = 900,
+    selected_checks: Sequence[str] = (),
+) -> Report:
+    validate_plan(profile, scope, source, probes)
+    if timeout <= 0:
+        raise VlanVerifyError("timeout은 0보다 커야 합니다.")
+    if control_max_age_seconds <= 0:
+        raise VlanVerifyError("control-max-age는 0보다 커야 합니다.")
+    evidence = evidence or {}
+    started_at = utc_now()
+    results: dict[str, Result] = {}
+
+    for probe in probes:
+        display_destination = probe.destination or f"DNS:{probe.destination_from}"
+        failed_dependencies = [
+            dependency for dependency in probe.dependencies if results[dependency].status != PASS
+        ]
+        if failed_dependencies:
+            source_address, source_interface = _dependency_source(probe, results)
+            observation = Observation(
+                "DEPENDENCY_NOT_PASS",
+                "PASS가 아닌 선행 계층: " + ", ".join(failed_dependencies),
+            )
+            results[probe.probe_id] = _result(
+                probe,
+                source,
+                display_destination,
+                None,
+                INCONCLUSIVE,
+                observation,
+                "선행 route/DNS/TCP/TLS 실패로 이 계층을 판정하지 않았습니다.",
+                source_address,
+                source_interface,
+            )
+            continue
+
+        try:
+            destination_display, destination = _resolve_destination(probe, results)
+        except VlanVerifyError as exc:
+            observation = Observation("DESTINATION_UNRESOLVED", str(exc))
+            results[probe.probe_id] = _result(
+                probe,
+                source,
+                display_destination,
+                None,
+                INCONCLUSIVE,
+                observation,
+                "목적지를 확정할 수 없어 정책을 판정하지 않았습니다.",
+            )
+            continue
+
+        source_address, source_interface = _dependency_source(probe, results)
+        if probe.layer == "route":
+            observation = backend.route(destination, timeout)
+            source_address = observation.data.get("source_address")
+            source_interface = observation.data.get("source_interface")
+            if observation.kind != "ROUTE_FOUND":
+                status = INCONCLUSIVE
+                basis = "route 부재 또는 조회 실패는 방화벽 차단 성공이 아닙니다."
+            else:
+                try:
+                    source_matches = ipaddress.ip_address(source_address) in source.network
+                except (TypeError, ValueError):
+                    source_matches = False
+                interface_matches = (
+                    source.interface is None or source_interface == source.interface
+                )
+                if not source_matches or not interface_matches:
+                    status = INCONCLUSIVE
+                    basis = (
+                        f"선언 source(cidr={source.cidr}, interface={source.interface or 'any'})와 "
+                        f"실제 route source가 다릅니다."
+                    )
+                    observation = Observation(
+                        "SOURCE_MISMATCH", observation.detail, dict(observation.data)
+                    )
+                else:
+                    status = PASS
+                    basis = "route와 실제 출발 주소/interface가 선언한 출발 위치와 일치합니다."
+            results[probe.probe_id] = _result(
+                probe,
+                source,
+                destination_display,
+                destination,
+                status,
+                observation,
+                basis,
+                source_address,
+                source_interface,
+            )
+            continue
+
+        if (
+            probe.expected == BLOCK
+            and ipaddress.ip_address(destination) in source.network
+            and (probe.enforcement_point or "").casefold() == "opnsense"
+        ):
+            raise VlanVerifyError(
+                f"probe {probe.probe_id}: 동적으로 확인한 목적지가 source와 같은 CIDR입니다. "
+                "OPNsense 차단 주장을 제거하고 host/Proxmox 검증으로 분리하세요."
+            )
+
+        if probe.layer == "dns":
+            observation = backend.dns(destination, probe.port or 53, probe.query, timeout)
+        elif probe.layer == "tcp":
+            observation = backend.tcp(destination, probe.port, timeout)
+        elif probe.layer == "ntp":
+            observation = backend.ntp(destination, probe.port or 123, timeout)
+        elif probe.layer == "ssh":
+            observation = backend.ssh(destination, probe.port, timeout)
+        elif probe.layer == "tls":
+            observation = backend.tls(
+                destination,
+                probe.port,
+                probe.server_name,
+                probe.tls_verify,
+                probe.ca_file,
+                timeout,
+            )
+        elif probe.layer == "http":
+            observation = backend.http(
+                destination,
+                probe.port,
+                probe.server_name,
+                probe.http_path,
+                probe.tls_verify,
+                probe.ca_file,
+                timeout,
+            )
+        else:
+            raise AssertionError(f"알 수 없는 layer: {probe.layer}")
+
+        if probe.expected == ALLOW:
+            status, basis = _evaluate_allow(probe, observation)
+        else:
+            if observation.kind in {"CONNECTED", "NTP_RESPONSE"}:
+                status = FAIL
+                basis = "기대 BLOCK 대상이 실제로 응답해 정책 위반입니다."
+            elif observation.kind in {"TIMEOUT", "CONNECTION_REFUSED"}:
+                control_valid, control_detail = _control_is_valid(
+                    probe,
+                    source,
+                    destination,
+                    evidence,
+                    control_max_age_seconds,
+                )
+                if control_valid:
+                    status = PASS
+                    mechanism = (
+                        "drop(timeout)" if observation.kind == "TIMEOUT" else "reject(connection refused)"
+                    )
+                    basis = f"{mechanism}와 열린 서비스 대조 증거가 함께 있습니다. {control_detail}"
+                else:
+                    status = INCONCLUSIVE
+                    basis = (
+                        "무응답/거부만으로 방화벽 차단을 증명할 수 없습니다. " + control_detail
+                    )
+            else:
+                status = INCONCLUSIVE
+                basis = "route 외 장애 또는 대상 상태 때문에 차단 정책을 확정할 수 없습니다."
+        results[probe.probe_id] = _result(
+            probe,
+            source,
+            destination_display,
+            destination,
+            status,
+            observation,
+            basis,
+            source_address,
+            source_interface,
+        )
+
+    result_list = list(results.values())
+    if any(result.status == FAIL for result in result_list):
+        overall_status = FAIL
+        exit_code = EXIT_FAILED
+    elif any(result.status == INCONCLUSIVE for result in result_list):
+        overall_status = INCONCLUSIVE
+        exit_code = EXIT_INCONCLUSIVE
+    else:
+        overall_status = PASS
+        exit_code = EXIT_OK
+    return Report(
+        profile=profile.name,
+        scope=scope,
+        profile_claim=profile.claim,
+        source=source,
+        selected_checks=tuple(selected_checks),
+        started_at=started_at,
+        finished_at=utc_now(),
+        overall_status=overall_status,
+        exit_code=exit_code,
+        results=result_list,
+    )
+
+
+def load_evidence(paths: Iterable[str]) -> dict[str, Result]:
+    evidence: dict[str, Result] = {}
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as stream:
+                payload = json.load(stream)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise VlanVerifyError(f"대조 증거를 읽을 수 없습니다({path}): {exc}") from exc
+        if not isinstance(payload, Mapping) or payload.get("schema_version") != 1:
+            raise VlanVerifyError(f"대조 증거 schema_version이 1이 아닙니다: {path}")
+        raw_results = payload.get("results")
+        if not isinstance(raw_results, list):
+            raise VlanVerifyError(f"대조 증거 results가 배열이 아닙니다: {path}")
+        for raw_result in raw_results:
+            if not isinstance(raw_result, Mapping):
+                raise VlanVerifyError(f"대조 증거 result가 object가 아닙니다: {path}")
+            result = Result.from_dict(raw_result)
+            if result.probe_id in evidence:
+                raise VlanVerifyError(f"대조 증거 probe ID가 중복됩니다: {result.probe_id}")
+            evidence[result.probe_id] = result
+    return evidence
+
+
+def _probe(**kwargs: Any) -> Probe:
+    return Probe(**kwargs)
+
+
+def _tls_verify(mode: str) -> bool:
+    if mode not in {"verify", "transport"}:
+        raise VlanVerifyError("TLS mode는 verify 또는 transport여야 합니다.")
+    return mode == "verify"
+
+
+def parse_dns_expect(values: Sequence[str]) -> list[tuple[str, str]]:
+    parsed: list[tuple[str, str]] = []
+    for value in values:
+        if "=" not in value:
+            raise VlanVerifyError("--dns-expect는 NAME=IP 형식이어야 합니다.")
+        name, address = value.split("=", 1)
+        name = _require_text(name, "--dns-expect NAME")
+        try:
+            parsed_address = ipaddress.ip_address(address)
+        except ValueError as exc:
+            raise VlanVerifyError(f"--dns-expect 주소가 잘못됐습니다: {address!r}") from exc
+        if parsed_address.version != 4:
+            raise VlanVerifyError("--dns-expect는 IPv4 주소만 지원합니다.")
+        parsed.append((name, str(parsed_address)))
+    return parsed
+
+
+def build_phase1_plan(args: argparse.Namespace) -> tuple[SourceSpec, list[Probe], tuple[str, ...]]:
+    checks = tuple(dict.fromkeys(item.strip() for item in args.checks.split(",") if item.strip()))
+    unknown = set(checks) - PHASE1_CHECKS
+    if unknown or not checks:
+        raise VlanVerifyError(
+            "--checks는 다음 값을 쉼표로 지정합니다: " + ", ".join(sorted(PHASE1_CHECKS))
+        )
+    source = parse_source(
+        {
+            "name": args.source_name,
+            "cidr": args.source_cidr,
+            "interface": args.source_interface,
+        }
+    )
+    probes: list[Probe] = []
+
+    def require(option: str, value: Any) -> Any:
+        if value is None or value == []:
+            raise VlanVerifyError(f"선택한 --checks에는 {option}이 필요합니다.")
+        return value
+
+    def add_route(
+        probe_id: str,
+        location: str,
+        reason: str,
+        destination: str | None = None,
+        destination_from: str | None = None,
+        dependencies: tuple[str, ...] = (),
+    ) -> None:
+        probes.append(
+            _probe(
+                probe_id=probe_id,
+                layer="route",
+                destination_location=location,
+                expected=ALLOW,
+                reason=reason,
+                destination=destination,
+                destination_from=destination_from,
+                dependencies=dependencies,
+            )
+        )
+
+    need_dns_route = bool(set(checks) & {"dns", "ntp", "external"})
+    if need_dns_route:
+        dns_server = require("--dns-server", args.dns_server)
+        add_route(
+            "phase1-dns-route",
+            "Phase 1 DNS resolver",
+            "DNS probe 전에 resolver 경로와 실제 출발 위치를 확인한다.",
+            destination=dns_server,
+        )
+
+    if "gateway" in checks:
+        gateway = require("--gateway", args.gateway)
+        gateway_name = require("--gateway-name", args.gateway_name)
+        gateway_port = require("--gateway-https-port", args.gateway_https_port)
+        add_route(
+            "phase1-gateway-route",
+            "Phase 1 gateway",
+            "ping이 아니라 route와 source를 gateway 도달 전제로 확인한다.",
+            destination=gateway,
+        )
+        probes.extend(
+            [
+                _probe(
+                    probe_id="phase1-gateway-tcp",
+                    layer="tcp",
+                    destination_location="OPNsense management HTTPS",
+                    expected=ALLOW,
+                    reason="Phase 1 관리 접근의 TCP 계층을 확인한다.",
+                    destination=gateway,
+                    port=gateway_port,
+                    dependencies=("phase1-gateway-route",),
+                    category="management-access",
+                ),
+                _probe(
+                    probe_id="phase1-gateway-tls",
+                    layer="tls",
+                    destination_location="OPNsense management HTTPS",
+                    expected=ALLOW,
+                    reason="TCP와 분리해 OPNsense TLS handshake를 확인한다.",
+                    destination=gateway,
+                    port=gateway_port,
+                    server_name=gateway_name,
+                    tls_verify=_tls_verify(args.gateway_tls_mode),
+                    ca_file=args.gateway_ca_file,
+                    dependencies=("phase1-gateway-route", "phase1-gateway-tcp"),
+                    category="management-access",
+                ),
+                _probe(
+                    probe_id="phase1-gateway-http",
+                    layer="http",
+                    destination_location="OPNsense management HTTPS",
+                    expected=ALLOW,
+                    reason="TLS와 분리해 OPNsense HTTP 응답을 확인한다.",
+                    destination=gateway,
+                    port=gateway_port,
+                    server_name=gateway_name,
+                    tls_verify=_tls_verify(args.gateway_tls_mode),
+                    ca_file=args.gateway_ca_file,
+                    dependencies=(
+                        "phase1-gateway-route",
+                        "phase1-gateway-tcp",
+                        "phase1-gateway-tls",
+                    ),
+                    category="management-access",
+                ),
+            ]
+        )
+
+    if "dns" in checks:
+        dns_expect = parse_dns_expect(require("--dns-expect", args.dns_expect))
+        for index, (name, address) in enumerate(dns_expect, start=1):
+            probes.append(
+                _probe(
+                    probe_id=f"phase1-dns-{index}",
+                    layer="dns",
+                    destination_location="Phase 1 DNS resolver",
+                    expected=ALLOW,
+                    reason=f"ip-plan에서 입력한 canonical host {name}의 A 응답을 확인한다.",
+                    destination=args.dns_server,
+                    port=args.dns_port,
+                    query=name,
+                    expected_addresses=(address,),
+                    dependencies=("phase1-dns-route",),
+                    category="foundation-dns",
+                )
+            )
+
+    if "ntp" in checks:
+        ntp_name = require("--ntp-hostname", args.ntp_hostname)
+        probes.extend(
+            [
+                _probe(
+                    probe_id="phase1-ntp-dns",
+                    layer="dns",
+                    destination_location="Phase 1 DNS resolver",
+                    expected=ALLOW,
+                    reason="NTP UDP probe 전에 대상 이름 해석을 별도 계층으로 확인한다.",
+                    destination=args.dns_server,
+                    port=args.dns_port,
+                    query=ntp_name,
+                    dependencies=("phase1-dns-route",),
+                    category="foundation-dns",
+                ),
+            ]
+        )
+        add_route(
+            "phase1-ntp-route",
+            "explicit NTP target",
+            "NTP UDP probe 전에 route와 실제 출발 위치를 확인한다.",
+            destination_from="phase1-ntp-dns",
+            dependencies=("phase1-ntp-dns",),
+        )
+        probes.append(
+            _probe(
+                probe_id="phase1-ntp",
+                layer="ntp",
+                destination_location="explicit NTP target",
+                expected=ALLOW,
+                reason="bootstrap에 필요한 NTP 응답형 UDP egress를 확인한다.",
+                destination_from="phase1-ntp-dns",
+                port=args.ntp_port,
+                dependencies=("phase1-ntp-dns", "phase1-ntp-route"),
+                category="foundation-ntp",
+            )
+        )
+
+    if "proxmox" in checks:
+        proxmox_host = require("--proxmox-host", args.proxmox_host)
+        proxmox_name = require("--proxmox-name", args.proxmox_name)
+        ssh_port = require("--proxmox-ssh-port", args.proxmox_ssh_port)
+        https_port = require("--proxmox-https-port", args.proxmox_https_port)
+        add_route(
+            "phase1-proxmox-route",
+            "Proxmox management",
+            "Proxmox 관리 probe 전에 route와 실제 출발 위치를 확인한다.",
+            destination=proxmox_host,
+        )
+        probes.extend(
+            [
+                _probe(
+                    probe_id="phase1-proxmox-ssh-tcp",
+                    layer="tcp",
+                    destination_location="Proxmox SSH",
+                    expected=ALLOW,
+                    reason="현재 Phase 1 Proxmox SSH 관리 포트 응답을 확인한다.",
+                    destination=proxmox_host,
+                    port=ssh_port,
+                    dependencies=("phase1-proxmox-route",),
+                    category="management-access",
+                ),
+                _probe(
+                    probe_id="phase1-proxmox-ssh",
+                    layer="ssh",
+                    destination_location="Proxmox SSH",
+                    expected=ALLOW,
+                    reason="TCP와 분리해 현재 Proxmox SSH protocol 응답을 확인한다.",
+                    destination=proxmox_host,
+                    port=ssh_port,
+                    dependencies=("phase1-proxmox-route", "phase1-proxmox-ssh-tcp"),
+                    category="management-access",
+                ),
+                _probe(
+                    probe_id="phase1-proxmox-https-tcp",
+                    layer="tcp",
+                    destination_location="Proxmox HTTPS",
+                    expected=ALLOW,
+                    reason="Proxmox HTTPS의 TCP 계층을 확인한다.",
+                    destination=proxmox_host,
+                    port=https_port,
+                    dependencies=("phase1-proxmox-route",),
+                    category="management-access",
+                ),
+                _probe(
+                    probe_id="phase1-proxmox-https-tls",
+                    layer="tls",
+                    destination_location="Proxmox HTTPS",
+                    expected=ALLOW,
+                    reason="Proxmox TCP와 분리해 TLS handshake를 확인한다.",
+                    destination=proxmox_host,
+                    port=https_port,
+                    server_name=proxmox_name,
+                    tls_verify=_tls_verify(args.proxmox_tls_mode),
+                    ca_file=args.proxmox_ca_file,
+                    dependencies=(
+                        "phase1-proxmox-route",
+                        "phase1-proxmox-https-tcp",
+                    ),
+                    category="management-access",
+                ),
+                _probe(
+                    probe_id="phase1-proxmox-https-http",
+                    layer="http",
+                    destination_location="Proxmox HTTPS",
+                    expected=ALLOW,
+                    reason="Proxmox TLS와 분리해 HTTP status를 확인한다.",
+                    destination=proxmox_host,
+                    port=https_port,
+                    server_name=proxmox_name,
+                    tls_verify=_tls_verify(args.proxmox_tls_mode),
+                    ca_file=args.proxmox_ca_file,
+                    dependencies=(
+                        "phase1-proxmox-route",
+                        "phase1-proxmox-https-tcp",
+                        "phase1-proxmox-https-tls",
+                    ),
+                    category="management-access",
+                ),
+            ]
+        )
+
+    if "external" in checks:
+        external_name = require("--external-hostname", args.external_hostname)
+        external_port = require("--external-https-port", args.external_https_port)
+        probes.append(
+            _probe(
+                probe_id="phase1-external-dns",
+                layer="dns",
+                destination_location="Phase 1 DNS resolver",
+                expected=ALLOW,
+                reason="외부 연결 전에 외부 이름 해석을 별도 계층으로 확인한다.",
+                destination=args.dns_server,
+                port=args.dns_port,
+                query=external_name,
+                dependencies=("phase1-dns-route",),
+                category="foundation-dns",
+            )
+        )
+        add_route(
+            "phase1-external-route",
+            "explicit external HTTPS target",
+            "외부 TCP/TLS/HTTP 전에 route와 실제 출발 위치를 확인한다.",
+            destination_from="phase1-external-dns",
+            dependencies=("phase1-external-dns",),
+        )
+        probes.extend(
+            [
+                _probe(
+                    probe_id="phase1-external-tcp",
+                    layer="tcp",
+                    destination_location="explicit external HTTPS target",
+                    expected=ALLOW,
+                    reason="bootstrap 인터넷 egress의 TCP 계층을 확인한다.",
+                    destination_from="phase1-external-dns",
+                    port=external_port,
+                    dependencies=("phase1-external-dns", "phase1-external-route"),
+                    category="internet-egress",
+                ),
+                _probe(
+                    probe_id="phase1-external-tls",
+                    layer="tls",
+                    destination_location="explicit external HTTPS target",
+                    expected=ALLOW,
+                    reason="외부 TCP와 분리해 신뢰 검증을 포함한 TLS handshake를 확인한다.",
+                    destination_from="phase1-external-dns",
+                    port=external_port,
+                    server_name=external_name,
+                    tls_verify=True,
+                    dependencies=(
+                        "phase1-external-dns",
+                        "phase1-external-route",
+                        "phase1-external-tcp",
+                    ),
+                    category="internet-egress",
+                ),
+                _probe(
+                    probe_id="phase1-external-http",
+                    layer="http",
+                    destination_location="explicit external HTTPS target",
+                    expected=ALLOW,
+                    reason="외부 TLS와 분리해 HTTP 응답을 확인한다.",
+                    destination_from="phase1-external-dns",
+                    port=external_port,
+                    server_name=external_name,
+                    tls_verify=True,
+                    dependencies=(
+                        "phase1-external-dns",
+                        "phase1-external-route",
+                        "phase1-external-tcp",
+                        "phase1-external-tls",
+                    ),
+                    category="internet-egress",
+                ),
+            ]
+        )
+
+    return source, probes, checks
+
+
+def print_human(report: Report) -> None:
+    print(f"profile={report.profile} scope={report.scope} status={report.overall_status}")
+    print(f"profile-claim: {report.profile_claim}")
+    print(
+        f"source-contract: name={report.source.name}, cidr={report.source.cidr}, "
+        f"interface={report.source.interface or 'any'}, "
+        f"vlan_id={report.source.vlan_id if report.source.vlan_id is not None else 'none'}"
+    )
+    if report.selected_checks:
+        print("selected-checks: " + ", ".join(report.selected_checks))
+    for result in report.results:
+        actual_source = result.source_address or "unresolved"
+        if result.source_interface:
+            actual_source += f" via {result.source_interface}"
+        print(f"[{result.status}] {result.probe_id}")
+        print(f"  출발: {result.source} (실제: {actual_source})")
+        print(
+            f"  목적지: {result.destination_location} "
+            f"({result.resolved_destination or result.destination})"
+        )
+        print(f"  계층/프로토콜: {result.layer} / {result.protocol}")
+        print(f"  기대: {result.expected}")
+        print(f"  정책 근거: {result.reason}")
+        print(f"  관측: {result.observation} — {result.detail}")
+        print(f"  판정 근거: {result.decision_basis}")
+    counts = {status: 0 for status in (PASS, FAIL, INCONCLUSIVE)}
+    for result in report.results:
+        counts[result.status] += 1
+    print(
+        "summary: "
+        f"PASS={counts[PASS]} FAIL={counts[FAIL]} INCONCLUSIVE={counts[INCONCLUSIVE]} "
+        f"exit={report.exit_code}"
+    )
+
+
+def print_profiles(name: str | None, output_format: str) -> None:
+    profiles = [get_profile(name)] if name else [PROFILES[item] for item in sorted(PROFILES)]
+    payload = [asdict(profile) for profile in profiles]
+    if output_format == "json":
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    for profile in profiles:
+        print(f"{profile.name}")
+        print(f"  scope: {', '.join(profile.scopes)}")
+        print(f"  목적: {profile.purpose}")
+        print(f"  주장 경계: {profile.claim}")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="vlan-verify",
+        description=(
+            "route/DNS/TCP/UDP/TLS/HTTP를 분리해 읽기 전용으로 검증합니다. "
+            "ping 실패만으로 차단을 판정하지 않습니다."
+        ),
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    profiles_parser = subparsers.add_parser("profiles", help="profile 계약 출력")
+    profiles_parser.add_argument("name", nargs="?")
+    profiles_parser.add_argument("--format", choices=("human", "json"), default="human")
+
+    run_parser = subparsers.add_parser("run", help="명시적 JSON probe plan 실행")
+    run_parser.add_argument("--profile", required=True)
+    run_parser.add_argument("--plan", required=True, help="JSON plan 경로")
+    run_parser.add_argument("--evidence", action="append", default=[])
+    run_parser.add_argument("--timeout", type=float, default=3.0)
+    run_parser.add_argument("--control-max-age", type=int, default=900)
+    run_parser.add_argument("--format", choices=("human", "json"), default="human")
+
+    phase1 = subparsers.add_parser(
+        "phase1", help="명시적 입력으로 Phase 1/observer 회귀 plan 생성·실행"
+    )
+    phase1.add_argument("--profile", required=True)
+    phase1.add_argument(
+        "--scope", choices=("phase1-untagged-lan", "observer"), default="phase1-untagged-lan"
+    )
+    phase1.add_argument("--source-name", required=True)
+    phase1.add_argument("--source-cidr", required=True)
+    phase1.add_argument("--source-interface")
+    phase1.add_argument(
+        "--checks", default="gateway,dns,ntp,proxmox,external",
+        help="gateway,dns,ntp,proxmox,external 중 쉼표 목록",
+    )
+    phase1.add_argument("--gateway")
+    phase1.add_argument("--gateway-name")
+    phase1.add_argument("--gateway-https-port", type=int)
+    phase1.add_argument("--gateway-tls-mode", choices=("verify", "transport"), default="verify")
+    phase1.add_argument("--gateway-ca-file")
+    phase1.add_argument("--dns-server")
+    phase1.add_argument("--dns-port", type=int, default=53)
+    phase1.add_argument("--dns-expect", action="append", default=[])
+    phase1.add_argument("--ntp-hostname")
+    phase1.add_argument("--ntp-port", type=int, default=123)
+    phase1.add_argument("--proxmox-host")
+    phase1.add_argument("--proxmox-name")
+    phase1.add_argument("--proxmox-ssh-port", type=int)
+    phase1.add_argument("--proxmox-https-port", type=int)
+    phase1.add_argument("--proxmox-tls-mode", choices=("verify", "transport"), default="verify")
+    phase1.add_argument("--proxmox-ca-file")
+    phase1.add_argument("--external-hostname")
+    phase1.add_argument("--external-https-port", type=int)
+    phase1.add_argument("--timeout", type=float, default=3.0)
+    phase1.add_argument("--format", choices=("human", "json"), default="human")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None, backend: Any | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "profiles":
+            print_profiles(args.name, args.format)
+            return EXIT_OK
+        profile = get_profile(args.profile)
+        if args.command == "run":
+            scope, source, probes = load_plan(args.plan)
+            evidence = load_evidence(args.evidence)
+            selected_checks: tuple[str, ...] = ()
+            control_max_age = args.control_max_age
+        else:
+            source, probes, selected_checks = build_phase1_plan(args)
+            scope = args.scope
+            evidence = {}
+            control_max_age = 900
+        report = run_plan(
+            profile=profile,
+            scope=scope,
+            source=source,
+            probes=probes,
+            backend=backend or SystemBackend(),
+            evidence=evidence,
+            timeout=args.timeout,
+            control_max_age_seconds=control_max_age,
+            selected_checks=selected_checks,
+        )
+    except VlanVerifyError as exc:
+        print(f"입력 오류: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    if args.format == "json":
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+    else:
+        print_human(report)
+    return report.exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -10,10 +10,10 @@
 | Proxmox | `DONE` | 9.2.0 설치, 관리 UI·SSH·스토리지와 재부팅 후 검증; 선택값은 runbook |
 | 자원 예산 | `DONE` | VM 0개 상태의 실측 기준표·과할당 한계·정지 기준; 값은 `capacity-plan.md` |
 | VM 선언 (OpenTofu) | `DONE` | provider·state 경계와 5개 VM 공통 모듈; 생성은 `OS-01`·`NET-03` 대기 |
-| VLAN trunk | `BLOCKED` | RECOVERY 복구 drill과 `vlan-verify` 필요 |
+| VLAN trunk | `BLOCKED` | `vlan-verify` 완료; RECOVERY 복구 drill 필요 |
 | VM·k3s·플랫폼 서비스 | `BLOCKED` | VLAN과 VM 기반 작업 필요 |
 
-`IAC-01` 완료로 `VM-01`의 선행 중 `CAP-01`·`IAC-01`이 충족됐고 남은 것은 `OS-01`과 `NET-03`이다. 지금 열린 작업은 `AUTO-01`·`OS-01`·`REC-01`이고 `NET-01`은 계속 병렬 가능하다. `PVE-LIVE`는 `OS-01`, `OPNSENSE-LIVE`는 `REC-01`이 사용하며 각각 한 번에 하나만 실행한다.
+`IAC-01` 완료로 `VM-01`의 선행 중 `CAP-01`·`IAC-01`이 충족됐고 남은 것은 `OS-01`과 `NET-03`이다. `NET-01`도 완료됐으며 지금 열린 작업은 `AUTO-01`·`OS-01`·`REC-01`이다. `PVE-LIVE`는 `OS-01`, `OPNSENSE-LIVE`는 `REC-01`이 사용하며 각각 한 번에 하나만 실행한다.
 
 ## 멀티 에이전트 규칙
 
@@ -61,7 +61,7 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 | `AUTO-01 READY` | 공식 `answer.toml` 템플릿과 자동설치 ISO PoC (`infra/proxmox/installer/`) | `PVE-01` | 없음 | 재설치 | 원본 ISO checksum, 템플릿·생성·검증 절차, Git의 비밀·생성 ISO 부재, 별도 VM/가상 디스크 무인 설치; 실물 디스크 미사용 |
 | `OS-01 READY` | Rocky Linux 9 Minimal cloud-init template·Ansible 공통 baseline | `PVE-01` | `PVE-LIVE` | 모든 VM | clone 후 SSH key, 시간, 저장소, qemu-agent, 재부팅 검증 |
 | `IAC-01 DONE` | OpenTofu provider·state·VM 공통 모듈 (`infra/proxmox/tofu/`) | `PVE-01`, `DNS-01`, `CAP-01` | `TOFU-STATE` | `VM-01` | secret 없는 init/validate/plan, state 보관 방식과 import 경계 검증 |
-| `NET-01 READY` | `vlan-verify`의 bootstrap/hardened profile과 테스트 | 없음 | 없음 | `NET-02`, `NET-04` | 현재망 회귀 테스트, 기대 허용·차단을 exit code로 판정 |
+| `NET-01 DONE` | `vlan-verify`의 bootstrap/hardened profile과 테스트 | 없음 | 없음 | `NET-02`, `NET-04` | 현재망 회귀 테스트, 기대 허용·차단을 exit code로 판정 |
 | `REC-01 READY` | `igc0` RECOVERY 설계·현장 복구 drill | `PVE-01` | `OPNSENSE-LIVE` | `NET-02` | 주 LAN 없이 GUI/콘솔 복구 후 원상복귀, runbook 검증 |
 
 `PVE-01`은 디스크를 지우는 작업이다. 자동설치 PoC는 수동 설치에서 확인한 값을 사용하되 현재 물리 노드에 재실행하지 않는다. 부트스트랩과 자동화 경계는 [ADR-0001](adr/0001-proxmox-bootstrap-reproducibility.md), OpenTofu provider·state 경계는 [ADR-0008](adr/0008-opentofu-provider-and-state-boundary.md)을 따른다.
