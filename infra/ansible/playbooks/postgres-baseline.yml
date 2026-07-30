@@ -1,0 +1,9 @@
+---
+# infra/ansible/playbooks/postgres-baseline.yml
+# Entry playbook for PG-01 PostgreSQL baseline configuration
+
+- name: Apply PostgreSQL baseline configuration
+  hosts: postgres_nodes
+  become: true
+  roles:
+    - postgres_baseline

@@ -1,0 +1,12 @@
+---
+# infra/ansible/roles/postgres_baseline/handlers/main.yml
+
+- name: restart postgresql
+  ansible.builtin.systemd:
+    name: postgresql
+    state: restarted
+
+- name: reload postgresql
+  ansible.builtin.systemd:
+    name: postgresql
+    state: reloaded

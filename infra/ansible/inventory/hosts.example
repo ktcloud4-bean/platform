@@ -5,3 +5,7 @@
 
 [rocky_baseline]
 # example_target ansible_host=10.10.10.199 ansible_user=rocky
+
+[postgres_nodes]
+# postgres-01 ansible_host=10.10.50.10 ansible_user=rocky
+

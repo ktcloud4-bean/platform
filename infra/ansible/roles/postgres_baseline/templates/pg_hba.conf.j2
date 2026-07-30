@@ -1,0 +1,13 @@
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+# Local socket connections
+local   all             all                                     peer
+
+# IPv4 loopback & local node connections (hostssl only)
+hostssl all             all             127.0.0.1/32            scram-sha-256
+hostssl all             all             {{ postgres_data_ip }}/32          scram-sha-256
+
+# PLATFORM VLAN (k3s / Keycloak)
+hostssl all             all             {{ postgres_platform_subnet }}         scram-sha-256
+
+# Explicitly reject non-SSL connections from any remote IPv4
+hostnossl all           all             0.0.0.0/0               reject

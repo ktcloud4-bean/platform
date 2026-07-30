@@ -1,0 +1,230 @@
+---
+# infra/ansible/roles/postgres_baseline/tasks/main.yml
+# PostgreSQL 16 baseline installation and hardening
+
+- name: Enable PostgreSQL 16 DNF stream module
+  ansible.builtin.dnf:
+    name: "@postgresql:16"
+    state: present
+
+- name: Install PostgreSQL 16 server, contrib, python3-psycopg2 and openssl
+  ansible.builtin.dnf:
+    name:
+      - postgresql-server
+      - postgresql-contrib
+      - python3-psycopg2
+      - openssl
+    state: present
+
+- name: Check if PostgreSQL PGDATA is initialized
+  ansible.builtin.stat:
+    path: "{{ postgres_data_dir }}/PG_VERSION"
+  register: pgdata_version
+
+- name: Initialize PostgreSQL database cluster
+  ansible.builtin.command:
+    cmd: postgresql-setup --initdb
+  when: not pgdata_version.stat.exists and not ansible_check_mode
+
+- name: Check if host-specific TLS private key exists
+  ansible.builtin.stat:
+    path: "{{ postgres_data_dir }}/server.key"
+  register: pg_tls_key
+
+- name: Generate host-specific TLS leaf certificate and key for postgres-01
+  ansible.builtin.command:
+    cmd: >
+      openssl req -x509 -newkey rsa:4096
+      -keyout {{ postgres_data_dir }}/server.key
+      -out {{ postgres_data_dir }}/server.crt
+      -days 365 -nodes
+      -subj "/CN={{ postgres_canonical_fqdn }}"
+      -addext "subjectAltName=DNS:{{ postgres_canonical_fqdn }},IP:{{ postgres_data_ip }}"
+  when: not pg_tls_key.stat.exists and not ansible_check_mode
+
+- name: Ensure correct permissions on TLS key file
+  ansible.builtin.file:
+    path: "{{ postgres_data_dir }}/server.key"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  when: pg_tls_key.stat.exists or not ansible_check_mode
+
+- name: Ensure correct permissions on TLS certificate file
+  ansible.builtin.file:
+    path: "{{ postgres_data_dir }}/server.crt"
+    owner: postgres
+    group: postgres
+    mode: "0644"
+  when: pg_tls_key.stat.exists or not ansible_check_mode
+
+- name: Deploy public copy of bootstrap leaf certificate for client trust
+  ansible.builtin.copy:
+    src: "{{ postgres_data_dir }}/server.crt"
+    dest: "/etc/pki/tls/certs/postgres-01-bootstrap.crt"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  when: pg_tls_key.stat.exists or not ansible_check_mode
+
+- name: Ensure postgres-01.imcherry5778.xyz points to 10.10.50.10 in /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "10.10.50.10 {{ postgres_canonical_fqdn }} postgres-01"
+    regexp: ".*{{ postgres_canonical_fqdn }}.*"
+    state: present
+
+- name: Configure listen_addresses in postgresql.conf
+  ansible.builtin.lineinfile:
+    path: "{{ postgres_data_dir }}/postgresql.conf"
+    regexp: "^#?listen_addresses\\s*=.*"
+    line: "listen_addresses = '{{ postgres_listen_addresses }}'"
+  notify: reload postgresql
+
+- name: Configure ssl in postgresql.conf
+  ansible.builtin.lineinfile:
+    path: "{{ postgres_data_dir }}/postgresql.conf"
+    regexp: "^#?ssl\\s*=.*"
+    line: "ssl = on"
+  notify: reload postgresql
+
+- name: Configure ssl_cert_file in postgresql.conf
+  ansible.builtin.lineinfile:
+    path: "{{ postgres_data_dir }}/postgresql.conf"
+    regexp: "^#?ssl_cert_file\\s*=.*"
+    line: "ssl_cert_file = 'server.crt'"
+  notify: reload postgresql
+
+- name: Configure ssl_key_file in postgresql.conf
+  ansible.builtin.lineinfile:
+    path: "{{ postgres_data_dir }}/postgresql.conf"
+    regexp: "^#?ssl_key_file\\s*=.*"
+    line: "ssl_key_file = 'server.key'"
+  notify: reload postgresql
+
+- name: Configure password_encryption in postgresql.conf
+  ansible.builtin.lineinfile:
+    path: "{{ postgres_data_dir }}/postgresql.conf"
+    regexp: "^#?password_encryption\\s*=.*"
+    line: "password_encryption = 'scram-sha-256'"
+  notify: reload postgresql
+
+- name: Deploy pg_hba.conf configuration
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgres_data_dir }}/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  notify: reload postgresql
+
+- name: Ensure postgresql service is enabled and running
+  ansible.builtin.systemd:
+    name: postgresql
+    state: started
+    enabled: true
+  when: not ansible_check_mode
+
+- name: Create keycloak_user service role with minimal privileges
+  community.postgresql.postgresql_user:
+    name: keycloak_user
+    password: "{{ pg_keycloak_password }}"
+    role_attr_flags: "NOSUPERUSER,NOCREATEDB,NOCREATEROLE,NOREPLICATION"
+    state: present
+  no_log: true
+  become: true
+  become_user: postgres
+  when: not ansible_check_mode
+
+- name: Create verify_user service role with minimal privileges
+  community.postgresql.postgresql_user:
+    name: verify_user
+    password: "{{ pg_verify_password }}"
+    role_attr_flags: "NOSUPERUSER,NOCREATEDB,NOCREATEROLE,NOREPLICATION"
+    state: present
+  no_log: true
+  become: true
+  become_user: postgres
+  when: not ansible_check_mode
+
+- name: Create keycloak database owned by keycloak_user
+  community.postgresql.postgresql_db:
+    name: keycloak
+    owner: keycloak_user
+    state: present
+  become: true
+  become_user: postgres
+  when: not ansible_check_mode
+
+- name: Create verify_db database owned by verify_user
+  community.postgresql.postgresql_db:
+    name: verify_db
+    owner: verify_user
+    state: present
+  become: true
+  become_user: postgres
+  when: not ansible_check_mode
+
+- name: Revoke CONNECT from PUBLIC on keycloak database
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: "REVOKE CONNECT ON DATABASE keycloak FROM PUBLIC;"
+  become: true
+  become_user: postgres
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Revoke CONNECT from PUBLIC on verify_db database
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: "REVOKE CONNECT ON DATABASE verify_db FROM PUBLIC;"
+  become: true
+  become_user: postgres
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Grant CONNECT on keycloak database to keycloak_user
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: "GRANT CONNECT ON DATABASE keycloak TO keycloak_user;"
+  become: true
+  become_user: postgres
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Grant CONNECT on verify_db database to verify_user
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: "GRANT CONNECT ON DATABASE verify_db TO verify_user;"
+  become: true
+  become_user: postgres
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Revoke ALL on schema public from PUBLIC in keycloak database
+  community.postgresql.postgresql_query:
+    db: keycloak
+    query: "REVOKE ALL ON SCHEMA public FROM PUBLIC;"
+  become: true
+  become_user: postgres
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Revoke ALL on schema public from PUBLIC in verify_db database
+  community.postgresql.postgresql_query:
+    db: verify_db
+    query: "REVOKE ALL ON SCHEMA public FROM PUBLIC;"
+  become: true
+  become_user: postgres
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Revoke ALL on schema public from PUBLIC in postgres database
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: "REVOKE ALL ON SCHEMA public FROM PUBLIC;"
+  become: true
+  become_user: postgres
+  changed_when: false
+  when: not ansible_check_mode
