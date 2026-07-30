@@ -32,6 +32,8 @@
 
 2026-07-31 `NET-02R` 검증에서 OPNsense 저장 설정과 재부팅 후 런타임 모두 LAN=`vlan01`, VLAN 20~50 논리 인터페이스·gateway, 부모 `igc2` 무주소 상태로 일치했다. Proxmox 관리는 `vmbr0.10`으로 유지됐고, 격리 namespace에서 untagged VLAN 10은 ARP 응답이 없으며 tagged VLAN 10~50은 모두 gateway ARP 응답이 있었다.
 
+같은 날 `NET-03`에서 VLAN 20~50의 임시 IPv4 bootstrap 방화벽 경계를 적용하고 재부팅 후에도 저장 설정과 PF 런타임이 유지됨을 확인했다. 실제 주소와 검증 범위는 아래 표와 [NET-03 runbook](runbook/opnsense-vlan-bootstrap-firewall.md)을 따른다.
+
 | 주소 | 대상 | 상태 |
 |---|---|---|
 | `10.10.10.1/24` | `opnsense` VLAN 10 MGMT gateway | `LIVE`; `vlan01` |
@@ -86,6 +88,22 @@ Proxmox NIC ── VLAN-aware bridge
 - VLAN 1과 native/untagged 트래픽을 최종 트렁크에 사용하지 않는다.
 - 관리 VLAN 전환은 OOB 콘솔 복구 경로를 검증한 뒤에만 한다.
 - Proxmox bridge는 VLAN을 전달하고, VLAN 간 라우팅은 OPNsense만 담당한다.
+
+## 현재 NET-03 IPv4 bootstrap 경계
+
+VLAN 20~50에는 다음 순서의 임시 정책이 `LIVE`다. 이 정책은 서비스 포트를 미리 열지 않고 구축에 필요한 이름 해석·시간 동기화와 공개 Web 용도의 RFC1918 외 egress만 제공한다.
+
+| 순서 | 출발 | 도착 | 정책 |
+|---|---|---|---|
+| 1 | 각 project VLAN | 해당 VLAN OPNsense gateway | DNS TCP/UDP 53 허용 |
+| 2 | 각 project VLAN | 해당 VLAN OPNsense gateway | NTP UDP 123 허용 |
+| 3 | 각 project VLAN | RFC1918 목적지 | 차단·기록 |
+| 4 | 각 project VLAN | 그 밖의 목적지 | TCP 80/443 허용 |
+| 5 | 각 project VLAN | 위에 없는 목적지·포트 | PF implicit deny |
+
+RFC1918 차단 alias는 `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`을 포함하고 공개 Web port alias는 80과 443만 포함한다. 따라서 뒤의 Web 허용이 OPNsense·Proxmox 관리면, HOME이나 다른 project VLAN의 TCP 80/443을 우회하지 못한다. 기존 LAN/HOME 규칙은 재배열하지 않았고, MGMT에서 시작한 project VLAN 관리 연결의 stateful 응답은 유지된다.
+
+project VLAN에는 routed IPv6 prefix·RA·IPv6 gateway가 없어 IPv6 broad allow를 만들지 않았다. DHCP도 활성화하지 않았고 automatic outbound NAT를 유지했다. 이 경계는 모든 신규 서비스를 위한 최종 allowlist가 아니며, `NET-04`에서 실제 서비스 통신표와 `vlan-verify hardened` 결과로 최소화한다.
 
 ## 목표 방화벽 정책
 

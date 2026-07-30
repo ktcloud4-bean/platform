@@ -30,3 +30,4 @@ UI 위치나 명령을 추측해 미리 작성하지 않는다. 첫 PoC는 백�
 - [`proxmox-acme.md`](proxmox-acme.md) — 2026-07-30 검증된 Proxmox VE 네이티브 ACME DNS-01 관리 TLS 절차
 - [`opnsense-oob-console-recovery.md`](opnsense-oob-console-recovery.md) — 2026-07-30 검증된 OOB 콘솔 복구 경로와 lockout 복구 drill
 - [`opnsense-proxmox-tagged-trunk.md`](opnsense-proxmox-tagged-trunk.md) — 2026-07-31 `NET-02R`에서 영속 할당·재부팅·tagged-only 경로를 재검증한 trunk 절차
+- [`opnsense-vlan-bootstrap-firewall.md`](opnsense-vlan-bootstrap-firewall.md) — 2026-07-31 `NET-03`에서 적용·재부팅·실제 VLAN source로 검증한 IPv4 bootstrap 방화벽 절차

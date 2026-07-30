@@ -285,7 +285,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1785232318.46" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1785436080.99" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -456,6 +456,902 @@
             <shaper2 />
             <description>HOME → 인터넷 허용</description>
           </rule>
+          <rule uuid="4a4c5342-1923-470f-956b-e6410a740cbd">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1000</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP/UDP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt2</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>opt2ip</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>53</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: PLATFORM gateway DNS TCP/UDP 53 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="a7564640-9ef5-4280-a2e0-837e0977c1f7">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1010</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>UDP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt2</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>opt2ip</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>123</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: PLATFORM gateway NTP UDP 123 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="bc421e8a-1382-4dd8-95a7-a1cc913ea055">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1020</sequence>
+            <action>block</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>any</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt2</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>NET03_PRIVATE_V4</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port />
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: PLATFORM의 RFC1918 내부 목적지 차단·기록; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="13032eca-fd99-4544-8e8b-e42d62b917bc">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1030</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt2</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>any</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>NET03_BOOTSTRAP_WEB_PORTS</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: PLATFORM의 공개 Web TCP 80/443 egress 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="c44eea81-9fb3-411e-aea4-94e448be93d3">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1100</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt3</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP/UDP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt3</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>opt3ip</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>53</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: ACCESS gateway DNS TCP/UDP 53 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="22cbac2b-929c-4bce-86ec-8e4c7dc53763">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1110</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt3</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>UDP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt3</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>opt3ip</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>123</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: ACCESS gateway NTP UDP 123 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="3f482b84-43b6-42bd-86b7-e3f0f81891de">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1120</sequence>
+            <action>block</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt3</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>any</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt3</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>NET03_PRIVATE_V4</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port />
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: ACCESS의 RFC1918 내부 목적지 차단·기록; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="16401def-2d07-41b6-ba04-916830f4fe40">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1130</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt3</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt3</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>any</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>NET03_BOOTSTRAP_WEB_PORTS</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: ACCESS의 공개 Web TCP 80/443 egress 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="483e0b03-5b2f-40b6-8a75-725d71f6f6e4">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1200</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt4</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP/UDP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt4</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>opt4ip</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>53</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: DMZ gateway DNS TCP/UDP 53 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="c227da6d-604f-47b5-8cff-48b18c5cbe74">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1210</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt4</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>UDP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt4</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>opt4ip</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>123</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: DMZ gateway NTP UDP 123 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="cc255770-506b-4eff-a3fe-0ad3aecdae7c">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1220</sequence>
+            <action>block</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt4</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>any</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt4</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>NET03_PRIVATE_V4</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port />
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: DMZ의 RFC1918 내부 목적지 차단·기록; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="7b61f277-77ac-46be-a682-92c1ecc1ce9c">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1230</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt4</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt4</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>any</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>NET03_BOOTSTRAP_WEB_PORTS</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: DMZ의 공개 Web TCP 80/443 egress 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="59f57a47-ccc9-4d39-9c8c-7f09f03478e7">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1300</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt5</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP/UDP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt5</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>opt5ip</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>53</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: DATA gateway DNS TCP/UDP 53 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="6bf34dfb-97ec-44b8-9ffa-7093912cb498">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1310</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt5</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>UDP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt5</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>opt5ip</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>123</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: DATA gateway NTP UDP 123 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="712e3561-d440-485f-b2b4-228ca69fb2c5">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1320</sequence>
+            <action>block</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt5</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>any</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt5</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>NET03_PRIVATE_V4</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port />
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: DATA의 RFC1918 내부 목적지 차단·기록; NET-04에서 실제 통신표로 교체</description>
+          </rule>
+          <rule uuid="8fc972e5-6b88-47f6-92f9-ebc54f6dde9d">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1330</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt5</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>opt5</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>any</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>NET03_BOOTSTRAP_WEB_PORTS</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>0</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NET-03 임시 bootstrap: DATA의 공개 Web TCP 80/443 egress 허용; NET-04에서 실제 통신표로 교체</description>
+          </rule>
         </rules>
         <snatrules />
         <npt />
@@ -464,11 +1360,49 @@
       <Lvtemplate version="0.0.1" persisted_at="1785198671.19" description="Firewall Live View filter templates">
         <templates />
       </Lvtemplate>
-      <Alias version="1.0.1" persisted_at="1785198671.57" description="Firewall aliases">
+      <Alias version="1.0.1" persisted_at="1785435956.12" description="Firewall aliases">
         <geoip>
           <url />
         </geoip>
-        <aliases />
+        <aliases>
+          <alias uuid="776e21a4-973c-4905-b4cb-4da5b5f43033">
+            <enabled>1</enabled>
+            <name>NET03_PRIVATE_V4</name>
+            <type>network</type>
+            <path_expression />
+            <proto />
+            <interface />
+            <counters>0</counters>
+            <updatefreq />
+            <content>10.0.0.0/8
+172.16.0.0/12
+192.168.0.0/16</content>
+            <password />
+            <username />
+            <authtype />
+            <expire />
+            <categories />
+            <description>NET-03 임시 bootstrap 내부 차단용 RFC1918 IPv4; NET-04에서 실제 통신표 정책으로 교체·재검토</description>
+          </alias>
+          <alias uuid="ca29f507-8661-4753-a876-a6773f011a05">
+            <enabled>1</enabled>
+            <name>NET03_BOOTSTRAP_WEB_PORTS</name>
+            <type>port</type>
+            <path_expression />
+            <proto />
+            <interface />
+            <counters>0</counters>
+            <updatefreq />
+            <content>80
+443</content>
+            <password />
+            <username />
+            <authtype />
+            <expire />
+            <categories />
+            <description>NET-03 임시 bootstrap 공개 Web egress용 TCP 80/443; NET-04에서 실제 통신표 정책으로 교체·재검토</description>
+          </alias>
+        </aliases>
       </Alias>
       <Category version="1.0.0" persisted_at="1785198671.57" description="Firewall categories">
         <categories />
