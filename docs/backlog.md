@@ -12,7 +12,7 @@
 | VLAN trunk | `BLOCKED` | RECOVERY 복구 drill과 `vlan-verify` 필요 |
 | VM·k3s·플랫폼 서비스 | `BLOCKED` | VLAN과 VM 기반 작업 필요 |
 
-`CAP-01` 완료로 `IAC-01`에 남은 선행은 `DNS-01` 하나다. 지금 열린 작업은 `DNS-01`·`AUTO-01`·`OS-01`·`REC-01`이고 `NET-01`은 계속 병렬 가능하다. `PVE-LIVE`(`OS-01`)와 `OPNSENSE-LIVE`(`DNS-01`·`REC-01`)는 각각 한 번에 하나만 실행한다.
+`DNS-01`·`CAP-01` 완료로 `IAC-01`이 열렸다. 지금 열린 작업은 `IAC-01`·`AUTO-01`·`OS-01`·`REC-01`이고 `NET-01`은 계속 병렬 가능하다. `PVE-LIVE`는 `OS-01`, `OPNSENSE-LIVE`는 `REC-01`이 사용하며 각각 한 번에 하나만 실행한다.
 
 ## 멀티 에이전트 규칙
 
@@ -21,7 +21,7 @@
 1. 한 세션은 작업 ID 하나와 그 소유 범위만 변경한다.
 2. 선행 ID가 모두 `DONE`이어야 `READY`다.
 3. 같은 잠금이 있는 작업은 동시에 실행하지 않는다.
-4. 작업자는 이 파일을 직접 갱신하지 않는다. 조정자가 완료 증거를 확인한 뒤 상태를 바꾼다.
+4. 작업자는 완료 증거를 확보하면 같은 세션에서 맡은 ID를 `DONE`으로 갱신하고, 모든 선행이 충족된 직접 후속 ID만 `READY`로 연다.
 5. 완료 보고에는 변경 파일, 라이브 검증, 실패 시 복구 지점, 후속 영향 ID를 포함한다.
 6. 계획만 만든 것은 완료가 아니다. `DONE`은 표의 완료 증거가 확보된 상태다.
 
@@ -55,11 +55,11 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `PVE-01 DONE` | Proxmox 수동 설치·선택값 runbook (`docs/runbook/proxmox-manual-install.md`)·재부팅 검증 | 없음 | `PVE-LIVE` | 이후 전체 | 목표 NVMe, 설치 버전·filesystem·storage 선택, `ip-plan` 기반 network 적용 증거, 관리 UI·SSH와 재부팅 후 정상 |
-| `DNS-01 READY` | Unbound에 물리·VM canonical host record 등록 | `PVE-01` | `OPNSENSE-LIVE` | `IAC-01`, 모든 VM | 정·역방향 이름 해석, 미배포 service alias 없음, drift 없음 |
+| `DNS-01 DONE` | Unbound에 물리·VM canonical host record 등록 | `PVE-01` | `OPNSENSE-LIVE` | `IAC-01`, 모든 VM | 정·역방향 이름 해석, 미배포 service alias 없음, drift 없음 |
 | `CAP-01 DONE` | CPU·RAM·thin storage·호스트 여유 예산 확정 (`docs/capacity-plan.md`) | `PVE-01` | `PVE-LIVE` | `VM-01`, PVC 용량 | VM 0개 상태의 `pvesm`·`lvs`·`vgs`·`free`·`lscpu` 실측 기준표, RAM 과할당 금지·thin 프로비저닝 상한·지표별 정지 기준 기록 |
 | `AUTO-01 READY` | 공식 `answer.toml` 템플릿과 자동설치 ISO PoC (`infra/proxmox/installer/`) | `PVE-01` | 없음 | 재설치 | 원본 ISO checksum, 템플릿·생성·검증 절차, Git의 비밀·생성 ISO 부재, 별도 VM/가상 디스크 무인 설치; 실물 디스크 미사용 |
 | `OS-01 READY` | Rocky Linux 9 Minimal cloud-init template·Ansible 공통 baseline | `PVE-01` | `PVE-LIVE` | 모든 VM | clone 후 SSH key, 시간, 저장소, qemu-agent, 재부팅 검증 |
-| `IAC-01 BLOCKED` | OpenTofu provider·state·VM 공통 모듈 (`infra/proxmox/`) | `PVE-01`, `DNS-01`, `CAP-01` | `TOFU-STATE` | `VM-01` | secret 없는 init/validate/plan, state 보관 방식과 import 경계 검증 |
+| `IAC-01 READY` | OpenTofu provider·state·VM 공통 모듈 (`infra/proxmox/`) | `PVE-01`, `DNS-01`, `CAP-01` | `TOFU-STATE` | `VM-01` | secret 없는 init/validate/plan, state 보관 방식과 import 경계 검증 |
 | `NET-01 READY` | `vlan-verify`의 bootstrap/hardened profile과 테스트 | 없음 | 없음 | `NET-02`, `NET-04` | 현재망 회귀 테스트, 기대 허용·차단을 exit code로 판정 |
 | `REC-01 READY` | `igc0` RECOVERY 설계·현장 복구 drill | `PVE-01` | `OPNSENSE-LIVE` | `NET-02` | 주 LAN 없이 GUI/콘솔 복구 후 원상복귀, runbook 검증 |
 
