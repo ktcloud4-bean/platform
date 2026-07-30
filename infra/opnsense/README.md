@@ -7,7 +7,7 @@ OPNsense는 경계 방화벽, VLAN router, NAT, 랩 DNS와 네트워크 IDS를 �
 `config.xml`은 **마스킹한 드리프트 스냅샷**이며 적용 파일이 아니다.
 
 ```text
-사람이 UI 또는 승인된 API로 라이브 변경
+사람이 지원되는 UI/API·설정 라이브러리로 라이브 변경
               ↓
 서비스·route·PF·DNS를 라이브 검증
               ↓
@@ -23,13 +23,13 @@ check-drift.sh --update로 스냅샷 승인
 
 ## 현재 스냅샷
 
-2026-07-29 커밋 기준으로 다음이 기록돼 있다. 변경 전에는 라이브 드리프트를 다시 확인한다.
+2026-07-31 스냅샷과 라이브 저장 설정을 다시 대조해 다음을 확인했다. 변경 전에는 라이브 드리프트와 목표 적합성을 각각 확인한다.
 
 | 영역 | 기록된 상태 |
 |---|---|
 | WAN | ISP DHCP, private·bogon 차단 |
 | LAN/HOME | 물리 재배치 완료; 주소는 IP 계획 참조 |
-| VLAN | VLAN 10 MGMT / 20 PLATFORM / 30 ACCESS / 40 DMZ / 50 DATA 생성 완료; igc2 tagged-only 802.1Q trunk |
+| VLAN | LAN=`vlan01`, VLAN 20~50 논리 인터페이스·gateway 저장; 부모 `igc2`는 무주소 tagged-only trunk |
 | Web GUI | HTTPS, LAN listen, Local+TOTP |
 | SSH | LAN listen, 공개키 관리 |
 | DNS | Unbound recursion, DNSSEC, forwarding 비활성 |
@@ -37,6 +37,8 @@ check-drift.sh --update로 스냅샷 승인
 | ACME | Cloudflare DNS-01 wildcard, 자동갱신 cron |
 | NAT | automatic outbound NAT |
 | IDS | Suricata 비활성; PCAP alert-only 목표는 `NIDS-01` |
+
+2026-07-31 `NET-02R`에서 저장 설정과 재부팅 후 런타임을 대조해 VLAN 10~50 gateway·직접 연결 route, 부모 `igc2` 무주소, tagged 성공·untagged 차단, SSH·strict TLS·DNS·PF·Dnsmasq를 확인했다. 일반 drift 검사가 성공하는 것은 라이브 저장 설정과 마스킹 스냅샷이 같다는 뜻일 뿐이므로, 목표 적합성과 런타임 검증은 계속 별도로 수행한다.
 
 현재 Phase 1 방화벽 규칙은 최종 VLAN 정책이 아니다. 목표 행렬과 전환 gate는 `docs/ip-plan.md`와 `docs/backlog.md`가 소유한다.
 
@@ -140,11 +142,12 @@ store로 검증한 경로와 `ip-plan.md`의 현재 IP로 DNS만 우회한 경�
 ## 변경 절차
 
 1. `docs/backlog.md`에서 선행 작업과 `OPNSENSE-LIVE` 잠금을 확인한다.
-2. 일반 drift check로 시작 상태를 확인한다.
-3. UI 또는 공식 API에서 최소 변경만 stage한다.
-4. 적용 전 독립 복구 경로와 rollback 값을 확인한다.
-5. 라이브 API 응답만 보지 말고 interface, route, PF, DNS와 실제 client 요청을 검증한다.
-6. 정당한 최종 상태만 `--update`하고 테스트를 실행한다.
+2. 일반 drift check로 저장 설정과 스냅샷의 일치 여부를 확인한다.
+3. `docs/ip-plan.md`의 목표와 저장 설정·런타임 interface/route를 별도로 대조한다.
+4. 지원되는 UI/API 또는 설치본의 설정 라이브러리에서 최소 변경만 stage한다. 설정 라이브러리를 쓸 때는 라이브 버전의 include·저장·reconfigure 경로를 먼저 확인한다.
+5. 적용 전 독립 복구 경로와 rollback 값을 확인한다.
+6. 라이브 API 응답만 보지 말고 저장 설정, interface, route, PF, DNS와 실제 client 요청을 검증한다.
+7. 정당한 최종 상태만 `--update`하고 테스트를 실행한다.
 
 API 요청 timeout은 성공이나 실패의 증거가 아니다. 인터페이스 전환으로 관리 경로가 끊긴 것일 수 있으므로 OOB에서 라이브 상태를 판정한다.
 

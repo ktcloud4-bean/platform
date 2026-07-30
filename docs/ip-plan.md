@@ -8,10 +8,10 @@
 |---|---|---|
 | `igc1` | `LIVE` WAN, ISP DHCP | 유지 |
 | `igc0` | 미할당, carrier 없음 | 예비; 복구 경로는 OOB 콘솔이 담당 |
-| `igc2` | `LIVE` Proxmox 직결 tagged-only 802.1Q trunk | 유지 |
+| `igc2` | `LIVE` Proxmox 직결 VLAN 10·20·30·40·50 tagged-only trunk; 부모 무주소 | 유지 |
 | `igc3` | `LIVE` HOME | 유지, 프로젝트 범위 밖 |
 
-`igc2`는 tagged-only 802.1Q trunk이다. 부모 인터페이스에 주소를 두지 않고 VLAN 인터페이스만 사용한다.
+`igc2`는 tagged-only 802.1Q trunk다. 부모 인터페이스에는 주소를 두지 않고 VLAN 인터페이스만 사용한다.
 
 ## 주소 규칙
 
@@ -28,13 +28,13 @@
 
 서버 VLAN에는 필요가 확인되기 전까지 DHCP를 만들지 않는다.
 
-## 현재 Phase 1
+## 현재 네트워크 기준선
 
-`NET-02` 작업으로 `igc2` 트렁크 전환이 완료되어 현재 LAN은 VLAN 10 (MGMT) 인터페이스(`vlan01`)를 사용한다.
+2026-07-31 `NET-02R` 검증에서 OPNsense 저장 설정과 재부팅 후 런타임 모두 LAN=`vlan01`, VLAN 20~50 논리 인터페이스·gateway, 부모 `igc2` 무주소 상태로 일치했다. Proxmox 관리는 `vmbr0.10`으로 유지됐고, 격리 namespace에서 untagged VLAN 10은 ARP 응답이 없으며 tagged VLAN 10~50은 모두 gateway ARP 응답이 있었다.
 
 | 주소 | 대상 | 상태 |
 |---|---|---|
-| `10.10.10.1/24` | `opnsense` VLAN 10 MGMT gateway | `LIVE` |
+| `10.10.10.1/24` | `opnsense` VLAN 10 MGMT gateway | `LIVE`; `vlan01` |
 | `10.10.10.10/24` | `proxmox-01` (`vmbr0.10`) | `LIVE` |
 
 현재 LAN DHCP는 `10.10.10.100-10.10.10.245`다. 임시 설치 환경의 동적 주소는 문서에 고정 배정으로 올리지 않는다.
@@ -56,7 +56,7 @@ VLAN 번호는 보안 등급 순서가 아니라 역할 식별자다. 실제 신
 
 | 주소 | 호스트 | 상태 |
 |---|---|---|
-| `10.10.10.1` | `opnsense` | `LIVE`; VLAN 10 gateway |
+| `10.10.10.1` | `opnsense` | `LIVE`; `vlan01` |
 | `10.10.10.10` | `proxmox-01` | `LIVE`; `vmbr0.10` |
 | `10.10.20.1` | OPNsense `PLATFORM` gateway | `LIVE` |
 | `10.10.20.10` | `k3s-01` | `RESERVED` |

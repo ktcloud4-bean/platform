@@ -29,5 +29,4 @@ UI 위치나 명령을 추측해 미리 작성하지 않는다. 첫 PoC는 백�
 - [`rocky9-template-and-baseline.md`](rocky9-template-and-baseline.md) — 2026-07-30 검증된 Rocky Linux 9 Cloud-Init Template 및 Ansible Baseline 절차
 - [`proxmox-acme.md`](proxmox-acme.md) — 2026-07-30 검증된 Proxmox VE 네이티브 ACME DNS-01 관리 TLS 절차
 - [`opnsense-oob-console-recovery.md`](opnsense-oob-console-recovery.md) — 2026-07-30 검증된 OOB 콘솔 복구 경로와 lockout 복구 drill
-- [`opnsense-proxmox-tagged-trunk.md`](opnsense-proxmox-tagged-trunk.md) — 2026-07-31 검증된 OPNsense–Proxmox tagged-only trunk 전환 절차
-
+- [`opnsense-proxmox-tagged-trunk.md`](opnsense-proxmox-tagged-trunk.md) — 2026-07-31 `NET-02R`에서 영속 할당·재부팅·tagged-only 경로를 재검증한 trunk 절차

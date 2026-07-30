@@ -125,7 +125,7 @@
     </wan>
     <lan>
       <enable>1</enable>
-      <if>igc2</if>
+      <if>vlan01</if>
       <ipaddr>10.10.10.1</ipaddr>
       <subnet>24</subnet>
       <ipaddrv6>idassoc6</ipaddrv6>
@@ -160,6 +160,38 @@
       <ipaddr>10.10.60.1</ipaddr>
       <subnet>24</subnet>
     </opt1>
+    <opt2>
+      <if>vlan02</if>
+      <descr>PLATFORM</descr>
+      <lock>1</lock>
+      <enable>1</enable>
+      <ipaddr>10.10.20.1</ipaddr>
+      <subnet>24</subnet>
+    </opt2>
+    <opt3>
+      <if>vlan03</if>
+      <descr>ACCESS</descr>
+      <lock>1</lock>
+      <enable>1</enable>
+      <ipaddr>10.10.30.1</ipaddr>
+      <subnet>24</subnet>
+    </opt3>
+    <opt4>
+      <if>vlan04</if>
+      <descr>DMZ</descr>
+      <lock>1</lock>
+      <enable>1</enable>
+      <ipaddr>10.10.40.1</ipaddr>
+      <subnet>24</subnet>
+    </opt4>
+    <opt5>
+      <if>vlan05</if>
+      <descr>DATA</descr>
+      <lock>1</lock>
+      <enable>1</enable>
+      <ipaddr>10.10.50.1</ipaddr>
+      <subnet>24</subnet>
+    </opt5>
   </interfaces>
   <dnsmasq version="1.0.9" persisted_at="1785242548.91" description="Dnsmasq DNS and DHCP">
     <enable>1</enable>

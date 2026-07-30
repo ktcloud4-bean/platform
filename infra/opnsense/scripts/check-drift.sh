@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # OPNsense 의 현재 설정을 받아 Git 사본과 비교한다.
 #
-# OPNsense 는 Git 이 바꿀 수 없다. 설정 변경은 항상 웹 UI 에서 일어나고,
+# OPNsense 는 Git 이 바꿀 수 없다. 설정 변경은 지원되는 UI/API·설정 라이브러리에서 일어나고,
 # 이 스크립트는 그 변경이 Git 에 기록되지 않은 채 남아 있는지를 탐지한다.
 # 교정은 하지 않는다 — 방화벽 설정을 자동으로 되돌리면 노드가 고립될 수 있다.
 set -euo pipefail
