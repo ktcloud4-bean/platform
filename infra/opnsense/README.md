@@ -172,3 +172,5 @@ API 요청 timeout은 성공이나 실패의 증거가 아니다. 인터페이�
 - 원격 세션만 가진 상태에서 관리 IP·물리 할당·기본 방화벽 변경
 
 OPNsense, Keycloak과 overlay가 동시에 중단돼도 PiKVM/콘솔과 로컬 관리자로 복구할 수 있어야 한다.
+
+이 경로의 검증된 절차, 성공 판정과 제약은 [`docs/runbook/opnsense-oob-console-recovery.md`](../../docs/runbook/opnsense-oob-console-recovery.md)가 소유한다. OOB 콘솔이 살아 있는 상태는 위 금지 항목의 "원격 세션만 가진 상태"에 해당하지 않는다. 다만 OOB가 랩 밖 네트워크 뒤에 있으면 그 경로가 끊기는 장애에서는 다시 현장 접근이 필요하다.

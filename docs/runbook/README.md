@@ -28,4 +28,5 @@ UI 위치나 명령을 추측해 미리 작성하지 않는다. 첫 PoC는 백�
 - [`proxmox-manual-install.md`](proxmox-manual-install.md) — 2026-07-30 검증된 Proxmox VE 수동 설치 선택값과 판정
 - [`rocky9-template-and-baseline.md`](rocky9-template-and-baseline.md) — 2026-07-30 검증된 Rocky Linux 9 Cloud-Init Template 및 Ansible Baseline 절차
 - [`proxmox-acme.md`](proxmox-acme.md) — 2026-07-30 검증된 Proxmox VE 네이티브 ACME DNS-01 관리 TLS 절차
+- [`opnsense-oob-console-recovery.md`](opnsense-oob-console-recovery.md) — 2026-07-30 검증된 OOB 콘솔 복구 경로와 lockout 복구 drill
 

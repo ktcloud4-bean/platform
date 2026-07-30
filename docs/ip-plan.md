@@ -7,7 +7,7 @@
 | OPNsense 장치 | 현재 | 목표 |
 |---|---|---|
 | `igc1` | `LIVE` WAN, ISP DHCP | 유지 |
-| `igc0` | 미할당 | RECOVERY 전용, 현장 검증 후 확정 |
+| `igc0` | 미할당, carrier 없음 | 예비; 복구 경로는 OOB 콘솔이 담당 |
 | `igc2` | `LIVE` untagged LAN | Proxmox 직결 tagged-only 802.1Q trunk |
 | `igc3` | `LIVE` HOME | 유지, 프로젝트 범위 밖 |
 
@@ -82,7 +82,7 @@ Proxmox NIC ── VLAN-aware bridge
 ```
 
 - VLAN 1과 native/untagged 트래픽을 최종 트렁크에 사용하지 않는다.
-- 관리 VLAN 전환은 RECOVERY 또는 OOB를 검증한 현장에서만 한다.
+- 관리 VLAN 전환은 OOB 콘솔 복구 경로를 검증한 뒤에만 한다.
 - Proxmox bridge는 VLAN을 전달하고, VLAN 간 라우팅은 OPNsense만 담당한다.
 
 ## 목표 방화벽 정책

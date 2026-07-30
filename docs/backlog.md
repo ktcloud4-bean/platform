@@ -10,10 +10,10 @@
 | Proxmox | `DONE` | PVE 9.2.0 / pve-manager 9.2.2 설치 기준선 및 `PVE-ACME-01` 관리 TLS 검증 완료 |
 | 자원 예산 | `DONE` | VM 0개 상태의 실측 기준표·과할당 한계·정지 기준; 값은 `capacity-plan.md` |
 | VM 선언 (OpenTofu) | `DONE` | provider·state 경계와 5개 VM 공통 모듈; 생성은 `NET-03` 대기 |
-| VLAN trunk | `BLOCKED` | `vlan-verify` 완료; RECOVERY 복구 drill 필요 |
+| VLAN trunk | `READY` | `vlan-verify`와 OOB 콘솔 복구 drill 완료; `NET-02` 전환 대기 |
 | VM·k3s·플랫폼 서비스 | `BLOCKED` | VLAN과 VM 기반 작업 필요 |
 
-`IAC-01`·`OS-01`·`PVE-ACME-01` 완료로 `VM-01`의 선행 중 `CAP-01`·`IAC-01`·`OS-01`·`PVE-ACME-01`이 충족됐고 남은 것은 `NET-03`이다. 지금 열린 작업은 `REC-01`이다.
+`IAC-01`·`OS-01`·`PVE-ACME-01` 완료로 `VM-01`의 선행 중 `CAP-01`·`IAC-01`·`OS-01`·`PVE-ACME-01`이 충족됐고 남은 것은 `NET-03`이다. `REC-01` 완료로 지금 열린 작업은 `NET-02`이며 `PVE-LIVE`와 `OPNSENSE-LIVE`를 함께 사용한다.
 
 ## 멀티 에이전트 규칙
 
@@ -65,15 +65,16 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 | `OS-01 DONE` | Rocky Linux 9 Minimal cloud-init template·Ansible 공통 baseline | `PVE-01` | `PVE-LIVE` | 모든 VM | VMID 9000 template 생성, clone 후 SSH key, 시간, 저장소, qemu-agent, 재부팅, Ansible 멱등성 검증 |
 | `IAC-01 DONE` | OpenTofu provider·state·VM 공통 모듈 (`infra/proxmox/tofu/`) | `PVE-01`, `DNS-01`, `CAP-01` | `TOFU-STATE` | `PVE-ACME-01`, `VM-01` | secret 없는 init/validate/plan, state 보관 방식과 import 경계 검증 |
 | `NET-01 DONE` | `vlan-verify`의 bootstrap/hardened profile과 테스트 | 없음 | 없음 | `NET-02`, `NET-04` | 현재망 회귀 테스트, 기대 허용·차단을 exit code로 판정 |
-| `REC-01 READY` | `igc0` RECOVERY 설계·현장 복구 drill | `PVE-01` | `OPNSENSE-LIVE` | `NET-02` | 주 LAN 없이 GUI/콘솔 복구 후 원상복귀, runbook 검증 |
+| `REC-01 DONE` | OOB 콘솔 복구 경로 검증·lockout 복구 drill (`docs/runbook/opnsense-oob-console-recovery.md`) | `PVE-01` | `OPNSENSE-LIVE` | `NET-02` | 주 LAN 주소 상실 상태에서 관리 경로 도달 실패와 OOB 콘솔 생존을 같은 시점에 관측, 콘솔로 복구 후 원상복귀, drift 없음, runbook 검증 |
+| `REC-02 DEFERRED` | `igc0` 물리 RECOVERY 포트 추가 | `REC-01` | `OPNSENSE-LIVE` | 없음 | 현장에서 케이블 연결 후 주 LAN 없이 GUI 접근과 원상복귀 |
 
-`PVE-01`은 디스크를 지우는 작업이다. 자동설치 PoC는 수동 설치에서 확인한 값을 사용하되 현재 물리 노드에 재실행하지 않는다. `PVE-ACME-01`은 443 전환이나 공개 경로 추가가 아니라 설치 후 8006의 서버 신뢰를 닫는 작업이다. 부트스트랩과 자동화 경계는 [ADR-0001](adr/0001-proxmox-bootstrap-reproducibility.md), Proxmox 인증서 소유권은 [ADR-0009](adr/0009-proxmox-native-acme-management-tls.md), OpenTofu provider·state 경계는 [ADR-0008](adr/0008-opentofu-provider-and-state-boundary.md)을 따른다.
+`PVE-01`은 디스크를 지우는 작업이다. 자동설치 PoC는 수동 설치에서 확인한 값을 사용하되 현재 물리 노드에 재실행하지 않는다. `PVE-ACME-01`은 443 전환이나 공개 경로 추가가 아니라 설치 후 8006의 서버 신뢰를 닫는 작업이다. `REC-01`은 OOB 콘솔이 랩 네트워크와 독립으로 동작함을 확인했다. OOB는 HOME 뒤에 있어 WAN·HOME이 손상되면 함께 끊기므로, 그 경우를 위한 `igc0` 물리 포트는 현장 접근이 가능할 때 `REC-02`로 검토한다. 부트스트랩과 자동화 경계는 [ADR-0001](adr/0001-proxmox-bootstrap-reproducibility.md), Proxmox 인증서 소유권은 [ADR-0009](adr/0009-proxmox-native-acme-management-tls.md), OpenTofu provider·state 경계는 [ADR-0008](adr/0008-opentofu-provider-and-state-boundary.md)을 따른다.
 
 ## 2. VLAN과 VM 기반
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `NET-02 BLOCKED` | OPNsense–Proxmox tagged-only trunk 전환 | `PVE-01`, `REC-01`, `NET-01` | `PVE-LIVE`, `OPNSENSE-LIVE` | 모든 VM 주소·경로 | VLAN gateway·Proxmox 관리 접근, untagged 차단, 재부팅, drift 없음 |
+| `NET-02 READY` | OPNsense–Proxmox tagged-only trunk 전환 | `PVE-01`, `REC-01`, `NET-01` | `PVE-LIVE`, `OPNSENSE-LIVE` | 모든 VM 주소·경로 | VLAN gateway·Proxmox 관리 접근, untagged 차단, 재부팅, drift 없음 |
 | `NET-03 BLOCKED` | VLAN 기본 deny와 bootstrap 허용 정책 | `NET-02` | `OPNSENSE-LIVE` | 모든 서비스 통신 | 관리망 역방향 차단, DNS/NTP/인터넷, `vlan-verify bootstrap` 성공 |
 | `VM-01 BLOCKED` | 5개 VM을 한 OpenTofu apply로 생성 | `CAP-01`, `OS-01`, `IAC-01`, `PVE-ACME-01`, `NET-03` | `TOFU-STATE`, `PVE-LIVE` | 3단계 전체 | strict TLS로 계획된 VLAN·disk·cloud-init, qemu-agent, gateway 통신, 재계획 무변경 |
 | `NIDS-01 BLOCKED` | OPNsense Suricata PCAP alert-only IDS 기준선 | `VM-01` | `OPNSENSE-LIVE` | `EDGE-01`, `AUDIT-01`, `WAZUH-01` | 논리 프로젝트 VLAN 범위, 부모/VLAN 동시 선택 없음, 대표 경보, CPU·지연·손실, 로컬 rotation·재부팅·drift 검증 |
