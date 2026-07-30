@@ -1,0 +1,25 @@
+# 실제 값을 담은 파일은 커밋하지 않는다. 이 디렉터리의 .gitignore 가 *.tfvars 를 막는다.
+#
+# 자격증명은 여기에 넣지 않는다. Proxmox API token 은 환경변수로만 주입한다.
+#   export PROXMOX_VE_API_TOKEN='tofu@pve!<token-id>=<uuid>'
+#
+# 아래 두 값은 선행 작업이 끝나기 전까지 비워 둔다. 비어 있으면 VM 이 계획되지 않는다.
+
+# OS-01 이 만든 Rocky Linux 9 cloud-init template 의 VMID.
+# 실제 값은 OS-01 완료 후 Proxmox 에서 확인해 넣는다.
+# vm_template_id = 9000
+
+# NET-02·NET-03 완료 후에만 true 로 바꾼다.
+# vlan_trunk_ready = true
+
+# cloud-init 이 넣을 SSH 공개키. 공개키만 넣는다.
+# ssh_public_keys = [
+#   "ssh-ed25519 AAAA<...공개키...> operator@workstation",
+# ]
+
+# 아래는 기본값을 바꿀 때만 쓴다.
+# proxmox_endpoint    = "https://proxmox-01.imcherry5778.xyz:8006/"
+# proxmox_node_name   = "proxmox-01"
+# vm_datastore_id     = "local-lvm"
+# vm_bridge           = "vmbr0"
+# cloud_init_username = "rocky"

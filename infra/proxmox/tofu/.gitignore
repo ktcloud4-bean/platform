@@ -1,0 +1,19 @@
+# 저장소 루트 .gitignore 가 이미 *.tfstate 와 .terraform/ 을 제외한다.
+# 여기서는 이 디렉터리에서만 생기는 파일을 추가로 막는다.
+
+# plan 파일은 바이너리이며 변수값·리소스 속성이 그대로 들어간다.
+*.tfplan
+*.tfplan.*
+plan.out
+plan.txt
+
+# 실제 변수값. 자격증명이나 SSH 키가 들어갈 수 있다. 예제만 커밋한다.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# state 백업과 크래시 로그
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log

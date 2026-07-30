@@ -12,6 +12,7 @@
 | `docs/ip-plan.md` | IP·VLAN·DNS·도메인을 다룰 때 |
 | `docs/capacity-plan.md` | VM 자원 배정·PVC 용량·정지 기준을 다룰 때 |
 | `infra/opnsense/README.md` | OPNsense를 조회하거나 변경할 때 |
+| `infra/proxmox/tofu/README.md` | Proxmox VM을 OpenTofu로 계획하거나 적용할 때 |
 | `README.md` | 저장소 구조나 운영 원칙을 바꿀 때 |
 
 백로그 작업에 ADR이 연결되어 있으면 작업 전에 해당 ADR을 함께 읽는다.
@@ -26,6 +27,17 @@
 4. 작업자는 완료 증거를 확보하면 같은 세션에서 맡은 ID를 `DONE`으로 갱신하고, 모든 선행이 충족된 직접 후속 ID만 `READY`로 연다.
 5. 라이브 상태가 문서의 전제와 다르면 변경하지 말고 차이와 영향 작업을 보고한다.
 6. OPNsense·Proxmox·OpenTofu state처럼 공유 상태를 다루는 작업은 계획과 적용을 한 작업자가 끝까지 소유한다.
+7. 작업은 작업 ID를 딴 전용 브랜치에서 하고, 완료 증거를 확보한 뒤 `main`으로 squash merge 한다. `main`에 직접 커밋하지 않는다.
+
+### 완료 후 merge
+
+`main`의 커밋 하나가 백로그 작업 하나에 대응하도록 squash 한다. 여러 작업자가 서로 다른 ID를 병렬로 진행하므로 `main`의 이력은 작업 단위로 읽혀야 한다.
+
+- merge 직전에 `main`을 다시 읽어 다른 작업자의 백로그·문서 변경을 확인한다.
+- 충돌은 자기 브랜치에서 해결하고 다시 검증한 뒤 merge 한다.
+- 커밋 메시지에 작업 ID와 검증한 내용을 남긴다.
+- 완료 증거가 없거나 라이브 검증이 실패했으면 merge 하지 않는다. 브랜치에 남겨 두고 무엇이 막혔는지 보고한다.
+- merge 한 브랜치는 지운다.
 
 ## 안전 원칙
 
