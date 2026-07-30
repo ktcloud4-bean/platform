@@ -59,9 +59,11 @@ IPS는 기준선이 아니다. `NIPS-01`이 채택될 때만 정상 트래픽·�
 | 경로 | 역할 |
 |---|---|
 | `config.xml` | 승인된 마스킹 스냅샷 |
+| `.env.example` | OPNsense drift 조회용 로컬 입력 계약; 실제 `.env`는 Git 제외 |
 | `scripts/normalize.py` | 시크릿·변동 노이즈 제거 |
 | `scripts/check-drift.sh` | 라이브 다운로드·정규화·diff |
 | `tests/test_normalize.py` | 마스킹 회귀 테스트 |
+| `tests/test_check_drift.py` | env·TLS·비상 fallback 회귀 테스트 |
 
 원본은 `config.raw.xml`처럼 `.gitignore`가 차단하는 이름으로만 저장하고 작업 후 안전하게 폐기한다.
 
@@ -72,16 +74,68 @@ IPS는 기준선이 아니다. `NIPS-01`이 채택될 때만 정상 트래픽·�
 ```sh
 python3 -m unittest discover -s infra/opnsense/tests -v
 
+# 방법 1: 프로세스 환경변수
 export OPN_KEY='...'
 export OPN_SECRET='...'
 infra/opnsense/scripts/check-drift.sh
+
+# 방법 2: 구성요소 전용 env 파일
+cp infra/opnsense/.env.example infra/opnsense/.env
+chmod 600 infra/opnsense/.env
+# 파일에 OPN_KEY와 OPN_SECRET을 채운 뒤 실행한다.
+infra/opnsense/scripts/check-drift.sh
+
+# 전환 중인 공유 env 파일은 명시적으로 지정할 수 있다.
+# OPN_*가 아닌 값은 읽거나 자식 프로세스로 export하지 않는다.
+infra/opnsense/scripts/check-drift.sh --env-file .env
 
 # 라이브 차이가 정당하고 런타임 검증까지 끝난 경우만
 infra/opnsense/scripts/check-drift.sh --update
 infra/opnsense/scripts/check-drift.sh
 ```
 
-환경변수 값, 다운로드한 원본 XML과 diff의 시크릿을 셸 기록·CI log·Git에 남기지 않는다.
+이미 export된 값이 env 파일보다 우선한다. env 파일은 셸로 `source`하지 않고
+허용된 `OPN_*`만 파싱하며, 소유자는 현재 사용자이고 group/other 권한은 없어야
+한다. 실제 값, 다운로드한 원본 XML과 diff의 시크릿을 셸 기록·CI log·Git에
+남기지 않는다. API key/secret은 임시 mode `0600` curl 설정으로만 전달하고
+명령 인자나 자식 프로세스 환경에 넣지 않는다.
+
+## TLS와 비상 연결
+
+기본 연결은 `docs/ip-plan.md`의 OPNsense canonical hostname과 시스템 trust
+store로 인증서를 검증한다. 현재 공인 wildcard 인증서에는 `OPN_CACERT`가
+필요하지 않다. 사설 CA로 바꾼 경우에만 읽을 수 있는 CA 파일을 지정한다.
+
+DNS만 고장났다면 인증서 검증을 끄지 않는다. canonical hostname은 유지하고
+현재 IP 계획에서 확인한 주소를 명시해 curl의 연결 대상만 바꾼다.
+
+```sh
+infra/opnsense/scripts/check-drift.sh --connect-ip '<현재 OPNsense IP>'
+```
+
+인증서 자체가 만료되거나 교체 중이라 엄격한 검증이 불가능한 비상 상황에서만
+대상 URL과 `--insecure`를 함께 명시한다. 스크립트는 API 자격증명 노출 위험을
+경고하며, 검증하지 않은 응답을 승인하지 못하도록 `--insecure --update`를
+거부한다. 정상 운영 명령이나 `.env`에 insecure 모드를 저장하지 않는다.
+
+```sh
+OPN_URL='https://<현재 OPNsense IP>' \
+  infra/opnsense/scripts/check-drift.sh --insecure
+```
+
+## OPN-DRIFT-01 검증 기록
+
+검증일은 2026-07-30이다. 합성 자격증명과 가짜 curl을 사용한 회귀 테스트
+15개로 env allowlist·권한·비밀 비상속, strict TLS, DNS 우회, insecure 경고와
+`--insecure --update` 거부를 확인했다. `bash -n`, `shellcheck`와 전체
+`unittest`가 통과했다.
+
+라이브 장비에는 쓰기 요청을 하지 않았다. canonical hostname을 시스템 trust
+store로 검증한 경로와 `ip-plan.md`의 현재 IP로 DNS만 우회한 경로에서 각각
+설정을 내려받았고, 둘 다 승인된 `config.xml`과 드리프트가 없었다. 별도 HTTPS
+검증도 HTTP `200`, 인증서 검증 결과 `0`, Let's Encrypt가 발급한 wildcard
+인증서를 확인했다. insecure 경로는 실제 API 자격증명으로 실행하지 않고 합성
+테스트로만 검증했다. 실제 env 파일과 자격증명은 Git 변경에 포함되지 않았다.
 
 ## 변경 절차
 
