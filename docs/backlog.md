@@ -13,7 +13,7 @@
 | VLAN trunk | `BLOCKED` | `vlan-verify` 완료; RECOVERY 복구 drill 필요 |
 | VM·k3s·플랫폼 서비스 | `BLOCKED` | VLAN과 VM 기반 작업 필요 |
 
-`IAC-01` 완료로 `VM-01`의 선행 중 `CAP-01`·`IAC-01`이 충족됐고 남은 것은 `OS-01`과 `NET-03`이다. `NET-01`도 완료됐으며 지금 열린 작업은 `AUTO-01`·`OS-01`·`REC-01`이다. `PVE-LIVE`는 `OS-01`, `OPNSENSE-LIVE`는 `REC-01`이 사용하며 각각 한 번에 하나만 실행한다.
+`IAC-01`·`OS-01` 완료로 `VM-01`의 선행 중 `CAP-01`·`IAC-01`·`OS-01`이 충족됐고 남은 것은 `NET-03`이다. `NET-01`도 완료됐으며 지금 열린 작업은 `AUTO-01`·`REC-01`이다. `OPNSENSE-LIVE`는 `REC-01`이 사용한다.
 
 ## 멀티 에이전트 규칙
 
@@ -59,7 +59,7 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 | `DNS-01 DONE` | Unbound에 물리·VM canonical host record 등록 | `PVE-01` | `OPNSENSE-LIVE` | `IAC-01`, 모든 VM | 정·역방향 이름 해석, 미배포 service alias 없음, drift 없음 |
 | `CAP-01 DONE` | CPU·RAM·thin storage·호스트 여유 예산 확정 (`docs/capacity-plan.md`) | `PVE-01` | `PVE-LIVE` | `VM-01`, PVC 용량 | VM 0개 상태의 `pvesm`·`lvs`·`vgs`·`free`·`lscpu` 실측 기준표, RAM 과할당 금지·thin 프로비저닝 상한·지표별 정지 기준 기록 |
 | `AUTO-01 READY` | 공식 `answer.toml` 템플릿과 자동설치 ISO PoC (`infra/proxmox/installer/`) | `PVE-01` | 없음 | 재설치 | 원본 ISO checksum, 템플릿·생성·검증 절차, Git의 비밀·생성 ISO 부재, 별도 VM/가상 디스크 무인 설치; 실물 디스크 미사용 |
-| `OS-01 READY` | Rocky Linux 9 Minimal cloud-init template·Ansible 공통 baseline | `PVE-01` | `PVE-LIVE` | 모든 VM | clone 후 SSH key, 시간, 저장소, qemu-agent, 재부팅 검증 |
+| `OS-01 DONE` | Rocky Linux 9 Minimal cloud-init template·Ansible 공통 baseline | `PVE-01` | `PVE-LIVE` | 모든 VM | VMID 9000 template 생성, clone 후 SSH key, 시간, 저장소, qemu-agent, 재부팅, Ansible 멱등성 검증 |
 | `IAC-01 DONE` | OpenTofu provider·state·VM 공통 모듈 (`infra/proxmox/tofu/`) | `PVE-01`, `DNS-01`, `CAP-01` | `TOFU-STATE` | `VM-01` | secret 없는 init/validate/plan, state 보관 방식과 import 경계 검증 |
 | `NET-01 DONE` | `vlan-verify`의 bootstrap/hardened profile과 테스트 | 없음 | 없음 | `NET-02`, `NET-04` | 현재망 회귀 테스트, 기대 허용·차단을 exit code로 판정 |
 | `REC-01 READY` | `igc0` RECOVERY 설계·현장 복구 drill | `PVE-01` | `OPNSENSE-LIVE` | `NET-02` | 주 LAN 없이 GUI/콘솔 복구 후 원상복귀, runbook 검증 |

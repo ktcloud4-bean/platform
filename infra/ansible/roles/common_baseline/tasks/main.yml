@@ -1,0 +1,102 @@
+---
+# ==============================================================================
+# infra/ansible/roles/common_baseline/tasks/main.yml
+# Rocky Linux 9 공통 baseline 역할
+# ==============================================================================
+
+- name: 1. 현재 Timezone 조회
+  ansible.builtin.command:
+    cmd: timedatectl show --property=Timezone --value
+  register: current_tz
+  changed_when: false
+
+- name: 1.1. Timezone을 Asia/Seoul로 설정
+  ansible.builtin.command:
+    cmd: timedatectl set-timezone Asia/Seoul
+  when: current_tz.stdout != 'Asia/Seoul'
+
+- name: 2. 필수 패키지 (cloud-init, qemu-guest-agent, chrony) 설치
+  ansible.builtin.dnf:
+    name:
+      - cloud-init
+      - qemu-guest-agent
+      - chrony
+    state: present
+
+- name: 3. qemu-guest-agent 서비스 활성화 및 시작
+  ansible.builtin.systemd:
+    name: qemu-guest-agent
+    enabled: true
+    state: started
+
+- name: 4. chronyd 시간 동기화 서비스 활성화 및 시작
+  ansible.builtin.systemd:
+    name: chronyd
+    enabled: true
+    state: started
+
+- name: 5. 공식 dnf repository 접근 및 동기화 상태 검증
+  ansible.builtin.command:
+    cmd: dnf repolist
+  register: dnf_repolist_result
+  changed_when: false
+
+- name: 5.1. 공식 Rocky 9 저장소 활성 상태 확인
+  ansible.builtin.assert:
+    that:
+      - "'baseos' in dnf_repolist_result.stdout"
+      - "'appstream' in dnf_repolist_result.stdout"
+    fail_msg: "공식 Rocky 9 repolist (baseos, appstream)가 정상적으로 활성화되지 않았습니다."
+
+- name: 6. SSH 공개키 기반 bootstrap 접근 환경 확인
+  ansible.builtin.stat:
+    path: /home/rocky/.ssh/authorized_keys
+  register: auth_keys_stat
+
+- name: 6.1. authorized_keys 존재 검증
+  ansible.builtin.assert:
+    that:
+      - auth_keys_stat.stat.exists
+      - auth_keys_stat.stat.size > 0
+    fail_msg: "/home/rocky/.ssh/authorized_keys 파일이 비어있거나 존재하지 않습니다."
+
+- name: 7. active swap 목록 확인
+  ansible.builtin.command:
+    cmd: swapon --show --noheadings
+  register: active_swaps
+  changed_when: false
+
+- name: 7.1. Swap 메모리 비활성화
+  ansible.builtin.command:
+    cmd: swapoff -a
+  when: active_swaps.stdout != ""
+
+- name: 7.1. /etc/fstab 내 Swap 항목 주석 처리 또는 제거
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^(\s*[^#\s]+\s+[^#\s]+\s+swap\s+.*)$'
+    replace: '# \1'
+
+- name: 7.2. Swap 사용 중이지 않음을 검증
+  ansible.builtin.command:
+    cmd: free -b
+  register: free_output
+  changed_when: false
+
+- name: 7.3. Swap Total 0 bytes 확인
+  ansible.builtin.assert:
+    that:
+      - "'Swap:\n' in free_output.stdout or 'Swap:' in free_output.stdout"
+    fail_msg: "Swap 상태 확인 실패"
+
+- name: 8. Failed systemd unit 존재 여부 검증
+  ansible.builtin.command:
+    cmd: systemctl list-units --failed --no-legend
+  register: failed_units
+  changed_when: false
+
+- name: 8.1. 실패한 systemd 서비스 0개 확인
+  ansible.builtin.assert:
+    that:
+      - failed_units.stdout == ""
+    fail_msg: "실패한 systemd 유닛이 존재합니다: {{ failed_units.stdout }}"

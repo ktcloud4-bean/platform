@@ -1,0 +1,7 @@
+---
+- name: Rocky Linux 9 Common Baseline Configuration & Verification
+  hosts: rocky_baseline
+  gather_facts: true
+  become: true
+  roles:
+    - role: common_baseline

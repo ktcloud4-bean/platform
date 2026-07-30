@@ -36,6 +36,17 @@ ansible/inventory/hosts.local
 *~
 .DS_Store
 
+# --- 이미지 및 부트스트랩 시크릿 ---
+*.qcow2
+*.iso
+*.img
+*.CHECKSUM*
+RPM-GPG-KEY-*
+infra/ansible/inventory/hosts
+infra/ansible/inventory/hosts.ini
+infra/ansible/inventory/*.local
+infra/ansible/id_*
+
 # --- 임시 ---
 *.bak
 *.tmp
@@ -45,3 +56,4 @@ tmp/
 
 # --- 빌드 캐시 ---
 __pycache__/
+
