@@ -22,8 +22,8 @@
 |---|---|
 | OPNsense | 26.7.1_1 (amd64), FreeBSD 15.1-RELEASE-p1 |
 | Suricata 패키지 | `suricata-8.0.6`, HYPERSCAN=on, NETMAP=on |
-| 관찰 대상 인터페이스 | DMZ (`opt4` / `vlan04` / VLAN 40) |
-| 제외 인터페이스 | `igc2` (부모 trunk), `igc1` (WAN), `vlan02` (PLATFORM), `vlan01`, `vlan03`, `vlan05` |
+| 관찰 대상 인터페이스 | DMZ (`opt4` / `vlan04` / VLAN 40), PLATFORM (`opt2` / `vlan02` / VLAN 20) |
+| 제외 인터페이스 | `igc2` (부모 trunk), `igc1` (WAN), `vlan01`, `vlan03`, `vlan05` |
 | 작동 모드 | PCAP alert-only (IDS live mode), drop 없음, payload 저장 비활성화 |
 | HOME_NET 정의 | `10.10.10.0/24,10.10.20.0/24,10.10.30.0/24,10.10.40.0/24,10.10.50.0/24` (프로젝트 VLAN만 지정) |
 | 활성화 룰셋 | `opnsense.test.rules`, `emerging-scan.rules`, 사용자 정의 테스트 룰 |

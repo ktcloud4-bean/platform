@@ -1561,7 +1561,7 @@
         <interface />
       </general>
     </Hostwatch>
-    <IDS version="1.1.2" persisted_at="1785445066.15" description="Intrusion detection">
+    <IDS version="1.1.2" persisted_at="1785445956.85" description="Intrusion detection">
       <rules />
       <policies />
       <userDefinedRules>
@@ -1609,7 +1609,7 @@
         <mode>pcap</mode>
         <divert_listeners>1</divert_listeners>
         <promisc>0</promisc>
-        <interfaces>opt4</interfaces>
+        <interfaces>opt4,opt2</interfaces>
         <homenet>10.10.10.0/24,10.10.20.0/24,10.10.30.0/24,10.10.40.0/24,10.10.50.0/24</homenet>
         <defaultPacketSize />
         <UpdateCron />
