@@ -1,0 +1,10 @@
+# Ansible 관리 파일: infra/ansible/roles/k3s_baseline
+# node IP, advertise address, Pod/Service CIDR는 여기서 고정하지 않는다.
+write-kubeconfig-mode: "0600"
+selinux: true
+{% if k3s_disabled_components | length > 0 %}
+disable:
+{% for component in k3s_disabled_components %}
+  - {{ component }}
+{% endfor %}
+{% endif %}

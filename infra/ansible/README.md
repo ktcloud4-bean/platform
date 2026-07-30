@@ -17,6 +17,39 @@
 
  서비스별 방화벽, Kubernetes, PostgreSQL, MinIO 등의 특정 설정이나 임의의 자동 업데이트/CIS hardening은 이 공통 baseline에 넣지 않는다.
 
+## k3s 단일 노드 기준선
+
+`playbooks/k3s-baseline.yml`과 `roles/k3s_baseline/`은 `K3S-01`의 단일 server
+k3s bootstrap을 소유한다. `update.k3s.io`의 `stable` 채널이 가리킨 실제 버전을
+defaults에 정확히 고정하고, 공식 release binary SHA-256과 고정 commit의 install
+script SHA-256을 검증한다. RHEL 계열은 Rancher GPG key로 검증하는
+`k3s-selinux` 정책을 설치하며 SELinux enforcing을 유지한다.
+
+이미 설치된 `k3s-selinux`는 정확한 NEVRA를 먼저 검증한다. `k3s-selinux`와
+`container-selinux`가 모두 있으면 DNF를 다시 실행하지 않아, 멱등 실행이 외부
+mirror metadata 갱신에 불필요하게 의존하지 않는다.
+
+설정 파일은 SQLite 기본 datastore와 CoreDNS·Traefik·ServiceLB·local-path·
+metrics-server 기본 구성을 그대로 둔다. node 주소, advertise 주소와 Pod/Service
+CIDR는 저장소에 고정하지 않는다. kubeconfig와 server token은 게스트 밖으로
+복사하거나 출력하지 않고 존재·경로·mode만 확인한다.
+
+실제 inventory는 저장소 밖 mode `0600` 파일을 사용한다. 첫 적용 전에는 반드시
+K3S-01 설치 승인 gate를 통과해야 한다.
+
+```bash
+cd infra/ansible
+export ANSIBLE_SSH_COMMON_ARGS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<저장소 밖 known_hosts> -o PasswordAuthentication=no"
+ansible-playbook -i <저장소 밖 inventory> playbooks/k3s-baseline.yml --syntax-check
+ansible-playbook -i <저장소 밖 inventory> playbooks/k3s-baseline.yml --check --diff
+# 명시적 승인 뒤에만 실제 적용
+ansible-playbook -i <저장소 밖 inventory> playbooks/k3s-baseline.yml
+```
+
+적용·검증·재부팅·rollback과 SELinux 환경의 local-path 삭제 helper 함정은
+[`docs/runbook/k3s-single-node-baseline.md`](../../docs/runbook/k3s-single-node-baseline.md)에
+기록한다.
+
 ## NTP source
 
 `NET-03`은 각 project VLAN에서 **해당 VLAN gateway의 UDP 123만** 허용한다. Rocky 기본 설정의 공개 pool은 차단되므로 그대로 두면 게스트가 영원히 동기화되지 않는다.
@@ -53,11 +86,11 @@ infra/ansible/
 ├── inventory/
 │   └── hosts.example        # 비밀 없는 인벤토리 예시 (Git 추적)
 ├── playbooks/
-│   └── baseline.yml         # 공통 baseline 엔트리 플레이북
+│   ├── baseline.yml         # 공통 baseline 엔트리 플레이북
+│   └── k3s-baseline.yml     # K3S-01 단일 server 엔트리 플레이북
 └── roles/
-    └── common_baseline/     # 공통 baseline 검증 및 태스크
-        └── tasks/
-            └── main.yml
+    ├── common_baseline/     # 공통 baseline 검증 및 태스크
+    └── k3s_baseline/        # 고정 k3s·SELinux·systemd 선언
 ```
 
 ## 구문 검사 (Syntax Check)

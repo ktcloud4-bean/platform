@@ -1,0 +1,7 @@
+---
+- name: 단일 노드 k3s SQLite 기준선 구성
+  hosts: k3s_servers
+  gather_facts: true
+  become: true
+  roles:
+    - role: k3s_baseline

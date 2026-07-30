@@ -158,6 +158,31 @@ metadata 사용률은 50%에서 경고, 70%에서 정지한다. 현재 0.24%다.
 - 대용량 저장은 k3s 밖으로 뺀다. Harbor registry backend와 Loki chunk는 `minio-01`의 S3, 관계형 데이터는 `postgres-01`을 쓴다. 이 선택이 무너지면 120 GiB 예산이 가장 먼저 깨진다.
 - Wazuh indexer는 이 예산에 포함하지 않는다. 배치는 `CAP-02` gate에서 결정한다.
 
+### `K3S-01` 기준선 직후 실측 (2026-07-31)
+
+검증용 PVC와 Pod를 제거한 뒤 측정했다. 주소와 VM 하드웨어 값은
+[`ip-plan.md`](ip-plan.md)와 `VM-01` 구성을 따른다.
+
+| 지표 | 실측 | 예산·정지 기준 | 판정 |
+|---|---|---|---|
+| guest root | 총 198.86 GiB · 사용 3.80 GiB · 여유 195.06 GiB · 2% | 여유 25% 미만 경고, 20% 미만 정지 | 정상 |
+| `/var/lib/rancher/k3s` | 1.31 GiB | 이미지·로그 50 GiB와 PVC 120 GiB 구획 안에서 관측 | 정상 |
+| Node memory | metrics-server 1,266 MiB(5%); OS `available` 21.97 GiB | VM 24 GiB Day 1 | 정상 |
+| Node CPU | 39 millicore(0%) | VM 8 vCPU Day 1 | 정상 |
+| PVC 선언 합계 | 0 | 96 GiB 경고, 120 GiB 정지 | 정상 |
+| Proxmox host `available` | 52.45 GiB | 12 GiB 미만 경고, 8 GiB 미만 정지 | 정상 |
+| Proxmox swap | 사용 0 | 0 초과 경고 | 정상 |
+| thin data / metadata | 1.15% / 0.27% | 60% / 50% 경고 | 정상 |
+| Proxmox `/` | 5% | 70% 경고 | 정상 |
+
+SQLite 파일은 약 10 MiB였고 read-only `quick_check=ok`였다. 초기 기준선의 k3s
+데이터 실사용은 1.31 GiB이므로 50 GiB 이미지·로그 구획에 여유가 있지만, 이는 앱
+배포 전 값이다. `K3S-HEAVY` 배포 전후에 다시 측정한다.
+
+동적 16 MiB PVC는 Bound 및 재부팅 후 데이터 유지를 통과했다. 삭제 시 기본
+local-path helper가 SELinux Enforcing 환경에서 timeout을 냈고 정확한 test 경로를
+수동 제거했다. capacity 미강제와 함께 자동 reclaim 동작도 `STOR-01`에서 재검토한다.
+
 ## 나머지 VM 디스크 구획
 
 | VM | 총량 | 구획 |

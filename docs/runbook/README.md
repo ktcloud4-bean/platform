@@ -33,3 +33,4 @@ UI 위치나 명령을 추측해 미리 작성하지 않는다. 첫 PoC는 백�
 - [`opnsense-vlan-bootstrap-firewall.md`](opnsense-vlan-bootstrap-firewall.md) — 2026-07-31 `NET-03`에서 적용·재부팅·실제 VLAN source로 검증한 IPv4 bootstrap 방화벽 절차
 - [`proxmox-opentofu-vm-creation.md`](proxmox-opentofu-vm-creation.md) — 2026-07-31 `VM-01`에서 적용·게스트 검증·재부팅·무변경 재계획까지 확인한 서비스 VM 생성 절차
 - [`opnsense-suricata-ids.md`](opnsense-suricata-ids.md) — 2026-07-31 `NIDS-01`에서 적용·재부팅·DMZ 런타임 및 경보 검증 완료한 Suricata alert-only IDS 절차
+- [`k3s-single-node-baseline.md`](k3s-single-node-baseline.md) — 2026-07-31 `K3S-01`에서 단일 Node·SQLite·기본 구성요소·PVC·재부팅·NET-03을 검증한 k3s 기준선

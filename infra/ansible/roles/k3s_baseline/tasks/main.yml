@@ -1,0 +1,359 @@
+---
+- name: 설치 전 k3s binary 상태 확인
+  ansible.builtin.stat:
+    path: "{{ k3s_binary_path }}"
+  register: k3s_binary_pre
+  check_mode: false
+
+- name: 설치 전 k3s systemd unit 상태 확인
+  ansible.builtin.stat:
+    path: "{{ k3s_service_path }}"
+  register: k3s_service_pre
+  check_mode: false
+
+- name: 설치 전 공식 제거 script 상태 확인
+  ansible.builtin.stat:
+    path: "{{ k3s_uninstall_script_path }}"
+  register: k3s_uninstall_pre
+  check_mode: false
+
+- name: k3s 설치 상태가 부분 상태가 아닌지 확인
+  ansible.builtin.assert:
+    that:
+      - >-
+        (not k3s_binary_pre.stat.exists and
+         not k3s_service_pre.stat.exists and
+         not k3s_uninstall_pre.stat.exists) or
+        (k3s_binary_pre.stat.exists and
+         k3s_service_pre.stat.exists and
+         k3s_uninstall_pre.stat.exists)
+    fail_msg: k3s binary, systemd unit, 제거 script가 불완전한 부분 설치 상태다.
+
+- name: Rocky Linux 9 단일 server 전제 확인
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Rocky'
+      - ansible_facts.distribution_major_version == '9'
+      - ansible_facts.architecture == 'x86_64'
+      - ansible_facts.swaptotal_mb | int == 0
+      - ansible_facts.selinux.status | default('disabled') == 'enabled'
+      - ansible_facts.selinux.mode | default('disabled') == 'enforcing'
+      - k3s_install_channel == 'stable'
+      - k3s_version is match('^v[0-9]+\\.[0-9]+\\.[0-9]+\\+k3s[0-9]+$')
+      - k3s_binary_sha256 is match('^[0-9a-f]{64}$')
+      - k3s_install_script_sha256 is match('^[0-9a-f]{64}$')
+      - k3s_disabled_components | intersect(k3s_required_packaged_components) | length == 0
+    fail_msg: Rocky 9, swap 0, SELinux enforcing 또는 고정 버전·기본 구성요소 계약이 맞지 않는다.
+
+- name: firewalld 현재 상태 조회
+  ansible.builtin.command:
+    cmd: systemctl is-active firewalld.service
+  register: k3s_firewalld_state
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: firewalld가 활성 상태가 아닌지 확인
+  ansible.builtin.assert:
+    that:
+      - k3s_firewalld_state.stdout != 'active'
+    fail_msg: firewalld가 active다. 방화벽 정책을 이 role에서 자동 변경하지 않는다.
+
+- name: 현재 IPv4 주소 조회
+  ansible.builtin.command:
+    cmd: ip -j address show
+  register: k3s_ip_addresses
+  changed_when: false
+  check_mode: false
+
+- name: 현재 IPv4 route 조회
+  ansible.builtin.command:
+    cmd: ip -j route show table all
+  register: k3s_ip_routes
+  changed_when: false
+  check_mode: false
+
+- name: 기본 Pod 및 Service 대역 충돌이 없는지 확인
+  ansible.builtin.assert:
+    that:
+      - "'10.42.' not in k3s_ip_addresses.stdout"
+      - "'10.43.' not in k3s_ip_addresses.stdout"
+      - "'10.42.' not in k3s_ip_routes.stdout"
+      - "'10.43.' not in k3s_ip_routes.stdout"
+    fail_msg: 기본 Pod 또는 Service 대역과 겹치는 주소나 route가 있다.
+  when: not k3s_service_pre.stat.exists
+
+- name: 현재 listen socket 조회
+  ansible.builtin.command:
+    cmd: ss -H -lntup
+  register: k3s_listen_sockets
+  changed_when: false
+  check_mode: false
+
+- name: 신규 설치 전 k3s 예정 포트가 비어 있는지 확인
+  ansible.builtin.assert:
+    that:
+      - (k3s_listen_sockets.stdout | regex_search(':(2379|2380|6443|8472|10250|51820|51821)(\\s|$)')) is none
+    fail_msg: k3s가 아직 설치되지 않았는데 예정 포트가 이미 사용 중이다.
+  when: not k3s_service_pre.stat.exists
+
+- name: 필요한 kernel module 제공 여부 확인
+  ansible.builtin.command:
+    argv:
+      - modinfo
+      - -F
+      - filename
+      - "{{ item }}"
+  loop:
+    - br_netfilter
+    - overlay
+  register: k3s_kernel_modules
+  changed_when: false
+  check_mode: false
+
+- name: 기존 k3s binary 버전 조회
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_binary_path }}"
+      - --version
+  register: k3s_existing_version
+  changed_when: false
+  check_mode: false
+  when: k3s_binary_pre.stat.exists
+
+- name: 기존 k3s binary SHA-256 조회
+  ansible.builtin.command:
+    argv:
+      - sha256sum
+      - "{{ k3s_binary_path }}"
+  register: k3s_existing_checksum
+  changed_when: false
+  check_mode: false
+  when: k3s_binary_pre.stat.exists
+
+- name: 기존 설치가 고정 버전과 일치하는지 확인
+  ansible.builtin.assert:
+    that:
+      - k3s_version in k3s_existing_version.stdout
+      - k3s_existing_checksum.stdout.split()[0] == k3s_binary_sha256
+    fail_msg: 기존 k3s binary가 이 role의 고정 버전 또는 checksum과 다르다.
+  when: k3s_binary_pre.stat.exists
+
+- name: 설치된 패키지 목록 조회
+  ansible.builtin.package_facts:
+    manager: auto
+  check_mode: false
+
+- name: 설치된 k3s SELinux 정책 패키지 NEVRA 조회
+  ansible.builtin.command:
+    argv:
+      - rpm
+      - -q
+      - --qf
+      - '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}'
+      - k3s-selinux
+  register: k3s_selinux_installed_nevra
+  changed_when: false
+  check_mode: false
+  when: "'k3s-selinux' in ansible_facts.packages"
+
+- name: 설치된 k3s SELinux 정책 패키지가 고정 버전인지 확인
+  ansible.builtin.assert:
+    that:
+      - k3s_selinux_installed_nevra.stdout == k3s_selinux_package_nevra
+    fail_msg: 설치된 k3s SELinux 정책 패키지가 고정 NEVRA와 다르다.
+  when: "'k3s-selinux' in ansible_facts.packages"
+
+- name: Rancher k3s SELinux RPM repository 선언
+  ansible.builtin.yum_repository:
+    name: "{{ k3s_selinux_repo_id }}"
+    description: Rancher K3s Common stable
+    baseurl: "{{ k3s_selinux_repo_baseurl }}"
+    enabled: true
+    gpgcheck: true
+    repo_gpgcheck: false
+    gpgkey: "{{ k3s_selinux_gpg_key_url }}"
+    state: present
+
+- name: Rancher RPM 서명 key 선언
+  ansible.builtin.rpm_key:
+    key: "{{ k3s_selinux_gpg_key_url }}"
+    fingerprint: "{{ k3s_selinux_gpg_fingerprint }}"
+    state: present
+
+- name: SELinux 정책 패키지 설치
+  ansible.builtin.dnf:
+    name:
+      - container-selinux
+      - "{{ k3s_selinux_package_nevra }}"
+    state: present
+    enablerepo:
+      - "{{ k3s_selinux_repo_id }}"
+    disable_gpg_check: false
+    update_cache: true
+  when:
+    - not ansible_check_mode
+    - >-
+      'k3s-selinux' not in ansible_facts.packages or
+      'container-selinux' not in ansible_facts.packages
+
+- name: Check mode에서 SELinux 정책 패키지 변경 예고
+  ansible.builtin.debug:
+    msg: >-
+      실제 적용에서는 GPG 검증이 활성화된 repository에서 container-selinux와
+      {{ k3s_selinux_package_nevra }}를 설치한다.
+  changed_when: >-
+    'k3s-selinux' not in ansible_facts.packages or
+    'container-selinux' not in ansible_facts.packages
+  when: ansible_check_mode
+
+- name: 고정 k3s binary 배치
+  ansible.builtin.get_url:
+    url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version | replace('+', '%2B') }}/k3s"
+    dest: "{{ k3s_binary_path }}"
+    owner: root
+    group: root
+    mode: '0755'
+    checksum: "sha256:{{ k3s_binary_sha256 }}"
+
+- name: k3s binary SELinux 실행 context 선언
+  ansible.builtin.file:
+    path: "{{ k3s_binary_path }}"
+    state: file
+    owner: root
+    group: root
+    mode: '0755'
+    seuser: system_u
+    serole: object_r
+    setype: container_runtime_exec_t
+    selevel: s0
+  when: not ansible_check_mode
+
+- name: Check mode에서 k3s binary SELinux context 변경 예고
+  ansible.builtin.debug:
+    msg: k3s binary를 system_u:object_r:container_runtime_exec_t:s0로 선언한다.
+  changed_when: not k3s_binary_pre.stat.exists
+  when: ansible_check_mode
+
+- name: k3s 설정 디렉터리 선언
+  ansible.builtin.file:
+    path: "{{ k3s_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: 단일 server 기본 구성 배치
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ k3s_config_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  register: k3s_config_result
+
+- name: 고정 commit의 공식 install script 임시 배치
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_release_commit }}/install.sh"
+    dest: "{{ k3s_install_script_path }}"
+    owner: root
+    group: root
+    mode: '0700'
+    checksum: "sha256:{{ k3s_install_script_sha256 }}"
+  when: not k3s_uninstall_pre.stat.exists
+
+- name: 공식 install script로 systemd unit과 제거 script 생성
+  ansible.builtin.command:
+    cmd: "{{ k3s_install_script_path }}"
+    creates: "{{ k3s_uninstall_script_path }}"
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_CHANNEL: "{{ k3s_install_channel }}"
+    INSTALL_K3S_EXEC: server
+    INSTALL_K3S_SKIP_DOWNLOAD: 'true'
+    INSTALL_K3S_SKIP_SELINUX_RPM: 'true'
+    INSTALL_K3S_SKIP_START: 'true'
+
+- name: 임시 install script 제거
+  ansible.builtin.file:
+    path: "{{ k3s_install_script_path }}"
+    state: absent
+  when: not ansible_check_mode
+
+- name: k3s 서비스 활성화 및 시작
+  ansible.builtin.systemd:
+    name: k3s
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not ansible_check_mode
+
+- name: 기존 설치의 설정 변경 시 k3s 재시작
+  ansible.builtin.systemd:
+    name: k3s
+    state: restarted
+  when:
+    - not ansible_check_mode
+    - k3s_service_pre.stat.exists
+    - k3s_config_result.changed
+
+- name: kubeconfig 생성 대기
+  ansible.builtin.wait_for:
+    path: "{{ k3s_kubeconfig_path }}"
+    timeout: 180
+  when: not ansible_check_mode
+
+- name: server token 생성 대기
+  ansible.builtin.wait_for:
+    path: "{{ k3s_server_token_path }}"
+    timeout: 180
+  when: not ansible_check_mode
+
+- name: 설치 후 k3s 서비스 상태 조회
+  ansible.builtin.command:
+    cmd: systemctl is-active k3s.service
+  register: k3s_service_active
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: 설치 후 k3s 서비스 enable 상태 조회
+  ansible.builtin.command:
+    cmd: systemctl is-enabled k3s.service
+  register: k3s_service_enabled
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: 설치 후 k3s 버전 조회
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_binary_path }}"
+      - --version
+  register: k3s_installed_version
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: kubeconfig와 token 메타데이터 조회
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ k3s_kubeconfig_path }}"
+    - "{{ k3s_server_token_path }}"
+  register: k3s_sensitive_file_stats
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: 설치 결과와 민감 파일 권한 확인
+  ansible.builtin.assert:
+    that:
+      - k3s_service_active.stdout == 'active'
+      - k3s_service_enabled.stdout == 'enabled'
+      - k3s_version in k3s_installed_version.stdout
+      - k3s_sensitive_file_stats.results[0].stat.exists
+      - k3s_sensitive_file_stats.results[0].stat.mode == '0600'
+      - k3s_sensitive_file_stats.results[1].stat.exists
+      - k3s_sensitive_file_stats.results[1].stat.mode == '0600'
+    fail_msg: k3s 서비스, 고정 버전 또는 kubeconfig/token 메타데이터가 계약과 다르다.
+  when: not ansible_check_mode

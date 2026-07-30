@@ -1,0 +1,37 @@
+---
+# update.k3s.io 의 stable 채널을 조회한 시점의 정확한 버전이다. 설치에는 채널
+# 포인터를 쓰지 않고 이 값을 고정한다.
+k3s_install_channel: stable
+k3s_version: v1.36.2+k3s1
+k3s_binary_sha256: 65a55ec56c24eab44383086166ec620a491952b7e23941a49ddca6e8a4c4b4de
+
+# release tag가 가리킨 커밋의 install.sh를 고정한다. get.k3s.io의 가변 script를
+# 실행 시점에 그대로 사용하지 않는다.
+k3s_release_commit: 01b6f04aaa69e8b09303f0393d4b4f1811da23aa
+k3s_install_script_sha256: 46177d4c99440b4c0311b67233823a8e8a2fc09693f6c89af1a7161e152fbfad
+
+k3s_binary_path: /usr/local/bin/k3s
+k3s_install_script_path: "/var/tmp/k3s-install-{{ k3s_release_commit }}.sh"
+k3s_service_path: /etc/systemd/system/k3s.service
+k3s_uninstall_script_path: /usr/local/bin/k3s-uninstall.sh
+k3s_config_dir: /etc/rancher/k3s
+k3s_config_path: /etc/rancher/k3s/config.yaml
+k3s_kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+k3s_server_token_path: /var/lib/rancher/k3s/server/token
+
+# RHEL 계열 SELinux enforcing에서 필요한 Rancher 서명 정책 패키지다.
+k3s_selinux_repo_id: rancher-k3s-common-stable
+k3s_selinux_repo_baseurl: https://rpm.rancher.io/k3s/stable/common/centos/9/noarch
+k3s_selinux_gpg_key_url: https://rpm.rancher.io/public.key
+k3s_selinux_gpg_fingerprint: C8CFF216455126E9B9C918BE925EA29AE257814A
+k3s_selinux_package_nevra: k3s-selinux-1.6-1.el9.noarch
+
+# ADR-0002의 기본 구성요소를 비활성화하지 않는다. 향후 값을 추가하려면 ADR과
+# 백로그 계약을 먼저 바꿔야 한다.
+k3s_disabled_components: []
+k3s_required_packaged_components:
+  - coredns
+  - traefik
+  - local-storage
+  - servicelb
+  - metrics-server
