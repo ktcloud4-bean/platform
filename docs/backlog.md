@@ -7,13 +7,13 @@
 | 계층 | 상태 | 근거 |
 |---|---|---|
 | OPNsense | `DONE` | 공인 WAN, 2FA, LAN/HOME 재배치, ACME, 마스킹·드리프트 도구 검증 |
-| Proxmox | `DONE` | 9.2.0 설치, 관리 UI·SSH·스토리지와 재부팅 후 검증; 선택값은 runbook |
+| Proxmox | `DONE` | PVE 9.2.0 / pve-manager 9.2.2 설치 기준선 및 `PVE-ACME-01` 관리 TLS 검증 완료 |
 | 자원 예산 | `DONE` | VM 0개 상태의 실측 기준표·과할당 한계·정지 기준; 값은 `capacity-plan.md` |
-| VM 선언 (OpenTofu) | `DONE` | provider·state 경계와 5개 VM 공통 모듈; 생성은 `OS-01`·`NET-03` 대기 |
+| VM 선언 (OpenTofu) | `DONE` | provider·state 경계와 5개 VM 공통 모듈; 생성은 `NET-03` 대기 |
 | VLAN trunk | `BLOCKED` | `vlan-verify` 완료; RECOVERY 복구 drill 필요 |
 | VM·k3s·플랫폼 서비스 | `BLOCKED` | VLAN과 VM 기반 작업 필요 |
 
-`IAC-01`·`OS-01` 완료로 `VM-01`의 선행 중 `CAP-01`·`IAC-01`·`OS-01`이 충족됐고 남은 것은 `NET-03`이다. `NET-01`과 `OPN-DRIFT-01`도 완료됐으며 지금 열린 작업은 `REC-01`이다. `OPNSENSE-LIVE`는 `REC-01`이 사용한다.
+`IAC-01`·`OS-01`·`PVE-ACME-01` 완료로 `VM-01`의 선행 중 `CAP-01`·`IAC-01`·`OS-01`·`PVE-ACME-01`이 충족됐고 남은 것은 `NET-03`이다. 지금 열린 작업은 `REC-01`이다.
 
 ## 멀티 에이전트 규칙
 
@@ -43,8 +43,9 @@
 ```text
 PVE-01 → DNS-01 · CAP-01 · OS-01 · AUTO-01 · REC-01
 DNS-01 + CAP-01 → IAC-01
+PVE-01 + DNS-01 + AUTO-01 + IAC-01 → PVE-ACME-01
 PVE-01 + REC-01 + NET-01 → NET-02 → NET-03
-CAP-01 + OS-01 + IAC-01 + NET-03 → VM-01
+CAP-01 + OS-01 + IAC-01 + PVE-ACME-01 + NET-03 → VM-01
 VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 
 기반 병렬 작업 → 백업 복구 gate → 공급망·정책 → 공개·최소권한
@@ -55,17 +56,18 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `PVE-01 DONE` | Proxmox 수동 설치·선택값 runbook (`docs/runbook/proxmox-manual-install.md`)·재부팅 검증 | 없음 | `PVE-LIVE` | 이후 전체 | 목표 NVMe, 설치 버전·filesystem·storage 선택, `ip-plan` 기반 network 적용 증거, 관리 UI·SSH와 재부팅 후 정상 |
-| `DNS-01 DONE` | Unbound에 물리·VM canonical host record 등록 | `PVE-01` | `OPNSENSE-LIVE` | `IAC-01`, 모든 VM | 정·역방향 이름 해석, 미배포 service alias 없음, drift 없음 |
+| `PVE-01 DONE` | Proxmox 수동 설치·선택값 runbook (`docs/runbook/proxmox-manual-install.md`)·재부팅 검증 | 없음 | `PVE-LIVE` | `PVE-ACME-01`, 이후 전체 | 목표 NVMe, 설치 버전·filesystem·storage 선택, `ip-plan` 기반 network 적용 증거, 관리 UI·SSH와 재부팅 후 정상 |
+| `DNS-01 DONE` | Unbound에 물리·VM canonical host record 등록 | `PVE-01` | `OPNSENSE-LIVE` | `IAC-01`, `PVE-ACME-01`, 모든 VM | 정·역방향 이름 해석, 미배포 service alias 없음, drift 없음 |
 | `OPN-DRIFT-01 DONE` | OPNsense drift 조회의 env 입력과 TLS 검증·비상 fallback 강화 (`infra/opnsense/`) | `DNS-01` | `OPNSENSE-LIVE` | `REC-01`, `NET-02`, `NET-03` | 실제 값을 실행하지 않는 env parser 회귀 테스트, canonical hostname strict TLS와 DNS 우회 검증, insecure 경고·`--update` 차단, 라이브 drift 없음, Git·로그의 자격증명 부재 |
 | `CAP-01 DONE` | CPU·RAM·thin storage·호스트 여유 예산 확정 (`docs/capacity-plan.md`) | `PVE-01` | `PVE-LIVE` | `VM-01`, PVC 용량 | VM 0개 상태의 `pvesm`·`lvs`·`vgs`·`free`·`lscpu` 실측 기준표, RAM 과할당 금지·thin 프로비저닝 상한·지표별 정지 기준 기록 |
-| `AUTO-01 DONE` | 공식 `answer.toml` 템플릿과 자동설치 ISO PoC (`infra/proxmox/installer/`) | `PVE-01` | 없음 | 재설치 | 원본 ISO checksum, 템플릿·생성·검증 절차, Git의 비밀·생성 ISO 부재, 별도 VM/가상 디스크 무인 설치; 실물 디스크 미사용 |
+| `AUTO-01 DONE` | 공식 `answer.toml` 템플릿과 자동설치 ISO PoC (`infra/proxmox/installer/`) | `PVE-01` | 없음 | `PVE-ACME-01`, 재설치 | 원본 ISO checksum, 템플릿·생성·검증 절차, Git의 비밀·생성 ISO 부재, 별도 VM/가상 디스크 무인 설치; 실물 디스크 미사용 |
+| `PVE-ACME-01 DONE` | Proxmox 네이티브 ACME DNS-01 관리 인증서·설치 후 재현 절차 (`infra/proxmox/acme/`) | `PVE-01`, `DNS-01`, `AUTO-01`, `IAC-01` | `PVE-LIVE`, `PUBLIC-DNS`, `TOFU-STATE` | `VM-01` | 라이브 버전의 plugin schema 확인, staging DNS-01과 기본 인증서 복귀 후 production 발급, canonical 단일 FQDN의 SAN·chain·만료·8006 strict TLS, `pveproxy`·API·console 정상, 자동 갱신 timer와 challenge TXT 정리, `proxmox_insecure=false` plan 무변경, Git·로그·명령 인자의 토큰 부재 |
 | `OS-01 DONE` | Rocky Linux 9 Minimal cloud-init template·Ansible 공통 baseline | `PVE-01` | `PVE-LIVE` | 모든 VM | VMID 9000 template 생성, clone 후 SSH key, 시간, 저장소, qemu-agent, 재부팅, Ansible 멱등성 검증 |
-| `IAC-01 DONE` | OpenTofu provider·state·VM 공통 모듈 (`infra/proxmox/tofu/`) | `PVE-01`, `DNS-01`, `CAP-01` | `TOFU-STATE` | `VM-01` | secret 없는 init/validate/plan, state 보관 방식과 import 경계 검증 |
+| `IAC-01 DONE` | OpenTofu provider·state·VM 공통 모듈 (`infra/proxmox/tofu/`) | `PVE-01`, `DNS-01`, `CAP-01` | `TOFU-STATE` | `PVE-ACME-01`, `VM-01` | secret 없는 init/validate/plan, state 보관 방식과 import 경계 검증 |
 | `NET-01 DONE` | `vlan-verify`의 bootstrap/hardened profile과 테스트 | 없음 | 없음 | `NET-02`, `NET-04` | 현재망 회귀 테스트, 기대 허용·차단을 exit code로 판정 |
 | `REC-01 READY` | `igc0` RECOVERY 설계·현장 복구 drill | `PVE-01` | `OPNSENSE-LIVE` | `NET-02` | 주 LAN 없이 GUI/콘솔 복구 후 원상복귀, runbook 검증 |
 
-`PVE-01`은 디스크를 지우는 작업이다. 자동설치 PoC는 수동 설치에서 확인한 값을 사용하되 현재 물리 노드에 재실행하지 않는다. 부트스트랩과 자동화 경계는 [ADR-0001](adr/0001-proxmox-bootstrap-reproducibility.md), OpenTofu provider·state 경계는 [ADR-0008](adr/0008-opentofu-provider-and-state-boundary.md)을 따른다.
+`PVE-01`은 디스크를 지우는 작업이다. 자동설치 PoC는 수동 설치에서 확인한 값을 사용하되 현재 물리 노드에 재실행하지 않는다. `PVE-ACME-01`은 443 전환이나 공개 경로 추가가 아니라 설치 후 8006의 서버 신뢰를 닫는 작업이다. 부트스트랩과 자동화 경계는 [ADR-0001](adr/0001-proxmox-bootstrap-reproducibility.md), Proxmox 인증서 소유권은 [ADR-0009](adr/0009-proxmox-native-acme-management-tls.md), OpenTofu provider·state 경계는 [ADR-0008](adr/0008-opentofu-provider-and-state-boundary.md)을 따른다.
 
 ## 2. VLAN과 VM 기반
 
@@ -73,12 +75,12 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 |---|---|---|---|---|---|
 | `NET-02 BLOCKED` | OPNsense–Proxmox tagged-only trunk 전환 | `PVE-01`, `REC-01`, `NET-01` | `PVE-LIVE`, `OPNSENSE-LIVE` | 모든 VM 주소·경로 | VLAN gateway·Proxmox 관리 접근, untagged 차단, 재부팅, drift 없음 |
 | `NET-03 BLOCKED` | VLAN 기본 deny와 bootstrap 허용 정책 | `NET-02` | `OPNSENSE-LIVE` | 모든 서비스 통신 | 관리망 역방향 차단, DNS/NTP/인터넷, `vlan-verify bootstrap` 성공 |
-| `VM-01 BLOCKED` | 5개 VM을 한 OpenTofu apply로 생성 | `CAP-01`, `OS-01`, `IAC-01`, `NET-03` | `TOFU-STATE`, `PVE-LIVE` | 3단계 전체 | 계획된 VLAN·disk·cloud-init, qemu-agent, gateway 통신, 재계획 무변경 |
+| `VM-01 BLOCKED` | 5개 VM을 한 OpenTofu apply로 생성 | `CAP-01`, `OS-01`, `IAC-01`, `PVE-ACME-01`, `NET-03` | `TOFU-STATE`, `PVE-LIVE` | 3단계 전체 | strict TLS로 계획된 VLAN·disk·cloud-init, qemu-agent, gateway 통신, 재계획 무변경 |
 | `NIDS-01 BLOCKED` | OPNsense Suricata PCAP alert-only IDS 기준선 | `VM-01` | `OPNSENSE-LIVE` | `EDGE-01`, `AUDIT-01`, `WAZUH-01` | 논리 프로젝트 VLAN 범위, 부모/VLAN 동시 선택 없음, 대표 경보, CPU·지연·손실, 로컬 rotation·재부팅·drift 검증 |
 
 동일 state에서 VM별 apply를 병렬 실행하지 않는다. `VM-01`이 VM 껍데기를 한 번에 만든 뒤 아래 OS 서비스 작업을 병렬화한다.
 
-`IAC-01`이 만든 구성은 `OS-01`의 실제 template VMID와 VLAN 준비 여부가 모두 확정되기 전까지 리소스를 0개 계획한다. `VM-01`은 두 값을 라이브에서 확인해 gate를 열며, 열기 전에 확인할 항목은 [`infra/proxmox/tofu/README.md`](../infra/proxmox/tofu/README.md)가 소유한다.
+`IAC-01`이 만든 구성은 `OS-01`의 실제 template VMID와 VLAN 준비 여부가 모두 확정되기 전까지 리소스를 0개 계획한다. 현재 자체 서명 인증서를 반영한 `proxmox_insecure=true`는 `PVE-ACME-01`의 라이브 검증 전까지 유지한다. `VM-01`은 인증서 검증 우회를 먼저 제거하고 두 생성 gate를 라이브에서 확인하며, 세부 항목은 [`infra/proxmox/tofu/README.md`](../infra/proxmox/tofu/README.md)가 소유한다.
 
 ## 3. 병렬 기반 서비스
 

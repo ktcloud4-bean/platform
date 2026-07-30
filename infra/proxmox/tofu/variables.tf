@@ -16,12 +16,10 @@ variable "proxmox_endpoint" {
 variable "proxmox_insecure" {
   description = <<-EOT
     PVE API 인증서 검증을 건너뛸지 여부.
-    현재 8006 은 PVE Cluster Manager CA 가 발급한 자체 서명 인증서다
-    (docs/runbook/proxmox-manual-install.md "알려진 잔여물").
-    공인 인증서 또는 CA 신뢰를 확보하면 false 로 되돌린다.
+    PVE-ACME-01 완료로 Let's Encrypt 공인 인증서가 설치되어 strict TLS 검증을 수행한다.
   EOT
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "proxmox_min_tls" {

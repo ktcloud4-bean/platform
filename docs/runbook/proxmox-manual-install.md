@@ -4,7 +4,7 @@
 
 ## 목적
 
-공식 ISO 그래픽 installer로 유일한 물리 노드에 Proxmox VE 기준선을 만들고, 재부팅까지 검증된 선택값을 고정한다. `AUTO-01`의 answer file 템플릿은 이 문서에서 검증된 값만 옮긴다.
+공식 ISO 그래픽 installer로 유일한 물리 노드에 Proxmox VE 기준선을 만들고, 재부팅까지 검증된 선택값을 고정한다. `AUTO-01`의 answer file 템플릿은 이 문서에서 검증된 값만 옮긴다. 일반 client가 신뢰하는 관리 인증서는 설치 완료 판정에 섞지 않고 후속 `PVE-ACME-01`이 소유한다.
 
 ## 전제와 영향
 
@@ -84,6 +84,8 @@ Install 이후에는 되돌릴 수 없다.
 
 관리 워크스테이션에서. 주소는 `ip-plan.md`의 `proxmox-01` 값을 넣는다.
 
+아래 `-k`는 설치 직후 PVE Cluster Manager CA 기준선을 확인하기 위한 의도된 예외다. `PVE-ACME-01` 완료 후의 정상 운영과 OpenTofu 검증에는 사용하지 않는다.
+
 ```sh
 ping -c 3 <proxmox-01>
 curl -sk -o /dev/null -w '%{http_code}\n' https://<proxmox-01>:8006/
@@ -149,7 +151,7 @@ efibootmgr | grep -E '^Boot(Order|Current)|^Boot0'
 |---|---|
 | `/etc/network/interfaces`의 `iface nic1 inet manual` | 실체 없는 항목. `auto`가 없어 무해하다. `NET-02`가 bridge를 편집할 때 무시한다 |
 | `vmbr0`에 `bridge-vlan-aware`·`bridge-vids` 없음 | Phase 1 untagged가 맞다. `NET-02`가 tagged-only trunk로 바꾼다 |
-| 웹 UI 자체 서명 인증서 | 예상 동작. 브라우저 경고가 나오며 공인 인증서는 별도 작업이다 |
+| 웹 UI의 PVE Cluster Manager CA 인증서 | 설치 기준선에서는 예상 동작이다. 브라우저 경고 제거·DNS-01·자동 갱신·strict TLS 전환은 [`PVE-ACME-01`](../backlog.md)이 소유하며 완료 전까지 잔여물이다 |
 | `lsblk`의 `sr0` | 가상 설치 매체가 아직 붙어 있다는 뜻이다. 부팅 순서만 확인하면 재부팅은 안전하고, 확실히 하려면 detach한다 |
 
 ## 중단과 복구
@@ -167,4 +169,5 @@ efibootmgr | grep -E '^Boot(Order|Current)|^Boot0'
 - root 비밀번호는 콘솔에서 사람이 입력한다. 대화·로그·명령줄·Git에 남기지 않는다.
 - 검증용 SSH 접근은 공개키 인증으로 전환한다. 비밀번호를 스크립트나 명령 인자에 넣지 않는다.
 - `/etc/pve`의 인증서 개인키, `/etc/ssh`의 host key와 스토리지 자격증명은 커밋하지 않는다.
+- ACME DNS token을 설치 answer, 생성 ISO, 셸 기록 또는 이 runbook에 넣지 않는다. 설치 후 입력·저장 경계는 [ADR-0009](../adr/0009-proxmox-native-acme-management-tls.md)을 따른다.
 - 디스크·NIC 시리얼 등 식별자는 필요한 최소만 남긴다. 이 문서는 모델명과 관리 NIC의 MAC만 소유한다.

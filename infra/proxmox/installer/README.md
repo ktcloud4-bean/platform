@@ -4,6 +4,12 @@
 
 이 절차의 PoC 대상은 로컬 QEMU/KVM의 단일 qcow2다. 현재 물리 Proxmox, 그 NVMe, Proxmox API/SSH와 `PVE-LIVE` 자산에는 접근하지 않는다. PoC 통과도 물리 노드 재설치 승인이 아니다.
 
+## 설치 이후 관리 TLS 경계
+
+`AUTO-01`의 설치 완료점은 PVE Cluster Manager CA 인증서로 8006 HTTPS가 응답하는 상태다. Cloudflare DNS credential을 answer file이나 생성 ISO에 넣어 설치와 인증서 발급을 결합하지 않는다.
+
+후속 `PVE-ACME-01`이 설치된 노드에서 Proxmox 내장 ACME DNS-01을 별도로 구성하고, 비밀 없는 입력 계약과 검증 절차를 `infra/proxmox/acme/`에 만든다. 실제 DNS API token은 Git에서 제외한 mode `0600` 입력으로 설치 후 주입하며 자동 갱신을 위해 Proxmox의 보호된 plugin config에 보관한다. 이 디렉터리는 ACME account, DNS token, 인증서나 private key를 소유하지 않는다. 세부 결정은 [ADR-0009](../../../docs/adr/0009-proxmox-native-acme-management-tls.md)을 따른다.
+
 ## 공식 기준과 고정 버전
 
 2026-07-30에 다음 공식 자료를 다시 확인했다.

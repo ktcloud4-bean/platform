@@ -55,7 +55,11 @@ VM 분리는 장애 도메인을 물리적으로 늘리지 않는다. 업데이�
 
 유일한 Proxmox의 Day 1은 독립 콘솔에서 대상과 복구 경로를 확인한 뒤 수동 설치한다. 검증된 비밀 아닌 입력을 공식 answer file 템플릿으로 옮기고, 자동설치 ISO는 폐기 가능한 VM·가상 디스크에서만 검증한다. 실제 비밀이 주입된 answer file과 생성 ISO는 Git에 두지 않으며 현재 물리 노드에 자동설치 PoC를 재실행하지 않는다.
 
+설치 직후 PVE Cluster Manager CA 인증서는 암호화된 기준선일 뿐 일반 client가 자동으로 신뢰하는 최종 상태가 아니다. 설치 후 단계에서 Proxmox 내장 ACME와 DNS-01로 `ip-plan.md`의 canonical node 이름에 대한 별도 공인 인증서를 발급한다. 8006은 유지하고 public A/AAAA·NAT·443 reverse proxy는 만들지 않는다. DNS API credential은 설치 ISO에 넣지 않고 Git에서 제외한 구성요소 전용 입력으로 주입하며, 자동 갱신에 필요한 값만 Proxmox의 보호된 ACME plugin config에 남긴다.
+
 그 이후 Proxmox VM은 OpenTofu, VM OS와 k3s bootstrap은 Ansible, Kubernetes 애플리케이션은 Argo CD가 소유한다. 선택 이유와 자동화 경계는 [ADR-0001](adr/0001-proxmox-bootstrap-reproducibility.md)을 따른다.
+
+OpenTofu는 공인 인증서가 라이브에서 검증된 뒤 TLS 검증 우회를 제거한다. Proxmox 인증서의 발급자·private key·갱신 경계와 검토한 대안은 [ADR-0009](adr/0009-proxmox-native-acme-management-tls.md)을 따른다.
 
 ## k3s 기준선
 
@@ -133,7 +137,7 @@ Service → Kubernetes Service DNS → Service
 | Pomerium | Keycloak 신원으로 Route 접근 결정·업스트림 프록시 |
 | 애플리케이션 | 서비스 내부 RBAC |
 
-OPNsense 인증서 개인키를 k3s로 복사하지 않는다. k3s ingress는 별도 인증서를 발급하고 Vault PKI는 내부 TLS·mTLS에 사용한다.
+OPNsense, Proxmox와 k3s ingress는 같은 공개 DNS zone을 사용해도 인증서 private key와 DNS API token을 공유하지 않는다. 각 계층이 별도 인증서를 발급하고, Vault PKI는 내부 TLS·mTLS에 사용한다.
 
 ## 탐지·관측 경계
 
@@ -175,6 +179,8 @@ Headlamp는 k3s의 일상 조회·로그·exec·장애 분석을 위한 관리 U
 ## Vault
 
 Day 1은 Community Edition, Integrated Storage(Raft), 수동 Shamir unseal을 사용한다. share와 초기 root token은 사용자가 저장소 밖에서 보관한다. AWS KMS auto-unseal은 기반 안정화 후 별도 마이그레이션으로 적용하며 Site-to-Site VPN의 선행조건으로 만들지 않는다.
+
+Vault PKI는 내부 workload 인증서용이며 Proxmox·OPNsense·ingress의 공인 관리 인증서를 자동으로 대체하지 않는다. 사설 CA로 옮기려면 모든 관리 client의 trust 배포와 Vault 장애 시 복구 독립성을 먼저 별도 결정으로 검증한다.
 
 사용할 기능은 다음으로 제한한다.
 
@@ -235,7 +241,7 @@ S3 복구 자격증명, K3s server token과 Shamir share처럼 전체 장애 때
 구현 작업은 시작 시 제품 버전을 고정하고 해당 버전 문서를 다시 확인한다.
 
 - [K3s datastore](https://docs.k3s.io/datastore), [K3s networking services](https://docs.k3s.io/networking/networking-services)
-- [Proxmox VE unattended installation](https://pve.proxmox.com/pve-docs/pve-admin-guide.pdf)
+- [Proxmox VE unattended installation과 certificate management](https://pve.proxmox.com/pve-docs/pve-admin-guide.pdf), [Cloudflare API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
 - [Rancher local-path-provisioner](https://github.com/rancher/local-path-provisioner)
 - [Velero file-system backup](https://velero.io/docs/v1.18/file-system-backup/)
 - [Vault seal/unseal](https://developer.hashicorp.com/vault/docs/concepts/seal), [AWS KMS seal](https://developer.hashicorp.com/vault/docs/configuration/seal/awskms)

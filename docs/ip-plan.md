@@ -136,4 +136,13 @@ canonical host의 주소는 이 문서의 고정 배정 표를 참조한다. `Un
 
 Keycloak issuer는 `https://sso.imcherry5778.xyz`로 고정한다. k3s 웹 서비스의 내부 레코드는 Traefik 진입 주소를 가리키고, 공개 서비스는 공인 DNS와 Unbound override를 함께 검증한다.
 
-공인 인증서는 서비스 계층별로 발급한다. OPNsense의 인증서 개인키를 Proxmox나 k3s로 복사하지 않는다.
+## 인증서 이름과 공개 DNS 경계
+
+공인 인증서는 서비스 계층별로 발급한다. OPNsense, Proxmox와 k3s는 인증서 private key와 DNS API token을 공유하지 않는다.
+
+- Proxmox 인증서 식별자는 위 표의 canonical host 하나다. 별도 service alias나 wildcard 이름을 추가하지 않는다.
+- Proxmox 관리 endpoint는 내부 주소의 HTTPS 8006을 유지한다. 공인 인증서 발급은 public A/AAAA, Cloudflare proxy, NAT 또는 443 공개를 뜻하지 않는다.
+- DNS-01은 공개 zone에 임시 `_acme-challenge` TXT만 만들며 발급 후 제거한다. 내부 Unbound host override는 그대로 유지한다.
+- 공인 CA의 Certificate Transparency log에는 canonical hostname이 공개될 수 있지만 내부 주소는 인증서에 넣지 않는다.
+
+인증서 소유권과 사설 CA 대안은 [ADR-0009](adr/0009-proxmox-native-acme-management-tls.md)을 따른다.

@@ -6,7 +6,7 @@
 
 **아무것도 만들지 않는다.** 기본값으로 `tofu plan`을 돌리면 리소스가 0개다.
 
-VM 5대는 `OS-01`의 template과 `NET-02`·`NET-03`의 VLAN이 모두 끝난 뒤 `VM-01`이 한 번의 apply로 만든다. 그때까지 이 구성은 계획만 검증할 수 있다.
+VM 5대는 `OS-01`의 template, `PVE-ACME-01`의 strict TLS와 `NET-02`·`NET-03`의 VLAN이 모두 끝난 뒤 `VM-01`이 한 번의 apply로 만든다. 그때까지 이 구성은 계획만 검증할 수 있다.
 
 ```sh
 tofu plan            # blocked_by 출력으로 무엇이 막고 있는지 확인
@@ -39,6 +39,12 @@ export PROXMOX_VE_API_TOKEN='<user>@<realm>!<token-id>=<secret>'
 
 `initialization.upgrade`와 `cpu.affinity`처럼 `root@pam`만 쓸 수 있는 항목은 이 구성에서 쓰지 않거나 꺼 두었다. API token으로 apply할 수 있게 하기 위한 선택이다.
 
+## TLS gate
+
+`PVE-ACME-01` 완료로 `ip-plan.md`의 canonical FQDN(`proxmox-01.imcherry5778.xyz`)에 Proxmox 내장 ACME Let's Encrypt 공인 인증서가 설치되었으며, system trust store 기반으로 HTTPS 8006 strict TLS 검증이 통과되었다.
+
+따라서 `proxmox_insecure` 기본값은 `false`로 고정되어 있으며 provider가 서버 인증서와 hostname을 엄격히 검증한다. 소유권과 대안은 [ADR-0009](../../../docs/adr/0009-proxmox-native-acme-management-tls.md)을 따른다.
+
 ## state
 
 로컬 backend다. 파일은 `terraform.tfstate`이며 Git에서 제외된다.
@@ -56,6 +62,7 @@ export PROXMOX_VE_API_TOKEN='<user>@<realm>!<token-id>=<secret>'
 | 자원 | 소유자 |
 |---|---|
 | Proxmox 노드 | `PVE-01` |
+| Proxmox ACME account·DNS plugin·관리 인증서 | `PVE-ACME-01` |
 | datastore `local`·`local-lvm` | `PVE-01` |
 | bridge와 VLAN 인터페이스 | `PVE-01` → `NET-02` |
 | cloud-init template | `OS-01` |
@@ -95,14 +102,15 @@ provider 문서는 `size`를 "gigabytes"라고 쓰지만 Proxmox는 이 값을 G
 
 ## `VM-01`이 gate를 열기 전에 확인할 것
 
-두 gate를 열면 5대가 즉시 생성 대상이 된다. 열기 전에 다음을 실제 값으로 확인한다.
+두 생성 gate를 열면 5대가 즉시 생성 대상이 된다. 열기 전에 다음을 실제 값으로 확인한다.
 
-1. **`OS-01` template VMID** — Proxmox에서 실제 template의 VMID를 읽어 `vm_template_id`에 넣는다. 추측하지 않는다.
-2. **template의 `bios`·`machine`·cloud-init drive 위치** — `vm_bios`·`vm_machine`·`cloud_init_interface`가 template과 다르면 clone이 template 설정을 덮어쓴다. 기본값은 `seabios`·`pc`·`ide2`다.
-3. **template의 qemu-guest-agent** — 부팅 시 자동 기동하지 않으면 `agent_enabled = false`로 둔다. agent 없이 `true`이면 생성·refresh·shutdown이 전부 timeout된다.
-4. **VLAN trunk** — `vmbr0`가 VLAN-aware이고 목표 VLAN gateway와 기본 deny 정책이 살아 있어야 `vlan_trunk_ready = true`다. 현재 `vmbr0`는 Phase 1 untagged이므로 VLAN tag를 붙여도 통신하지 않는다.
-5. **capacity 정지 기준** — `capacity-plan.md`의 재측정 절차를 돌려 어떤 지표도 정지 구간이 아닌지 확인한다.
-6. **SSH 공개키** — `ssh_public_keys`가 비면 생성 후 게스트에 들어갈 방법이 없다. 모듈이 이를 `precondition`으로 막는다.
+1. **관리 API TLS** — `PVE-ACME-01 DONE`, canonical FQDN의 인증서 검증 성공, `proxmox_insecure=false`를 확인한다.
+2. **`OS-01` template VMID** — Proxmox에서 실제 template의 VMID를 읽어 `vm_template_id`에 넣는다. 추측하지 않는다.
+3. **template의 `bios`·`machine`·cloud-init drive 위치** — `vm_bios`·`vm_machine`·`cloud_init_interface`가 template과 다르면 clone이 template 설정을 덮어쓴다. 기본값은 `seabios`·`pc`·`ide2`다.
+4. **template의 qemu-guest-agent** — 부팅 시 자동 기동하지 않으면 `agent_enabled = false`로 둔다. agent 없이 `true`이면 생성·refresh·shutdown이 전부 timeout된다.
+5. **VLAN trunk** — `vmbr0`가 VLAN-aware이고 목표 VLAN gateway와 기본 deny 정책이 살아 있어야 `vlan_trunk_ready = true`다. 현재 `vmbr0`는 Phase 1 untagged이므로 VLAN tag를 붙여도 통신하지 않는다.
+6. **capacity 정지 기준** — `capacity-plan.md`의 재측정 절차를 돌려 어떤 지표도 정지 구간이 아닌지 확인한다.
+7. **SSH 공개키** — `ssh_public_keys`가 비면 생성 후 게스트에 들어갈 방법이 없다. 모듈이 이를 `precondition`으로 막는다.
 
 ## 검증 절차
 
