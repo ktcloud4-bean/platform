@@ -150,7 +150,7 @@ efibootmgr | grep -E '^Boot(Order|Current)|^Boot0'
 | 항목 | 판단 |
 |---|---|
 | `/etc/network/interfaces`의 `iface nic1 inet manual` | 실체 없는 항목. `auto`가 없어 무해하다. `NET-02`가 bridge를 편집할 때 무시한다 |
-| `vmbr0`에 `bridge-vlan-aware`·`bridge-vids` 없음 | Phase 1 untagged가 맞다. `NET-02`가 tagged-only trunk로 바꾼다 |
+| `vmbr0`에 `bridge-vlan-aware`·`bridge-vids` 없음 | 설치 시점에는 Phase 1 untagged가 맞음. `NET-02` 작업으로 `bridge-vlan-aware yes` 및 `bridge-vids 10 20 30 40 50` 설정 완료되어 해소됨 ([`opnsense-proxmox-tagged-trunk.md`](opnsense-proxmox-tagged-trunk.md)) |
 | 웹 UI의 PVE Cluster Manager CA 인증서 | 설치 기준선에서는 예상 동작이다. 브라우저 경고 제거·DNS-01·자동 갱신·strict TLS 전환은 [`PVE-ACME-01`](../backlog.md)이 소유하며 완료 전까지 잔여물이다 |
 | `lsblk`의 `sr0` | 가상 설치 매체가 아직 붙어 있다는 뜻이다. 부팅 순서만 확인하면 재부팅은 안전하고, 확실히 하려면 detach한다 |
 

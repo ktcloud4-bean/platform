@@ -10,10 +10,10 @@
 | Proxmox | `DONE` | PVE 9.2.0 / pve-manager 9.2.2 설치 기준선 및 `PVE-ACME-01` 관리 TLS 검증 완료 |
 | 자원 예산 | `DONE` | VM 0개 상태의 실측 기준표·과할당 한계·정지 기준; 값은 `capacity-plan.md` |
 | VM 선언 (OpenTofu) | `DONE` | provider·state 경계와 5개 VM 공통 모듈; 생성은 `NET-03` 대기 |
-| VLAN trunk | `READY` | `vlan-verify`와 OOB 콘솔 복구 drill 완료; `NET-02` 전환 대기 |
-| VM·k3s·플랫폼 서비스 | `BLOCKED` | VLAN과 VM 기반 작업 필요 |
+| VLAN trunk | `DONE` | OPNsense–Proxmox tagged-only 802.1Q trunk 전환·VLAN 10-50 gateway·strict TLS·untagged 차단·재부팅·drift 검증 완료 |
+| VM·k3s·플랫폼 서비스 | `BLOCKED` | VLAN 방화벽 정책(`NET-03`) 필요 |
 
-`IAC-01`·`OS-01`·`PVE-ACME-01` 완료로 `VM-01`의 선행 중 `CAP-01`·`IAC-01`·`OS-01`·`PVE-ACME-01`이 충족됐고 남은 것은 `NET-03`이다. `REC-01` 완료로 지금 열린 작업은 `NET-02`이며 `PVE-LIVE`와 `OPNSENSE-LIVE`를 함께 사용한다.
+`IAC-01`·`OS-01`·`PVE-ACME-01`·`NET-02` 완료로 `VM-01`의 선행 중 `CAP-01`·`IAC-01`·`OS-01`·`PVE-ACME-01`이 충족됐고 남은 것은 `NET-03`이다. `NET-02` 완료로 열린 직접 후속 작업은 `NET-03`이며 `OPNSENSE-LIVE` 잠금을 사용한다.
 
 ## 멀티 에이전트 규칙
 
@@ -74,8 +74,8 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `NET-02 READY` | OPNsense–Proxmox tagged-only trunk 전환 | `PVE-01`, `REC-01`, `NET-01` | `PVE-LIVE`, `OPNSENSE-LIVE` | 모든 VM 주소·경로 | VLAN gateway·Proxmox 관리 접근, untagged 차단, 재부팅, drift 없음 |
-| `NET-03 BLOCKED` | VLAN 기본 deny와 bootstrap 허용 정책 | `NET-02` | `OPNSENSE-LIVE` | 모든 서비스 통신 | 관리망 역방향 차단, DNS/NTP/인터넷, `vlan-verify bootstrap` 성공 |
+| `NET-02 DONE` | OPNsense–Proxmox tagged-only trunk 전환 (`docs/runbook/opnsense-proxmox-tagged-trunk.md`) | `PVE-01`, `REC-01`, `NET-01` | `PVE-LIVE`, `OPNSENSE-LIVE` | 모든 VM 주소·경로 | VLAN gateway·Proxmox 관리 접근, untagged 차단, 재부팅, drift 없음 |
+| `NET-03 READY` | VLAN 기본 deny와 bootstrap 허용 정책 | `NET-02` | `OPNSENSE-LIVE` | 모든 서비스 통신 | 관리망 역방향 차단, DNS/NTP/인터넷, `vlan-verify bootstrap` 성공 |
 | `VM-01 BLOCKED` | 5개 VM을 한 OpenTofu apply로 생성 | `CAP-01`, `OS-01`, `IAC-01`, `PVE-ACME-01`, `NET-03` | `TOFU-STATE`, `PVE-LIVE` | 3단계 전체 | strict TLS로 계획된 VLAN·disk·cloud-init, qemu-agent, gateway 통신, 재계획 무변경 |
 | `NIDS-01 BLOCKED` | OPNsense Suricata PCAP alert-only IDS 기준선 | `VM-01` | `OPNSENSE-LIVE` | `EDGE-01`, `AUDIT-01`, `WAZUH-01` | 논리 프로젝트 VLAN 범위, 부모/VLAN 동시 선택 없음, 대표 경보, CPU·지연·손실, 로컬 rotation·재부팅·drift 검증 |
 

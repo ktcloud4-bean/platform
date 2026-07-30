@@ -92,7 +92,7 @@
       <otpLength>6</otpLength>
       <timeWindow />
       <graceperiod />
-      <passwordFirst />
+      <passwordFirst>1</passwordFirst>
     </authserver>
     <dns1gw>none</dns1gw>
     <dns2gw>none</dns2gw>
@@ -1480,7 +1480,48 @@
   <gres version="1.0.0" persisted_at="1785198672.05" description="GRE devices" />
   <laggs version="1.0.0" persisted_at="1785198672.10" description="LAGG devices" />
   <virtualip version="1.0.1" persisted_at="1785198672.23" description="Virtual IP configuration" />
-  <vlans version="1.0.0" persisted_at="1785198672.27" description="VLAN configuration" />
+  <vlans version="1.0.0" persisted_at="1785426978.54" description="VLAN configuration">
+    <vlan uuid="43610d9d-2fba-46c0-bd57-a372eabe8a49">
+      <if>igc2</if>
+      <tag>10</tag>
+      <pcp>0</pcp>
+      <proto />
+      <descr>MGMT</descr>
+      <vlanif>vlan01</vlanif>
+    </vlan>
+    <vlan uuid="f6d378f1-bd99-486f-9cb1-4571eddd3ef2">
+      <if>igc2</if>
+      <tag>20</tag>
+      <pcp>0</pcp>
+      <proto />
+      <descr>PLATFORM</descr>
+      <vlanif>vlan02</vlanif>
+    </vlan>
+    <vlan uuid="164fa2bb-f5ad-4cc4-8030-041d8845eaf0">
+      <if>igc2</if>
+      <tag>30</tag>
+      <pcp>0</pcp>
+      <proto />
+      <descr>ACCESS</descr>
+      <vlanif>vlan03</vlanif>
+    </vlan>
+    <vlan uuid="58f51134-b9ed-4c00-9cfd-13b03ad22a37">
+      <if>igc2</if>
+      <tag>40</tag>
+      <pcp>0</pcp>
+      <proto />
+      <descr>DMZ</descr>
+      <vlanif>vlan04</vlanif>
+    </vlan>
+    <vlan uuid="f20083f7-fd0b-4486-b8f9-3539e488c8c8">
+      <if>igc2</if>
+      <tag>50</tag>
+      <pcp>0</pcp>
+      <proto />
+      <descr>DATA</descr>
+      <vlanif>vlan05</vlanif>
+    </vlan>
+  </vlans>
   <staticroutes version="1.0.1" persisted_at="1785198672.44" description="Static routes" />
   <cert uuid="88942876-6a3d-4a0b-a8b6-3b2542c4828e">
     <refid>6a67f861bc5a8</refid>

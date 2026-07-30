@@ -29,7 +29,7 @@ check-drift.sh --update로 스냅샷 승인
 |---|---|
 | WAN | ISP DHCP, private·bogon 차단 |
 | LAN/HOME | 물리 재배치 완료; 주소는 IP 계획 참조 |
-| VLAN | 아직 없음; Phase 1 untagged LAN |
+| VLAN | VLAN 10 MGMT / 20 PLATFORM / 30 ACCESS / 40 DMZ / 50 DATA 생성 완료; igc2 tagged-only 802.1Q trunk |
 | Web GUI | HTTPS, LAN listen, Local+TOTP |
 | SSH | LAN listen, 공개키 관리 |
 | DNS | Unbound recursion, DNSSEC, forwarding 비활성 |
