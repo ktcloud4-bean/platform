@@ -1,0 +1,9 @@
+# 실제 answer와 ISO는 저장소 밖에서 만들지만, 이 디렉터리에 잘못 둔 경우도 차단한다.
+/answer.toml
+/*.iso
+/*.iso.*
+/*.qcow2
+/*.raw
+/id_*
+/known_hosts
+/poc/

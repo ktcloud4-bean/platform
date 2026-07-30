@@ -1,0 +1,24 @@
+# AUTO-01에서 검증한 공식 입력. 셸에서 source할 수 있는 단순 KEY=VALUE 형식이다.
+PVE_PRODUCT_VERSION=9.2
+PVE_ISO_VERSION=9.2-1
+PVE_ISO_RELEASE_DATE=2026-05-21
+PVE_ISO_FILENAME=proxmox-ve_9.2-1.iso
+PVE_ISO_URL=https://enterprise.proxmox.com/iso/proxmox-ve_9.2-1.iso
+PVE_ISO_SIZE=1706178560
+PVE_ISO_SHA256=4e88fe416df9b527624a175f24c9aa07c714d3332afb1ee3dbf3879573ef2c6c
+PVE_ISO_SIGNATURE_URL=https://enterprise.proxmox.com/iso/proxmox-ve_9.2-1.iso.asc
+
+PVE_TRIXIE_KEY_FILENAME=proxmox-release-trixie.gpg
+PVE_TRIXIE_KEY_URL=https://enterprise.proxmox.com/debian/proxmox-release-trixie.gpg
+PVE_TRIXIE_KEY_FINGERPRINT=24B30F06ECC1836A4E5EFECBA7BCD1420BFE778E
+PVE_BOOKWORM_KEY_FILENAME=proxmox-release-bookworm.gpg
+PVE_BOOKWORM_KEY_URL=https://enterprise.proxmox.com/debian/proxmox-release-bookworm.gpg
+PVE_BOOKWORM_KEY_FINGERPRINT=F4E136C67CDCE41AE6DE6FC81140AF8F639E0C39
+
+PVE_ASSISTANT_VERSION=9.2.7
+PVE_ASSISTANT_FILENAME=proxmox-auto-install-assistant_9.2.7_amd64.deb
+PVE_ASSISTANT_URL=http://download.proxmox.com/debian/pve/dists/trixie/pve-no-subscription/binary-amd64/proxmox-auto-install-assistant_9.2.7_amd64.deb
+PVE_ASSISTANT_SHA256=92d34cd218bcabea83b72dd45f6e92ab571a221a8cbe1b548076685bc9234f15
+
+PVE_ASSISTANT_BASE_IMAGE=docker.io/library/debian@sha256:9bb8a3626890e084ab54e888fdd7c4b6d2f119071cd4c5dc5fecb4d73062aa5f
+PVE_ASSISTANT_IMAGE=localhost/ktcloud4-auto01-assistant:9.2.7

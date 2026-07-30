@@ -1,0 +1,27 @@
+# 이 파일은 TOML 문법만 갖춘 비밀 없는 템플릿이다.
+# 실제 값은 저장소 밖의 입력 파일에서 scripts/render-answer.sh로 주입한다.
+[global]
+keyboard = "en-us"
+country = "kr"
+fqdn = "@@FQDN@@"
+mailto = "@@MAILTO@@"
+timezone = "Asia/Seoul"
+root-password-hashed = "@@ROOT_PASSWORD_HASH@@"
+root-ssh-keys = ["@@ROOT_SSH_KEY@@"]
+reboot-on-error = false
+reboot-mode = "reboot"
+
+[network]
+source = "from-answer"
+cidr = "@@CIDR@@"
+dns = "@@DNS@@"
+gateway = "@@GATEWAY@@"
+filter.ID_NET_NAME_MAC = "@@NIC_ID_NET_NAME_MAC@@"
+
+[network.interface-name-pinning]
+enabled = true
+
+[disk-setup]
+filesystem = "ext4"
+filter-match = "all"
+filter.ID_SERIAL_SHORT = "@@DISK_ID_SERIAL_SHORT@@"
