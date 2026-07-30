@@ -1561,19 +1561,56 @@
         <interface />
       </general>
     </Hostwatch>
-    <IDS version="1.1.2" persisted_at="1785198672.03" description="Intrusion detection">
+    <IDS version="1.1.2" persisted_at="1785445066.15" description="Intrusion detection">
       <rules />
       <policies />
-      <userDefinedRules />
-      <files />
+      <userDefinedRules>
+        <rule uuid="4989bda4-3e4a-4718-bd23-add1cb17d54f">
+          <enabled>1</enabled>
+          <source>any</source>
+          <destination>any</destination>
+          <fingerprint />
+          <description>NIDS-01 DMZ ICMP Test Alert</description>
+          <action>alert</action>
+          <bypass>0</bypass>
+        </rule>
+        <rule uuid="f8c08a87-a09d-46b2-ac3c-63dd9635cde7">
+          <enabled>1</enabled>
+          <source>any</source>
+          <destination>any</destination>
+          <fingerprint />
+          <description>NIDS-01 DMZ HTTP Test Alert</description>
+          <action>alert</action>
+          <bypass>0</bypass>
+        </rule>
+        <rule uuid="c0b2b2e1-6963-41e5-a3f4-ef1b4741d349">
+          <enabled>1</enabled>
+          <source>any</source>
+          <destination>any</destination>
+          <fingerprint />
+          <description>NIDS-01 DMZ Test Signature Alert</description>
+          <action>alert</action>
+          <bypass>0</bypass>
+        </rule>
+      </userDefinedRules>
+      <files>
+        <file uuid="c8f3980f-3d96-4360-84ab-547cc3c326e9">
+          <filename>opnsense.test.rules</filename>
+          <enabled>1</enabled>
+        </file>
+        <file uuid="8f6c50d5-4e89-4bfd-95cb-2d275afddfea">
+          <filename>emerging-scan.rules</filename>
+          <enabled>1</enabled>
+        </file>
+      </files>
       <fileTags />
       <general>
-        <enabled>0</enabled>
+        <enabled>1</enabled>
         <mode>pcap</mode>
         <divert_listeners>1</divert_listeners>
         <promisc>0</promisc>
-        <interfaces>wan</interfaces>
-        <homenet>192.168.0.0/16,10.0.0.0/8,172.16.0.0/12</homenet>
+        <interfaces>opt4</interfaces>
+        <homenet>10.10.10.0/24,10.10.20.0/24,10.10.30.0/24,10.10.40.0/24,10.10.50.0/24</homenet>
         <defaultPacketSize />
         <UpdateCron />
         <AlertLogrotate>W0D23</AlertLogrotate>
