@@ -8,9 +8,12 @@
 |---|---|
 | `docs/backlog.md` | 세션 시작 시 항상 |
 | `docs/architecture.md` | 서비스 배치·의존성·보안 경계를 바꿀 때 |
+| `docs/adr/README.md` | 선택 이유·대안·재검토 조건을 바꿀 때 |
 | `docs/ip-plan.md` | IP·VLAN·DNS·도메인을 다룰 때 |
 | `infra/opnsense/README.md` | OPNsense를 조회하거나 변경할 때 |
 | `README.md` | 저장소 구조나 운영 원칙을 바꿀 때 |
+
+백로그 작업에 ADR이 연결되어 있으면 작업 전에 해당 ADR을 함께 읽는다.
 
 주소와 설정값은 해당 단일 원본을 참조하고 다른 문서에 복제하지 않는다.
 

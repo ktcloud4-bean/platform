@@ -49,6 +49,12 @@ Proxmox
 
 VM 분리는 장애 도메인을 물리적으로 늘리지 않는다. 업데이트 순서, 권한, 방화벽과 복구 단위를 분리하는 것이 목적이다.
 
+## 부트스트랩과 재현성
+
+유일한 Proxmox의 Day 1은 독립 콘솔에서 대상과 복구 경로를 확인한 뒤 수동 설치한다. 검증된 비밀 아닌 입력을 공식 answer file 템플릿으로 옮기고, 자동설치 ISO는 폐기 가능한 VM·가상 디스크에서만 검증한다. 실제 비밀이 주입된 answer file과 생성 ISO는 Git에 두지 않으며 현재 물리 노드에 자동설치 PoC를 재실행하지 않는다.
+
+그 이후 Proxmox VM은 OpenTofu, VM OS와 k3s bootstrap은 Ansible, Kubernetes 애플리케이션은 Argo CD가 소유한다. 선택 이유와 자동화 경계는 [ADR-0001](adr/0001-proxmox-bootstrap-reproducibility.md)을 따른다.
+
 ## k3s 기준선
 
 - 단일 server 노드와 기본 SQLite datastore를 사용한다.
@@ -218,11 +224,16 @@ S3 복구 자격증명, K3s server token과 Shamir share처럼 전체 장애 때
 | AWS KMS auto-unseal | Vault 백업·복구와 Shamir 운영 검증 완료 |
 | Shuffle 자동 대응 | 경보 품질과 수동 incident runbook 검증 완료 |
 
+## 결정 기록
+
+이 문서는 확정한 목표만 유지한다. 선택 이유, 검토한 대안과 재검토 조건은 [ADR 목록](adr/README.md)이 소유하며, 결정이 바뀌면 기존 기록을 덮어쓰지 않고 새 ADR로 대체한다.
+
 ## 구현 기준 문서
 
 구현 작업은 시작 시 제품 버전을 고정하고 해당 버전 문서를 다시 확인한다.
 
 - [K3s datastore](https://docs.k3s.io/datastore), [K3s networking services](https://docs.k3s.io/networking/networking-services)
+- [Proxmox VE unattended installation](https://pve.proxmox.com/pve-docs/pve-admin-guide.pdf)
 - [Rancher local-path-provisioner](https://github.com/rancher/local-path-provisioner)
 - [Velero file-system backup](https://velero.io/docs/v1.18/file-system-backup/)
 - [Vault seal/unseal](https://developer.hashicorp.com/vault/docs/concepts/seal), [AWS KMS seal](https://developer.hashicorp.com/vault/docs/configuration/seal/awskms)

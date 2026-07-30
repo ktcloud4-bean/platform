@@ -53,16 +53,16 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `PVE-01 READY` | Proxmox 수동 설치·재부팅 검증 | 없음 | `PVE-LIVE` | 이후 전체 | 목표 NVMe 재확인, 관리 IP의 UI·SSH와 재부팅 후 정상 |
+| `PVE-01 READY` | Proxmox 수동 설치·선택값 runbook (`docs/runbook/proxmox-manual-install.md`)·재부팅 검증 | 없음 | `PVE-LIVE` | 이후 전체 | 목표 NVMe, 설치 버전·filesystem·storage 선택, `ip-plan` 기반 network 적용 증거, 관리 UI·SSH와 재부팅 후 정상 |
 | `DNS-01 BLOCKED` | Unbound에 물리·VM canonical host record 등록 | `PVE-01` | `OPNSENSE-LIVE` | `IAC-01`, 모든 VM | 정·역방향 이름 해석, 미배포 service alias 없음, drift 없음 |
 | `CAP-01 BLOCKED` | CPU·RAM·thin storage·호스트 여유 예산 확정 | `PVE-01` | `PVE-LIVE` | `VM-01`, PVC 용량 | 실제 `pvesm`, 메모리와 디스크 기준표; 과할당 한계 기록 |
-| `AUTO-01 BLOCKED` | 공식 `answer.toml`과 자동설치 ISO PoC (`infra/proxmox/installer/`) | `PVE-01` | 없음 | 재설치 | 별도 VM/가상 디스크에서 무인 설치·checksum·생성 절차 검증; 실물 디스크 미사용 |
+| `AUTO-01 BLOCKED` | 공식 `answer.toml` 템플릿과 자동설치 ISO PoC (`infra/proxmox/installer/`) | `PVE-01` | 없음 | 재설치 | 원본 ISO checksum, 템플릿·생성·검증 절차, Git의 비밀·생성 ISO 부재, 별도 VM/가상 디스크 무인 설치; 실물 디스크 미사용 |
 | `OS-01 BLOCKED` | Rocky Linux 9 Minimal cloud-init template·Ansible 공통 baseline | `PVE-01` | `PVE-LIVE` | 모든 VM | clone 후 SSH key, 시간, 저장소, qemu-agent, 재부팅 검증 |
 | `IAC-01 BLOCKED` | OpenTofu provider·state·VM 공통 모듈 (`infra/proxmox/`) | `PVE-01`, `DNS-01`, `CAP-01` | `TOFU-STATE` | `VM-01` | secret 없는 init/validate/plan, state 보관 방식과 import 경계 검증 |
 | `NET-01 READY` | `vlan-verify`의 bootstrap/hardened profile과 테스트 | 없음 | 없음 | `NET-02`, `NET-04` | 현재망 회귀 테스트, 기대 허용·차단을 exit code로 판정 |
 | `REC-01 BLOCKED` | `igc0` RECOVERY 설계·현장 복구 drill | `PVE-01` | `OPNSENSE-LIVE` | `NET-02` | 주 LAN 없이 GUI/콘솔 복구 후 원상복귀, runbook 검증 |
 
-`PVE-01`은 디스크를 지우는 작업이다. 자동설치 PoC는 수동 설치에서 확인한 값을 사용하되 현재 물리 노드에 재실행하지 않는다.
+`PVE-01`은 디스크를 지우는 작업이다. 자동설치 PoC는 수동 설치에서 확인한 값을 사용하되 현재 물리 노드에 재실행하지 않는다. 부트스트랩과 자동화 경계는 [ADR-0001](adr/0001-proxmox-bootstrap-reproducibility.md)을 따른다.
 
 ## 2. VLAN과 VM 기반
 
@@ -77,7 +77,7 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 
 ## 3. 병렬 기반 서비스
 
-다음 다섯 작업은 `VM-01` 이후 서로 독립적으로 진행한다.
+다음 다섯 작업은 `VM-01` 이후 서로 독립적으로 진행한다. 단일 k3s·스토리지 선택은 [ADR-0002](adr/0002-single-node-k3s-and-local-storage.md), VM 분리 기준은 [ADR-0003](adr/0003-service-vm-boundaries.md)을 따른다.
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
@@ -89,6 +89,8 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 | `AWS-NET-01 BLOCKED` | OPNsense↔AWS Site-to-Site VPN | `NET-03` | `OPNSENSE-LIVE` | AWS 사설 연동 | 양방향 대상 대역만 통신, 인터넷 기본 경로 불변, 장애 시 롤백 |
 
 ## 4. k3s 제어면·인증
+
+통합인증·관리 접근은 [ADR-0004](adr/0004-zero-trust-identity-and-management-access.md), Vault bootstrap과 seal 경계는 [ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md)을 따른다.
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
@@ -108,7 +110,7 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 
 ## 5. 데이터 보호 gate
 
-이 단계가 끝나기 전에는 복구 불가능한 운영 데이터를 넣거나 공개 경로를 완료 처리하지 않는다.
+이 단계가 끝나기 전에는 복구 불가능한 운영 데이터를 넣거나 공개 경로를 완료 처리하지 않는다. 백업 도구별 소유 범위와 오프사이트 기준은 [ADR-0005](adr/0005-backup-and-offsite-recovery.md)를 따른다.
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
@@ -164,7 +166,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 
 ## 9. 최종 관측·보안 운영
 
-플랫폼 구축 속도를 막지 않도록 다음 작업은 모든 핵심 서비스와 공개 경로가 안정된 뒤 시작한다. 큰 워크로드는 `K3S-HEAVY` 잠금으로 하나씩 배포하고 매번 자원 여유를 다시 측정한다.
+플랫폼 구축 속도를 막지 않도록 다음 작업은 모든 핵심 서비스와 공개 경로가 안정된 뒤 시작한다. 큰 워크로드는 `K3S-HEAVY` 잠금으로 하나씩 배포하고 매번 자원 여유를 다시 측정한다. 탐지·관측의 역할과 순서는 [ADR-0007](adr/0007-detection-and-observability-staging.md)을 따른다.
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
