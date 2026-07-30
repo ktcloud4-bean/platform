@@ -79,6 +79,7 @@ Git에는 PVC 선언만 저장하고 PVC 데이터나 노드 디렉터리명을 
 | 특권 세션 | Warpgate | 전용 VM |
 | 시크릿·내부 PKI | Vault | k3s |
 | GitOps | Argo CD | k3s |
+| Kubernetes 관리 UI | Headlamp | k3s |
 | SCM·CI·품질·레지스트리 | Gitea · Jenkins · SonarQube · Harbor | k3s |
 | 자동화 | AWX · Renovate | k3s |
 | 공급망 검증 | Trivy · Cosign · Kyverno | k3s |
@@ -161,6 +162,8 @@ Keycloak은 팀 사용자, MFA, OIDC/SAML의 중앙 IdP다. 프로젝트 realm�
 
 Pomerium Routes Portal에는 일상 관리 UI만 노출한다. OPNsense, Proxmox, Keycloak 관리, Vault 복구, NetBird 복구와 Pomerium 복구는 Pomerium을 유일한 경로로 삼지 않는다.
 
+Headlamp는 k3s의 일상 조회·로그·exec·장애 분석을 위한 관리 UI다. Pomerium은 Headlamp Route 진입을 제한하고, Keycloak OIDC 토큰을 신뢰하도록 구성한 Kubernetes API와 Kubernetes RBAC가 실제 API 권한을 결정한다. Headlamp에 공유 `cluster-admin` ServiceAccount를 주지 않는다. Argo CD가 소유한 선언 리소스는 Git으로 변경하며, Headlamp 직접 변경은 복구 작업으로 제한하고 즉시 Git 상태와 대조한다. IdP나 Headlamp 장애 때 사용할 관리자 kubeconfig는 클러스터 밖에 break-glass로 유지한다.
+
 ## Vault
 
 Day 1은 Community Edition, Integrated Storage(Raft), 수동 Shamir unseal을 사용한다. share와 초기 root token은 사용자가 저장소 밖에서 보관한다. AWS KMS auto-unseal은 기반 안정화 후 별도 마이그레이션으로 적용하며 Site-to-Site VPN의 선행조건으로 만들지 않는다.
@@ -224,6 +227,7 @@ S3 복구 자격증명, K3s server token과 Shamir share처럼 전체 장애 때
 - [Velero file-system backup](https://velero.io/docs/v1.18/file-system-backup/)
 - [Vault seal/unseal](https://developer.hashicorp.com/vault/docs/concepts/seal), [AWS KMS seal](https://developer.hashicorp.com/vault/docs/configuration/seal/awskms)
 - [Pomerium Routes Portal](https://www.pomerium.com/docs/capabilities/routes-portal)
+- [Headlamp in-cluster](https://headlamp.dev/docs/latest/installation/in-cluster/), [Headlamp OIDC](https://headlamp.dev/docs/latest/installation/in-cluster/oidc/)
 - [OPNsense intrusion detection](https://docs.opnsense.org/manual/ips.html), [OPNsense Wazuh Agent](https://docs.opnsense.org/manual/wazuh-agent.html)
 - [Coraza connectors](https://www.coraza.io/connectors/)
 - [NetBox source-of-truth model](https://netboxlabs.com/docs/netbox/introduction/)

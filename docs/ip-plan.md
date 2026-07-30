@@ -119,6 +119,7 @@ Proxmox NIC ── VLAN-aware bridge
 | `sso.imcherry5778.xyz` | Keycloak | 외부 인증 연동 가능 |
 | `access.imcherry5778.xyz` | Pomerium Routes Portal | 보호된 외부 접근 가능 |
 | `argo.imcherry5778.xyz` | Argo CD | Pomerium |
+| `headlamp.imcherry5778.xyz` | Headlamp | Pomerium |
 | `vault.imcherry5778.xyz` | Vault | 내부 관리 경로만 |
 | `git.imcherry5778.xyz` | Gitea | Pomerium |
 | `jenkins.imcherry5778.xyz` | Jenkins | Pomerium |
