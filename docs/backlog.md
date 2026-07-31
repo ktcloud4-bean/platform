@@ -53,7 +53,8 @@ DNS-01 + CAP-01 → IAC-01
 PVE-01 + DNS-01 + AUTO-01 + IAC-01 → PVE-ACME-01
 PVE-01 + REC-01 + NET-01 → NET-02 → NET-02R → NET-03
 CAP-01 + OS-01 + IAC-01 + PVE-ACME-01 + NET-03 → VM-01
-VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
+VM-01 → NIDS-01 · K3S-01 · PG-01 · S3-DESIGN-01 · NB-01 · WG-01
+VM-01 + S3-DESIGN-01 → S3-01
 
 기반 병렬 작업 → 백업 복구 gate → 공급망·정책 → 공개·최소권한
 → Loki → kube-prometheus-stack → Wazuh → Shuffle
@@ -97,13 +98,15 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 
 ## 3. 병렬 기반 서비스
 
-다음 다섯 작업은 `VM-01` 이후 서로 독립적으로 진행한다. 단일 k3s·스토리지 선택은 [ADR-0002](adr/0002-single-node-k3s-and-local-storage.md), VM 분리 기준은 [ADR-0003](adr/0003-service-vm-boundaries.md)을 따른다.
+다음 기반 서비스 작업은 `VM-01` 이후 서로 독립적으로 진행한다. 단일 k3s·스토리지 선택은 [ADR-0002](adr/0002-single-node-k3s-and-local-storage.md), VM 분리 기준은 [ADR-0003](adr/0003-service-vm-boundaries.md), 로컬 S3 구현은 [ADR-0010](adr/0010-seaweedfs-local-s3.md)을 따른다.
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `K3S-01 DONE` | 단일 노드 k3s·SQLite 기준선 (`infra/ansible`, k3s bootstrap) | `VM-01` | `K3S-BOOTSTRAP` | 모든 k3s 앱 | `v1.36.2+k3s1`, 재부팅 후 Node Ready, CoreDNS·Traefik·ServiceLB, SQLite 위치·무결성, PVC 데이터 유지, Ansible·NET-03 재검증 |
 | `PG-01 DONE` | PostgreSQL VM·서비스별 DB/role·TLS | `VM-01` | 없음 | Keycloak·플랫폼 앱 | PostgreSQL 16.14(Rocky AppStream GPG 서명), verify-full TLS(canonical FQDN/pg_stat_ssl), sslmode=disable 차단 & pg_hba_file_rules 오류 0, 최소 service role(keycloak_user/verify_user) DB/schema 권한 격리, 타 VLAN probe 차단, 재부팅 후 데이터·TLS·role 유지, pg_dump/pg_restore 복구, chrony/QGA/capacity 정상, Ansible 멱등(changed=0) |
-| `MINIO-01 READY` | MinIO VM·버킷·버전관리·TLS | `VM-01` | 없음 | 모든 백업 | S3 API, 별도 service account, 재부팅, 테스트 object round-trip |
+| `S3-DESIGN-01 DONE` | 미배포 MinIO 계획을 SeaweedFS 로컬 S3로 전환하고 제품 중립 이름·state 마이그레이션·호환성 gate 결정 | `VM-01` | 없음 | `S3-01`, 모든 백업 | 새 ADR과 목표 아키텍처·주소 전환 경계, 기존 VMID·주소·디스크 불변, destroy/create 금지와 rollback, 클라이언트별 S3 복원 gate 문서화, state·라이브 VM identity 읽기 전용 대조와 변경 명령 0 |
+| `S3-01 READY` | 기존 VM을 `object-01`로 제자리 이름 전환하고 SeaweedFS master·volume·filer·S3를 선언형 배포 | `VM-01`, `S3-DESIGN-01` | `TOFU-STATE`, `PVE-LIVE`, `OPNSENSE-LIVE` | 모든 백업 | state 복구 사본·`moved` 선언과 destroy/create 0 plan, VMID·주소·디스크 보존, canonical DNS·hostname 일치, 고정 version·digest·license, TLS S3, 최소권한 계정·bucket policy, versioning·multipart·presigned URL·checksum, 재부팅 후 object 유지, Ansible check/diff·2회차 changed=0, 임시 자원·자격증명 제거 |
+| `MINIO-01 DEFERRED` | 배포 시작 전 upstream 유지 중단으로 폐기한 MinIO 구현 계획; `S3-01`이 대체 | `VM-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0010](adr/0010-seaweedfs-local-s3.md)의 재검토 조건이 생기면 새 결정으로만 검토 |
 | `NB-01 DONE` | NetBird 기본 self-host와 로컬 Owner 복구 계정 | `VM-01` | `PUBLIC-DNS · OPNSENSE-LIVE` | 원격 진입 | 외부 peer 연결, relay 경로, 로컬 Owner 로그인과 백업 가능 |
 | `WG-01 DONE` | Warpgate 기본 배포와 로컬 복구 계정 | `VM-01` | 없음 | 특권 접근 | Warpgate v0.26.1 고정·checksum·SBOM, 비-root + systemd hardening + SELinux label, 세션 중계와 기록 생성·제품 조회, 대상별 역할 허용/거부, 로컬 복구 로그인 성공·실패, 재부팅 후 유지, 격리 인스턴스 복원, Ansible 멱등(changed=0) |
 | `AWS-NET-01 READY` | OPNsense↔AWS Site-to-Site VPN | `NET-03` | `OPNSENSE-LIVE` | AWS 사설 연동 | 양방향 대상 대역만 통신, 인터넷 기본 경로 불변, 장애 시 롤백 |
@@ -157,6 +160,24 @@ SQLite 온라인 backup으로 일관 백업을 만들어 별도 data directory�
 아니다.** OPNsense·방화벽·공개 DNS는 변경하지 않았고 `MINIO-01`이 없으므로 원격 백업도
 아니다. 직접 후속 `WG-02`는 `KC-01`이 남아 있어 `READY`로 열지 않는다.
 
+2026-07-31 `S3-DESIGN-01`에서 아직 배포하지 않은 MinIO 계획을 SeaweedFS 로컬 S3로
+전환했다. 기존 `minio-01` VMID·주소·200 GiB 디스크와 전용 DATA VM 경계는 유지하고,
+목표 canonical 이름을 `object-01`, service alias를 `s3`로 정했다. 이번 작업은 문서만
+바꿨으며 라이브 VM·DNS·OpenTofu 구성과 state는 변경하지 않았다. 실제 전환은
+`S3-01`이 세 공유 잠금을 단독 소유하고 state 복구 사본과 `moved` 선언을 사용하며,
+destroy/create가 보이면 적용을 중단한다. MinIO 관련 과거 완료 증거는 당시 사실로
+보존하고 현재 의존성만 `S3-01`로 옮겼다. `VM-01`과 `S3-DESIGN-01`이 모두 완료됐으므로
+직접 후속 `S3-01`만 `READY`로 연다.
+
+읽기 전용 대조에서 mode `0600` OpenTofu state의 5개 리소스 중 기존 모듈 주소가
+`module.service_vm["minio-01"]`이고 VMID 151·200 GiB·VLAN 50임을 확인했다. Proxmox
+라이브에서도 VM 151은 실행 중이며 같은 이름·디스크·VLAN이고, 허용된 QGA hostname
+조회도 `minio-01.imcherry5778.xyz`였다. 현재 canonical DNS만 해석되고 목표
+`object-01`·`s3`는 아직 해석되지 않음을 확인했다. QGA 임의 명령 실행은 정책상
+비활성이고 게스트 SSH host key는 인증된 저장소에 없어 새로 신뢰하지 않았으므로,
+게스트 내부 제품 설치 여부는 이번 라이브 증거에 포함하지 않는다. 미배포 판정은
+백로그와 Git 선언에 한정한다.
+
 ## 4. k3s 제어면·인증
 
 통합인증·관리 접근은 [ADR-0004](adr/0004-zero-trust-identity-and-management-access.md), Vault bootstrap과 seal 경계는 [ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md)을 따른다.
@@ -183,10 +204,10 @@ SQLite 온라인 backup으로 일관 백업을 만들어 별도 data directory�
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `BKP-01 BLOCKED` | K3s SQLite·server token 전용 backup/restore | `K3S-01`, `MINIO-01` | `K3S-BOOTSTRAP` | 클러스터 복구 | 격리된 빈 VM에서 API 객체 복원; Velero와 별도임을 검증 |
-| `BKP-02 BLOCKED` | Velero + node-agent/Kopia와 local PV restore PoC | `GITOPS-01`, `STOR-01`, `MINIO-01` | 없음 | 모든 k3s PVC | 테스트 namespace 삭제 후 리소스·파일 복원, hostPath 제약 판정 |
-| `BKP-03 BLOCKED` | PostgreSQL native backup·Vault Raft snapshot | `PG-01`, `VAULT-02`, `MINIO-01` | 없음 | 인증·플랫폼 데이터 | 별도 DB/namespace에 point-in-time 또는 snapshot restore |
-| `BKP-04 BLOCKED` | MinIO bucket을 AWS S3로 오프사이트 복제 | `MINIO-01` | 없음 | 모든 백업의 물리 장애 대응 | 새 자격증명으로 S3에서 샘플 복원, 암호화·보존·실패 경보 검증 |
+| `BKP-01 BLOCKED` | K3s SQLite·server token 전용 backup/restore | `K3S-01`, `S3-01` | `K3S-BOOTSTRAP` | 클러스터 복구 | 격리된 빈 VM에서 API 객체 복원; Velero와 별도임을 검증 |
+| `BKP-02 BLOCKED` | Velero + node-agent/Kopia와 local PV restore PoC | `GITOPS-01`, `STOR-01`, `S3-01` | 없음 | 모든 k3s PVC | 테스트 namespace 삭제 후 리소스·파일 복원, hostPath 제약 판정 |
+| `BKP-03 BLOCKED` | PostgreSQL native backup·Vault Raft snapshot | `PG-01`, `VAULT-02`, `S3-01` | 없음 | 인증·플랫폼 데이터 | 별도 DB/namespace에 point-in-time 또는 snapshot restore |
+| `BKP-04 BLOCKED` | SeaweedFS 로컬 S3에서 AWS S3로 오프사이트 사본 생성 | `S3-01` | 없음 | 모든 백업의 물리 장애 대응 | 별도 최소권한 자격증명과 검증한 방식으로 전송, AWS S3에서 샘플 복원, 암호화·버전·보존·실패 경보 검증 |
 | `BKP-05 BLOCKED` | 통합 재해복구 drill·RPO/RTO 기록 | `BKP-01`, `BKP-02`, `BKP-03`, `BKP-04` | `K3S-BOOTSTRAP` | 공급망·공개 전환 gate | Git+S3만으로 핵심 서비스 복구, 누락·시간·수동 절차 기록 |
 | `PVE-BKP-01 DEFERRED` | 두 번째 SSD에 Proxmox VM backup | 두 번째 SSD 장착 | `PVE-LIVE` | 빠른 VM 복구 | 원본 NVMe와 다른 장치에 backup·restore; S3 앱 백업은 유지 |
 

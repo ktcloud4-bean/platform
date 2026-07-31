@@ -113,6 +113,23 @@ pveum role delete OpenTofuVM
 - **복구 지점:** `VM-01`이 2026-07-31에 처음 apply했다. 그 이후 apply마다 직후의 `terraform.tfstate`를 저장소 밖 mode `0600` 사본으로 두고 SHA-256만 작업 기록에 남긴다.
 - **state를 잃으면** VM은 살아 있는데 소유권만 사라진다. 아래 import로 되찾는다.
 
+### `S3-01` 제자리 이름 전환 계약
+
+현재 state 주소는 `module.service_vm["minio-01"]`이고 라이브 VMID는 151이다.
+[ADR-0010](../../../docs/adr/0010-seaweedfs-local-s3.md)의 목표 이름 `object-01`로
+바꿀 때 새 VM을 만들거나 기존 VM·디스크를 교체하지 않는다.
+
+`S3-01` 작업자는 `TOFU-STATE`와 `PVE-LIVE`를 함께 소유하고 변경 직전 state를
+저장소 밖 mode `0600`으로 복사해 SHA-256을 기록한다. `locals.tf`의 카탈로그 키 변경과
+동시에 OpenTofu `moved` 선언으로 기존 모듈 주소를 새 주소에 연결한다. refresh를 포함한
+plan에서 create, destroy, replace가 하나라도 나오거나 VMID·디스크 identity가 달라지면
+apply하지 않고 구성과 state 복구 사본으로 돌아간다. `tofu state rm`이나 수동 import로
+정상 state를 우회하지 않는다.
+
+적용 후에는 state 주소, Proxmox VMID·디스크, 게스트 주소·hostname을 대조하고 재부팅
+후에도 같음을 확인한다. 그 증거가 확보된 뒤에만 `ip-plan.md`의 현재 canonical 이름과
+Unbound host override를 전환한다.
+
 ## import 경계
 
 이 state가 소유하는 것은 **자신이 만든 VM 5대와 그 VM이 만든 디스크·cloud-init 디스크뿐**이다.

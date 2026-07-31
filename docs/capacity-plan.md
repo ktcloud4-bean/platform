@@ -45,6 +45,11 @@
 | `netbird-01` | 2 | 4 | 2 GiB | 4 GiB | 32 GiB | 64 GiB |
 | **Day 1 합계** | **18** | — | **40 GiB** | — | **572 GiB** | — |
 
+`S3-DESIGN-01`은 표의 현재 `minio-01`을 새 VM으로 교체하지 않고 같은 VMID·주소·
+200 GiB 디스크의 목표 이름만 `object-01`로 바꾸기로 했다. `S3-01` 라이브 전환이
+끝날 때까지 이 문서의 VM 이름과 실측은 현재값을 유지한다. 따라서 이번 결정으로
+추가되는 vCPU·RAM·thin 프로비저닝은 0이다.
+
 VM 분리 근거는 [ADR-0003](adr/0003-service-vm-boundaries.md), 단일 k3s와 local storage 선택은 [ADR-0002](adr/0002-single-node-k3s-and-local-storage.md)를 따른다.
 
 ### 공통 VM 옵션
@@ -155,7 +160,7 @@ metadata 사용률은 50%에서 경고, 70%에서 정지한다. 현재 0.24%다.
 - PVC 선언 합계가 120 GiB를 넘는 배포는 CAP 재검토 없이 하지 않는다.
 - namespace `ResourceQuota`의 `requests.storage`는 **선언 합계만** 강제한다. 실사용은 강제하지 못하므로 요청량과 실사용량을 둘 다 본다. `STOR-01`이 capacity 미강제를 실제로 확인한다.
 - 게스트 파일시스템 여유가 20% 밑으로 내려가면 사람이 개입한다. kubelet 기본 `nodefs.available<10%` eviction보다 앞선 지점이다.
-- 대용량 저장은 k3s 밖으로 뺀다. Harbor registry backend와 Loki chunk는 `minio-01`의 S3, 관계형 데이터는 `postgres-01`을 쓴다. 이 선택이 무너지면 120 GiB 예산이 가장 먼저 깨진다.
+- 대용량 저장은 k3s 밖으로 뺀다. Harbor registry backend와 Loki chunk는 전용 로컬 S3, 관계형 데이터는 `postgres-01`을 쓴다. 이 선택이 무너지면 120 GiB 예산이 가장 먼저 깨진다.
 - Wazuh indexer는 이 예산에 포함하지 않는다. 배치는 `CAP-02` gate에서 결정한다.
 
 ### `K3S-01` 기준선 직후 실측 (2026-07-31)
@@ -210,7 +215,10 @@ Pod, PVC, PV와 실제 시험 경로를 모두 제거하고 다시 측정했다.
 | `warpgate-01` | 40 GiB | OS 10 · 세션 기록 20 · 여유 10 |
 | `netbird-01` | 32 GiB | OS 10 · 제품 DB·로그 12 · 여유 10 |
 
-`minio-01`의 170 GiB는 `k3s-01` PVC 120 GiB와 `postgres-01` 데이터 80 GiB를 받는 착지점이다. 보존 세대 수가 예산을 결정하므로 `BKP-02`–`BKP-04`가 보존기간을 확정할 때 이 값을 다시 본다. `warpgate-01`의 세션 기록도 용량이 아니라 보존기간으로 통제한다.
+현재 `minio-01`(목표 이름 `object-01`)의 170 GiB는 `k3s-01` PVC 120 GiB와
+`postgres-01` 데이터 80 GiB를 받는 착지점이다. 보존 세대 수가 예산을 결정하므로
+`BKP-02`–`BKP-04`가 보존기간을 확정할 때 이 값을 다시 본다. `warpgate-01`의 세션
+기록도 용량이 아니라 보존기간으로 통제한다.
 
 ## 정지 기준 요약
 

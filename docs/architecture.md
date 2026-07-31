@@ -23,7 +23,7 @@ OPNsense ── 방화벽 · NAT · VLAN 라우팅 · Unbound DNS
 Proxmox
    ├─ k3s-01       플랫폼 워크로드
    ├─ postgres-01  공용 PostgreSQL
-   ├─ minio-01     로컬 오브젝트 · 백업 착지점
+   ├─ object-01    SeaweedFS 로컬 S3 · 백업 착지점
    ├─ warpgate-01  특권 세션 중계
    └─ netbird-01   오버레이 제어 플레인
 
@@ -43,7 +43,7 @@ Proxmox
 | Proxmox 베어메탈 | 가상화 | 유일한 물리 컴퓨트 노드 |
 | `k3s-01` | 단일 서버 k3s | 자원 효율과 local storage 단순성 |
 | `postgres-01` | 서비스별 DB·role을 둔 PostgreSQL | 클러스터 재구축과 DB 복구 분리 |
-| `minio-01` | S3 호환 저장소와 로컬 백업 | k3s 장애와 백업 착지점 분리 |
+| `object-01` | SeaweedFS S3와 로컬 백업 | k3s 장애와 백업 착지점 분리 |
 | `warpgate-01` | SSH 등 특권 세션 중계 | 일반 워크로드·공개 진입점과 분리 |
 | `netbird-01` | 원격접속 제어·relay 계열 | 인터넷 노출면을 DMZ에 격리 |
 
@@ -123,7 +123,7 @@ Client → OPNsense의 명시적 공개 port → netbird-01
 Service → Kubernetes Service DNS → Service
 ```
 
-대괄호의 Cloudflare는 외부 요청일 때만 지난다. Keycloak은 Pomerium의 IdP이므로 Pomerium 뒤에 두지 않는다. Harbor registry API, MinIO S3 API와 비 HTTP 프로토콜도 Pomerium Portal 경로와 분리한다.
+대괄호의 Cloudflare는 외부 요청일 때만 지난다. Keycloak은 Pomerium의 IdP이므로 Pomerium 뒤에 두지 않는다. Harbor registry API, SeaweedFS S3 API와 비 HTTP 프로토콜도 Pomerium Portal 경로와 분리한다.
 
 역할은 겹치지 않는다.
 
@@ -197,17 +197,23 @@ root token은 초기화와 복구에만 사용한다. GitOps가 Vault의 원문 
 
 ## 데이터와 백업
 
-같은 물리 노드의 VM·MinIO는 빠른 복구 사본이지 물리 장애 대비 오프사이트 백업이 아니다.
+같은 물리 노드의 VM·SeaweedFS는 빠른 복구 사본이지 물리 장애 대비 오프사이트 백업이 아니다.
+
+`object-01`은 단일 VM 안에서도 SeaweedFS master, volume server, filer와 S3 gateway를
+각각 선언하고 데이터·metadata 경로를 영속화한다. 애플리케이션에는 TLS S3 endpoint만
+제공하고 나머지 구성요소·관리 endpoint는 관리 경로로 제한한다. 이 분리는 운영 경계일
+뿐 한 물리 노드와 한 디스크 안에서 HA를 만들지는 않는다. 필요한 S3 API는 제품의 호환
+표만 믿지 않고 백업 생산자별 실제 복원으로 검증한다.
 
 | 대상 | 백업 방식 | 착지점 |
 |---|---|---|
 | 선언형 인프라 | Git, OpenTofu, Ansible, GitOps | 원격 Git |
-| K3s SQLite·server token | K3s datastore 전용 백업 | MinIO → S3 |
-| Kubernetes 리소스·PVC | Velero + node-agent/Kopia | MinIO → S3 |
-| PostgreSQL | DB 네이티브 백업과 복구 검증 | MinIO → S3 |
-| Vault | Raft snapshot과 구성 백업 | MinIO → S3 |
-| MinIO 데이터 | 버킷 단위 오프사이트 복제 | AWS S3 |
-| NetBird·Warpgate | 제품 DB·구성 백업 | MinIO → S3 |
+| K3s SQLite·server token | K3s datastore 전용 백업 | SeaweedFS S3 → AWS S3 |
+| Kubernetes 리소스·PVC | Velero + node-agent/Kopia | SeaweedFS S3 → AWS S3 |
+| PostgreSQL | DB 네이티브 백업과 복구 검증 | SeaweedFS S3 → AWS S3 |
+| Vault | Raft snapshot과 구성 백업 | SeaweedFS S3 → AWS S3 |
+| 로컬 S3 데이터 | 별도 검증한 방식으로 오프사이트 사본 생성 | AWS S3 |
+| NetBird·Warpgate | 제품 DB·구성 백업 | SeaweedFS S3 → AWS S3 |
 | VM 전체 | 두 번째 SSD 추가 후 Proxmox backup | 별도 SSD; 앱 백업은 계속 S3 |
 
 Velero는 K3s SQLite를 백업하지 않는다. CSI snapshot을 지원하지 않는 local storage에서는 snapshot 완료를 가정하지 않고 파일 백업과 실제 restore를 검증한다. 로그는 백업 자산이 아니라 보존기간을 가진 운영 데이터로 취급한다.
@@ -243,6 +249,7 @@ S3 복구 자격증명, K3s server token과 Shamir share처럼 전체 장애 때
 - [K3s datastore](https://docs.k3s.io/datastore), [K3s networking services](https://docs.k3s.io/networking/networking-services)
 - [Proxmox VE unattended installation과 certificate management](https://pve.proxmox.com/pve-docs/pve-admin-guide.pdf), [Cloudflare API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
 - [Rancher local-path-provisioner](https://github.com/rancher/local-path-provisioner)
+- [SeaweedFS](https://github.com/seaweedfs/seaweedfs), [SeaweedFS Amazon S3 API](https://github.com/seaweedfs/seaweedfs/wiki/Amazon-S3-API)
 - [Velero file-system backup](https://velero.io/docs/v1.18/file-system-backup/)
 - [Vault seal/unseal](https://developer.hashicorp.com/vault/docs/concepts/seal), [AWS KMS seal](https://developer.hashicorp.com/vault/docs/configuration/seal/awskms)
 - [Pomerium Routes Portal](https://www.pomerium.com/docs/capabilities/routes-portal)

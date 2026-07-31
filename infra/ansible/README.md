@@ -15,7 +15,7 @@
 - **Swap 비활성화**: 게스트 swap 비활성화 (`swapoff -a` 및 `/etc/fstab` 주석 처리) - k3s 요구사항 및 `capacity-plan.md` 준수
 - **시스템 상태**: `systemctl --failed`로 실패한 systemd 유닛 0개 확인
 
- 서비스별 방화벽, Kubernetes, PostgreSQL, MinIO 등의 특정 설정이나 임의의 자동 업데이트/CIS hardening은 이 공통 baseline에 넣지 않는다.
+서비스별 방화벽, Kubernetes, PostgreSQL, S3 오브젝트 저장소 등의 특정 설정이나 임의의 자동 업데이트/CIS hardening은 이 공통 baseline에 넣지 않는다.
 
 ## k3s 단일 노드 기준선
 

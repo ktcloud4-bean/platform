@@ -51,7 +51,7 @@ VLAN 번호는 보안 등급 순서가 아니라 역할 식별자다. 실제 신
 | 20 | `PLATFORM` | `10.10.20.0/24` | k3s |
 | 30 | `ACCESS` | `10.10.30.0/24` | Warpgate |
 | 40 | `DMZ` | `10.10.40.0/24` | NetBird · 공개 진입면 |
-| 50 | `DATA` | `10.10.50.0/24` | PostgreSQL · MinIO |
+| 50 | `DATA` | `10.10.50.0/24` | PostgreSQL · 로컬 S3 |
 | 60 | `HOME` | `10.10.60.0/24` | 프로젝트 범위 밖 |
 
 ### 고정 배정
@@ -71,6 +71,12 @@ VLAN 번호는 보안 등급 순서가 아니라 역할 식별자다. 실제 신
 | `10.10.50.20` | `minio-01` | `LIVE`; VMID 151 |
 
 2026-07-31 `VM-01`에서 다섯 주소를 cloud-init 고정 배정으로 적용하고 재부팅 후까지 검증해 `RESERVED`에서 `LIVE`로 올렸다. 각 게스트는 자기 VLAN gateway를 default route와 DNS resolver로 쓰고, 실제 source에서 실행한 `vlan-verify bootstrap`이 통과했다. VMID 규칙과 VM 계약은 [`infra/proxmox/tofu/README.md`](../infra/proxmox/tofu/README.md)가 소유한다.
+
+`S3-DESIGN-01`은 로컬 S3의 목표 canonical 이름을 `object-01`, service alias를
+`s3`로 정했지만 라이브 이름을 바꾸지 않았다. 따라서 위 고정 배정과 아래 물리
+토폴로지의 `minio-01`은 검증된 현재값이다. `S3-01`은 같은 주소·VMID·디스크를
+제자리 전환하고 라이브·재부팅 검증까지 끝낸 뒤에만 이 현재값을 `object-01`로
+바꾸며, 두 canonical host override를 동시에 유지하지 않는다.
 
 ## 물리 토폴로지
 
@@ -135,7 +141,8 @@ project VLAN에는 routed IPv6 prefix·RA·IPv6 gateway가 없어 IPv6 broad all
 | `proxmox-01.imcherry5778.xyz` | canonical host | Proxmox 관리 | 내부 | Unbound 등록 |
 | `k3s-01.imcherry5778.xyz` | canonical host | k3s 노드 | 내부 | Unbound 등록 |
 | `postgres-01.imcherry5778.xyz` | canonical host | PostgreSQL VM | 내부 | Unbound 등록 |
-| `minio-01.imcherry5778.xyz` | canonical host | MinIO VM | 내부 | Unbound 등록 |
+| `minio-01.imcherry5778.xyz` | canonical host | 로컬 S3 전환 전 현재 VM | 내부 | Unbound 등록; `S3-01` 성공 뒤 제거 |
+| `object-01.imcherry5778.xyz` | canonical host | SeaweedFS 로컬 S3 VM | 내부 | `TARGET`; `S3-01` 성공 뒤 등록 |
 | `warpgate-01.imcherry5778.xyz` | canonical host | Warpgate VM | 내부 | Unbound 등록 |
 | `netbird-01.imcherry5778.xyz` | canonical host | NetBird VM | 내부 | Unbound 등록 |
 | `sso.imcherry5778.xyz` | service alias | Keycloak | 외부 인증 연동 가능 | 미등록 |
@@ -152,7 +159,7 @@ project VLAN에는 routed IPv6 prefix·RA·IPv6 gateway가 없어 IPv6 broad all
 | `netbird.imcherry5778.xyz` | service alias | NetBird control plane | 외부 | 미등록 |
 | `warpgate.imcherry5778.xyz` | service alias | Warpgate 서비스 | 내부·NetBird 경유 | 미등록 |
 | `postgres.imcherry5778.xyz` | service alias | PostgreSQL | 내부, 비 HTTP | 미등록 |
-| `minio.imcherry5778.xyz` | service alias | MinIO API | 내부, 비 Pomerium 데이터 경로 | 미등록 |
+| `s3.imcherry5778.xyz` | service alias | SeaweedFS S3 API | 내부, 비 Pomerium 데이터 경로 | 미등록 |
 
 canonical host의 주소는 이 문서의 고정 배정 표를 참조한다. `Unbound 등록`은 내부 host override 상태이며 공개 DNS 상태와는 별개다. service alias는 해당 서비스와 진입 경로를 검증한 뒤 등록한다.
 

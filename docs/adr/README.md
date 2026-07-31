@@ -23,6 +23,7 @@ ADR(Architecture Decision Record)은 목표 구조를 선택한 이유, 검토�
 | [ADR-0007](0007-detection-and-observability-staging.md) | 탐지·관측의 역할과 배포 순서 | `Accepted` | 자원 gate 통과·경보 품질과 대응 절차 검증 |
 | [ADR-0008](0008-opentofu-provider-and-state-boundary.md) | OpenTofu provider와 state 경계 | `Accepted` | 원격 state 착지점 확보·provider 1.0·NetBox 전환 |
 | [ADR-0009](0009-proxmox-native-acme-management-tls.md) | Proxmox 네이티브 ACME DNS-01 관리 TLS | `Accepted` | CT 비공개 요구·사설 CA trust 자동화·다중 cluster |
+| [ADR-0010](0010-seaweedfs-local-s3.md) | 로컬 S3 구현을 SeaweedFS로 전환 | `Accepted` | 클라이언트 호환 실패·독립 storage 확보·유지 상태 변화 |
 
 ## 형식
 
