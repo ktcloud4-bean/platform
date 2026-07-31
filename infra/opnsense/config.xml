@@ -276,6 +276,54 @@
     <outbound>
       <mode>automatic</mode>
     </outbound>
+    <rule>
+      <source>
+        <any>1</any>
+      </source>
+      <destination>
+        <network>wanip</network>
+        <port>80</port>
+      </destination>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp</protocol>
+      <target>10.10.40.10</target>
+      <local-port>80</local-port>
+      <interface>wan</interface>
+      <descr>NB-01 NetBird HTTP</descr>
+      <associated-rule-id>pass</associated-rule-id>
+    </rule>
+    <rule>
+      <source>
+        <any>1</any>
+      </source>
+      <destination>
+        <network>wanip</network>
+        <port>443</port>
+      </destination>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp</protocol>
+      <target>10.10.40.10</target>
+      <local-port>443</local-port>
+      <interface>wan</interface>
+      <descr>NB-01 NetBird HTTPS</descr>
+      <associated-rule-id>pass</associated-rule-id>
+    </rule>
+    <rule>
+      <source>
+        <any>1</any>
+      </source>
+      <destination>
+        <network>wanip</network>
+        <port>3478</port>
+      </destination>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>udp</protocol>
+      <target>10.10.40.10</target>
+      <local-port>3478</local-port>
+      <interface>wan</interface>
+      <descr>NB-01 NetBird STUN Relay</descr>
+      <associated-rule-id>pass</associated-rule-id>
+    </rule>
   </nat>
   <filter>
   </filter>
