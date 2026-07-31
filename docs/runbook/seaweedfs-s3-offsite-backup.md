@@ -169,10 +169,19 @@ CloudWatch heartbeat alarm은 metric 발행 후 `OK`로 전이했다. 이 alarm�
 죽어 job이 실행조차 되지 않는 경우를 맡는다. `treat_missing_data`를 기본값으로 두면
 데이터가 없을 때 영원히 침묵하므로 `breaching`으로 선언했다.
 
-**이메일 수신은 아직 확인되지 않았다.** SNS email 구독이 `PendingConfirmation` 상태이고,
-수신자가 확인 링크를 눌러야 활성화된다. 그때까지 SNS는 메시지를 받아들이지만 메일로
-전달하지 않는다. 확인 후에는 `aws sns list-subscriptions-by-topic`의 `SubscriptionArn`이
-실제 ARN으로 바뀌며, 위 4번을 한 번 더 실행해 수신을 확인한다.
+email 구독이 확인된 뒤 같은 시험을 한 번 더 돌려 마지막 구간까지 확인했다. 구독 속성의
+`PendingConfirmation`이 `false`가 된 상태에서, 임시 systemd drop-in으로 원본 bucket만
+바꿔 job을 실패시켰다. unit은 `ExecMainStatus=78`로 끝났고 `OnFailure=`가 경보 unit을
+**새 `InvocationID`로** 실행했으며 MessageId `efded8b2-20d0-579c-b313-ba5450d9b294`가
+발행됐다. drop-in을 제거하고 `daemon-reload` 한 뒤 job은 다시 성공했다.
+
+SNS의 `NumberOfNotificationsDelivered`가 같은 창에서 **2, `NumberOfNotificationsFailed`는
+0**이었다. 발행 성공만이 아니라 실제 전달까지 확인한 근거다.
+
+drop-in으로 `Environment=`만 덮어쓰는 방법은 통하지 않는다. 유닛의 `EnvironmentFile=`이
+같은 key를 다시 덮어써 job이 그대로 성공해 버린다. 실패를 주입하려면 `ExecStart=`를 비우고
+다시 선언해야 한다. 경보 unit의 `InvocationID`가 바뀌었는지 보지 않으면 이전 실행의 로그를
+새 증거로 착각하기 쉽다.
 
 ## 멱등성과 현재 gate
 
@@ -232,7 +241,6 @@ state 원문, access key secret, S3 secret은 기록·Git·일반 log에 넣지 
 
 ## 한계
 
-- 이메일 수신은 구독 확인 전이라 검증되지 않았다. 위 "실패 경보 시험"의 단서를 따른다.
 - 30일 보존 만료는 시간이 지나야 관측된다. 지금은 lifecycle rule의 라이브 선언까지만
   확인했다.
 - 재부팅 후 timer 자동 시작은 `enabled` 상태와 `Persistent=true` 선언으로만 확인했다.
