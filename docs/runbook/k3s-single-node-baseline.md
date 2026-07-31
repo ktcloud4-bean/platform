@@ -139,7 +139,9 @@ AVC가 기록되지 않아 확정하지 않았다. 이 세션이 만든 marker �
 파일은 `rm -f`, 빈 디렉터리는 `rmdir`로 제거했고 PV·helper까지 사라진 것을 확인했다.
 
 기본 local-path 설정이나 SELinux를 완화하지 않는다. `STOR-01`에서 재현·원인·안전한
-보정 여부를 다시 판정한다.
+보정 여부를 다시 판정한다. 이후 `STOR-01`에서 MCS 불일치를 재현하고 helper 전용
+정책으로 해결했으며, 현재 절차와 rollback은
+[`k3s-local-path-storage.md`](k3s-local-path-storage.md)가 소유한다.
 
 ## rollback
 

@@ -19,6 +19,16 @@ k3s_config_path: /etc/rancher/k3s/config.yaml
 k3s_kubeconfig_path: /etc/rancher/k3s/k3s.yaml
 k3s_server_token_path: /var/lib/rancher/k3s/server/token
 
+# k3s가 매 시작 때 되쓰는 packaged local-storage AddOn과 동일 리소스를 경쟁하지
+# 않도록 packaged AddOn은 끄고, 같은 provisioner 버전의 STOR-01 manifest를
+# Ansible이 소유한다.
+k3s_local_path_manifest_path: /var/lib/rancher/k3s/server/manifests/stor-local-path.yaml
+k3s_local_path_storage_root: /var/lib/rancher/k3s/storage
+k3s_local_path_provisioner_image: rancher/local-path-provisioner:v0.0.36
+k3s_local_path_helper_image: rancher/mirrored-library-busybox:1.37.0
+k3s_local_path_policy_name: k3s_local_path_helper
+k3s_local_path_policy_dir: /etc/selinux/local
+
 # RHEL 계열 SELinux enforcing에서 필요한 Rancher 서명 정책 패키지다.
 k3s_selinux_repo_id: rancher-k3s-common-stable
 k3s_selinux_repo_baseurl: https://rpm.rancher.io/k3s/stable/common/centos/9/noarch
@@ -26,12 +36,12 @@ k3s_selinux_gpg_key_url: https://rpm.rancher.io/public.key
 k3s_selinux_gpg_fingerprint: C8CFF216455126E9B9C918BE925EA29AE257814A
 k3s_selinux_package_nevra: k3s-selinux-1.6-1.el9.noarch
 
-# ADR-0002의 기본 구성요소를 비활성화하지 않는다. 향후 값을 추가하려면 ADR과
-# 백로그 계약을 먼저 바꿔야 한다.
-k3s_disabled_components: []
+# local-path 자체를 제거하는 것이 아니라 k3s가 매 시작 때 덮어쓰는 packaged
+# manifest만 끄고 아래 Ansible 소유 AddOn으로 같은 기본 StorageClass를 유지한다.
+k3s_disabled_components:
+  - local-storage
 k3s_required_packaged_components:
   - coredns
   - traefik
-  - local-storage
   - servicelb
   - metrics-server

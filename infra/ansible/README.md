@@ -34,6 +34,14 @@ metrics-server 기본 구성을 그대로 둔다. node 주소, advertise 주소�
 CIDR는 저장소에 고정하지 않는다. kubeconfig와 server token은 게스트 밖으로
 복사하거나 출력하지 않고 존재·경로·mode만 확인한다.
 
+`STOR-01`부터 local-path 자체는 유지하되 k3s가 시작 때 되쓰는 packaged
+`local-storage` AddOn은 비활성화하고, 동일한 provisioner 버전과 기본 StorageClass를
+role 소유 manifest로 선언한다. StorageClass는 `defaultVolumeType: local`을 쓰며,
+SELinux helper 전용 type은 다른 Pod의 MCS category로 재라벨된 대상만 정리할 수 있게
+한다. helper는 privileged가 아니고 capability 전체 drop, 권한 상승 금지, read-only
+root filesystem, RuntimeDefault seccomp, token 미마운트와 template의 임의 hostPath 금지를
+함께 적용한다.
+
 실제 inventory는 저장소 밖 mode `0600` 파일을 사용한다. 첫 적용 전에는 반드시
 K3S-01 설치 승인 gate를 통과해야 한다.
 
@@ -46,9 +54,11 @@ ansible-playbook -i <저장소 밖 inventory> playbooks/k3s-baseline.yml --check
 ansible-playbook -i <저장소 밖 inventory> playbooks/k3s-baseline.yml
 ```
 
-적용·검증·재부팅·rollback과 SELinux 환경의 local-path 삭제 helper 함정은
-[`docs/runbook/k3s-single-node-baseline.md`](../../docs/runbook/k3s-single-node-baseline.md)에
-기록한다.
+설치 기준선은
+[`docs/runbook/k3s-single-node-baseline.md`](../../docs/runbook/k3s-single-node-baseline.md),
+local PV·capacity·SELinux helper의 적용·검증·rollback은
+[`docs/runbook/k3s-local-path-storage.md`](../../docs/runbook/k3s-local-path-storage.md)가
+소유한다.
 
 ## NTP source
 
@@ -90,7 +100,7 @@ infra/ansible/
 │   └── k3s-baseline.yml     # K3S-01 단일 server 엔트리 플레이북
 └── roles/
     ├── common_baseline/     # 공통 baseline 검증 및 태스크
-    └── k3s_baseline/        # 고정 k3s·SELinux·systemd 선언
+    └── k3s_baseline/        # 고정 k3s·local-path·SELinux·systemd 선언
 ```
 
 ## 구문 검사 (Syntax Check)

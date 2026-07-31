@@ -183,6 +183,24 @@ SQLite 파일은 약 10 MiB였고 read-only `quick_check=ok`였다. 초기 기�
 local-path helper가 SELinux Enforcing 환경에서 timeout을 냈고 정확한 test 경로를
 수동 제거했다. capacity 미강제와 함께 자동 reclaim 동작도 `STOR-01`에서 재검토한다.
 
+### `STOR-01` 검증 자원 정리 후 실측 (2026-07-31)
+
+16Mi 요청 PVC에 32MiB bounded write와 재부팅·자동 reclaim을 검증한 뒤 namespace,
+Pod, PVC, PV와 실제 시험 경로를 모두 제거하고 다시 측정했다.
+
+| 지표 | 실측 | 경고 | 정지 | 판정 |
+|---|---|---|---|---|
+| guest root | 총 198.86 GiB · 사용 3.86 GiB · 여유 195.00 GiB · 2% | 여유 25% 미만 | 여유 20% 미만 | 정상 |
+| `/var/lib/rancher/k3s` | 1.26 GiB | 이미지·로그 50 GiB와 PVC 120 GiB 구획 안에서 관측 | 구획 합계·guest 여유 기준 | 정상 |
+| Node memory | 1,268 MiB · 5%; OS available 21.94 GiB | VM 24 GiB Day 1 | guest 여유 기준 | 정상 |
+| Node CPU | 31 millicore · 0% | VM 8 vCPU Day 1 | 지속 부하 재측정 | 정상 |
+| PVC 선언 합계 | 0 | 96 GiB | 120 GiB | 정상 |
+| DiskPressure | `False` | — | `True`면 신규 쓰기 중단·원인 회수 | 정상 |
+
+요청 16Mi보다 큰 32MiB 파일 쓰기가 성공해 local-path capacity가 하드 quota가 아님을
+확인했다. 이는 64MiB 이하의 제한 시험 결과이며, nodefs 소진이나 kubelet eviction
+임계 자체를 시험한 것이 아니다. 자동 삭제 뒤 PVC 선언 합계와 storage child는 0이다.
+
 ## 나머지 VM 디스크 구획
 
 | VM | 총량 | 구획 |

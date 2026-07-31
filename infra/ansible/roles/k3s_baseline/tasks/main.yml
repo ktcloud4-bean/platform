@@ -207,6 +207,98 @@
     'container-selinux' not in ansible_facts.packages
   when: ansible_check_mode
 
+- name: local-path helper SELinux 정책 빌드 도구 설치
+  ansible.builtin.dnf:
+    name:
+      - make
+      - selinux-policy-devel
+    state: present
+  when:
+    - not ansible_check_mode
+    - >-
+      'make' not in ansible_facts.packages or
+      'selinux-policy-devel' not in ansible_facts.packages
+
+- name: Check mode에서 local-path helper 정책 빌드 도구 변경 예고
+  ansible.builtin.debug:
+    msg: 실제 적용에서는 local-path helper 정책 빌드를 위해 make와 selinux-policy-devel을 설치한다.
+  changed_when: >-
+    'make' not in ansible_facts.packages or
+    'selinux-policy-devel' not in ansible_facts.packages
+  when: ansible_check_mode
+
+- name: local-path helper SELinux 정책 디렉터리 선언
+  ansible.builtin.file:
+    path: "{{ k3s_local_path_policy_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: local-path helper SELinux 정책 원본 배치
+  ansible.builtin.copy:
+    src: k3s_local_path_helper.te
+    dest: "{{ k3s_local_path_policy_dir }}/{{ k3s_local_path_policy_name }}.te"
+    owner: root
+    group: root
+    mode: '0644'
+  register: k3s_local_path_policy_source
+
+- name: 설치된 local-path helper SELinux 정책 조회
+  ansible.builtin.command:
+    argv:
+      - semodule
+      - -l
+  register: k3s_local_path_policy_modules
+  changed_when: false
+  check_mode: false
+
+- name: local-path helper SELinux 정책 컴파일
+  ansible.builtin.command:
+    argv:
+      - make
+      - -f
+      - /usr/share/selinux/devel/Makefile
+      - "{{ k3s_local_path_policy_name }}.pp"
+    chdir: "{{ k3s_local_path_policy_dir }}"
+  when:
+    - not ansible_check_mode
+    - >-
+      k3s_local_path_policy_source.changed or
+      k3s_local_path_policy_name not in k3s_local_path_policy_modules.stdout
+
+- name: local-path helper SELinux 정책 설치
+  ansible.builtin.command:
+    argv:
+      - semodule
+      - -i
+      - "{{ k3s_local_path_policy_dir }}/{{ k3s_local_path_policy_name }}.pp"
+  when:
+    - not ansible_check_mode
+    - >-
+      k3s_local_path_policy_source.changed or
+      k3s_local_path_policy_name not in k3s_local_path_policy_modules.stdout
+
+- name: local-path helper SELinux 정책 설치 결과 조회
+  ansible.builtin.command:
+    argv:
+      - semodule
+      - -lfull
+  register: k3s_local_path_policy_installed
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: local-path helper SELinux 정책 설치 확인
+  ansible.builtin.assert:
+    that:
+      - k3s_local_path_policy_name in k3s_local_path_policy_installed.stdout
+      - >-
+        ('400 ' + k3s_local_path_policy_name + ' pp') in
+        k3s_local_path_policy_installed.stdout
+    fail_msg: local-path helper 전용 SELinux 정책이 설치되지 않았다.
+  when: not ansible_check_mode
+
 - name: 고정 k3s binary 배치
   ansible.builtin.get_url:
     url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version | replace('+', '%2B') }}/k3s"
@@ -307,6 +399,161 @@
   ansible.builtin.wait_for:
     path: "{{ k3s_server_token_path }}"
     timeout: 180
+  when: not ansible_check_mode
+
+- name: Kubernetes API ready 대기
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_binary_path }}"
+      - kubectl
+      - get
+      - --raw=/readyz
+  register: k3s_api_ready
+  changed_when: false
+  retries: 60
+  delay: 2
+  until: k3s_api_ready.rc == 0 and k3s_api_ready.stdout == 'ok'
+  when: not ansible_check_mode
+
+- name: local-path 저장소 root 선언
+  ansible.builtin.file:
+    path: "{{ k3s_local_path_storage_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+    seuser: system_u
+    serole: object_r
+    setype: container_file_t
+    selevel: s0
+  when: not ansible_check_mode
+
+- name: Check mode에서 local-path 저장소 root 선언 예고
+  ansible.builtin.debug:
+    msg: local-path 저장소 root를 root:root 0700, container_file_t:s0로 선언한다.
+  changed_when: false
+  when: ansible_check_mode
+
+- name: Ansible 소유 local-path AddOn manifest 배치
+  ansible.builtin.template:
+    src: stor-local-path.yaml.j2
+    dest: "{{ k3s_local_path_manifest_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  register: k3s_local_path_manifest
+
+- name: local-path provisioner 적용 대기
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_binary_path }}"
+      - kubectl
+      - -n
+      - kube-system
+      - rollout
+      - status
+      - deployment/local-path-provisioner
+      - --timeout=180s
+  register: k3s_local_path_rollout
+  changed_when: false
+  retries: 3
+  delay: 5
+  until: k3s_local_path_rollout.rc == 0
+  when: not ansible_check_mode
+
+- name: local-path 선언 상태 조회
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_binary_path }}"
+      - kubectl
+      - get
+      - storageclass
+      - local-path
+      - -o
+      - json
+  register: k3s_local_path_storageclass
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: local-path helper 선언 상태 조회
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_binary_path }}"
+      - kubectl
+      - -n
+      - kube-system
+      - get
+      - configmap
+      - local-path-config
+      - -o
+      - json
+  register: k3s_local_path_configmap
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: local-path provisioner 선언 상태 조회
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_binary_path }}"
+      - kubectl
+      - -n
+      - kube-system
+      - get
+      - deployment
+      - local-path-provisioner
+      - -o
+      - json
+  register: k3s_local_path_deployment
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: local-path local PV와 제한 helper 계약 확인
+  ansible.builtin.assert:
+    that:
+      - (k3s_local_path_storageclass.stdout | from_json).metadata.annotations.defaultVolumeType == 'local'
+      - (k3s_local_path_storageclass.stdout | from_json).metadata.annotations['storageclass.kubernetes.io/is-default-class'] == 'true'
+      - (k3s_local_path_storageclass.stdout | from_json).provisioner == 'rancher.io/local-path'
+      - >-
+        k3s_local_path_helper_image in
+        (k3s_local_path_configmap.stdout | from_json).data['helperPod.yaml']
+      - >-
+        'k3s_local_path_helper_t' in
+        (k3s_local_path_configmap.stdout | from_json).data['helperPod.yaml']
+      - >-
+        'allowPrivilegeEscalation: false' in
+        (k3s_local_path_configmap.stdout | from_json).data['helperPod.yaml']
+      - >-
+        'automountServiceAccountToken: false' in
+        (k3s_local_path_configmap.stdout | from_json).data['helperPod.yaml']
+      - >-
+        'readOnlyRootFilesystem: true' in
+        (k3s_local_path_configmap.stdout | from_json).data['helperPod.yaml']
+      - >-
+        'type: RuntimeDefault' in
+        (k3s_local_path_configmap.stdout | from_json).data['helperPod.yaml']
+      - >-
+        'level: s0' in
+        (k3s_local_path_configmap.stdout | from_json).data['helperPod.yaml']
+      - >-
+        'drop:' in
+        (k3s_local_path_configmap.stdout | from_json).data['helperPod.yaml']
+      - >-
+        '- ALL' in
+        (k3s_local_path_configmap.stdout | from_json).data['helperPod.yaml']
+      - >-
+        'hostPath:' not in
+        (k3s_local_path_configmap.stdout | from_json).data['helperPod.yaml']
+      - >-
+        'privileged: true' not in
+        (k3s_local_path_configmap.stdout | from_json).data['helperPod.yaml']
+      - k3s_local_path_provisioner_image == (k3s_local_path_deployment.stdout | from_json).spec.template.spec.containers[0].image
+      - >-
+        '--allow-unsafe-helper-pod-template' in
+        (k3s_local_path_deployment.stdout | from_json).spec.template.spec.containers[0].command
+    fail_msg: local-path StorageClass, provisioner 또는 제한된 SELinux helper 선언이 계약과 다르다.
   when: not ansible_check_mode
 
 - name: 설치 후 k3s 서비스 상태 조회

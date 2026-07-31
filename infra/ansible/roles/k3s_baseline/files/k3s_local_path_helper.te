@@ -1,0 +1,25 @@
+policy_module(k3s_local_path_helper, 1.0)
+
+gen_require(`
+    attribute container_domain;
+')
+
+# container runtime이 helper entrypoint를 실행하는 표준 경계를 상속한다. 소비
+# Pod와 다른 MCS category를 가진 삭제 helper만 정리할 수 있도록 mcs_constrained()
+# 대상에는 넣지 않는다.
+type k3s_local_path_helper_t, container_domain;
+domain_type(k3s_local_path_helper_t)
+domain_user_exemption_target(k3s_local_path_helper_t)
+mls_rangetrans_target(k3s_local_path_helper_t)
+virt_sandbox_domain(k3s_local_path_helper_t)
+role system_r types k3s_local_path_helper_t;
+
+kernel_read_system_state(k3s_local_path_helper_t)
+kernel_read_all_proc(k3s_local_path_helper_t)
+logging_send_syslog_msg(k3s_local_path_helper_t)
+
+# 파일 연산 권한은 표준 container 경계를 사용한다. 이 module의 목적은 임의
+# privileged 권한을 추가하는 것이 아니라, helper 전용 type을 MCS 제약 대상에서
+# 제외해 다른 category로 재라벨된 단일 대상 mount를 정리하는 것이다. 실제 노출
+# 범위는 helper Pod의 비특권 securityContext와 provisioner가 주입하는 정확한 한 개의
+# PV mount로 제한한다.
