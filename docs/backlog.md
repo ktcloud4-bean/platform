@@ -254,9 +254,39 @@ mode 0600 임시 파일에만 남겨 사용자가 직접 암호화 장기 보관
 | `BKP-01 READY` | K3s SQLite·server token 전용 backup/restore | `K3S-01`, `S3-01` | `K3S-BOOTSTRAP` | 클러스터 복구 | 격리된 빈 VM에서 API 객체 복원; Velero와 별도임을 검증 |
 | `BKP-02 READY` | Velero + node-agent/Kopia와 local PV restore PoC | `GITOPS-01`, `STOR-01`, `S3-01` | 없음 | 모든 k3s PVC | 테스트 namespace 삭제 후 리소스·파일 복원, hostPath 제약 판정 |
 | `BKP-03 BLOCKED` | PostgreSQL native backup·Vault Raft snapshot | `PG-01`, `VAULT-02`, `S3-01` | 없음 | 인증·플랫폼 데이터 | 별도 DB/namespace에 point-in-time 또는 snapshot restore |
-| `BKP-04 READY` | SeaweedFS 로컬 S3에서 AWS S3로 오프사이트 사본 생성 | `S3-01` | 없음 | 모든 백업의 물리 장애 대응 | 별도 최소권한 자격증명과 검증한 방식으로 전송, AWS S3에서 샘플 복원, 암호화·버전·보존·실패 경보 검증 |
+| `BKP-04 DONE` | SeaweedFS 로컬 S3에서 AWS S3로 오프사이트 사본 생성 | `S3-01` | 없음 | 모든 백업의 물리 장애 대응 | 별도 최소권한 자격증명과 검증한 방식으로 전송, AWS S3에서 샘플 복원, 암호화·버전·보존·실패 경보 검증 |
 | `BKP-05 BLOCKED` | 통합 재해복구 drill·RPO/RTO 기록 | `BKP-01`, `BKP-02`, `BKP-03`, `BKP-04` | `K3S-BOOTSTRAP` | 공급망·공개 전환 gate | Git+S3만으로 핵심 서비스 복구, 누락·시간·수동 절차 기록 |
 | `PVE-BKP-01 DEFERRED` | 두 번째 SSD에 Proxmox VM backup | 두 번째 SSD 장착 | `PVE-LIVE` | 빠른 VM 복구 | 원본 NVMe와 다른 장치에 backup·restore; S3 앱 백업은 유지 |
+
+2026-07-31 `BKP-04`에서 로컬 SeaweedFS S3의 AWS S3 오프사이트 경로를 만들고 검증했다.
+착지점은 `infra/aws/tofu` 별도 state root가 소유하며 12개 리소스를 0 change·0 destroy로
+적용했고 재-plan은 무변경이다. bucket은 public access 4종 차단, `BucketOwnerEnforced`,
+SSE-S3 `AES256`, versioning `Enabled`, 구버전 30일·미완료 multipart 7일 lifecycle,
+평문 HTTP 거부와 `prevent_destroy`를 갖는다. 전송은 `object-01`에서 밖으로 미는 방식이라
+8333용 신규 규칙 없이 outbound 443만 쓴다. rclone 1.74.4는 release·license SHA-256으로
+강제했고 그 digest가 담긴 `SHA256SUMS`의 PGP 서명을 유지자 키로 검증했다.
+
+실제 전송으로 객체 3개 25,165,896 bytes를 옮겨 AWS 측 `AES256`·prefix 보존·version 2개를
+확인했고, 원본 host도 AWS도 아닌 별도 위치에서 전송 전용 최소권한 자격증명만으로 복원해
+이전 version을 포함한 4개 SHA-256이 모두 일치했다. 변경 없는 재실행은 재업로드 0이었고
+24 MiB multipart 업로드도 SSE를 유지한 채 성공했다. 삭제·타 bucket·`ListAllMyBuckets`·
+versioning 중단·lifecycle 삭제·타 topic·타 namespace·평문 HTTP·잘못된 secret은 모두
+거부됐고 같은 시점의 허용 경로는 성공해 양성 통제를 두었다. 존재하지 않는 원본 bucket을
+주입해 job 실패 → systemd `OnFailure` → SNS `Publish` 성공까지 실증했고 정상 설정 복구
+후 재성공을 확인했다. Ansible은 check/diff 뒤 적용했고 2회차 `changed=0`이다. 검증
+bucket·객체 version·identity·임시 파일은 모두 제거했으며 최종 `s3.json`은 disabled
+sentinel 하나뿐이다.
+
+남은 한계는 명시한다. SNS email 구독이 `PendingConfirmation`이라 메일 실제 수신은
+확인되지 않았고, 30일 보존 만료는 시간이 지나야 관측된다. `object-01`은 다른 작업자가
+함께 쓸 수 있어 재부팅은 수행하지 않았고 timer 자동 시작은 `enabled`와 `Persistent=true`
+선언으로만 확인했다. 현재 `offsite_source_buckets`는 비어 있어 사본 대상 데이터가 0이며,
+이 작업이 만든 것은 검증된 경로이지 백업 자산이 아니다. 그 상태에서도 timer는 매일
+heartbeat object를 써서 AWS 자격증명·네트워크·쓰기 권한을 실제로 사용하고, 부재 시
+CloudWatch alarm이 울린다. 상세 증거와 rollback은
+[오프사이트 백업 runbook](runbook/seaweedfs-s3-offsite-backup.md), 착지점 운영은
+[AWS OpenTofu README](../infra/aws/tofu/README.md)가 소유한다. 직접 후속 `BKP-05`는
+`BKP-01`·`BKP-02`·`BKP-03`이 남아 `BLOCKED`를 유지하므로 새로 `READY`로 여는 작업은 없다.
 
 ## 6. 공급망과 정책
 

@@ -1,0 +1,112 @@
+#!/bin/bash
+# 로컬 SeaweedFS S3의 오프사이트 사본을 AWS S3에 만든다.
+#
+# 설정과 자격증명은 systemd 유닛의 EnvironmentFile로만 들어온다. 이 스크립트는
+# 어떤 파일도 셸로 source 하지 않고, 비밀을 출력하지 않는다.
+#
+# 이 스크립트는 원본을 지우지 않는다. rclone `copy`만 쓰고 `sync`나 `--delete-*`를
+# 쓰지 않으며, AWS 쪽 IAM policy에도 삭제 action이 없다. 규칙과 권한 양쪽으로 막는다.
+
+set -euo pipefail
+umask 077
+
+STATE_DIR={{ offsite_state_dir }}
+RUN_LOG="${STATE_DIR}/last-run.log"
+RCLONE={{ offsite_rclone_path }}
+SIGV4={{ offsite_bin_dir }}/aws-sigv4-post.py
+
+: >"${RUN_LOG}"
+
+log() {
+    local line
+    line="$(date -u '+%Y-%m-%dT%H:%M:%SZ') $*"
+    printf '%s\n' "${line}"
+    printf '%s\n' "${line}" >>"${RUN_LOG}"
+}
+
+require() {
+    local name=$1
+    if [ -z "${!name:-}" ]; then
+        log "필수 설정 ${name}가 비어 있다"
+        exit 78
+    fi
+}
+
+fail() {
+    log "실패: $*"
+    exit 1
+}
+
+require OFFSITE_AWS_REGION
+require OFFSITE_AWS_BUCKET
+require OFFSITE_COPY_PREFIX
+require OFFSITE_HEARTBEAT_PREFIX
+require OFFSITE_HEARTBEAT_NAMESPACE
+require OFFSITE_HEARTBEAT_METRIC
+require AWS_ACCESS_KEY_ID
+require AWS_SECRET_ACCESS_KEY
+
+HOST_FQDN=$(hostname -f)
+STARTED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+RCLONE_VERSION=$("${RCLONE}" version --check=false 2>/dev/null | sed -n '1p')
+
+log "오프사이트 백업 시작 host=${HOST_FQDN} bucket=${OFFSITE_AWS_BUCKET} ${RCLONE_VERSION}"
+
+# rclone remote는 파일이 아니라 RCLONE_CONFIG_* 환경변수로 정의된다.
+# 비밀이 유닛의 EnvironmentFile 한 곳에만 있게 하려는 것이다.
+RCLONE_COMMON=(
+    --config "{{ offsite_config_dir }}/rclone.conf"
+    --ca-cert "{{ offsite_system_ca_path }}"
+    --ca-cert "{{ offsite_local_ca_path }}"
+    --retries {{ offsite_rclone_retries }}
+    --low-level-retries 10
+    --stats-one-line
+    --stats 30s
+    --log-level INFO
+)
+
+# 1단계: liveness object.
+# 원본 bucket이 아직 하나도 없어도 매 실행이 AWS 자격증명·네트워크·쓰기 권한을
+# 실제로 사용하게 만든다. 첫 실제 백업 날에야 권한 문제를 발견하는 것을 막는다.
+log "heartbeat object 기록"
+printf 'offsite backup heartbeat\nhost=%s\nstarted=%s\n' "${HOST_FQDN}" "${STARTED_AT}" |
+    "${RCLONE}" rcat "${RCLONE_COMMON[@]}" \
+        "aws:${OFFSITE_AWS_BUCKET}/${OFFSITE_HEARTBEAT_PREFIX}/${HOST_FQDN}.txt" \
+        2>&1 | tee -a "${RUN_LOG}" || fail "heartbeat object 기록"
+
+# 2단계: 원본 bucket 사본.
+# 목록이 비어 있으면 아직 백업 생산자가 없다는 뜻이고, 그것은 실패가 아니다.
+SOURCE_BUCKETS=${OFFSITE_SOURCE_BUCKETS:-}
+if [ -z "${SOURCE_BUCKETS}" ]; then
+    log "원본 bucket 목록이 비어 있다. 사본 단계를 건너뛴다"
+else
+    require OFFSITE_LOCAL_ENDPOINT
+    require RCLONE_CONFIG_LOCAL_ACCESS_KEY_ID
+    require RCLONE_CONFIG_LOCAL_SECRET_ACCESS_KEY
+
+    for bucket in ${SOURCE_BUCKETS}; do
+        log "사본 생성 local:${bucket} -> aws:${OFFSITE_AWS_BUCKET}/${OFFSITE_COPY_PREFIX}/${bucket}"
+        "${RCLONE}" copy "${RCLONE_COMMON[@]}" \
+            --transfers {{ offsite_rclone_transfers }} \
+            --checkers {{ offsite_rclone_checkers }} \
+            "local:${bucket}" \
+            "aws:${OFFSITE_AWS_BUCKET}/${OFFSITE_COPY_PREFIX}/${bucket}" \
+            2>&1 | tee -a "${RUN_LOG}" || fail "bucket ${bucket} 사본 생성"
+    done
+fi
+
+# 3단계: 성공 heartbeat metric.
+# 이 metric의 부재를 CloudWatch alarm이 breaching으로 취급한다.
+# job이 아예 실행되지 않는 실패는 OnFailure 경로로는 잡히지 않기 때문이다.
+log "성공 metric 발행"
+"${SIGV4}" monitoring "${OFFSITE_AWS_REGION}" \
+    Action=PutMetricData \
+    Version=2010-08-01 \
+    "Namespace=${OFFSITE_HEARTBEAT_NAMESPACE}" \
+    "MetricData.member.1.MetricName=${OFFSITE_HEARTBEAT_METRIC}" \
+    MetricData.member.1.Value=1 \
+    MetricData.member.1.Unit=Count \
+    >>"${RUN_LOG}" 2>&1 || fail "성공 metric 발행"
+
+log "오프사이트 백업 완료"

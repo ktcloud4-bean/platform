@@ -1,0 +1,7 @@
+---
+
+- name: systemd daemon-reload
+  ansible.builtin.systemd:
+    daemon_reload: true
+  listen: 오프사이트 백업 유닛 재적재
+  when: not ansible_check_mode

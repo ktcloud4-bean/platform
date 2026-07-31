@@ -1,0 +1,276 @@
+---
+
+- name: 오프사이트 백업 전제 확인
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.architecture == 'x86_64'
+      - ansible_facts.distribution == 'Rocky'
+      - ansible_facts.distribution_major_version == '9'
+      - offsite_rclone_version == '1.74.4'
+      - offsite_rclone_sha256 | length == 64
+      - offsite_rclone_license == 'MIT'
+      - offsite_rclone_license_sha256 | length == 64
+    fail_msg: Rocky Linux 9/amd64와 고정한 rclone release·license digest를 확인한다.
+
+- name: 원본을 지우는 동기화가 열려 있지 않은지 확인
+  ansible.builtin.assert:
+    that:
+      - not offsite_allow_delete
+    fail_msg: >-
+      오프사이트 사본은 원본 삭제를 따라가지 않는다. 삭제 동기화가 필요하다고 판단되면
+      이 role이 아니라 ADR을 먼저 바꾼다.
+
+- name: AWS 착지점 입력 확인
+  ansible.builtin.assert:
+    that:
+      - offsite_aws_bucket | length > 0
+      - offsite_aws_bucket is regex('^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$')
+      - offsite_aws_region | length > 0
+      - offsite_alert_topic_arn is regex('^arn:aws:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$')
+      - offsite_heartbeat_namespace | length > 0
+    fail_msg: bucket 이름, region과 경보 topic ARN은 저장소 밖 입력으로 채워야 한다.
+
+- name: AWS 전송 자격증명 최소 형식 확인
+  ansible.builtin.assert:
+    that:
+      - offsite_aws_access_key_id | length >= 16
+      - offsite_aws_secret_access_key | length >= 32
+    fail_msg: 전송용 access key는 저장소 밖 입력으로만 주입한다.
+  no_log: true
+
+- name: 원본 bucket 이름 형식 확인
+  ansible.builtin.assert:
+    that:
+      - item is regex('^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$')
+    fail_msg: 원본 bucket 이름은 S3 bucket 규칙을 따라야 한다.
+  loop: "{{ offsite_source_buckets }}"
+
+- name: 원본 bucket이 있으면 로컬 S3 자격증명도 있는지 확인
+  ansible.builtin.assert:
+    that:
+      - offsite_local_access_key_id | length >= 16
+      - offsite_local_secret_access_key | length >= 32
+    fail_msg: 원본 bucket을 지정하면 로컬 S3 읽기 자격증명이 함께 필요하다.
+  when: offsite_source_buckets | length > 0
+  no_log: true
+
+- name: 오프사이트 백업 필수 패키지 설치
+  ansible.builtin.dnf:
+    name:
+      - coreutils
+      - policycoreutils-python-utils
+      - python3
+      - unzip
+    state: present
+
+- name: 오프사이트 백업 system group 선언
+  ansible.builtin.group:
+    name: "{{ offsite_group }}"
+    system: true
+    state: present
+
+# 전송 계정은 로그인하지 않는다. SeaweedFS의 데이터·비밀에는 접근하지 않고
+# leaf 인증서를 읽기 위한 보조 그룹만 갖는다.
+- name: 오프사이트 백업 system user 선언
+  ansible.builtin.user:
+    name: "{{ offsite_user }}"
+    group: "{{ offsite_group }}"
+    groups: ["seaweedfs"]
+    append: true
+    system: true
+    shell: /sbin/nologin
+    home: "{{ offsite_state_dir }}"
+    create_home: false
+    state: present
+
+- name: 오프사이트 백업 디렉터리 선언
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ offsite_config_dir }}", owner: root, group: "{{ offsite_group }}", mode: "0750" }
+    - { path: "{{ offsite_state_dir }}", owner: "{{ offsite_user }}", group: "{{ offsite_group }}", mode: "0750" }
+    - { path: "{{ offsite_cache_dir }}", owner: "{{ offsite_user }}", group: "{{ offsite_group }}", mode: "0750" }
+    - { path: /usr/share/licenses/rclone, owner: root, group: root, mode: "0755" }
+    - { path: "{{ offsite_cache_dir }}/download", owner: root, group: root, mode: "0755" }
+  register: offsite_dirs
+
+- name: 고정 rclone release archive 다운로드와 SHA-256 강제
+  ansible.builtin.get_url:
+    url: "{{ offsite_rclone_url }}"
+    dest: "{{ offsite_cache_dir }}/download/{{ offsite_rclone_archive }}"
+    checksum: "sha256:{{ offsite_rclone_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: 고정 rclone archive 압축 해제
+  ansible.builtin.unarchive:
+    src: "{{ offsite_cache_dir }}/download/{{ offsite_rclone_archive }}"
+    dest: "{{ offsite_cache_dir }}/download"
+    remote_src: true
+    creates: "{{ offsite_cache_dir }}/download/rclone-v{{ offsite_rclone_version }}-linux-amd64/rclone"
+  when: not ansible_check_mode
+
+- name: 압축 해제한 rclone binary 확인
+  ansible.builtin.stat:
+    path: "{{ offsite_cache_dir }}/download/rclone-v{{ offsite_rclone_version }}-linux-amd64/rclone"
+  register: offsite_extracted_binary
+
+- name: rclone binary 설치
+  ansible.builtin.copy:
+    src: "{{ offsite_cache_dir }}/download/rclone-v{{ offsite_rclone_version }}-linux-amd64/rclone"
+    dest: "{{ offsite_rclone_path }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  when: offsite_extracted_binary.stat.exists
+
+- name: MIT license 원문 설치와 SHA-256 강제
+  ansible.builtin.get_url:
+    url: "{{ offsite_rclone_license_url }}"
+    dest: /usr/share/licenses/rclone/COPYING
+    checksum: "sha256:{{ offsite_rclone_license_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: AWS SigV4 POST helper 설치
+  ansible.builtin.copy:
+    src: aws-sigv4-post.py
+    dest: "{{ offsite_bin_dir }}/aws-sigv4-post.py"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: 오프사이트 백업 실행 스크립트 선언
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ offsite_bin_dir }}/{{ item }}"
+    owner: root
+    group: "{{ offsite_group }}"
+    mode: "0750"
+  loop:
+    - offsite-backup.sh
+    - offsite-backup-alert.sh
+
+# 빈 설정 파일을 둔다. remote 정의는 전부 환경변수로 오고, rclone이 설정 파일을
+# 찾지 못해 경고하거나 새로 만들려 하는 경로를 없앤다.
+- name: 비어 있는 rclone 설정 파일 선언
+  ansible.builtin.copy:
+    content: |
+      # 이 파일은 의도적으로 비어 있다.
+      # rclone remote는 systemd EnvironmentFile의 RCLONE_CONFIG_* 변수로만 정의한다.
+      # 비밀의 사본을 늘리지 않기 위해서다.
+    dest: "{{ offsite_config_dir }}/rclone.conf"
+    owner: root
+    group: "{{ offsite_group }}"
+    mode: "0640"
+
+- name: 오프사이트 백업 설정과 자격증명 선언
+  ansible.builtin.template:
+    src: offsite.env.j2
+    dest: "{{ offsite_config_dir }}/offsite.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: 오프사이트 백업 유닛 재적재
+
+- name: 오프사이트 백업 systemd 유닛 선언
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - offsite-backup.service
+    - offsite-backup-alert.service
+    - offsite-backup.timer
+  notify: 오프사이트 백업 유닛 재적재
+
+- name: 오프사이트 백업 SELinux local file-context 현재 선언 조회
+  ansible.builtin.command:
+    argv: [semanage, fcontext, -C, -l]
+  register: offsite_selinux_local_contexts
+  changed_when: false
+  check_mode: false
+
+- name: 오프사이트 백업 SELinux file-context 영속 선언
+  ansible.builtin.command:
+    argv:
+      - semanage
+      - fcontext
+      - -a
+      - -t
+      - "{{ item.type }}"
+      - "{{ item.target }}"
+  loop:
+    - { target: "{{ offsite_state_dir }}(/.*)?", type: "var_lib_t" }
+    - { target: "{{ offsite_config_dir }}(/.*)?", type: "etc_t" }
+    - { target: "{{ offsite_rclone_path }}", type: "bin_t" }
+  when:
+    - not ansible_check_mode
+    - item.target not in offsite_selinux_local_contexts.stdout
+
+- name: 오프사이트 백업 경로 SELinux label 적용
+  ansible.builtin.command:
+    argv: [restorecon, -RFv, "{{ item }}"]
+  loop:
+    - "{{ offsite_state_dir }}"
+    - "{{ offsite_config_dir }}"
+    - "{{ offsite_rclone_path }}"
+    - "{{ offsite_bin_dir }}/aws-sigv4-post.py"
+  register: offsite_restorecon
+  changed_when: "'Relabeled' in offsite_restorecon.stdout"
+  when: not ansible_check_mode
+
+- name: check mode에서 오프사이트 백업 SELinux label drift 조회
+  ansible.builtin.command:
+    argv: [restorecon, -nRFv, "{{ item }}"]
+  loop:
+    - "{{ offsite_state_dir }}"
+    - "{{ offsite_config_dir }}"
+    - "{{ offsite_rclone_path }}"
+  register: offsite_restorecon_check
+  changed_when: offsite_restorecon_check.stdout | length > 0
+  failed_when: false
+  # command 모듈은 check mode에서 기본적으로 실행되지 않는다. -n 은 라벨을 바꾸지
+  # 않고 차이만 출력하므로 check mode에서도 실제로 돌려야 의미가 있다.
+  check_mode: false
+  when: ansible_check_mode
+
+- name: 대기 중인 유닛 재적재를 먼저 반영
+  ansible.builtin.meta: flush_handlers
+
+# 원본 bucket 목록과 무관하게 정기 실행을 켠다.
+# 목록이 비어 있어도 매 실행이 heartbeat object를 써서 AWS 자격증명·네트워크·쓰기
+# 권한을 실제로 사용한다. 첫 실제 백업 날에야 권한 만료나 경로 단절을 발견하는 것을
+# 막는 canary다. 옮길 원본이 없다는 사실은 실행 로그가 그대로 말한다.
+- name: 오프사이트 백업 정기 실행 활성화
+  ansible.builtin.systemd:
+    name: offsite-backup.timer
+    enabled: true
+    state: started
+  when: not ansible_check_mode
+
+- name: 설치 결과 확인
+  ansible.builtin.command:
+    argv: ["{{ offsite_rclone_path }}", version, --check=false]
+  register: offsite_rclone_version_check
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: 설치한 rclone이 고정한 버전인지 확인
+  ansible.builtin.assert:
+    that:
+      - "'rclone v' + offsite_rclone_version in offsite_rclone_version_check.stdout"
+    fail_msg: 설치된 rclone 버전이 고정값과 다르다.
+  when: not ansible_check_mode

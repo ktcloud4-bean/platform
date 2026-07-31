@@ -13,6 +13,7 @@
 | `docs/capacity-plan.md` | VM 자원 배정·PVC 용량·정지 기준을 다룰 때 |
 | `infra/opnsense/README.md` | OPNsense를 조회하거나 변경할 때 |
 | `infra/proxmox/tofu/README.md` | Proxmox VM을 OpenTofu로 계획하거나 적용할 때 |
+| `infra/aws/tofu/README.md` | AWS 오프사이트 착지점을 계획하거나 적용할 때 |
 | `README.md` | 저장소 구조나 운영 원칙을 바꿀 때 |
 
 백로그 작업에 ADR이 연결되어 있으면 작업 전에 해당 ADR을 함께 읽는다.

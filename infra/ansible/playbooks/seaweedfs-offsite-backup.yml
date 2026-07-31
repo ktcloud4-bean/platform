@@ -1,0 +1,16 @@
+---
+
+# 로컬 SeaweedFS S3의 AWS S3 오프사이트 사본 경로를 object host에 선언한다.
+# 착지점·자격증명·원본 bucket 목록은 저장소 밖 extra-vars로만 주입한다.
+#
+#   ansible-playbook playbooks/seaweedfs-offsite-backup.yml \
+#     -i <저장소 밖 인벤토리> \
+#     -e @<저장소 밖 offsite-vars.yml>
+#
+# 값의 출처는 infra/aws/tofu 의 output 이다.
+
+- name: SeaweedFS 오프사이트 백업 경로 선언
+  hosts: object_nodes
+  become: true
+  roles:
+    - seaweedfs_offsite_backup

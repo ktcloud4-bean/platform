@@ -1,0 +1,13 @@
+[Unit]
+Description=오프사이트 백업 정기 실행
+
+[Timer]
+OnCalendar={{ offsite_timer_oncalendar }}
+# 여러 host가 같은 초에 AWS로 몰리지 않게 흩는다.
+RandomizedDelaySec={{ offsite_timer_randomized_delay_sec }}
+# 정지·재부팅으로 놓친 실행을 부팅 후 따라잡는다.
+Persistent=true
+Unit=offsite-backup.service
+
+[Install]
+WantedBy=timers.target

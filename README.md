@@ -35,7 +35,7 @@ OPNsense → Proxmox → Rocky Linux VM → k3s → 플랫폼 서비스
 
 ```text
 docs/          아키텍처 · ADR · 주소 계획 · 백로그 · runbook
-infra/         OPNsense · Proxmox · VM · OS 자동화
+infra/         OPNsense · Proxmox · VM · OS 자동화 · AWS 오프사이트 착지점
 gitops/        Argo CD가 적용할 Kubernetes 선언
 policies/      Kyverno · NetworkPolicy · 서명 검증 정책
 ```
