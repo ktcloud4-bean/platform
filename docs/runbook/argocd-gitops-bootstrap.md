@@ -1,0 +1,156 @@
+# Argo CD private Git bootstrap
+
+- 작업: `GITOPS-01`
+- 상태: 적용·검증 완료 (main 전환은 병합 승인 뒤 수행)
+- 잠금: `K3S-BOOTSTRAP`
+- 주소 단일 원본: [`docs/ip-plan.md`](../ip-plan.md)
+- 작업 상태 단일 원본: [`docs/backlog.md`](../backlog.md)
+
+## 결정과 소유 경계
+
+`k3s-01`의 Kubernetes `v1.36.2+k3s1`에는 Argo CD `v3.5.0-rc3`을 적용한다.
+이 버전은 pre-release이지만 release-3.5의 공식 시험 표가 Kubernetes `v1.36`을
+포함하며, 운영자가 그 위험을 명시적으로 수용했다. `latest`, release branch와
+k3s downgrade는 사용하지 않는다. 정식 `v3.5` GA가 나오면 자동 추적하지 않고,
+고정 tag·manifest·image digest·upgrade 결과를 다시 검증하는 별도 version update로
+전환한다.
+
+bootstrap은 Argo CD namespace·CRD·controller·최초 AppProject·repository credential
+Secret·root Application을 직접 적용한다. 이것들은 Argo CD가 Git을 읽기 전에 있어야
+하므로 GitOps가 소유하지 않는다. 최종 `gitops/root/`의 AppProject만 root Application이
+관리한다. 검증용 ConfigMap은 drift와 prune을 증명한 뒤 Git과 클러스터에서 제거했다.
+UI 외부 노출, Ingress, public DNS, NAT는 만들지 않으며 검증은 SSH를 통한 `k3s kubectl`과
+localhost port-forward로 제한한다.
+
+## 고정 release와 무결성
+
+[`release-metadata.env`](../../gitops/bootstrap/argocd/release-metadata.env)가 고정값의
+단일 원본이다.
+
+| 항목 | 고정값 |
+|---|---|
+| Argo CD | `v3.5.0-rc3` |
+| tag commit | `7660efb23b2d56bf01b0189ba5e2c2ab12badf71` |
+| 공식 manifest | `https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.0-rc3/manifests/install.yaml` |
+| vendored manifest SHA-256 | `4f25b7f9669c5d6212d8a5fe1b31e2e47d3d8d84d0f436a7f68dcdd033f63dd7` |
+| Argo CD image digest | `sha256:4e88d929195c9e1d224d046ad629e365dc60f8a5d65d88d6eee15810aac9dbad` |
+| Dex image digest | `sha256:b8469881d3cb3a73001506f0d3aaefecb9c45d2311c1e0f405d8ac538316c59d` |
+| Redis image digest | `sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba` |
+
+manifest는 공식 고정 tag에서 내려받아 SHA-256을 대조한 뒤 Git에 vendor한다.
+bootstrap script는 적용 전에 같은 SHA-256을 재확인한다. image digest는
+`skopeo inspect`로 확인했고, 적용 뒤 Pod의 `imageID`로 다시 대조한다.
+
+## private Git과 SSH 신뢰
+
+repository URL은 `ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git`다. 공개
+TCP 22를 열지 않는다. GitHub 공식 Ed25519 fingerprint
+`SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU`와 일치하는
+`[ssh.github.com]:443` key는 official Argo CD manifest의
+`argocd-ssh-known-hosts-cm`에 포함되어 있다. `StrictHostKeyChecking=no`,
+`accept-new`, `ssh-keyscan` 단독 신뢰를 사용하지 않는다.
+
+| 항목 | 값 |
+|---|---|
+| GitHub deploy key 제목 | `GITOPS-01-k3s-01-argo-readonly-20260731` |
+| GitHub deploy key ID | `158868245` |
+| 권한 | read-only |
+| 공개 fingerprint | `SHA256:8mGR//dKQq5N7Z90wdazcMWzGBQspnZR7lF4ZC+3InE` |
+| 장기 보관 | 사용자 Bitwarden |
+
+private key는 Git·문서·일반 로그에 넣지 않는다. bootstrap 때만 Bitwarden에서 mode
+`0600` 작업 파일로 내보내며 script가 Kubernetes Secret에 stdin으로 주입한다.
+Secret 원문 manifest, PAT, 개인 계정 SSH key는 저장소에 넣지 않는다.
+
+## 적용 전 gate
+
+1. `GITOPS-01 READY`, `K3S-01 DONE`, `K3S-BOOTSTRAP` 비점유와 S3-01의 독립 lock.
+2. k3s service active, Node Ready, DiskPressure=False, CoreDNS·Traefik·ServiceLB·
+   metrics-server·local-path-provisioner 정상, SELinux Enforcing, swap 0,
+   failed unit 0, guest root 여유가 `capacity-plan.md` 정지 기준 밖.
+3. `argocd` namespace, `argoproj.io` CRD, Application, AppProject와 관련
+   ServiceAccount·Secret이 모두 없다. 하나라도 있으면 인수·삭제하지 않고 중단한다.
+4. GitHub 저장소 private/default branch, deploy key read-only, strict host-key SSH
+   443 private Git read, manifest SHA-256·tag commit·image digest를 확인한다.
+
+## bootstrap과 fresh clone
+
+fresh clone은 저장소 밖의 trusted k3s `known_hosts`, GitHub 공식 Ed25519 host key만 든
+`known_hosts`, Bitwarden에서 내보낸 mode `0600` deploy key 파일만 전제한다. 기존
+worktree·숨은 파일·kubeconfig를 복사하지 않는다.
+
+```bash
+export K3S_SSH_TARGET=rocky@k3s-01.imcherry5778.xyz
+export K3S_SSH_KNOWN_HOSTS=<저장소-밖-trusted-known_hosts>
+export GITHUB_SSH_KNOWN_HOSTS=<GitHub-공식-Ed25519-key만-든-known_hosts>
+export DEPLOY_KEY=<Bitwarden에서-내보낸-mode-0600-deploy-key>
+test "$(stat -c %a "$DEPLOY_KEY")" = 600
+GIT_SSH_COMMAND="ssh -o BatchMode=yes -o IdentitiesOnly=yes \
+  -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$GITHUB_SSH_KNOWN_HOSTS \
+  -o HostKeyAlgorithms=ssh-ed25519 -i $DEPLOY_KEY" \
+  git clone ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git platform
+cd platform
+git checkout <검증할-고정-commit-SHA>
+./gitops/bootstrap/argocd/bootstrap.sh \
+  --target-revision <검증할-고정-commit-SHA> \
+  --private-key "$DEPLOY_KEY"
+```
+
+script는 vendored manifest를 server-side apply하고 controller·server·repo-server가
+Ready일 때까지 기다린다. 그 뒤 repository Secret, AppProject와 root Application을
+적용한다. 초기 root Application은 mutable branch가 아니라 task branch의 signed commit
+SHA를 `targetRevision`으로 쓴다. main merge 뒤에만 `targetRevision=main`으로 바꾸고
+remote main SHA와 `Synced`·`Healthy`를 다시 증명한다.
+
+## 검증과 rollback
+
+controller·repo-server·application-controller Ready, runtime imageID digest,
+repository connection, `platform-root`의 `Synced`·`Healthy`를 확인한다. 임시
+`gitops-01-verification` ConfigMap으로 data drift 자동 복구와 Git 제거 뒤 prune을
+증명하고, 최종 선언에는 남기지 않는다. Argo CD Pod 하나만 재시작해 Application 상태
+유지와 두 번째 bootstrap 선언 diff를 확인한다. 마지막에 Node·기본 구성요소·
+DiskPressure·SELinux·failed unit·용량, AVC·restart loop·orphan 리소스를 재확인한다.
+
+실패 시 기존 Argo CD가 없었다는 사전 증거가 있을 때만 이 작업이 만든 `argocd`
+namespace, vendored manifest의 정확한 Argo resource, `argocd-repo-platform` Secret,
+GitHub deploy key ID `158868245`를 개별 대상으로 rollback한다. 다른 namespace,
+기존 CRD consumer, GitHub key, wildcard resource를 삭제하지 않는다. k3s uninstall,
+cluster reset, 노드 재부팅, VM·OpenTofu·OPNsense 변경은 금지다.
+
+## 적용·검증 결과 (2026-07-31)
+
+- 사전 gate에서 k3s `v1.36.2+k3s1`, Node `Ready=True`·`DiskPressure=False`, SELinux
+  `Enforcing`, swap 0, failed systemd unit 0, 기존 Argo CD namespace·CRD·Application·
+  AppProject·관련 Secret 0을 확인했다. guest root는 199 GiB 중 194 GiB 여유(사용 3%)로
+  guest 여유 경고 25%·정지 20% 기준 밖이며, CoreDNS·Traefik·ServiceLB·metrics-server·
+  local-path-provisioner도 Running/Ready였다.
+- vendored manifest SHA-256은 위 고정값과 일치했다. 실행 Pod의 Argo CD, Dex, Redis
+  imageID digest도 각각 고정 digest와 일치했다. Service는 전부 ClusterIP이고 Argo CD
+  Ingress는 0개다.
+- root Application은 SSH 443 private repository에서 task branch의 signed commit
+  `50383d78fcbba357a724d03c6e6f450569296a69`을 읽어 `Synced/Healthy`가 됐다. repository
+  Secret은 `argocd.argoproj.io/secret-type=repository` label만 확인했고 데이터 원문은
+  출력하지 않았다.
+- 임시 ConfigMap의 `managed-by` 값을 `drift`로 한 번만 바꾸자 두 번째 5초 관찰 주기에
+  `gitops`로 self-heal됐다. 이어 Git에서 그 ConfigMap을 제거하고 동일 signed commit으로
+  root Application을 전환하자 클러스터에서도 정확히 prune됐으며 Application은
+  `Synced/Healthy`를 유지했다.
+- `argocd-repo-server-54dc495f7d-7ztt5` Pod 한 개만 삭제해 Deployment 복구를 확인했고,
+  Application은 같은 revision에서 `Synced/Healthy`를 유지했다. 두 번째 bootstrap과
+  fresh clone bootstrap도 완료됐다. bootstrap과 같은 `--server-side --force-conflicts`
+  조건의 manifest·namespace·AppProject·Application diff는 모두 exit 0이었다. 일반
+  server-side diff는 upstream manifest field 하나의 기존 `kubectl` manager 충돌로
+  중단되므로 무변경 판정에는 실제 bootstrap 조건을 사용했다.
+- 별도 `/tmp` fresh clone은 GitHub SSH 443, 저장소 밖 deploy key·host key·k3s known_hosts만
+  사용해 같은 commit을 checkout하고 bootstrap했다. 기존 worktree·숨은 파일·kubeconfig는
+  사용하지 않았고, 검증 후 그 임시 clone은 제거했다.
+- 최종 점검에서 Argo CD Pod 7개는 Running/Ready, restart loop 0, Argo CD Job 0,
+  `argocd` namespace Active, 오늘의 AVC 0줄이었다. 잘못된 최초 manifest 적용이 잠시
+  `default` namespace에 만든 manifest 정의 resource 50개와 자동 생성 Secret 2개는
+  기존 Argo CD가 없던 것을 확인한 뒤 정확한 이름으로만 제거했고, 최종 `default`에는
+  이름이 `argocd`인 namespaced resource가 0개다.
+
+`v3.5.0-rc3`은 pre-release다. 정식 `v3.5` GA 전환은 이 결과를 승계하지 않으며,
+새 fixed tag·manifest SHA-256·image digest·Kubernetes 호환성·upgrade 및 rollback
+검증을 갖춘 별도 작업으로 수행한다. deploy key의 장기 복구본은 Bitwarden에 있고,
+Vault 이관은 `VAULT-01` 이후 별도 credential migration으로 재검토한다.
