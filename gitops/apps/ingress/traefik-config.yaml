@@ -1,0 +1,86 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/part-of: platform-ingress
+spec:
+  failurePolicy: abort
+  valuesContent: |-
+    logs:
+      access:
+        enabled: true
+        format: json
+        fields:
+          general:
+            defaultmode: keep
+          headers:
+            defaultmode: drop
+
+    env:
+      - name: CF_DNS_API_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: ingress-01-cloudflare-dns
+            key: CF_DNS_API_TOKEN
+
+    persistence:
+      enabled: true
+      name: data
+      accessMode: ReadWriteOnce
+      size: 128Mi
+      storageClass: local-path
+
+    podSecurityContext:
+      fsGroup: 65532
+      fsGroupChangePolicy: OnRootMismatch
+
+    certificatesResolvers:
+      letsencrypt-staging:
+        acme:
+          email: imcherry5778@gmail.com
+          caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+          dnsChallenge:
+            provider: cloudflare
+            propagation:
+              delayBeforeChecks: 30s
+              disableANSChecks: true
+              requireAllRNS: true
+          storage: /data/acme-staging.json
+      letsencrypt-production:
+        acme:
+          email: imcherry5778@gmail.com
+          caServer: https://acme-v02.api.letsencrypt.org/directory
+          dnsChallenge:
+            provider: cloudflare
+            propagation:
+              delayBeforeChecks: 30s
+              disableANSChecks: true
+              requireAllRNS: true
+          storage: /data/acme-production.json
+
+    ports:
+      web:
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+              permanent: true
+        forwardedHeaders:
+          trustedIPs: []
+          insecure: false
+      websecure:
+        http:
+          tls:
+            certResolver: letsencrypt-production
+            domains:
+              - main: k3s-01.imcherry5778.xyz
+        forwardedHeaders:
+          trustedIPs: []
+          insecure: false
+
+    service:
+      spec:
+        externalTrafficPolicy: Local

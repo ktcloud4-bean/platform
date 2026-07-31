@@ -33,8 +33,8 @@ check-drift.sh --update로 스냅샷 승인
 | 방화벽 | VLAN 20~50 임시 IPv4 bootstrap: gateway DNS·NTP 허용, RFC1918 선차단·기록, RFC1918 외 TCP 80/443 허용, 나머지 implicit deny |
 | Web GUI | HTTPS, LAN listen, Local+TOTP |
 | SSH | LAN listen, 공개키 관리 |
-| DNS | Unbound recursion, DNSSEC, forwarding 비활성 |
-| DHCP | Dnsmasq; 로컬 domain record를 Unbound와 연계 |
+| DNS | Unbound recursion, DNSSEC, exact split override; 공인 zone 전체 forwarding 비활성 |
+| DHCP | Dnsmasq; 현재 동적·정적 hostname record 없음 |
 | ACME | Cloudflare DNS-01 wildcard, 자동갱신 cron |
 | NAT | automatic outbound NAT |
 | IDS | Suricata DMZ (`vlan04`) 및 PLATFORM (`vlan02`) PCAP alert-only 활성화 (`NIDS-01`); `opnsense.test.rules`, `emerging-scan.rules` 및 custom rules 적용 |
@@ -171,10 +171,24 @@ API 요청 timeout은 성공이나 실패의 증거가 아니다. 인터페이�
 ## DNS 경계
 
 - Unbound는 재귀 해석기이며 외부 forwarding을 사용하지 않는다.
-- Dnsmasq는 DHCP와 동적 로컬 이름을 담당하고 별도 포트에서 Unbound와 연결된다.
+- Dnsmasq는 DHCP를 담당하고 별도 포트에서 실행한다. 공인 zone 전체를 Dnsmasq로
+  forward하지 않는다.
 - Kubernetes CoreDNS는 Pod·Service 이름만 담당한다. 랩 DNS를 k3s로 옮기지 않는다.
 - 내부 zone과 같은 공인 이름은 split DNS override를 명시적으로 관리한다.
 - OPNsense wildcard 인증서 개인키를 다른 계층에 배포하지 않는다.
+
+2026-07-31 `INGRESS-01`에서 `imcherry5778.xyz` 전체를 Dnsmasq로 보내던 Unbound
+query-forward row를 비활성화했다. Dnsmasq는 같은 이름을 local zone으로 취급하므로
+미등록 공개 이름에 NXDOMAIN, apex SOA·NS에 빈 NODATA를 반환했고, 이는 DNS-01 zone
+discovery를 막았다. Unbound의 `transparent` local zone과 exact host override는 유지해
+등록된 내부 A/PTR·alias만 사설 주소로 응답하고, 나머지 SOA·NS·미등록 이름은 공개
+권위 계층으로 재귀한다.
+
+현재 Dnsmasq lease·host·static mapping이 모두 0개라 이 변경으로 사라지는 실제 동적
+이름은 없다. 향후 DHCP lease hostname 조회가 필요하면 공인 apex를 다시 forward하지
+말고 `docs/ip-plan.md`에서 별도 내부 DHCP subdomain을 먼저 확정한 뒤 그 subdomain만
+연결한다. 임의 이름을 만들거나 공개 SOA·NS를 로컬에 복제하지 않는다. rollback은 기존
+query-forward row를 다시 활성화하고 Unbound를 재구성하는 것이다.
 
 ## 패키지와 사용자
 

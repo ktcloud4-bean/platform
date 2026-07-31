@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: ingress
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  description: INGRESS-01 packaged Traefik HelmChartConfig 최소 배포 경계
+  sourceRepos:
+    - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
+  destinations:
+    - namespace: kube-system
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: helm.cattle.io
+      kind: HelmChartConfig

@@ -205,11 +205,11 @@ version, multipart, identity, credential, client 파일까지 API로 정리했�
 | `GITOPS-01 DONE` | `gitops/` 생성·Argo CD bootstrap·root Application | `K3S-01` | `K3S-BOOTSTRAP` | 이후 k3s 앱 | 새 clone에서 bootstrap, Synced/Healthy, secret 원문 없음 |
 | `HEADLAMP-01 READY` | Headlamp 기본 GitOps 배포·내부 bootstrap 접근 | `GITOPS-01` | 없음 | 초기 k3s 조회·`HEADLAMP-02` | Argo Synced/Healthy, 외부 ingress 없음, Headlamp SA 무권한, port-forward와 단기 reader token으로 리소스·로그 조회 |
 | `STOR-01 DONE` | local-path 경로·`local` PV 타입·disk-pressure 검증 | `K3S-01` | `K3S-BOOTSTRAP` | 모든 PVC·`BKP-02` | 동적 PVC, capacity 미강제, 재부팅 후 데이터, SELinux 삭제 helper, 임계치 기준 |
-| `INGRESS-01 READY` | Traefik 단일 ingress·별도 DNS-01 인증서 | `GITOPS-01` | `PUBLIC-DNS` | 모든 HTTP 앱 | 80→443, 내부·외부 split DNS, OPNsense 개인키 미복사, source IP 판정 |
+| `INGRESS-01 DONE` | Traefik 단일 ingress·별도 DNS-01 인증서 | `GITOPS-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 모든 HTTP 앱 | 80→443, 내부·외부 split DNS, OPNsense 개인키 미복사, source IP 판정 |
 | `VAULT-01 DONE` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
 | `VAULT-02 READY` | KV v2·Kubernetes auth·DB engine·PKI·audit policy | `VAULT-01`, `PG-01` | 없음 | 모든 플랫폼 앱 | 앱별 policy 격리, 단기 DB credential 폐기, 인증서·감사 이벤트 검증 |
 | `KC-01 BLOCKED` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
-| `CORAZA-01 BLOCKED` | Traefik HTTP-WASM Coraza + CRS PoC | `INGRESS-01` | 없음 | 공개 HTTP | 정상 요청·대표 CRS 차단·예외 정책·성능 기준 검증 |
+| `CORAZA-01 READY` | Traefik HTTP-WASM Coraza + CRS PoC | `INGRESS-01` | 없음 | 공개 HTTP | 정상 요청·대표 CRS 차단·예외 정책·성능 기준 검증 |
 | `POM-01 BLOCKED` | Pomerium Core·선언형 Route·Routes Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음 | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
 | `HEADLAMP-02 BLOCKED` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
 | `NB-02 BLOCKED` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
@@ -226,6 +226,47 @@ Application은 GitHub private repository의 signed commit
 선행조건으로 재계산해 `HEADLAMP-01`, `INGRESS-01`, `VAULT-01`을 `READY`로 열었다.
 `BKP-02`는 `S3-01`이 아직 `DONE`이 아니므로 `BLOCKED`를 유지한다. 적용·fresh clone·
 rollback 경계는 [GITOPS-01 runbook](runbook/argocd-gitops-bootstrap.md)이 소유한다.
+
+2026-07-31 `INGRESS-01` staging preflight에서 Unbound가 공인 zone 전체를 Dnsmasq로
+forward해 내부 exact A override 밖의 공개 SOA·NS를 NODATA로 만드는 것을 확인했다.
+명시적으로 추가 승인한 `OPNSENSE-LIVE` 잠금 아래 해당 query-forward row만 비활성화하고
+Unbound를 재구성했다. 내부 canonical A 9개와 PTR 7개는 유지됐고, 내부 resolver의 공개
+SOA·NS가 Cloudflare authoritative 결과와 일치했으며 CoreDNS를 사용하는 임시 Pod에서도
+동일했다. PF·NAT·DHCP·공개 DNS는 바꾸지 않았고 임시 namespace를 제거한 뒤 OPNsense
+drift 없음까지 확인했다. 인증서·redirect·restart 검증이 남았으므로 `INGRESS-01`은
+`READY`를 유지한다.
+
+2026-07-31 같은 작업의 staging 재검증에서 packaged Traefik `3.7.4` 하나와 기존
+imageID를 유지하고 DNS-01 발급에 성공했다. Cloudflare API 쓰기 직후 Unbound가
+NXDOMAIN을 1800초 negative cache하던 경쟁은 두 resolver의 propagation 확인을 30초
+지연하고, 실패 재시도 전에 남은 정확한 challenge TXT cache만 한 번 flush해 해소했다.
+두 authoritative NS에서 TXT `0→1→0`, 정확한 SAN·staging chain·잘못된 hostname 실패,
+위조 XFF 비신뢰와 `ClientHost=10.10.60.2`, 인증서 발급 뒤 Pod 교체 시 fingerprint·HTTPS
+200·ACME 파일 불변을 확인했다. Argo revision 일치·Synced/Healthy, Git/live
+HelmChartConfig 일치, Traefik·ServiceLB 단일 인스턴스, 전체 Pod·Node·DiskPressure·용량·
+failed unit과 OPNsense drift도 정상이다. ingress 전용 token은 live Secret과 일치하고
+Git 이력·diff에 없지만, 최신 main의 NB-01 defaults에는 이 token과 다른 `cfat_` 형식
+credential이 추적된 별도 보안 차이가 있다. production 전에 해당 credential을
+Cloudflare에서 폐기·회전하고 소유 작업에서 Git 경계를 교정해야 한다. production DNS-01,
+system strict TLS와 80→443 redirect도 별도 승인 전이므로 `INGRESS-01 READY`,
+`CORAZA-01 BLOCKED`, `KC-01 BLOCKED`를 유지한다.
+
+2026-07-31 `INGRESS-01` production 승인 뒤 NB-01 defaults에 노출됐던 별도 Cloudflare
+token의 폐기를 사용자에게 확인받고 승격했다. staging ACME state가 같은 SAN을 전역
+TLS store에 제공해 production 요청을 막는 동작을 확인해 staging 파일 하나만 0바이트로
+정리했으며, production resolver를 명시한 폐기형 IngressRoute로 DNS-01을 발급했다. 두
+authoritative NS의 TXT `0→1→0`, Let's Encrypt `YR1` chain·정확한 SAN·유효기간,
+system strict TLS 성공과 잘못된 hostname 실패를 확인했다. HTTP는 path/query를 보존한
+HTTPS Location으로 permanent `301`을 반환했다. 정상·위조 XFF에서
+`ClientHost=10.10.60.2`와 backend 전달 경계가 같고 위조 값은 제거됐다. Pod 교체 뒤
+certificate fingerprint·strict HTTPS·redirect·ACME 파일이 유지됐고 TXT 재생성은 없었다.
+public A·AAAA·NAT는 만들지 않았으며 내부 A `10.10.20.10`과 외부 NXDOMAIN의 split DNS를
+재확인했다. k3s·OPNsense·Proxmox 인증서 public key는 모두 달랐고 ingress private key는
+PVC의 mode `0600` ACME 파일에만 있다. 최종 Argo revision 일치·Synced/Healthy,
+Git/live HCC 일치, 단일 Traefik·IngressClass·ServiceLB, 전체 Pod·Node·DiskPressure·용량·
+failed unit·OPNsense drift를 확인하고 임시 namespace·TXT·port-forward를 제거했다.
+`INGRESS-01`을 `DONE`, 직접 후속 `CORAZA-01`만 `READY`로 열며 `VAULT-02`가 남은
+`KC-01`은 `BLOCKED`를 유지한다.
 
 2026-07-31 `VAULT-01`에서 `hashicorp/vault:2.0.3`(Docker Hub 공식 organization, digest
 `sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54`, BUSL-1.1

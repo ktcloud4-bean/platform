@@ -2054,7 +2054,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785473515.30" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785489156.16" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2126,7 +2126,7 @@
       </forwarding>
       <dots>
         <dot uuid="cd4e949a-dda9-4e02-ae79-2a48c2091b5d">
-          <enabled>1</enabled>
+          <enabled>0</enabled>
           <type>forward</type>
           <domain>imcherry5778.xyz</domain>
           <server>127.0.0.1</server>
