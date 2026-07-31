@@ -277,8 +277,12 @@ versioning 중단·lifecycle 삭제·타 topic·타 namespace·평문 HTTP·잘�
 bucket·객체 version·identity·임시 파일은 모두 제거했으며 최종 `s3.json`은 disabled
 sentinel 하나뿐이다.
 
-남은 한계는 명시한다. SNS email 구독이 `PendingConfirmation`이라 메일 실제 수신은
-확인되지 않았고, 30일 보존 만료는 시간이 지나야 관측된다. `object-01`은 다른 작업자가
+merge 뒤 구독이 확인되어 경보 메일 수신까지 마저 검증했다. 실패를 다시 주입해 job이
+`ExecMainStatus=78`로 끝나고 `OnFailure=`가 경보 unit을 새 `InvocationID`로 실행했으며,
+SNS `NumberOfNotificationsDelivered`가 2·`NumberOfNotificationsFailed`가 0이었다. 임시
+drop-in은 제거했고 job은 다시 성공한다.
+
+남은 한계는 명시한다. 30일 보존 만료는 시간이 지나야 관측된다. `object-01`은 다른 작업자가
 함께 쓸 수 있어 재부팅은 수행하지 않았고 timer 자동 시작은 `enabled`와 `Persistent=true`
 선언으로만 확인했다. 현재 `offsite_source_buckets`는 비어 있어 사본 대상 데이터가 0이며,
 이 작업이 만든 것은 검증된 경로이지 백업 자산이 아니다. 그 상태에서도 timer는 매일
