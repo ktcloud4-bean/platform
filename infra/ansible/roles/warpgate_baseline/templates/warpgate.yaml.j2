@@ -1,0 +1,40 @@
+{{ ansible_managed | comment }}
+# WG-01: warpgate-01 Warpgate 설정. 이 파일은 Ansible role 이 소유한다.
+# 수동 편집은 다음 실행에서 덮어써진다.
+database_url: sqlite:{{ warpgate_data_dir }}/db
+external_host: {{ warpgate_external_host }}
+
+ssh:
+  enable: true
+  listen: '{{ warpgate_ssh_listen }}'
+  keys: {{ warpgate_data_dir }}/ssh-keys
+  host_key_verification: {{ warpgate_ssh_host_key_verification }}
+  inactivity_timeout: 5m
+
+http:
+  listen: '{{ warpgate_http_listen }}'
+  certificate: {{ warpgate_data_dir }}/tls.certificate.pem
+  key: {{ warpgate_data_dir }}/tls.key.pem
+  session_max_age: 30m
+  cookie_max_age: 1day
+  trust_x_forwarded_headers: false
+
+# 아직 필요하지 않은 프로토콜은 열지 않는다.
+mysql:
+  enable: false
+postgres:
+  enable: false
+kubernetes:
+  enable: false
+
+recordings:
+  enable: {{ warpgate_recordings_enable | bool | lower }}
+  path: {{ warpgate_data_dir }}/recordings
+
+log:
+  format: {{ warpgate_log_format }}
+  retention: {{ warpgate_log_retention }}
+  audit_retention: {{ warpgate_audit_retention }}
+
+# SSO 는 WG-02 (Keycloak 연동) 범위다. 여기서는 로컬 자격증명만 사용한다.
+sso_providers: []

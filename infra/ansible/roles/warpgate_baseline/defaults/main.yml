@@ -1,0 +1,93 @@
+---
+# infra/ansible/roles/warpgate_baseline/defaults/main.yml
+# WG-01 warpgate-01 기준선 기본값.
+#
+# 버전과 checksum 은 고정한다. `latest` 나 미검증 설치 스크립트, curl|sh 는 쓰지 않는다.
+# 선정 근거와 무결성 검증 절차는 docs/runbook/warpgate-privileged-access.md 가 소유한다.
+
+# 작업 시점의 최신 안정 릴리스. prerelease(v0.27.0-beta.*)는 채택하지 않는다.
+warpgate_version: "v0.26.1"
+warpgate_arch_suffix: "x86_64-linux"
+
+# GitHub Release asset 의 SHA-256. release API 의 asset digest 와 동일해야 한다.
+warpgate_binary_sha256: "a09e96f48ef0462ee7d7c2a770595211d63c3825b39a019ab3ba5e2b5f84bd54"
+# CycloneDX SBOM. 공급망 증거로 함께 고정한다.
+warpgate_sbom_sha256: "b2e371ac168362f9cc6e3d666f376d66bec0f6205866183d8665ead5a2f92de1"
+
+warpgate_release_base: "https://github.com/warp-tech/warpgate/releases/download/{{ warpgate_version }}"
+warpgate_binary_url: "{{ warpgate_release_base }}/warpgate-{{ warpgate_version }}-{{ warpgate_arch_suffix }}"
+warpgate_sbom_url: "{{ warpgate_release_base }}/warpgate-{{ warpgate_version }}-{{ warpgate_arch_suffix }}.cdx.xml"
+
+# 전용 서비스 계정. 로그인 셸을 주지 않는다.
+warpgate_user: "warpgate"
+warpgate_group: "warpgate"
+
+# 경로
+# 바이너리는 /usr/local/bin 에 둔다. Rocky 9 targeted policy 의 기본 file context 가
+# 이미 bin_t 이므로 semanage 로 별도 규칙을 추가하지 않아도 올바른 label 을 얻는다.
+# 데이터 디렉터리는 /var/lib 아래라 var_lib_t 를 상속한다.
+warpgate_binary_path: "/usr/local/bin/warpgate-{{ warpgate_version }}"
+warpgate_binary_link: "/usr/local/bin/warpgate"
+warpgate_sbom_path: "/usr/local/share/warpgate-{{ warpgate_version }}-{{ warpgate_arch_suffix }}.cdx.xml"
+warpgate_config_path: "/etc/warpgate.yaml"
+warpgate_data_dir: "/var/lib/warpgate"
+
+# listen endpoint
+# 단일 홈 VM 이라 [::] 는 사실상 eth0 + loopback 이다. VLAN 경계는 OPNsense 가 소유하며
+# 실제 최소화는 NET-04 범위다. 이 role 은 VLAN 정책을 만들지 않는다.
+warpgate_http_listen: "[::]:8888"
+warpgate_ssh_listen: "[::]:2222"
+
+# canonical 내부 이름. docs/ip-plan.md 가 단일 원본이다.
+warpgate_external_host: "warpgate-01.imcherry5778.xyz"
+
+# 세션 기록
+warpgate_recordings_enable: true
+
+# 로그·감사 보존기간. 보존기간으로 통제하고 용량으로 통제하지 않는다
+# (docs/capacity-plan.md 의 warpgate-01 구획 참조).
+warpgate_log_retention: "7days"
+warpgate_audit_retention: "90days"
+warpgate_log_format: "text"
+
+# 대상 host key 검증 정책. prompt 는 첫 접속에서 사용자에게 확인을 요구한다.
+# auto_accept 는 TOFU 이므로 기본값으로 쓰지 않는다.
+warpgate_ssh_host_key_verification: "prompt"
+
+# 로컬 break-glass 관리자 비밀번호. 저장소에 두지 않는다.
+# 저장소 밖 mode 0600 vars 파일 또는 --extra-vars 로만 주입한다.
+warpgate_admin_password: ""
+
+# 선언형 provisioning 목록. 기본은 비어 있고 저장소 밖 vars 파일로 주입한다.
+# 각 항목은 state: present|absent 를 가진다.
+#
+# warpgate_roles:
+#   - { name: "<role>", description: "", state: present }
+# warpgate_targets:
+#   - name: "<target>"
+#     description: ""
+#     ssh: { host: "127.0.0.1", port: 22, username: "<user>" }
+#     roles: ["<role>"]
+#     state: present
+# warpgate_users:
+#   - name: "<user>"
+#     description: ""
+#     password: "<저장소 밖에서 주입>"
+#     roles: ["<role>"]
+#     state: present
+# warpgate_known_hosts:
+#   - { host: "<대상>", port: 22, key_type: "ssh-ed25519", key_base64: "<인증 경로로 확인한 값>", state: present }
+warpgate_roles: []
+warpgate_targets: []
+warpgate_users: []
+warpgate_known_hosts: []
+
+# provisioning 을 수행할지 여부. false 면 설치·설정·서비스만 선언한다.
+warpgate_provision_enabled: >-
+  {{ (warpgate_roles | length + warpgate_targets | length
+      + warpgate_users | length + warpgate_known_hosts | length) > 0 }}
+
+# admin API 호출에 쓰는 loopback base URL.
+# setup 이 생성하는 인증서는 warpgate.local/localhost 자체서명이므로 loopback 한정으로만 쓴다.
+# 공인·내부 PKI 인증서 배치는 INGRESS-01 / VAULT-02 범위이며 이 role 이 소유하지 않는다.
+warpgate_api_base: "https://127.0.0.1:{{ warpgate_http_listen | regex_replace('^.*:', '') }}"

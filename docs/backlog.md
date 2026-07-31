@@ -105,7 +105,7 @@ VM-01 → NIDS-01 · K3S-01 · PG-01 · MINIO-01 · NB-01 · WG-01
 | `PG-01 DONE` | PostgreSQL VM·서비스별 DB/role·TLS | `VM-01` | 없음 | Keycloak·플랫폼 앱 | PostgreSQL 16.14(Rocky AppStream GPG 서명), verify-full TLS(canonical FQDN/pg_stat_ssl), sslmode=disable 차단 & pg_hba_file_rules 오류 0, 최소 service role(keycloak_user/verify_user) DB/schema 권한 격리, 타 VLAN probe 차단, 재부팅 후 데이터·TLS·role 유지, pg_dump/pg_restore 복구, chrony/QGA/capacity 정상, Ansible 멱등(changed=0) |
 | `MINIO-01 READY` | MinIO VM·버킷·버전관리·TLS | `VM-01` | 없음 | 모든 백업 | S3 API, 별도 service account, 재부팅, 테스트 object round-trip |
 | `NB-01 DONE` | NetBird 기본 self-host와 로컬 Owner 복구 계정 | `VM-01` | `PUBLIC-DNS · OPNSENSE-LIVE` | 원격 진입 | 외부 peer 연결, relay 경로, 로컬 Owner 로그인과 백업 가능 |
-| `WG-01 READY` | Warpgate 기본 배포와 로컬 복구 계정 | `VM-01` | 없음 | 특권 접근 | 세션 중계·기록, 대상 allowlist, 로컬 복구 로그인 검증 |
+| `WG-01 DONE` | Warpgate 기본 배포와 로컬 복구 계정 | `VM-01` | 없음 | 특권 접근 | Warpgate v0.26.1 고정·checksum·SBOM, 비-root + systemd hardening + SELinux label, 세션 중계와 기록 생성·제품 조회, 대상별 역할 허용/거부, 로컬 복구 로그인 성공·실패, 재부팅 후 유지, 격리 인스턴스 복원, Ansible 멱등(changed=0) |
 | `AWS-NET-01 READY` | OPNsense↔AWS Site-to-Site VPN | `NET-03` | `OPNSENSE-LIVE` | AWS 사설 연동 | 양방향 대상 대역만 통신, 인터넷 기본 경로 불변, 장애 시 롤백 |
 
 2026-07-31 `K3S-01`에서 k3s `v1.36.2+k3s1`을 정확한 binary checksum과
@@ -136,6 +136,26 @@ SELinux policy로 최종 PVC 삭제가 4초 안에 끝나 PV·helper·시험 경
 검증 자원은 0이고 Node·기본 구성요소·DiskPressure·failed unit·멱등성 기준도 모두
 통과했다. 직접 후속 `VAULT-01`은 `GITOPS-01`, `BKP-02`는 `GITOPS-01`과 `MINIO-01`이
 남아 있으므로 새로 `READY`로 열지 않는다.
+
+2026-07-31 `WG-01`에서 Warpgate를 `warpgate-01`에 Ansible로 선언 배포했다. 작업 시점의 최신
+안정 릴리스 `v0.26.1`을 고정하고 GitHub Release asset digest의 SHA-256을 강제했으며 같은
+릴리스의 CycloneDX SBOM도 검증해 보관했다. 참고값 `v0.23.4`는 `CVE-2026-63330`(세션 기록
+WebSocket 도청, `< 0.25.6`)을 포함한 자문의 영향 범위 안이라 채택하지 않았다.
+전용 비-root 서비스 계정, `ProtectSystem=strict`와 빈 `CapabilityBoundingSet`을 포함한 systemd
+hardening, `bin_t`/`var_lib_t` 올바른 SELinux label과 `0600`/`0700` 최소 권한으로 적용했고
+SELinux Enforcing을 유지했다. 라이브 검증에서 허용 role을 가진 사용자는 지정 대상에 접속해
+고유 marker 명령을 실행했고, 같은 대상에 미할당 사용자와 잘못된 자격증명은 거부됐다. 감사
+로그는 `UserAuthenticated1`·`UserAuthenticationFailed1`·`TargetSessionStarted1`/`Ended1`과
+`Target ... not authorized`를 구분해 남겼고, 세션 기록 파일이 최소 권한·올바른 context로
+생성돼 제품 API에서 조회됐다. `warpgate-01`만 재부팅해 boot ID 변경, failed unit 0, AVC 0,
+자동 시작, 기록 SHA-256 불변, 로컬 복구 로그인·역할 제한·기존 감사 유지를 재확인했다.
+SQLite 온라인 backup으로 일관 백업을 만들어 별도 data directory와 별도 port의 격리
+인스턴스에서 로컬 관리자와 기록 metadata 복원을 확인한 뒤 복원 인스턴스·임시 백업·임시
+계정·임시 Warpgate 객체를 모두 제거했다. Ansible은 syntax-check, check/diff, 적용, 2차 적용
+`changed=0`, 재부팅 후 check와 적용 `changed=0`을 모두 통과했다.
+**이 검증은 같은 VM의 loopback 대상에 한정되며 실제 운영 대상의 cross-VLAN 접근 증거가
+아니다.** OPNsense·방화벽·공개 DNS는 변경하지 않았고 `MINIO-01`이 없으므로 원격 백업도
+아니다. 직접 후속 `WG-02`는 `KC-01`이 남아 있어 `READY`로 열지 않는다.
 
 ## 4. k3s 제어면·인증
 

@@ -1,0 +1,9 @@
+---
+# infra/ansible/playbooks/warpgate-baseline.yml
+# WG-01 Warpgate 기준선 엔트리 플레이북
+
+- name: Apply Warpgate baseline configuration
+  hosts: warpgate_nodes
+  become: true
+  roles:
+    - warpgate_baseline

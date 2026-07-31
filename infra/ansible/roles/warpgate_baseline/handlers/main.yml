@@ -1,0 +1,12 @@
+---
+# infra/ansible/roles/warpgate_baseline/handlers/main.yml
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart warpgate
+  ansible.builtin.systemd:
+    name: warpgate.service
+    state: restarted
+    daemon_reload: true

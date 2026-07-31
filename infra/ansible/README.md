@@ -60,6 +60,39 @@ local PV·capacity·SELinux helper의 적용·검증·rollback은
 [`docs/runbook/k3s-local-path-storage.md`](../../docs/runbook/k3s-local-path-storage.md)가
 소유한다.
 
+## Warpgate 특권 세션 기준선
+
+`playbooks/warpgate-baseline.yml`과 `roles/warpgate_baseline/`은 `WG-01`의 Warpgate
+배포를 소유한다. 작업 시점의 최신 안정 릴리스를 정확히 고정하고 GitHub Release asset
+digest 의 SHA-256 을 `get_url`의 `checksum`으로 강제한다. 같은 릴리스의 CycloneDX SBOM 도
+checksum 검증 후 게스트에 보관한다. `floating latest`나 `curl | sh`는 쓰지 않는다.
+
+전용 system 계정 `warpgate`로 비-root 실행하고, 바이너리는 기본 file context 가 `bin_t`인
+`/usr/local/bin`에 두어 `semanage` 규칙 없이 올바른 SELinux label 을 얻는다. 데이터는
+`/var/lib/warpgate` `0700`, 설정은 `/etc/warpgate.yaml` `0600`이다. systemd unit 에는
+`ProtectSystem=strict`, 빈 `CapabilityBoundingSet`, `SystemCallFilter` 등을 적용한다.
+
+Warpgate 는 role·target·user 를 설정 파일이 아니라 제품 DB 에 둔다. `provision.yml`이
+loopback 관리 API 로 `warpgate_roles`·`warpgate_targets`·`warpgate_users`·
+`warpgate_known_hosts` 선언을 반영하며 각 항목은 `state: present|absent`를 가진다.
+기본값은 모두 빈 목록이고 실제 값과 비밀번호는 저장소 밖에서 주입한다.
+
+로컬 break-glass 관리자 비밀번호(`warpgate_admin_password`)는 저장소에 두지 않는다.
+기본값은 빈 문자열이며 role 이 12자 미만이면 적용을 거부한다.
+
+```bash
+cd infra/ansible
+export ANSIBLE_SSH_COMMON_ARGS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<저장소 밖 known_hosts> -o PasswordAuthentication=no"
+ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 secrets.yml>" playbooks/warpgate-baseline.yml --syntax-check
+ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 secrets.yml>" playbooks/warpgate-baseline.yml --check --diff
+# 명시적 승인 뒤에만 실제 적용
+ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 secrets.yml>" playbooks/warpgate-baseline.yml
+```
+
+버전 선정 근거, 라이브 검증, 재부팅, 백업·복원과 rollback 은
+[`docs/runbook/warpgate-privileged-access.md`](../../docs/runbook/warpgate-privileged-access.md)가
+소유한다.
+
 ## NTP source
 
 `NET-03`은 각 project VLAN에서 **해당 VLAN gateway의 UDP 123만** 허용한다. Rocky 기본 설정의 공개 pool은 차단되므로 그대로 두면 게스트가 영원히 동기화되지 않는다.
@@ -97,10 +130,16 @@ infra/ansible/
 │   └── hosts.example        # 비밀 없는 인벤토리 예시 (Git 추적)
 ├── playbooks/
 │   ├── baseline.yml         # 공통 baseline 엔트리 플레이북
-│   └── k3s-baseline.yml     # K3S-01 단일 server 엔트리 플레이북
+│   ├── k3s-baseline.yml     # K3S-01 단일 server 엔트리 플레이북
+│   ├── postgres-baseline.yml # PG-01 PostgreSQL 엔트리 플레이북
+│   ├── netbird-server.yml   # NB-01 NetBird 엔트리 플레이북
+│   └── warpgate-baseline.yml # WG-01 Warpgate 엔트리 플레이북
 └── roles/
     ├── common_baseline/     # 공통 baseline 검증 및 태스크
-    └── k3s_baseline/        # 고정 k3s·local-path·SELinux·systemd 선언
+    ├── k3s_baseline/        # 고정 k3s·local-path·SELinux·systemd 선언
+    ├── postgres_baseline/   # PostgreSQL 16·TLS·최소권한 role 선언
+    ├── netbird_server/      # NetBird control/relay compose 선언
+    └── warpgate_baseline/   # 고정 Warpgate·systemd hardening·role/target 선언
 ```
 
 ## 구문 검사 (Syntax Check)
