@@ -42,6 +42,10 @@ policies/      Kyverno · NetworkPolicy · 서명 검증 정책
 
 `gitops/`와 `policies/`는 해당 기반이 준비되는 백로그 작업에서 만든다. 빈 구조를 미리 만들지 않는다.
 
+`infra/`는 **대상별로 나누고 도구는 그 아래에 둔다**(`infra/<대상>/<도구>`). 같은 도구가 여러 대상에 쓰이기 때문이다. OpenTofu가 `infra/proxmox/tofu`와 `infra/aws/tofu` 양쪽에 있는 것이 그 예다. `infra/tofu/<대상>`처럼 도구를 먼저 두지 않는다.
+
+`infra/ansible`은 기록된 예외다. 대상이 게스트 VM 계층 하나뿐이라 도구 이름이 계층 이름을 겸해도 정보가 줄지 않는다. 게스트를 구성하는 수단이 둘 이상이 되면 `infra/guest/ansible`로 내린다. `infra/network`도 리소스가 아니라 VLAN 경로 검증 하네스이며, 실제 VLAN 리소스는 OPNsense가 소유한다.
+
 ## 계층별 Git의 역할
 
 | 계층 | 방식 | 드리프트 처리 |

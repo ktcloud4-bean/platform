@@ -2,15 +2,25 @@
 # 비밀이 포함되지 않은 예시 인벤토리 파일입니다.
 # 실제 실행 시에는 hosts.local 파일(gitignore 대상)을 생성하거나
 # -i 옵션으로 대상 host/IP를 전달하세요.
+#
+# 그룹 이름은 playbooks/ 의 hosts: 와 정확히 같아야 한다. 이름이 어긋나면
+# ansible-playbook 은 실패가 아니라 "skipping: no hosts matched" 로 조용히
+# 아무것도 하지 않는다. 여기의 그룹 목록은 playbook 전체를 덮어야 한다.
 
 [rocky_baseline]
 # example_target ansible_host=10.10.10.199 ansible_user=rocky
+
+[k3s_servers]
+# k3s-01 ansible_host=<docs/ip-plan.md의 k3s-01 주소> ansible_user=rocky
 
 [postgres_nodes]
 # postgres-01 ansible_host=10.10.50.10 ansible_user=rocky
 
 [warpgate_nodes]
 # warpgate-01 ansible_host=10.10.30.10 ansible_user=rocky
+
+[netbird_server]
+# netbird-01 ansible_host=<docs/ip-plan.md의 netbird-01 주소> ansible_user=rocky
 
 [object_nodes]
 # object-01 ansible_host=<docs/ip-plan.md의 object-01 주소> ansible_user=rocky
