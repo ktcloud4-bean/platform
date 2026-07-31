@@ -1,0 +1,45 @@
+#!/bin/bash
+# 오프사이트 백업 실패 경보를 SNS로 발행한다.
+# offsite-backup.service 의 OnFailure= 로만 호출된다.
+#
+# journal 대신 마지막 실행 로그의 끝부분을 담는다. 경보를 보내려고 이 계정에
+# 전체 journal 읽기 권한을 주지 않기 위해서다.
+
+set -euo pipefail
+umask 077
+
+STATE_DIR={{ offsite_state_dir }}
+RUN_LOG="${STATE_DIR}/last-run.log"
+SIGV4={{ offsite_bin_dir }}/aws-sigv4-post.py
+
+if [ -z "${OFFSITE_ALERT_TOPIC_ARN:-}" ] || [ -z "${OFFSITE_AWS_REGION:-}" ]; then
+    echo "경보 topic 또는 region이 설정되지 않아 경보를 보낼 수 없다" >&2
+    exit 78
+fi
+
+HOST_FQDN=$(hostname -f)
+FAILED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+if [ -r "${RUN_LOG}" ]; then
+    LOG_TAIL=$(tail -n 15 "${RUN_LOG}")
+else
+    LOG_TAIL="(마지막 실행 로그가 없다. job이 시작조차 못했을 수 있다.)"
+fi
+
+MESSAGE=$(
+    printf '오프사이트 백업이 실패했다.\n\n'
+    printf 'host: %s\n' "${HOST_FQDN}"
+    printf 'unit: offsite-backup.service\n'
+    printf '시각(UTC): %s\n' "${FAILED_AT}"
+    printf 'AWS bucket: %s\n' "${OFFSITE_AWS_BUCKET:-(미설정)}"
+    printf '\n마지막 실행 로그 끝부분:\n%s\n' "${LOG_TAIL}"
+    printf '\n확인: journalctl -u offsite-backup.service -n 100\n'
+)
+
+# SNS Subject는 ASCII만 허용하고 100자 미만이어야 한다. 본문만 한국어로 쓴다.
+exec "${SIGV4}" sns "${OFFSITE_AWS_REGION}" \
+    Action=Publish \
+    Version=2010-03-31 \
+    "TopicArn=${OFFSITE_ALERT_TOPIC_ARN}" \
+    "Subject=[BKP-04] offsite backup FAILED on ${HOST_FQDN}" \
+    "Message=${MESSAGE}"

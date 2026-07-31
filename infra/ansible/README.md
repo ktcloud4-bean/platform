@@ -125,6 +125,42 @@ ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 s3-identities.
 고정 입력, TLS·DNS·방화벽 경계, S3 호환성 시험, 재부팅·정리와 rollback은
 [`docs/runbook/seaweedfs-s3.md`](../../docs/runbook/seaweedfs-s3.md)가 소유한다.
 
+## SeaweedFS 오프사이트 사본
+
+`playbooks/seaweedfs-offsite-backup.yml`과 `roles/seaweedfs_offsite_backup/`은 `BKP-04`의
+AWS S3 오프사이트 경로를 소유한다. 전송은 같은 host에서 밖으로 미는 방식이라 8333용
+신규 방화벽 규칙 없이 outbound 443만 쓴다. 착지점 자원은 `infra/aws/tofu`가 소유하고
+이 role은 그 output을 입력으로 받는다.
+
+rclone 1.74.4 `linux-amd64.zip`과 MIT license 원문 모두 SHA-256을 강제한다. 전송은
+`rclone copy` 전용이며 `sync`나 `--delete-*`를 쓰지 않는다. 규칙만으로 두지 않고 AWS IAM
+policy에 삭제 action을 넣지 않아 권한으로도 막고, `offsite_allow_delete`가 참이면 role이
+적용을 거부한다.
+
+비밀은 `/etc/offsite-backup/offsite.env` mode `0600` 한 곳에만 둔다. rclone remote도
+설정 파일이 아니라 이 파일의 `RCLONE_CONFIG_*` 환경변수로 정의해 사본을 늘리지 않는다.
+스크립트는 어떤 파일도 셸로 `source` 하지 않고, systemd가 `EnvironmentFile`로만 읽는다.
+SNS·CloudWatch 두 호출 때문에 AWS CLI나 boto3를 설치하지 않고 표준 라이브러리만 쓰는
+SigV4 서명기를 둔다.
+
+`offsite_source_buckets`가 비어 있어도 timer는 매일 돌며 heartbeat object를 써서 AWS
+자격증명·네트워크·쓰기 권한을 실제로 사용한다. 첫 실제 백업 날에야 권한 만료나 경로
+단절을 발견하는 것을 막는 canary다. 백업 생산자가 생기면 bucket 이름과 그 bucket에
+`Read`·`List`만 가진 SeaweedFS identity를 **함께** 넣는다.
+
+```bash
+cd infra/ansible
+export ANSIBLE_SSH_COMMON_ARGS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<저장소 밖 인증된 known_hosts> -o PasswordAuthentication=no"
+ansible-playbook -i <저장소 밖 inventory> playbooks/seaweedfs-offsite-backup.yml --syntax-check
+ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 offsite-vars.yml>" playbooks/seaweedfs-offsite-backup.yml --check --diff
+# 명시적 승인 뒤에만 실제 적용
+ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 offsite-vars.yml>" playbooks/seaweedfs-offsite-backup.yml
+```
+
+전송 계약, 최소권한 음성 시험, 복원 대조와 실패 경보 증거는
+[`docs/runbook/seaweedfs-s3-offsite-backup.md`](../../docs/runbook/seaweedfs-s3-offsite-backup.md)가
+소유한다.
+
 ## NTP source
 
 `NET-03`은 각 project VLAN에서 **해당 VLAN gateway의 UDP 123만** 허용한다. Rocky 기본 설정의 공개 pool은 차단되므로 그대로 두면 게스트가 영원히 동기화되지 않는다.

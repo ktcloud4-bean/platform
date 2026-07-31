@@ -1,0 +1,27 @@
+# 저장소 루트 .gitignore 가 이미 *.tfstate 와 .terraform/ 을 제외한다.
+# 여기서는 이 디렉터리에서만 생기는 파일을 추가로 막는다.
+#
+# 이 root의 state에는 IAM access key secret이 들어간다.
+# 실수로라도 커밋되지 않게 여러 겹으로 막고, 사본은 저장소 밖 mode 0600으로만 둔다.
+
+# plan 파일은 바이너리이며 변수값·리소스 속성이 그대로 들어간다.
+*.tfplan
+*.tfplan.*
+plan.out
+plan.txt
+
+# 실제 변수값. 계정 ID와 경보 이메일이 들어간다. 예제만 커밋한다.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# state 백업과 크래시 로그
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# 회수한 자격증명이 실수로 이 디렉터리에 떨어지는 경우
+*.env
+credentials
+*.secret

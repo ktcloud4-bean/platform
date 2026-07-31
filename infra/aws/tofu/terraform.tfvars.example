@@ -1,0 +1,19 @@
+# 실제 값은 이 파일이 아니라 저장소 밖 파일에 두고 -var-file 로 넘긴다.
+# 계정 ID와 경보 이메일은 커밋하지 않는다.
+
+# 적용 대상 AWS 계정 ID (12자리). provider guard와 bucket 이름에 함께 쓰인다.
+aws_account_id = "000000000000"
+
+# 오프사이트 사본을 두는 region.
+aws_region = "ap-northeast-2"
+
+# 백업 실패 경보를 받을 이메일. 적용 후 확인 메일의 링크를 눌러야 활성화된다.
+# 빈 문자열이면 구독을 선언하지 않는다.
+alert_email = "alerts@example.invalid"
+
+# 오프사이트 job이 실제로 도는 동안에만 연다.
+# 닫혀 있으면 heartbeat alarm을 0개 선언한다.
+enable_heartbeat_alarm = false
+
+# 이전 version 보존 일수. 실수·손상에서 되돌릴 수 있는 창이다.
+noncurrent_version_retention_days = 30

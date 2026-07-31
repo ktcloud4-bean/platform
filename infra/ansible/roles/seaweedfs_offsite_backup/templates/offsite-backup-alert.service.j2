@@ -1,0 +1,38 @@
+[Unit]
+Description=오프사이트 백업 실패 경보 발행
+Documentation=https://docs.aws.amazon.com/sns/latest/api/API_Publish.html
+
+[Service]
+Type=oneshot
+User={{ offsite_user }}
+Group={{ offsite_group }}
+UMask=0077
+Environment=HOME={{ offsite_state_dir }}
+EnvironmentFile={{ offsite_config_dir }}/offsite.env
+ExecStart={{ offsite_bin_dir }}/offsite-backup-alert.sh
+TimeoutStartSec=120
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+ReadOnlyPaths={{ offsite_config_dir }} {{ offsite_state_dir }}
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=

@@ -1,0 +1,58 @@
+---
+
+# 전송 도구는 정확히 고정한다. digest는 공식 SHA256SUMS에서 확인하며 그 파일은
+# rclone 유지자 키로 PGP 서명되어 있다. mutable `latest`나 배포판 패키지를 쓰지 않는다.
+offsite_rclone_version: "1.74.4"
+offsite_rclone_archive: "rclone-v{{ offsite_rclone_version }}-linux-amd64.zip"
+offsite_rclone_url: "https://github.com/rclone/rclone/releases/download/v{{ offsite_rclone_version }}/{{ offsite_rclone_archive }}"
+offsite_rclone_sha256: "fe435e0c36228e7c2f116a8701f01127bb1f694005fc11d1f27186c8bca4115d"
+offsite_rclone_license: "MIT"
+offsite_rclone_license_url: "https://raw.githubusercontent.com/rclone/rclone/v{{ offsite_rclone_version }}/COPYING"
+offsite_rclone_license_sha256: "8cd2e9e750b90a04b7d82dbbca3930c696ae0309d7c10464f90a44f45754cd04"
+
+offsite_user: "offsite-backup"
+offsite_group: "offsite-backup"
+offsite_config_dir: "/etc/offsite-backup"
+offsite_bin_dir: "/usr/local/bin"
+offsite_rclone_path: "/usr/local/bin/rclone"
+offsite_state_dir: "/var/lib/offsite-backup"
+offsite_cache_dir: "/var/cache/offsite-backup"
+
+# --- AWS 착지점. 값은 infra/aws/tofu 의 output에서 온다. ---
+offsite_aws_region: "ap-northeast-2"
+offsite_aws_bucket: ""
+offsite_copy_prefix: "seaweedfs"
+offsite_heartbeat_prefix: "_heartbeat"
+offsite_heartbeat_namespace: "KtCloud4Bean/OffsiteBackup"
+offsite_heartbeat_metric: "BackupSuccess"
+offsite_alert_topic_arn: ""
+
+# 전송 전용 IAM user의 access key. 저장소 밖 extra-vars로만 주입한다.
+offsite_aws_access_key_id: ""
+offsite_aws_secret_access_key: ""
+
+# --- 로컬 SeaweedFS S3 원본 ---
+offsite_local_endpoint: "https://s3.imcherry5778.xyz:8333"
+# SeaweedFS role이 소유하는 leaf 인증서를 그대로 참조한다. 사본을 만들지 않아야
+# 갱신 뒤에도 경로가 어긋나지 않는다. 읽기는 seaweedfs 그룹 멤버십으로만 얻는다.
+offsite_local_ca_path: "/etc/seaweedfs/tls/s3.crt"
+offsite_system_ca_path: "/etc/pki/tls/certs/ca-bundle.crt"
+offsite_local_access_key_id: ""
+offsite_local_secret_access_key: ""
+
+# 오프사이트로 옮길 로컬 bucket 목록.
+# 비어 있으면 사본 단계만 건너뛴다. timer는 계속 돌며 heartbeat로 경로 건강을 확인한다.
+# 백업 생산자(BKP-01·BKP-02·BKP-03)가 bucket을 만들면 여기에 더하고, 같은 bucket에
+# Read·List만 가진 SeaweedFS identity를 함께 주입한다.
+offsite_source_buckets: []
+
+# 원본을 지우는 동기화는 하지 않는다. 이 값을 true로 바꿀 수 없게 assert로 막는다.
+offsite_allow_delete: false
+
+offsite_timer_oncalendar: "*-*-* 03:20:00"
+offsite_timer_randomized_delay_sec: 600
+offsite_job_timeout_sec: 3600
+
+offsite_rclone_transfers: 4
+offsite_rclone_checkers: 8
+offsite_rclone_retries: 3

@@ -1,0 +1,47 @@
+[Unit]
+Description=SeaweedFS 로컬 S3의 AWS S3 오프사이트 사본 생성
+Documentation=https://rclone.org/s3/
+After=network-online.target
+Wants=network-online.target
+# 실패하면 SNS로 알린다. host나 timer가 죽어 "실행조차 되지 않는" 실패는
+# 이 경로로 잡히지 않으므로 CloudWatch heartbeat alarm이 따로 맡는다.
+OnFailure=offsite-backup-alert.service
+
+[Service]
+Type=oneshot
+User={{ offsite_user }}
+Group={{ offsite_group }}
+UMask=0077
+Environment=HOME={{ offsite_state_dir }}
+Environment=XDG_CACHE_HOME={{ offsite_cache_dir }}
+EnvironmentFile={{ offsite_config_dir }}/offsite.env
+ExecStart={{ offsite_bin_dir }}/offsite-backup.sh
+TimeoutStartSec={{ offsite_job_timeout_sec }}
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+ReadOnlyPaths={{ offsite_config_dir }}
+ReadWritePaths={{ offsite_state_dir }} {{ offsite_cache_dir }}
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+# IPAddressAllow로 좁히지 않는다. AWS S3·SNS·CloudWatch endpoint의 주소 대역은
+# 고정되어 있지 않아 목록이 곧 낡고, 낡은 목록은 조용한 백업 중단이 된다.
