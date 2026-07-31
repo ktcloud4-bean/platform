@@ -109,7 +109,7 @@ VM-01 + S3-DESIGN-01 → S3-01
 | `MINIO-01 DEFERRED` | 배포 시작 전 upstream 유지 중단으로 폐기한 MinIO 구현 계획; `S3-01`이 대체 | `VM-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0010](adr/0010-seaweedfs-local-s3.md)의 재검토 조건이 생기면 새 결정으로만 검토 |
 | `NB-01 DONE` | NetBird 기본 self-host와 로컬 Owner 복구 계정 | `VM-01` | `PUBLIC-DNS · OPNSENSE-LIVE` | 원격 진입 | 외부 peer 연결, relay 경로, 로컬 Owner 로그인과 백업 가능 |
 | `WG-01 DONE` | Warpgate 기본 배포와 로컬 복구 계정 | `VM-01` | 없음 | 특권 접근 | Warpgate v0.26.1 고정·checksum·SBOM, 비-root + systemd hardening + SELinux label, 세션 중계와 기록 생성·제품 조회, 대상별 역할 허용/거부, 로컬 복구 로그인 성공·실패, 재부팅 후 유지, 격리 인스턴스 복원, Ansible 멱등(changed=0) |
-| `AWS-NET-01 READY` | OPNsense↔AWS Site-to-Site VPN | `NET-03` | `OPNSENSE-LIVE` | AWS 사설 연동 | 양방향 대상 대역만 통신, 인터넷 기본 경로 불변, 장애 시 롤백 |
+| `AWS-NET-01 DONE` | OPNsense↔AWS Site-to-Site VPN | `NET-03` | `OPNSENSE-LIVE` | AWS 사설 연동 | 양쪽 관점 일치한 IKEv2 SA, 실제 VM의 payload 정방향과 selector 밖 대조 차단, 역방향 허용·차단 양쪽 실증, 기본 경로 불변, 재부팅 후 자동 복구, 장애 격리·복구, 임시 자원 제거·plan 무변경·PSK 미커밋 |
 
 2026-07-31 `K3S-01`에서 k3s `v1.36.2+k3s1`을 정확한 binary checksum과
 고정 release commit의 install script로 선언하고 SELinux Enforcing을 유지했다.
@@ -195,6 +195,37 @@ version, multipart, identity, credential, client 파일까지 API로 정리했�
 [SeaweedFS S3 runbook](runbook/seaweedfs-s3.md)이 소유한다. 최신 선행조건을 다시 계산해
 `BKP-01`, `BKP-02`, `BKP-04`만 `READY`로 열었고 `VAULT-02`가 남은 `BKP-03`은 `BLOCKED`를
 유지한다.
+
+2026-07-31 `AWS-NET-01`에서 OPNsense와 AWS를 policy-based Site-to-Site VPN으로 연결했다.
+AWS 착지점은 `infra/aws/tofu-network` 별도 state root가 소유하며 오프사이트 백업 root와
+state를 공유하지 않는다. 10개 리소스를 적용했고 최종 재-plan은 무변경이다. VPC에는 인터넷
+gateway를 두지 않아 유일한 외부 경로가 VPN이며, BGP 대신 static routing을 써서 터널이
+기본 경로를 바꿀 수 없다. OPNsense 26.7의 swanctl Connections로 IKEv2·`aes256-sha256-modp2048`
+단일 연결을 만들고 traffic selector를 DATA VLAN ↔ VPC 대역으로 좁혔다.
+
+라이브 검증에서 OPNsense `swanctl`의 IKE `ESTABLISHED`·Child `INSTALLED`와 AWS telemetry의
+터널 `UP`·`AcceptedRouteCount` 1이 일치했다. 실제 VM `object-01`에서 ICMP 3/3(약 6.9ms)과
+HTTP marker payload를 받아 정방향을 payload로 판정했고, SA 카운터가 양방향으로 증가해
+트래픽이 실제 터널을 지난 것을 확인했다. selector 밖인 PLATFORM·ACCESS 출발지는 같은
+목적지로 모두 실패했으며 모든 BLOCK에 같은 시점 `object-01` 성공을 대조로 두었다.
+역방향은 임시 허용 규칙이 있을 때 연결과 payload가 온프레미스 listener에 도착했고, 규칙을
+제거한 뒤 재시도 3회분 동안 0건이었다. 기본 경로는 계속 WAN이고 커널 라우팅 테이블에 VPC
+대역 항목이 생기지 않았다. OPNsense 재부팅 34초 뒤 SA가 자동 재확립됐고 방화벽 규칙과
+`enc0` 인바운드 부재까지 재부팅 전과 같았다. IPsec 서비스를 내리자 AWS 경로만 끊기고
+DNS·인터넷 HTTPS·관리 SSH는 영향이 없었으며 다시 올리자 복구됐다.
+
+검증 인스턴스와 보안 그룹 5개, 온프레미스 임시 listener를 모두 제거했다. 스냅샷 갱신 뒤
+실제 PSK 문자열로 검색해 평문이 남지 않은 것을 확인했고 drift는 없다. `normalize.py`에
+PSK 마스킹 회귀 테스트를 추가했다.
+
+남은 한계는 명시한다. 터널 2는 AWS 쪽에만 있어 AWS가 터널 1을 유지보수하면 단절될 수 있고,
+WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요하다. DATA VLAN 허용 규칙은
+프로토콜·포트를 좁히지 않은 임시 규칙이며 `NET-04`가 다시 판정한다. 이 작업이 만든 것은
+검증된 경로이지 그 위에 올릴 서비스가 아니다. VPN Connection은 존재하는 시간에 비례해
+과금되므로 유지 여부는 필요에 따라 gate 변수로 결정한다. 상세는
+[AWS VPN runbook](runbook/aws-site-to-site-vpn.md)과 [ADR-0011](adr/0011-aws-site-to-site-vpn-boundary.md)이
+소유한다. 백로그에서 `AWS-NET-01`을 선행으로 갖는 작업이 없으므로 새로 `READY`로 여는
+후속은 없다. `AWS-ID-01`은 `KC-01`이, `KMS-01`은 `BKP-05`가 남아 있고 VPN은 그 선행이 아니다.
 
 ## 4. k3s 제어면·인증
 

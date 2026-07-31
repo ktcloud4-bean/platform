@@ -28,7 +28,8 @@ SECRET_TAGS = {
     "apikey",
     "secret",
     "pre-shared-key",
-    "presharedkey",
+    "presharedkey",     # IPsec PSK 항목. 하위 <Key> 까지 통째로 제거된다
+    "psk",
     "sharedkey",
     "tunnelpassword",
     "passwd",

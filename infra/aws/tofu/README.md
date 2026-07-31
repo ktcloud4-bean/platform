@@ -16,6 +16,11 @@ bucket과 그 보호 설정, 전송 전용 IAM identity, 경보 채널을 선언
 다르고, 한쪽 `destroy`가 다른 쪽을 사정권에 넣으면 안 된다. 계정 안의 다른 자원
 (기존 CloudTrail bucket 등)은 `resource`로 선언하지도 `import`하지도 않는다.
 
+같은 이유로 `AWS-NET-01`이 만든 사설 착지점(`infra/aws/tofu-network`)과도 state를
+공유하지 않는다. 이 bucket은 지워지면 안 되는 자산이고 그쪽 VPN은 비용 때문에 언제든
+내릴 수 있어야 한다. 오프사이트 전송은 계속 공인 AWS API endpoint로 나가며 그 VPN을
+경유하지 않는다.
+
 ## 실행
 
 실제 변수값은 저장소 밖 파일에 둔다. 계정 ID와 경보 이메일은 커밋하지 않는다.

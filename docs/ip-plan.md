@@ -112,6 +112,31 @@ RFC1918 차단 alias는 `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`을 포�
 
 project VLAN에는 routed IPv6 prefix·RA·IPv6 gateway가 없어 IPv6 broad allow를 만들지 않았다. DHCP도 활성화하지 않았고 automatic outbound NAT를 유지했다. 이 경계는 모든 신규 서비스를 위한 최종 allowlist가 아니며, `NET-04`에서 실제 서비스 통신표와 `vlan-verify hardened` 결과로 최소화한다.
 
+## AWS 사설 착지점
+
+2026-07-31 `AWS-NET-01`에서 OPNsense와 AWS를 policy-based Site-to-Site VPN으로 연결했다.
+토폴로지 결정은 [ADR-0011](adr/0011-aws-site-to-site-vpn-boundary.md), 절차와 증거는
+[AWS VPN runbook](runbook/aws-site-to-site-vpn.md)이 소유한다.
+
+| 대역 | 대상 | 상태 |
+|---|---|---|
+| `10.20.0.0/16` | AWS 사설 착지점 VPC | `LIVE`; 인터넷 gateway 없음 |
+| `10.20.1.0/24` | 사설 서브넷 (단일 AZ) | `LIVE` |
+
+랩 대역 `10.10.0.0/16`, 계정 default VPC `172.31.0.0/16`과 겹치지 않는다. 터널의 IPsec
+traffic selector는 `10.10.50.0/24 ↔ 10.20.0.0/16`이며, 이 selector 밖 출발지는 암호화
+계층에서 이미 통신할 수 없다. AWS 쪽 터널 endpoint 주소는 재생성 때마다 바뀌므로 이
+문서에 고정값으로 적지 않고 OpenTofu output에서 읽는다.
+
+방화벽에서는 DATA VLAN의 `NET03_PRIVATE_V4` 차단 규칙보다 앞선 순서(seq 1315)에
+`AWSNET01_VPC_V4` alias 목적지 허용 규칙을 두었다. 이 규칙은 프로토콜·포트를 좁히지 않은
+임시 규칙이며 `NET-04`가 실제 통신표로 다시 판정한다.
+
+역방향(AWS에서 온프레미스로 신규 연결)은 허용하지 않는다. OPNsense는 IPsec 터널에
+`pass out on enc0 ... keep state`만 두므로 온프레미스가 개시한 흐름과 그 응답만 지난다.
+
+오프사이트 백업 전송은 이 VPN을 쓰지 않고 계속 공인 AWS API endpoint로 나간다.
+
 ## 목표 방화벽 정책
 
 기본값은 VLAN 간 차단이다. 아래 허용은 서비스가 실제로 요구하는 목적지와 포트로 구현한다.

@@ -1,0 +1,30 @@
+# 저장소 루트 .gitignore 가 이미 *.tfstate 와 .terraform/ 을 제외한다.
+# 여기서는 이 디렉터리에서만 생기는 파일을 추가로 막는다.
+#
+# 이 root의 state에는 IPsec tunnel pre-shared key가 평문으로 들어간다.
+# AWS가 생성한 PSK는 state와 API 응답에만 존재하므로, 실수로라도 커밋되지 않게
+# 여러 겹으로 막고 사본은 저장소 밖 mode 0600으로만 둔다.
+
+# plan 파일은 바이너리이며 변수값·리소스 속성이 그대로 들어간다.
+# tunnel PSK도 여기에 포함된다.
+*.tfplan
+*.tfplan.*
+plan.out
+plan.txt
+
+# 실제 변수값. 계정 ID와 WAN 공인 IP가 들어간다. 예제만 커밋한다.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# state 백업과 크래시 로그
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# 회수한 PSK나 OPNsense 설정 초안이 이 디렉터리에 떨어지는 경우
+*.env
+credentials
+*.secret
+*.psk

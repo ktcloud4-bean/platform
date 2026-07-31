@@ -1,0 +1,28 @@
+# 실제 값은 저장소 밖 파일에 두고 -var-file 로 넘긴다.
+# 계정 ID와 WAN 공인 IP를 커밋하지 않는다.
+
+# 적용 대상 계정. provider guard가 이 값과 다른 계정의 적용을 막는다.
+aws_account_id = "000000000000"
+
+# OPNsense WAN(igc1)의 현재 공인 IPv4.
+# ISP DHCP 임대이므로 값이 바뀌면 Customer Gateway를 교체해야 터널이 복구된다.
+customer_gateway_ip = "203.0.113.10"
+
+# 아래는 기본값이 있다. 바꾸려면 주석을 푼다.
+
+# 온프레미스 대역. 좁힐수록 IPsec traffic selector와 security group이 함께 좁아진다.
+# 기본값은 DATA VLAN 하나다.
+# onprem_cidr = "10.10.50.0/24"
+
+# AWS 쪽 대역. 온프레미스 랩 대역·default VPC 대역과 겹치면 안 된다.
+# vpc_cidr            = "10.20.0.0/16"
+# private_subnet_cidr = "10.20.1.0/24"
+
+# 비용 gate. 닫으면 과금 자원이 0이 되고 VPC·서브넷·VGW만 남는다.
+# create_vpn_connection = true
+
+# 검증 gate. 양방향 증거를 만들 때만 열고, 증거 확보 후 닫아 제거한다.
+# create_verify_instance = false
+
+# 검증 인스턴스가 AWS→온프레미스 방향 증명을 위해 접속할 대상. onprem_cidr 안이어야 한다.
+# verify_onprem_probe_target = "10.10.50.20:9".

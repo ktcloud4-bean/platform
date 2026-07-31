@@ -37,6 +37,7 @@ check-drift.sh --update로 스냅샷 승인
 | DHCP | Dnsmasq; 현재 동적·정적 hostname record 없음 |
 | ACME | Cloudflare DNS-01 wildcard, 자동갱신 cron |
 | NAT | automatic outbound NAT |
+| IPsec | `AWS-NET-01` swanctl Connections 1개(IKEv2, policy-based, static). PSK는 스냅샷에서 제거된다 |
 | IDS | Suricata DMZ (`vlan04`) 및 PLATFORM (`vlan02`) PCAP alert-only 활성화 (`NIDS-01`); `opnsense.test.rules`, `emerging-scan.rules` 및 custom rules 적용 |
 
 2026-07-31 `NET-02R`에서 저장 설정과 재부팅 후 런타임을 대조해 VLAN 10~50 gateway·직접 연결 route, 부모 `igc2` 무주소, tagged 성공·untagged 차단, SSH·strict TLS·DNS·PF·Dnsmasq를 확인했다. 이어 `NET-03`에서 VLAN 20~50 bootstrap 방화벽을 적용하고 실제 VLAN client와 OPNsense 재부팅 후까지 검증했다. 일반 drift 검사가 성공하는 것은 라이브 저장 설정과 마스킹 스냅샷이 같다는 뜻일 뿐이므로, 목표 적합성과 런타임 검증은 계속 별도로 수행한다.
