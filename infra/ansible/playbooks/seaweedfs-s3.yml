@@ -1,0 +1,8 @@
+---
+# S3-01: 기존 DATA VM에 SeaweedFS 네 구성요소와 TLS S3 endpoint를 선언한다.
+
+- name: SeaweedFS 로컬 S3 기준선 적용
+  hosts: object_nodes
+  become: true
+  roles:
+    - seaweedfs_s3

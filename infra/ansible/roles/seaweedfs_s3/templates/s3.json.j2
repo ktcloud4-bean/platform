@@ -1,0 +1,2 @@
+{% set deny_all_identity = [{'name': 'deny-all-bootstrap', 'disabled': true}] %}
+{{ {'identities': (seaweedfs_s3_identities if seaweedfs_s3_identities | length > 0 else deny_all_identity)} | to_nice_json }}

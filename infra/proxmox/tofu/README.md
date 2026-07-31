@@ -115,9 +115,10 @@ pveum role delete OpenTofuVM
 
 ### `S3-01` 제자리 이름 전환 계약
 
-현재 state 주소는 `module.service_vm["minio-01"]`이고 라이브 VMID는 151이다.
-[ADR-0010](../../../docs/adr/0010-seaweedfs-local-s3.md)의 목표 이름 `object-01`로
-바꿀 때 새 VM을 만들거나 기존 VM·디스크를 교체하지 않는다.
+전환 전 state 주소는 `module.service_vm["minio-01"]`였고, `S3-01` 완료 뒤 현재
+주소는 `module.service_vm["object-01"]`이다. 라이브 VMID는 계속 151이며
+[ADR-0010](../../../docs/adr/0010-seaweedfs-local-s3.md)의 `moved` 선언으로 새 VM을
+만들거나 기존 VM·디스크를 교체하지 않았다.
 
 `S3-01` 작업자는 `TOFU-STATE`와 `PVE-LIVE`를 함께 소유하고 변경 직전 state를
 저장소 밖 mode `0600`으로 복사해 SHA-256을 기록한다. `locals.tf`의 카탈로그 키 변경과
@@ -126,9 +127,20 @@ plan에서 create, destroy, replace가 하나라도 나오거나 VMID·디스크
 apply하지 않고 구성과 state 복구 사본으로 돌아간다. `tofu state rm`이나 수동 import로
 정상 state를 우회하지 않는다.
 
-적용 후에는 state 주소, Proxmox VMID·디스크, 게스트 주소·hostname을 대조하고 재부팅
-후에도 같음을 확인한다. 그 증거가 확보된 뒤에만 `ip-plan.md`의 현재 canonical 이름과
-Unbound host override를 전환한다.
+2026-07-31 적용 전 state는 저장소 밖
+`/home/imcherry/.local/state-backups/s3-01-20260731-7OsvqE/terraform.tfstate.pre-change`에
+mode `0600`으로 보관했고 SHA-256은
+`84abde409604682de797c68163f97770e6ffbecff2bf8c4fe4de6aafe4f38a51`이다. 적용은
+`0 add, 1 change, 0 destroy`(VM name·description만 변경)였고, 최신 refresh plan은
+다섯 VM 모두 `no-op`이다. VMID 151, MAC `BC:24:11:3C:CD:77`, VLAN 50, 주소
+`10.10.50.20`, boot disk `local-lvm:vm-151-disk-0` 200 GiB는 적용 전후 불변이다.
+
+복구가 필요하면 state 원문을 편집하거나 `state rm`·정상 state import를 쓰지 않는다.
+위 사본을 별도 안전 위치에서 backend에 복원한 뒤, `moved` 선언을 유지한 refresh plan이
+create/destroy/replace 0인지 먼저 확인한다. 그 뒤에만 이 전환이 만든 VM 이름·DNS·S3
+리소스를 정확한 대상으로 되돌린다. 적용 후 state 주소, Proxmox VMID·disk, 게스트
+주소·hostname을 대조하고 재부팅 후에도 같음을 확인했으며, 그 증거 뒤에
+`ip-plan.md`와 Unbound host override를 전환했다.
 
 ## import 경계
 

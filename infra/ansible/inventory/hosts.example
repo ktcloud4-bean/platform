@@ -12,3 +12,6 @@
 [warpgate_nodes]
 # warpgate-01 ansible_host=10.10.30.10 ansible_user=rocky
 
+[object_nodes]
+# object-01 ansible_host=<docs/ip-plan.md의 object-01 주소> ansible_user=rocky
+# 실제 inventory에서 seaweedfs_s3_allowed_sources에 소비자 /32 CIDR를 선언한다.

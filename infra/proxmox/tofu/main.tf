@@ -37,6 +37,14 @@ module "service_vm" {
   agent_enabled = var.agent_enabled
 }
 
+# S3-01은 기존 VMID 151과 디스크를 새로 만들지 않고 모듈 주소만 제품 중립
+# canonical 이름으로 옮긴다. 이 선언 없이 카탈로그 key만 바꾸면 destroy/create가
+# 계획될 수 있으므로 ADR-0010의 제자리 전환 계약으로 계속 유지한다.
+moved {
+  from = module.service_vm["minio-01"]
+  to   = module.service_vm["object-01"]
+}
+
 # ---------------------------------------------------------------------------
 # 카탈로그 자체 검증
 #

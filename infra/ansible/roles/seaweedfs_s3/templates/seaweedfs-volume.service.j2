@@ -1,0 +1,58 @@
+[Unit]
+Description=SeaweedFS volume server
+Documentation=https://github.com/seaweedfs/seaweedfs
+After=network-online.target seaweedfs-master.service
+Wants=network-online.target
+Requires=seaweedfs-master.service
+
+[Service]
+Type=simple
+User={{ seaweedfs_user }}
+Group={{ seaweedfs_group }}
+UMask=0027
+ExecStart={{ seaweedfs_binary_path }} volume \
+  -master=127.0.0.1:{{ seaweedfs_master_port }} \
+  -ip=127.0.0.1 \
+  -ip.bind=127.0.0.1 \
+  -port={{ seaweedfs_volume_port }} \
+  -port.grpc={{ seaweedfs_volume_grpc_port }} \
+  -dir={{ seaweedfs_volume_dir }} \
+  -dir.idx={{ seaweedfs_volume_dir }} \
+  -index=leveldb \
+  -max={{ seaweedfs_volume_max_count }} \
+  -minFreeSpace={{ seaweedfs_volume_min_free_space }} \
+  -metricsPort=0
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+ReadWritePaths={{ seaweedfs_volume_dir }}
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+IPAddressAllow=localhost
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target

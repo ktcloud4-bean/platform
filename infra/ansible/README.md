@@ -93,6 +93,38 @@ ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 secrets.yml>" 
 [`docs/runbook/warpgate-privileged-access.md`](../../docs/runbook/warpgate-privileged-access.md)가
 소유한다.
 
+## SeaweedFS 로컬 S3 기준선
+
+`playbooks/seaweedfs-s3.yml`과 `roles/seaweedfs_s3/`은 `S3-01`의 단일 DATA VM
+SeaweedFS를 소유한다. 운영 선언은 `weed mini`가 아니라 master·volume server·filer·TLS
+S3 gateway 네 systemd unit이다. master metadata, volume data, filer metadata는 각각
+`/var/lib/seaweedfs/master`, `/var/lib/seaweedfs/volume`, `/var/lib/seaweedfs/filer`에
+분리해 영속화한다.
+
+SeaweedFS 4.40 `linux_amd64.tar.gz`와 Apache-2.0 license 원문은 모두 SHA-256을
+강제한다. 서비스는 비로그인 `seaweedfs` 계정으로 실행하며, master·volume·filer의
+관리 endpoint는 loopback에만 bind한다. S3만 DATA 주소 TCP 8333에서 TLS를 제공하고,
+systemd `IPAddressAllow`와 OPNsense 규칙이 검증한 소비자 `/32`만 허용한다.
+
+S3 credential과 bucket별 action은 저장소 밖 mode `0600` extra-vars로만 넣는다. 기본
+identity 목록이 비어도 SeaweedFS가 allow-all로 동작하지 않도록 disabled sentinel
+identity를 생성한다. 장기 consumer credential은 소비자가 생길 때까지 만들지 않는다.
+TLS private key는 guest에서 생성되어 `/etc/seaweedfs/tls/s3.key` mode `0600`에만 있고,
+bootstrap leaf는 `object-01`·`s3` SAN과 DATA IP를 가진 CA:FALSE 인증서다. OPNsense
+private key를 복사하지 않는다.
+
+```bash
+cd infra/ansible
+export ANSIBLE_SSH_COMMON_ARGS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<저장소 밖 인증된 known_hosts> -o PasswordAuthentication=no"
+ansible-playbook -i <저장소 밖 inventory> playbooks/seaweedfs-s3.yml --syntax-check
+ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 s3-identities.yml>" playbooks/seaweedfs-s3.yml --check --diff
+# 명시적 승인 뒤에만 실제 적용
+ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 s3-identities.yml>" playbooks/seaweedfs-s3.yml
+```
+
+고정 입력, TLS·DNS·방화벽 경계, S3 호환성 시험, 재부팅·정리와 rollback은
+[`docs/runbook/seaweedfs-s3.md`](../../docs/runbook/seaweedfs-s3.md)가 소유한다.
+
 ## NTP source
 
 `NET-03`은 각 project VLAN에서 **해당 VLAN gateway의 UDP 123만** 허용한다. Rocky 기본 설정의 공개 pool은 차단되므로 그대로 두면 게스트가 영원히 동기화되지 않는다.
@@ -133,13 +165,15 @@ infra/ansible/
 │   ├── k3s-baseline.yml     # K3S-01 단일 server 엔트리 플레이북
 │   ├── postgres-baseline.yml # PG-01 PostgreSQL 엔트리 플레이북
 │   ├── netbird-server.yml   # NB-01 NetBird 엔트리 플레이북
-│   └── warpgate-baseline.yml # WG-01 Warpgate 엔트리 플레이북
+│   ├── warpgate-baseline.yml # WG-01 Warpgate 엔트리 플레이북
+│   └── seaweedfs-s3.yml     # S3-01 SeaweedFS TLS S3 엔트리 플레이북
 └── roles/
     ├── common_baseline/     # 공통 baseline 검증 및 태스크
     ├── k3s_baseline/        # 고정 k3s·local-path·SELinux·systemd 선언
     ├── postgres_baseline/   # PostgreSQL 16·TLS·최소권한 role 선언
     ├── netbird_server/      # NetBird control/relay compose 선언
-    └── warpgate_baseline/   # 고정 Warpgate·systemd hardening·role/target 선언
+    ├── warpgate_baseline/   # 고정 Warpgate·systemd hardening·role/target 선언
+    └── seaweedfs_s3/        # SeaweedFS 4개 unit·SELinux·TLS·S3 identity 선언
 ```
 
 ## 구문 검사 (Syntax Check)

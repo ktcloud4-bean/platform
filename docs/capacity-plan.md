@@ -40,15 +40,14 @@
 |---|---|---|---|---|---|---|
 | `k3s-01` | 8 | 14 | 24 GiB | 36 GiB | 200 GiB | 320 GiB |
 | `postgres-01` | 4 | 6 | 8 GiB | 12 GiB | 100 GiB | 160 GiB |
-| `minio-01` | 2 | 4 | 4 GiB | 8 GiB | 200 GiB | 320 GiB |
+| `object-01` | 2 | 4 | 4 GiB | 8 GiB | 200 GiB | 320 GiB |
 | `warpgate-01` | 2 | 4 | 2 GiB | 4 GiB | 40 GiB | 80 GiB |
 | `netbird-01` | 2 | 4 | 2 GiB | 4 GiB | 32 GiB | 64 GiB |
 | **Day 1 합계** | **18** | — | **40 GiB** | — | **572 GiB** | — |
 
-`S3-DESIGN-01`은 표의 현재 `minio-01`을 새 VM으로 교체하지 않고 같은 VMID·주소·
-200 GiB 디스크의 목표 이름만 `object-01`로 바꾸기로 했다. `S3-01` 라이브 전환이
-끝날 때까지 이 문서의 VM 이름과 실측은 현재값을 유지한다. 따라서 이번 결정으로
-추가되는 vCPU·RAM·thin 프로비저닝은 0이다.
+`S3-01`은 기존 VM을 새 VM으로 교체하지 않고 같은 VMID·주소·200 GiB 디스크의
+canonical 이름만 `object-01`로 전환했다. 따라서 이번 전환으로 추가되는 vCPU·RAM·thin
+프로비저닝은 0이다.
 
 VM 분리 근거는 [ADR-0003](adr/0003-service-vm-boundaries.md), 단일 k3s와 local storage 선택은 [ADR-0002](adr/0002-single-node-k3s-and-local-storage.md)를 따른다.
 
@@ -211,14 +210,14 @@ Pod, PVC, PV와 실제 시험 경로를 모두 제거하고 다시 측정했다.
 | VM | 총량 | 구획 |
 |---|---|---|
 | `postgres-01` | 100 GiB | OS 10 · PGDATA 60 · WAL·아카이브 20 · 여유 10 |
-| `minio-01` | 200 GiB | OS 10 · 버킷 데이터 170 · 여유 20 |
+| `object-01` | 200 GiB | OS 10 · 버킷 데이터 170 · 여유 20 |
 | `warpgate-01` | 40 GiB | OS 10 · 세션 기록 20 · 여유 10 |
 | `netbird-01` | 32 GiB | OS 10 · 제품 DB·로그 12 · 여유 10 |
 
-현재 `minio-01`(목표 이름 `object-01`)의 170 GiB는 `k3s-01` PVC 120 GiB와
-`postgres-01` 데이터 80 GiB를 받는 착지점이다. 보존 세대 수가 예산을 결정하므로
-`BKP-02`–`BKP-04`가 보존기간을 확정할 때 이 값을 다시 본다. `warpgate-01`의 세션
-기록도 용량이 아니라 보존기간으로 통제한다.
+`object-01`의 170 GiB는 `k3s-01` PVC 120 GiB와 `postgres-01` 데이터 80 GiB를 받는
+착지점이다. 보존 세대 수가 예산을 결정하므로 `BKP-02`–`BKP-04`가 보존기간을 확정할
+때 이 값을 다시 본다. `warpgate-01`의 세션 기록도 용량이 아니라 보존기간으로
+통제한다.
 
 ## 정지 기준 요약
 
@@ -316,6 +315,27 @@ Ansible 배포 및 재부팅 검증 완료 뒤 측정했다. 컨테이너 3개(n
 | 잘못된 로그인 거부 | "Invalid Email Address or password." 반환 | — | 통과 |
 | 올바른 로그인 | HTTP 303 + auth code redirect | — | 통과 |
 | 백업 파일 크기 | 25 KiB (설정·DB·인증서 포함) | — | 정상 |
+
+### `S3-01` 정리·재부팅 뒤 실측 (2026-07-31)
+
+SeaweedFS S3 호환성 시험(총 payload 6,291,528 bytes)과 시험 bucket·version·identity
+정리를 마치고 `object-01`만 재부팅한 뒤 측정했다. VMID 151·2 vCPU·4 GiB RAM·200 GiB
+disk의 배정은 불변이다.
+
+| 지표 | 실측 | 경고·정지 기준 | 판정 |
+|---|---|---|---|
+| `object-01` guest root | 총 198.86 GiB · 사용 2.71 GiB · 여유 196.15 GiB · 2% | 여유 25% 미만 경고, 20% 미만 정지 | 정상 |
+| SeaweedFS 영속 경로 합계 | 77,918 bytes (master 1,623 · volume 40,913 · filer 35,382) | 버킷 데이터 170 GiB 구획 안에서 관측 | 정상 |
+| guest memory (total / available) | 3.57 GiB / 2.96 GiB | Day 1 4 GiB | 정상 |
+| 호스트 `available` | 47.66 GiB | 12 GiB 미만 / 8 GiB 미만 | 정상 |
+| 호스트 swap 사용 | 0 | 0 초과 경고 | 정상 |
+| thin data / metadata | 1.79% / 0.29% | 60% / 50% 경고, 70% / 70% 정지 | 정상 |
+| 호스트 `/` 사용률 | 5% | 70% / 80% | 정상 |
+| 15분 load average | 0.21 | 20 / 30 지속 | 정상 |
+| 배정 vCPU / RAM / thin 프로비저닝 | 18 / 41.00 GiB / 572 GiB | 24 / 52 GiB / 714 GiB 상한 | 정상 |
+
+단일 VM·단일 thin-backed disk이므로 이 수치는 HA 또는 물리 장애 복구 증거가 아니다.
+`BKP-04`의 AWS S3 오프사이트 사본과 이후 복구 drill이 별도로 필요하다.
 
 ## 재검토 시점
 

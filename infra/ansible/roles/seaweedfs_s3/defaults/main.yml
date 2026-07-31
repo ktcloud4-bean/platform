@@ -1,0 +1,45 @@
+---
+
+seaweedfs_version: "4.40"
+seaweedfs_release_asset: "linux_amd64.tar.gz"
+seaweedfs_release_url: "https://github.com/seaweedfs/seaweedfs/releases/download/{{ seaweedfs_version }}/{{ seaweedfs_release_asset }}"
+seaweedfs_release_sha256: "0c63aec15429d17e216fdb878a92532188d3e147d7f072645bfec9eb6f992a02"
+seaweedfs_license: "Apache-2.0"
+seaweedfs_license_url: "https://raw.githubusercontent.com/seaweedfs/seaweedfs/{{ seaweedfs_version }}/LICENSE"
+seaweedfs_license_sha256: "d789d433cc11da163273d1e39be2e8fa67642f9a58ef220d3f258fa9c14ef613"
+
+seaweedfs_user: "seaweedfs"
+seaweedfs_group: "seaweedfs"
+seaweedfs_binary_path: "/usr/local/bin/weed"
+seaweedfs_cache_dir: "/var/cache/seaweedfs"
+seaweedfs_config_dir: "/etc/seaweedfs"
+seaweedfs_data_dir: "/var/lib/seaweedfs"
+seaweedfs_master_dir: "{{ seaweedfs_data_dir }}/master"
+seaweedfs_volume_dir: "{{ seaweedfs_data_dir }}/volume"
+seaweedfs_filer_dir: "{{ seaweedfs_data_dir }}/filer"
+
+seaweedfs_canonical_fqdn: "object-01.imcherry5778.xyz"
+seaweedfs_s3_fqdn: "s3.imcherry5778.xyz"
+seaweedfs_s3_bind_address: "{{ ansible_default_ipv4.address }}"
+seaweedfs_s3_port: 8333
+seaweedfs_s3_grpc_port: 18333
+seaweedfs_s3_allowed_sources: []
+
+# 실제 자격증명은 저장소 밖 extra-vars에서만 주입한다. 빈 목록이면 template이
+# credential·action 없는 disabled sentinel identity를 넣어 SeaweedFS 인증 경로를
+# 활성화한다. SeaweedFS는 identity가 0개면 allow-all이므로 빈 JSON으로 두지 않는다.
+seaweedfs_s3_identities: []
+
+seaweedfs_master_port: 9333
+seaweedfs_master_grpc_port: 19333
+seaweedfs_volume_port: 8080
+seaweedfs_volume_grpc_port: 18080
+seaweedfs_filer_port: 8888
+seaweedfs_filer_grpc_port: 18888
+seaweedfs_volume_max_count: 5
+seaweedfs_volume_min_free_space: "20GiB"
+
+seaweedfs_tls_cert_path: "{{ seaweedfs_config_dir }}/tls/s3.crt"
+seaweedfs_tls_key_path: "{{ seaweedfs_config_dir }}/tls/s3.key"
+seaweedfs_tls_valid_days: 365
+seaweedfs_tls_renew_before_seconds: 2592000

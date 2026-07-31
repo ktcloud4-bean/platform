@@ -333,7 +333,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1785436080.99" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1785473407.21" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -1400,6 +1400,62 @@
             <shaper2 />
             <description>NET-03 임시 bootstrap: DATA의 공개 Web TCP 80/443 egress 허용; NET-04에서 실제 통신표로 교체</description>
           </rule>
+          <rule uuid="58525b66-bc90-484e-893a-a51bfd5aa346">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1015</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.50.20</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>8333</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>S3-01: k3s-01에서 object-01 TLS S3 TCP 8333만 허용</description>
+          </rule>
         </rules>
         <snatrules />
         <npt />
@@ -1998,7 +2054,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785458915.61" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785473515.30" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2160,19 +2216,6 @@
           <addptr>1</addptr>
           <description>PostgreSQL VM</description>
         </host>
-        <host uuid="5ea705e2-e841-420c-afc6-0ed8622f6aa7">
-          <enabled>1</enabled>
-          <hostname>minio-01</hostname>
-          <domain>imcherry5778.xyz</domain>
-          <rr>A</rr>
-          <mxprio />
-          <mx />
-          <ttl />
-          <server>10.10.50.20</server>
-          <txtdata />
-          <addptr>1</addptr>
-          <description>MinIO VM</description>
-        </host>
         <host uuid="aa585d31-2896-43f5-86d1-2ec2bc2fddae">
           <enabled>1</enabled>
           <hostname>netbird</hostname>
@@ -2186,8 +2229,29 @@
           <addptr>1</addptr>
           <description>NetBird service alias (NB-01)</description>
         </host>
+        <host uuid="5cd99f64-6add-4fb7-b46b-3f2e440efecf">
+          <enabled>1</enabled>
+          <hostname>object-01</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <rr>A</rr>
+          <mxprio />
+          <mx />
+          <ttl />
+          <server>10.10.50.20</server>
+          <txtdata />
+          <addptr>1</addptr>
+          <description>SeaweedFS object VM</description>
+        </host>
       </hosts>
-      <aliases />
+      <aliases>
+        <alias uuid="9604ff7d-6d32-43ec-bd56-7df689649024">
+          <enabled>1</enabled>
+          <host>5cd99f64-6add-4fb7-b46b-3f2e440efecf</host>
+          <hostname>s3</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>SeaweedFS TLS S3 service alias</description>
+        </alias>
+      </aliases>
     </unboundplus>
     <AcmeClient version="4.4.0" persisted_at="1785264667.46" description="A secure ACME Client plugin">
       <settings>

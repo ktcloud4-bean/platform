@@ -44,7 +44,7 @@ locals {
       description   = "공용 PostgreSQL. 서비스별 DB·role."
     }
 
-    "minio-01" = {
+    "object-01" = {
       vm_id         = 151
       role          = "data"
       vcpu          = 2
@@ -54,7 +54,7 @@ locals {
       ipv4_cidr     = "10.10.50.20/24"
       ipv4_gateway  = "10.10.50.1"
       startup_order = 1
-      description   = "S3 호환 오브젝트 저장소. 로컬 백업 착지점."
+      description   = "SeaweedFS S3 오브젝트 저장소. 로컬 백업 착지점."
     }
 
     "warpgate-01" = {

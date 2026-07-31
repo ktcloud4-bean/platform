@@ -1,0 +1,62 @@
+[Unit]
+Description=SeaweedFS TLS S3 gateway
+Documentation=https://github.com/seaweedfs/seaweedfs
+After=network-online.target seaweedfs-filer.service
+Wants=network-online.target
+Requires=seaweedfs-filer.service
+
+[Service]
+Type=simple
+User={{ seaweedfs_user }}
+Group={{ seaweedfs_group }}
+UMask=0077
+ExecStart={{ seaweedfs_binary_path }} s3 \
+  -filer=127.0.0.1:{{ seaweedfs_filer_port }} \
+  -ip.bind={{ seaweedfs_s3_bind_address }} \
+  -port={{ seaweedfs_s3_port }} \
+  -port.grpc={{ seaweedfs_s3_grpc_port }} \
+  -port.iceberg=0 \
+  -metricsPort=0 \
+  -iam=false \
+  -config={{ seaweedfs_config_dir }}/s3.json \
+  -cert.file={{ seaweedfs_tls_cert_path }} \
+  -key.file={{ seaweedfs_tls_key_path }} \
+  -externalUrl=https://{{ seaweedfs_s3_fqdn }}:{{ seaweedfs_s3_port }}
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+ReadOnlyPaths={{ seaweedfs_config_dir }}
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+IPAddressAllow=localhost
+IPAddressAllow={{ seaweedfs_s3_bind_address }}/32
+{% for source in seaweedfs_s3_allowed_sources %}
+IPAddressAllow={{ source }}
+{% endfor %}
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target

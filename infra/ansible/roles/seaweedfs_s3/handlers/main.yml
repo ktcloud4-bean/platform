@@ -1,0 +1,42 @@
+---
+
+- name: systemd daemon-reload
+  ansible.builtin.systemd:
+    daemon_reload: true
+  listen: SeaweedFS stack 재시작
+  when: not ansible_check_mode
+
+- name: SeaweedFS master 재시작
+  ansible.builtin.systemd:
+    name: seaweedfs-master.service
+    state: restarted
+  listen: SeaweedFS stack 재시작
+  when: not ansible_check_mode
+
+- name: SeaweedFS volume server 재시작
+  ansible.builtin.systemd:
+    name: seaweedfs-volume.service
+    state: restarted
+  listen: SeaweedFS stack 재시작
+  when: not ansible_check_mode
+
+- name: SeaweedFS filer 재시작
+  ansible.builtin.systemd:
+    name: seaweedfs-filer.service
+    state: restarted
+  listen: SeaweedFS stack 재시작
+  when: not ansible_check_mode
+
+- name: SeaweedFS S3 gateway 재시작
+  ansible.builtin.systemd:
+    name: seaweedfs-s3.service
+    state: restarted
+  listen: SeaweedFS stack 재시작
+  when: not ansible_check_mode
+
+- name: SeaweedFS S3 gateway만 재시작
+  ansible.builtin.systemd:
+    name: seaweedfs-s3.service
+    state: restarted
+  listen: SeaweedFS S3 재시작
+  when: not ansible_check_mode

@@ -1,0 +1,7 @@
+# 이 파일은 cloud-init의 manage_etc_hosts=true 경로가 매 부팅 렌더링한다.
+# S3-01 Ansible role이 canonical host와 service alias를 선언하므로 직접 편집하지 않는다.
+{{ seaweedfs_s3_bind_address }} {{ seaweedfs_canonical_fqdn }} {{ seaweedfs_s3_fqdn }} object-01
+127.0.0.1 localhost.localdomain localhost
+127.0.0.1 localhost4.localdomain4 localhost4
+::1 localhost.localdomain localhost
+::1 localhost6.localdomain6 localhost6

@@ -1,0 +1,54 @@
+[Unit]
+Description=SeaweedFS master
+Documentation=https://github.com/seaweedfs/seaweedfs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ seaweedfs_user }}
+Group={{ seaweedfs_group }}
+UMask=0027
+ExecStart={{ seaweedfs_binary_path }} master \
+  -ip=127.0.0.1 \
+  -ip.bind=127.0.0.1 \
+  -port={{ seaweedfs_master_port }} \
+  -port.grpc={{ seaweedfs_master_grpc_port }} \
+  -mdir={{ seaweedfs_master_dir }} \
+  -peers=none \
+  -telemetry=false \
+  -metricsPort=0
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+ReadWritePaths={{ seaweedfs_master_dir }}
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+IPAddressAllow=localhost
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target
