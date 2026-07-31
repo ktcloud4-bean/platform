@@ -36,3 +36,4 @@ UI 위치나 명령을 추측해 미리 작성하지 않는다. 첫 PoC는 백�
 - [`k3s-single-node-baseline.md`](k3s-single-node-baseline.md) — 2026-07-31 `K3S-01`에서 단일 Node·SQLite·기본 구성요소·PVC·재부팅·NET-03을 검증한 k3s 기준선
 - [`netbird-selfhost.md`](netbird-selfhost.md) — 2026-07-31 `NB-01`에서 배포·재부팅·로컬 Owner 로그인과 백업을 검증한 NetBird self-host 절차
 - [`warpgate-privileged-access.md`](warpgate-privileged-access.md) — 2026-07-31 `WG-01`에서 버전 선정·선언형 배포·역할 제한·감사/세션 기록·재부팅·격리 복원을 검증한 Warpgate 기준선
+- [`vault-raft-baseline.md`](vault-raft-baseline.md) — 2026-07-31 `VAULT-01`에서 GitOps 배포·TLS·초기화/unseal·Pod 재시작 복구를 검증한 Vault 단일 replica Raft 기준선

@@ -17,4 +17,6 @@ spec:
       kind: ConfigMap
     - group: argoproj.io
       kind: AppProject
+    - group: argoproj.io
+      kind: Application
   clusterResourceWhitelist: []

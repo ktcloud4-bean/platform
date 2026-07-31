@@ -206,8 +206,8 @@ version, multipart, identity, credential, client 파일까지 API로 정리했�
 | `HEADLAMP-01 READY` | Headlamp 기본 GitOps 배포·내부 bootstrap 접근 | `GITOPS-01` | 없음 | 초기 k3s 조회·`HEADLAMP-02` | Argo Synced/Healthy, 외부 ingress 없음, Headlamp SA 무권한, port-forward와 단기 reader token으로 리소스·로그 조회 |
 | `STOR-01 DONE` | local-path 경로·`local` PV 타입·disk-pressure 검증 | `K3S-01` | `K3S-BOOTSTRAP` | 모든 PVC·`BKP-02` | 동적 PVC, capacity 미강제, 재부팅 후 데이터, SELinux 삭제 helper, 임계치 기준 |
 | `INGRESS-01 READY` | Traefik 단일 ingress·별도 DNS-01 인증서 | `GITOPS-01` | `PUBLIC-DNS` | 모든 HTTP 앱 | 80→443, 내부·외부 split DNS, OPNsense 개인키 미복사, source IP 판정 |
-| `VAULT-01 READY` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
-| `VAULT-02 BLOCKED` | KV v2·Kubernetes auth·DB engine·PKI·audit policy | `VAULT-01`, `PG-01` | 없음 | 모든 플랫폼 앱 | 앱별 policy 격리, 단기 DB credential 폐기, 인증서·감사 이벤트 검증 |
+| `VAULT-01 DONE` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
+| `VAULT-02 READY` | KV v2·Kubernetes auth·DB engine·PKI·audit policy | `VAULT-01`, `PG-01` | 없음 | 모든 플랫폼 앱 | 앱별 policy 격리, 단기 DB credential 폐기, 인증서·감사 이벤트 검증 |
 | `KC-01 BLOCKED` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `CORAZA-01 BLOCKED` | Traefik HTTP-WASM Coraza + CRS PoC | `INGRESS-01` | 없음 | 공개 HTTP | 정상 요청·대표 CRS 차단·예외 정책·성능 기준 검증 |
 | `POM-01 BLOCKED` | Pomerium Core·선언형 Route·Routes Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음 | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
@@ -226,6 +226,24 @@ Application은 GitHub private repository의 signed commit
 선행조건으로 재계산해 `HEADLAMP-01`, `INGRESS-01`, `VAULT-01`을 `READY`로 열었다.
 `BKP-02`는 `S3-01`이 아직 `DONE`이 아니므로 `BLOCKED`를 유지한다. 적용·fresh clone·
 rollback 경계는 [GITOPS-01 runbook](runbook/argocd-gitops-bootstrap.md)이 소유한다.
+
+2026-07-31 `VAULT-01`에서 `hashicorp/vault:2.0.3`(Docker Hub 공식 organization, digest
+`sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54`, BUSL-1.1
+라이선스)을 `vault` namespace에 원시 manifest(Kustomize)로 선언하고, `platform-root` 하위에
+전용 AppProject·child Application `vault`를 추가했다. 단일 replica StatefulSet과 Raft
+storage, local-path PVC(`vault-data`, 4Gi)를 사용한다. TLS는 Kubernetes Secret이 아니라
+PVC 내부 파일(mode 0600 key)로만 제공하며, host-specific 자체서명 leaf로 정상 hostname
+성공과 잘못된 hostname·신뢰되지 않은 인증서 실패를 모두 라이브로 확인했다. Shamir
+5 shares/threshold 3으로 초기화하고 HTTP API 요청 본문으로만 unseal해 CLI·shell 인자
+노출을 피했다. `vault-0` 단독 재시작 후 sealed 상태와 비인증 요청 거부, 동일 key로
+재unseal, 재시작 전후 `cluster_id`·Raft 구성 불변을 확인했다. `kubectl get secret -n vault`
+0건과 Pod 로그에 key/root token 미포함을 검사했고, 초기화 출력은 저장소·클러스터 밖
+mode 0600 임시 파일에만 남겨 사용자가 직접 암호화 장기 보관소로 이관하도록 안내했다.
+공식 이미지 entrypoint가 `-config` 인자를 암묵적으로 중복 추가해 발생하는
+`CrashLoopBackOff` 함정을 라이브로 재현·수정했다. 절차와 rollback 경계는
+[VAULT-01 runbook](runbook/vault-raft-baseline.md)이 소유한다. `PG-01`도 `DONE`이므로
+직접 후속 `VAULT-02`만 `READY`로 열었다. `KC-01`과 `BKP-03`은 각각 `INGRESS-01`·`VAULT-02`
+등 남은 선행이 있어 `BLOCKED`를 유지한다.
 
 ## 5. 데이터 보호 gate
 
