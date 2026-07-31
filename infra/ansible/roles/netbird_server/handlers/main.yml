@@ -1,0 +1,11 @@
+---
+- name: Reload Systemd and Restart NetBird
+  ansible.builtin.systemd:
+    daemon_reload: true
+    name: netbird-compose.service
+    state: restarted
+
+- name: Restart NetBird Compose Service
+  ansible.builtin.systemd:
+    name: netbird-compose.service
+    state: restarted

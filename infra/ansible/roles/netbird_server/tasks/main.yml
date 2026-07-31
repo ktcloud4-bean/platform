@@ -1,0 +1,91 @@
+---
+- name: Docker yum repository 추가
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/centos/docker-ce.repo
+    dest: /etc/yum.repos.d/docker-ce.repo
+    mode: '0644'
+  check_mode: false
+
+- name: Docker Engine 및 Docker Compose 플러그인 설치
+  ansible.builtin.dnf:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Docker 서비스 활성화 및 시작
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: NetBird 데이터 및 설정 디렉터리 생성
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - "{{ netbird_config_dir }}"
+    - "{{ netbird_data_dir }}"
+    - "{{ netbird_idp_data_dir }}"
+    - "{{ netbird_letsencrypt_dir }}"
+
+- name: NetBird 데이터 디렉터리 SELinux fcontext 등록
+  ansible.builtin.shell:
+    cmd: "semanage fcontext -l | grep -q '{{ item }}' || semanage fcontext -a -t container_file_t '{{ item }}(/.*)?'"
+  loop:
+    - "{{ netbird_data_dir }}"
+    - "{{ netbird_letsencrypt_dir }}"
+  changed_when: false
+
+- name: NetBird 데이터 디렉터리 restorecon 적용
+  ansible.builtin.command:
+    cmd: "restorecon -R {{ netbird_data_dir }} {{ netbird_letsencrypt_dir }}"
+  changed_when: false
+
+- name: NetBird config.yaml 설정 파일 배치
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ netbird_config_dir }}/config.yaml"
+    owner: root
+    group: root
+    mode: '0600'
+  notify: Restart NetBird Compose Service
+
+- name: Traefik dynamic TLS 설정 파일 배치
+  ansible.builtin.template:
+    src: traefik-dynamic.yml.j2
+    dest: "{{ netbird_config_dir }}/traefik-dynamic.yml"
+    owner: root
+    group: root
+    mode: '0600'
+  notify: Restart NetBird Compose Service
+
+- name: NetBird docker-compose.yml 파일 배치
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ netbird_config_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: '0600'
+  notify: Restart NetBird Compose Service
+
+- name: netbird-compose.service systemd 유닛 파일 배치
+  ansible.builtin.template:
+    src: netbird-compose.service.j2
+    dest: /etc/systemd/system/netbird-compose.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload Systemd and Restart NetBird
+
+- name: netbird-compose.service 서비스 활성화 및 시작
+  ansible.builtin.systemd:
+    name: netbird-compose.service
+    enabled: true
+    state: started

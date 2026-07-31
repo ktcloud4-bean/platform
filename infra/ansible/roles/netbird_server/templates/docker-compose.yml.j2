@@ -1,0 +1,80 @@
+services:
+  traefik:
+    image: {{ traefik_image }}
+    container_name: netbird-traefik
+    restart: unless-stopped
+    command:
+      - "--global.checknewversion=false"
+      - "--global.sendanonymoususage=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.http.tls=true"
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--log.level=INFO"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "{{ netbird_letsencrypt_dir }}:/letsencrypt:ro"
+      - "{{ netbird_config_dir }}/traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro"
+    networks:
+      - netbird-net
+
+  netbird-server:
+    image: {{ netbird_server_image }}
+    container_name: netbird-server
+    restart: unless-stopped
+    command: ["--config", "/etc/netbird/config.yaml"]
+    ports:
+      - "3478:3478/udp"
+    volumes:
+      - "{{ netbird_data_dir }}:/var/lib/netbird"
+      - "{{ netbird_config_dir }}/config.yaml:/etc/netbird/config.yaml:ro"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.netbird-api.rule=Host(`{{ netbird_domain }}`) && (PathPrefix(`/api`) || PathPrefix(`/oauth2`) || PathPrefix(`/signal`) || PathPrefix(`/management`) || PathPrefix(`/relay`))"
+      - "traefik.http.routers.netbird-api.entrypoints=websecure"
+      - "traefik.http.routers.netbird-api.service=netbird-api"
+      - "traefik.http.routers.netbird-api.tls=true"
+      - "traefik.http.services.netbird-api.loadbalancer.server.port=8080"
+      - "traefik.http.routers.netbird-grpc.rule=Host(`{{ netbird_domain }}`) && HeaderRegexp(`Content-Type`, `^application/grpc`)"
+      - "traefik.http.routers.netbird-grpc.entrypoints=websecure"
+      - "traefik.http.routers.netbird-grpc.service=netbird-grpc"
+      - "traefik.http.routers.netbird-grpc.tls=true"
+      - "traefik.http.services.netbird-grpc.loadbalancer.server.port=8080"
+      - "traefik.http.services.netbird-grpc.loadbalancer.server.scheme=h2c"
+    networks:
+      - netbird-net
+
+  dashboard:
+    image: {{ netbird_dashboard_image }}
+    container_name: netbird-dashboard
+    restart: unless-stopped
+    environment:
+      - NETBIRD_MGMT_API_ENDPOINT=https://{{ netbird_domain }}
+      - NETBIRD_MGMT_SINGLE_ACCOUNT_MODE=true
+      - NETBIRD_AUTH_OIDC_CONFIGURATION_ENDPOINT=https://{{ netbird_domain }}/oauth2/.well-known/openid-configuration
+      - NETBIRD_AUTH_AUDIENCE=netbird-dashboard
+      - NETBIRD_AUTH_CLIENT_ID=netbird-dashboard
+      - NETBIRD_AUTH_AUTHORITY=https://{{ netbird_domain }}/oauth2
+      - NETBIRD_AUTH_REDIRECT_URI=https://{{ netbird_domain }}/nb-auth
+      - NETBIRD_AUTH_SILENT_REDIRECT_URI=https://{{ netbird_domain }}/nb-silent-auth
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`{{ netbird_domain }}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.service=dashboard"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.priority=1"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=80"
+    networks:
+      - netbird-net
+
+networks:
+  netbird-net:
+    driver: bridge

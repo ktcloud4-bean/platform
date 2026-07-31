@@ -1,0 +1,7 @@
+---
+- name: NetBird Self-Hosted Control & Relay Server Deployment
+  hosts: netbird_server
+  become: true
+  roles:
+    - common_baseline
+    - netbird_server

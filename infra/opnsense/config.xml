@@ -1950,7 +1950,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785394217.09" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785458915.61" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2124,6 +2124,19 @@
           <txtdata />
           <addptr>1</addptr>
           <description>MinIO VM</description>
+        </host>
+        <host uuid="aa585d31-2896-43f5-86d1-2ec2bc2fddae">
+          <enabled>1</enabled>
+          <hostname>netbird</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <rr>A</rr>
+          <mxprio />
+          <mx />
+          <ttl />
+          <server>10.10.40.10</server>
+          <txtdata />
+          <addptr>1</addptr>
+          <description>NetBird service alias (NB-01)</description>
         </host>
       </hosts>
       <aliases />

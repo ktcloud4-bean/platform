@@ -266,6 +266,27 @@ ssh root@<proxmox-01> '
 '
 ```
 
+### `NB-01` 배포 직후 실측 (2026-07-31)
+
+Ansible 배포 및 재부팅 검증 완료 뒤 측정했다. 컨테이너 3개(netbird-traefik, netbird-server, netbird-dashboard)가 systemd unit 자동 시작 후 Up 상태였다.
+
+| 지표 | 실측 | 예산·정지 기준 | 판정 |
+|---|---|---|---|
+| guest root | 총 31 GiB · 사용 2.7 GiB · 여유 29 GiB · 9% | 여유 25% 미만 경고, 20% 미만 정지 | 정상 |
+| VM RAM (total / available) | 1,771 MiB / 1,256 MiB | Day 1 2 GiB | 정상 |
+| netbird-traefik 메모리 | 110.7 MiB | — | 정상 |
+| netbird-server 메모리 | 71.7 MiB | — | 정상 |
+| netbird-dashboard 메모리 | 30.2 MiB | — | 정상 |
+| 컨테이너 3개 합계 | 212.6 MiB | RAM 2 GiB 내 | 정상 |
+| 재부팅 후 자동 시작 | netbird-compose.service enabled + active | 재부팅 유지 필수 | 통과 |
+| HTTPS (TLS 443) | HTTP/2 200, Let's Encrypt 와일드카드 인증서 | — | 통과 |
+| API 인증 거부 | HTTP 401 (인증 없이 접근 시) | — | 통과 |
+| STUN UDP 3478 | 0.0.0.0:3478 LISTEN | — | 통과 |
+| /oauth2 OpenID Discovery | HTTP 200 | — | 통과 |
+| 잘못된 로그인 거부 | "Invalid Email Address or password." 반환 | — | 통과 |
+| 올바른 로그인 | HTTP 303 + auth code redirect | — | 통과 |
+| 백업 파일 크기 | 25 KiB (설정·DB·인증서 포함) | — | 정상 |
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.
