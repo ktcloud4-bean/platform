@@ -1,0 +1,48 @@
+{
+  "clientId": "headlamp",
+  "name": "HEADLAMP-02 Kubernetes OIDC",
+  "description": "HEADLAMP-02 browser Authorization Code + PKCE public client; Kubernetes API audience=headlamp",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": true,
+  "clientAuthenticatorType": "client-secret",
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "authorizationServicesEnabled": false,
+  "consentRequired": false,
+  "frontchannelLogout": false,
+  "fullScopeAllowed": false,
+  "rootUrl": "https://headlamp.imcherry5778.xyz",
+  "baseUrl": "https://headlamp.imcherry5778.xyz/",
+  "redirectUris": [
+    "https://headlamp.imcherry5778.xyz/oidc-callback"
+  ],
+  "webOrigins": [
+    "https://headlamp.imcherry5778.xyz"
+  ],
+  "attributes": {
+    "pkce.code.challenge.method": "S256"
+  },
+  "defaultClientScopes": [
+    "profile",
+    "email"
+  ],
+  "optionalClientScopes": [],
+  "protocolMappers": [
+    {
+      "name": "groups",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "groups",
+        "full.path": "true",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }
+  ]
+}

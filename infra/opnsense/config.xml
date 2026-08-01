@@ -2445,7 +2445,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785625824.54" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785627379.53" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2662,6 +2662,13 @@
           <hostname>warpgate</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>Warpgate SSO service alias (WG-02)</description>
+        </alias>
+        <alias uuid="f5357a8d-1091-4290-9be4-839861673356">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>headlamp</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>Headlamp Keycloak OIDC Kubernetes RBAC alias (HEADLAMP-02)</description>
         </alias>
       </aliases>
     </unboundplus>
