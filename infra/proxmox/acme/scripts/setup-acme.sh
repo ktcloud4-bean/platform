@@ -96,7 +96,8 @@ register_account() {
 
     run_ssh "
         set -euo pipefail
-        if pvenode acme account list | grep -q '^│ ${acc_name} '; then
+        # 출력 형식(단순 목록/박스 테이블)에 의존하지 않도록 단어 단위로 판정한다.
+        if pvenode acme account list | grep -qw '${acc_name}'; then
             echo '[INFO] ACME Account ${acc_name} already registered.'
         else
             echo '[INFO] Registering ACME Account ${acc_name} with directory ${directory}...'
@@ -164,6 +165,11 @@ verify_cert() {
     local mode="${1:-production}"
     echo "=== Certificate Verification (${mode}) ==="
 
+    # pveproxy 재시작 직후에는 교체 전 인증서가 잠시 응답하므로 안정화를 기다린다.
+    # 이 대기가 없으면 방금 발급한 인증서 대신 이전 인증서를 검증해 잘못 통과할 수 있다.
+    run_ssh "systemctl is-active pveproxy >/dev/null" || true
+    sleep 5
+
     local cert_info
     cert_info="$(echo | openssl s_client -connect "${PVE_HOST}:${PORT}" 2>/dev/null | openssl x509 -text -noout)"
 
@@ -183,6 +189,13 @@ verify_cert() {
             exit 1
         fi
         echo "[INFO] Checking Certificate Issuer..."
+        # staging issuer도 O=Let's Encrypt 이므로 "Let's Encrypt" 매칭만으로는 구분되지 않는다.
+        # staging 인증서가 남아 있는 상태를 production 통과로 오판하지 않도록 먼저 배제한다.
+        if echo "${cert_info}" | grep "Issuer:" | grep -q "STAGING"; then
+            echo "[ERROR] Staging issuer is still installed in production mode!" >&2
+            echo "${cert_info}" | grep "Issuer:" >&2
+            exit 1
+        fi
         if echo "${cert_info}" | grep "Issuer:" | grep -q "Let's Encrypt"; then
             echo "[OK] Valid Let's Encrypt production issuer found."
         else

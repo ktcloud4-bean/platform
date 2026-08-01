@@ -32,6 +32,13 @@ CLOUDFLARE_API_TOKEN=your_scoped_cloudflare_api_token
 PROXMOX_ACME_EMAIL=admin@imcherry5778.xyz
 ```
 
+`CLOUDFLARE_API_TOKEN`은 Proxmox 전용 토큰이어야 한다. 같은 zone을 쓰는 다른 ACME
+client(OPNsense, k3s Traefik, Warpgate)의 토큰을 재사용하면 한쪽을 회전·폐기할 때 다른
+쪽 자동 갱신이 조용히 깨지므로 [ADR-0009](../../../docs/adr/0009-proxmox-native-acme-management-tls.md)가
+이를 금지한다. Cloudflare 대시보드에서 토큰 이름은 `<service>-acme-<zone>` 규약을 따르며
+Proxmox는 `proxmox-acme-imcherry5778-xyz`를 쓴다. 어떤 토큰이 설정돼 있는지는 값을 읽지
+않고 대시보드의 `Last used` 갱신 시각으로 판별한다.
+
 `.env` 파일은 셸로 `source`하지 않으며, 스크립트가 안전한 키 추출 방식을 사용하여 `CF_Token` 값만 Proxmox 보호 데이터 파라미터로 전달한다.
 
 ---
@@ -80,10 +87,11 @@ PROXMOX_ACME_EMAIL=admin@imcherry5778.xyz
 ## 5. Token 회전 (Rotation) 및 폐기 (Revocation) 절차
 
 1. **토큰 회전 (Token Rotation)**:
-   - Cloudflare 대시보드에서 새 `Zone - DNS - Edit` 토큰을 발급받는다.
+   - Cloudflare 대시보드에서 `proxmox-acme-imcherry5778-xyz` 규약의 새 `Zone - DNS - Edit` 토큰을 발급받는다.
    - `.env` 파일의 `CLOUDFLARE_API_TOKEN` 값을 새 토큰으로 교체한다.
-   - `./infra/proxmox/acme/scripts/setup-acme.sh production` 또는 `setup_plugin`을 재실행하여 Proxmox의 `cf-dns` plugin data를 갱신한다.
-   - 기존 Cloudflare 토큰을 폐기한다.
+   - `./infra/proxmox/acme/scripts/setup-acme.sh plugin`으로 `cf-dns` plugin data만 갱신한다. `production`은 인증서를 재발급하므로 Let's Encrypt rate limit을 소모한다. 회전만 할 때는 쓰지 않는다.
+   - `./infra/proxmox/acme/scripts/setup-acme.sh staging`으로 새 토큰의 DNS-01 동작을 확인한 뒤 `production`으로 공인 인증서를 복귀시킨다. 이 검증 없이는 다음 자동 갱신 시점까지 새 토큰의 실패를 알 수 없다.
+   - Cloudflare 대시보드에서 새 토큰의 `Last used`가 갱신됐는지 확인한 뒤 기존 토큰을 폐기한다. 다른 서비스가 같은 토큰을 쓰고 있지 않은지 먼저 확인한다.
 
 2. **토큰 및 인증서 폐기 (Revocation & Cleanup)**:
    - 비상시 인증서를 폐기할 때는 `pvenode acme cert revoke` 명령을 실행한다.

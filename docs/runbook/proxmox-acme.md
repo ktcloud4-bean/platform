@@ -1,6 +1,8 @@
 # Proxmox VE ACME DNS-01 관리 TLS 운용
 
-검증일: 2026-07-30. 선택 이유·대안·재검토 조건은 [ADR-0009](../adr/0009-proxmox-native-acme-management-tls.md), 주소는 `docs/ip-plan.md`가 소유한다.
+검증일: 2026-08-01 (`PVE-ACME-FIX-01`, 전용 token 교체·재발급 재검증). 최초 구축 검증일은 2026-07-30 (`PVE-ACME-01`). 선택 이유·대안·재검토 조건은 [ADR-0009](../adr/0009-proxmox-native-acme-management-tls.md), 주소는 `docs/ip-plan.md`가 소유한다.
+
+저장된 plugin 자격증명은 발급 성공만으로 검증되지 않는다. 인증서가 유효한 동안에는 잘못된 token이 저장돼 있어도 드러나지 않고, 만료 30일 전 자동 갱신 시점에야 실패한다. token을 바꾼 뒤에는 반드시 저장값 해시를 확인하고 staging 발급으로 DNS-01 왕복을 실증한다.
 
 ---
 
@@ -16,7 +18,7 @@ Proxmox VE 내장 ACME 기능과 Cloudflare DNS-01 API를 이용해 `proxmox-01.
 - **전제조건**:
   - `PVE-01` (Proxmox 기본 설치), `DNS-01` (내부 DNS 등록), `AUTO-01` (자동설치 PoC), `IAC-01` (OpenTofu 기준선) 완료
   - Cloudflare Zone: `imcherry5778.xyz`
-  - Cloudflare API Token: Proxmox 전용, `Zone.DNS` (Edit) 최소 권한 스코프 부여
+  - Cloudflare API Token: Proxmox 전용 `proxmox-acme-imcherry5778-xyz`, `Zone.DNS` (Edit) 최소 권한 스코프 부여. 같은 zone을 쓰는 OPNsense·k3s Traefik·Warpgate 토큰을 재사용하지 않는다
 
 ---
 
@@ -97,10 +99,11 @@ systemctl restart pveproxy
 ## Token Rotation 및 폐기 절차
 
 1. **토큰 회전 (Rotation)**:
-   - Cloudflare 대시보드에서 새 `Zone.DNS` (Edit) 토큰 발급
+   - Cloudflare 대시보드에서 `proxmox-acme-imcherry5778-xyz` 규약의 새 `Zone.DNS` (Edit) 토큰 발급
    - `.env` 파일의 `CLOUDFLARE_API_TOKEN` 수정
-   - `./infra/proxmox/acme/scripts/setup-acme.sh production` 실행하여 Proxmox ACME plugin data 갱신
-   - 기존 토큰 Revoke
+   - `./infra/proxmox/acme/scripts/setup-acme.sh plugin` 실행하여 `cf-dns` plugin data만 갱신 (`production`은 인증서를 재발급해 rate limit을 소모하므로 회전 전용으로 쓰지 않는다)
+   - `staging`으로 새 토큰의 DNS-01 성공을 확인한 뒤 `production`으로 공인 인증서 복귀
+   - Cloudflare 대시보드에서 새 토큰 `Last used` 갱신 확인 후 기존 토큰 Revoke. 다른 서비스가 같은 토큰을 참조하지 않는지 먼저 확인한다
 2. **토큰 및 인증서 폐기 (Revocation)**:
    - `pvenode acme cert revoke` 명령으로 인증서 폐기 요청
    - Cloudflare 대시보드에서 해당 토큰 폐기(Revoke)
@@ -113,3 +116,10 @@ systemctl restart pveproxy
 - `.env` 파일 내용 및 API Token 원문
 - ACME 계정 private key 및 인증서 private key 원문
 - Proxmox task log 중 시크릿이 포함될 수 있는 raw dump
+- `pvenode acme plugin list` 출력. `data` 컬럼이 `CF_Token` 값을 평문으로 표시한다. 어떤 토큰이 저장돼 있는지 확인할 때는 이 명령을 쓰지 말고, 값 대신 길이와 해시만 비교한다:
+
+  ```bash
+  ssh root@<pve> "awk '/^[[:space:]]*data[[:space:]]/{print \$2}' /etc/pve/priv/acme/plugins.cfg \
+    | base64 -d | sed -n 's/^CF_Token=//p' | tr -d '\r\n' > /tmp/.t
+    printf 'len=%s sha=%s\n' \"\$(wc -c < /tmp/.t)\" \"\$(sha256sum /tmp/.t | cut -c1-12)\"; rm -f /tmp/.t"
+  ```
