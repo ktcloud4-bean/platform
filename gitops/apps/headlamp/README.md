@@ -61,7 +61,9 @@ ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
 
 [`verify-reader-access.sh`](../../tools/headlamp-01/verify-reader-access.sh)는 TokenRequest
 출력을 mode `0600` 임시 파일로만 받고, token 원문을 stdout·stderr·shell 인자에 넣지
-않는다. token과 Authorization header 파일은 종료 trap에서 지운다.
+않는다. token과 Authorization header 파일은 종료 trap에서 지운다. 검증 전 원격
+loopback port가 비어 있는지 확인하고, 종료 trap에서 이 검증이 시작한 원격
+`kubectl port-forward`도 종료한 뒤 listener 0건을 확인한다.
 
 ```bash
 K3S_SSH_TARGET=rocky@k3s-01.imcherry5778.xyz \

@@ -8,6 +8,14 @@ K3S_SSH_KNOWN_HOSTS="${K3S_SSH_KNOWN_HOSTS:-$HOME/.ssh/known_hosts}"
 HEADLAMP_LOCAL_PORT="${HEADLAMP_LOCAL_PORT:-8446}"
 HEADLAMP_REMOTE_PORT="${HEADLAMP_REMOTE_PORT:-18446}"
 
+for port_value in "$HEADLAMP_LOCAL_PORT" "$HEADLAMP_REMOTE_PORT"; do
+  if [[ ! "$port_value" =~ ^[0-9]+$ ]] \
+    || ((port_value < 1024 || port_value > 65535)); then
+    echo "port는 1024~65535 정수여야 합니다: $port_value" >&2
+    exit 1
+  fi
+done
+
 for command_name in base64 curl jq shred ssh; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "필수 명령이 없습니다: $command_name" >&2
@@ -26,10 +34,34 @@ curl_config="$verify_dir/curl.conf"
 response_file="$verify_dir/response.json"
 port_forward_log="$verify_dir/port-forward.log"
 port_forward_pid=""
+remote_port_forward_owned=false
+
+stop_remote_port_forward() {
+  # HEADLAMP_REMOTE_PORT는 로컬에서 정수 범위를 검증한 뒤 원격 명령에 넣는다.
+  # shellcheck disable=SC2029
+  ssh "${ssh_options[@]}" "$K3S_SSH_TARGET" \
+    "sudo -n /usr/sbin/fuser -k ${HEADLAMP_REMOTE_PORT}/tcp >/dev/null 2>&1 || true; \
+for _ in {1..20}; do \
+  if ! sudo -n ss -H -lnt '( sport = :${HEADLAMP_REMOTE_PORT} )' | grep -q .; then \
+    exit 0; \
+  fi; \
+  sleep 0.1; \
+done; \
+exit 1"
+}
 
 cleanup() {
   local cleanup_status=$?
   trap - EXIT INT TERM
+
+  if [[ "$remote_port_forward_owned" == true ]]; then
+    if ! stop_remote_port_forward; then
+      echo "원격 port-forward 정리에 실패했습니다: 127.0.0.1:${HEADLAMP_REMOTE_PORT}" >&2
+      if ((cleanup_status == 0)); then
+        cleanup_status=1
+      fi
+    fi
+  fi
 
   if [[ -n "$port_forward_pid" ]] && kill -0 "$port_forward_pid" 2>/dev/null; then
     kill "$port_forward_pid" 2>/dev/null || true
@@ -43,7 +75,9 @@ cleanup() {
 
   exit "$cleanup_status"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 ssh_options=(
   -o BatchMode=yes
@@ -52,6 +86,24 @@ ssh_options=(
   -o "UserKnownHostsFile=$K3S_SSH_KNOWN_HOSTS"
 )
 remote_kubectl="sudo -n /usr/local/bin/k3s kubectl"
+
+if ! ssh "${ssh_options[@]}" "$K3S_SSH_TARGET" \
+  'test -x /usr/sbin/fuser'; then
+  echo "k3s 노드에 /usr/sbin/fuser가 없습니다." >&2
+  exit 1
+fi
+
+existing_remote_listener="$(
+  # HEADLAMP_REMOTE_PORT는 로컬에서 정수 범위를 검증한 뒤 원격 명령에 넣는다.
+  # shellcheck disable=SC2029
+  ssh "${ssh_options[@]}" "$K3S_SSH_TARGET" \
+    "sudo -n ss -H -lnt '( sport = :${HEADLAMP_REMOTE_PORT} )'"
+)"
+if [[ -n "$existing_remote_listener" ]]; then
+  echo "원격 port가 이미 사용 중입니다: 127.0.0.1:${HEADLAMP_REMOTE_PORT}" >&2
+  exit 1
+fi
+unset existing_remote_listener
 
 # remote_kubectl은 고정된 비밀 없는 명령 prefix만 client에서 확장한다.
 # shellcheck disable=SC2029
@@ -90,6 +142,7 @@ ssh "${ssh_options[@]}" -o ExitOnForwardFailure=yes \
   "$remote_kubectl -n headlamp port-forward --address=127.0.0.1 service/headlamp ${HEADLAMP_REMOTE_PORT}:80" \
   >"$port_forward_log" 2>&1 &
 port_forward_pid=$!
+remote_port_forward_owned=true
 
 for _ in {1..30}; do
   if ! kill -0 "$port_forward_pid" 2>/dev/null; then
