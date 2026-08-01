@@ -260,7 +260,13 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `HEADLAMP-02 BLOCKED` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
 | `NB-02 READY` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
 | `WG-02 READY` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | 없음 | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
-| `AWS-ID-01 READY` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
+| `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
+
+2026-08-01 `AWS-ID-01`은 세 번째 AWS identity state root에서 Keycloak SAML provider와
+일상/특권 분리 temporary role을 적용했다. daily/privileged console SAML, 무그룹 role 없음·STS
+거부, 최소권한 allow/deny, 900초 만료, 사람용 IAM access key 0, 검증용 임시 user 제거와 최종
+OpenTofu plan 무변경을 확인했다. 현재 백로그에서 `AWS-ID-01`을 선행으로 갖는 직접 후속은
+없으므로 새로 `READY`로 연 작업은 없다.
 
 2026-07-31 `GITOPS-01`에서 Kubernetes `v1.36.2+k3s1`에 Argo CD `v3.5.0-rc3`
 pre-release를 fixed tag·commit·manifest SHA-256·image digest로 bootstrap했다. root

@@ -1,0 +1,23 @@
+# provider cache와 state. 이 root는 IdP metadata와 ARN을 state에 보관한다.
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# 실제 계정 ID·metadata 경로·binary plan은 저장소 밖에서만 다룬다.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+*.tfplan
+*.tfplan.*
+plan.out
+plan.txt
+
+# Keycloak metadata, assertion 및 복구 중 생성될 수 있는 민감 출력 차단.
+*.xml
+*.saml
+*.assertion
+*.env
+credentials
+*.secret
+crash.log
+crash.*.log

@@ -1,0 +1,11 @@
+# 실제 값은 이 파일을 복사하지 말고 저장소 밖 mode 0600 파일에 둔다.
+# aws_account_id = "123456789012"
+
+# Keycloak realm metadata는 적용 직전에 현재 endpoint에서 내려받아 저장소 밖에 둔다.
+# saml_metadata_file = "/home/<operator>/secrets/ktcloud4-bean/aws-id-01/keycloak-platform-metadata.xml"
+
+# IAM SAML provider와 Keycloak reconcile script가 같은 이름을 쓴다.
+saml_provider_name = "keycloak-platform"
+
+# AWS 최소값인 15분. 이 값을 바꾸지 말고 만료 검증도 함께 다시 설계한다.
+console_session_duration_seconds = 900
