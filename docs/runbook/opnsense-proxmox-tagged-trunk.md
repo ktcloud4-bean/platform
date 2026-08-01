@@ -29,7 +29,7 @@ OPNsense의 Proxmox 직결 부모 포트를 무주소로 유지하고 VLAN 10·2
 - `docs/backlog.md`에서 선행 작업과 `PVE-LIVE`, `OPNSENSE-LIVE` 잠금을 확인한다.
 - OPNsense와 Proxmox 모두 로컬 `known_hosts`를 사용한 strict host key 검증과 공개키 SSH가 성공해야 한다.
 - Bitwarden SSH agent는 로컬에서 서명한다. 서버에는 공개키와 서명 증명만 전달되며 private key를 호스트, 명령 인자, 저장소로 복사하지 않는다.
-- OPNsense API 입력은 권한이 제한된 `infra/opnsense/.env`에서 읽고, 원문 credential을 출력하지 않는다.
+- OPNsense API 입력은 권한이 제한된 저장소 밖 `~/secrets/ktcloud4-bean/opnsense/env`에서 읽고, 원문 credential을 출력하지 않는다.
 - PiKVM에서 현재 OPNsense 화면과 콘솔 입력을 확인하고 로컬 복구 로그인이 가능해야 한다.
 - 작업 전 원본은 저장소 밖 임의 디렉터리에 보관한다. 디렉터리는 `0700`, OPNsense 원본 설정과 Proxmox 네트워크 사본은 `0600`이어야 한다.
 - 정확한 주소와 VLAN 값은 `docs/ip-plan.md`에서 읽는다. 이 runbook의 과거 값이나 셸 기록을 단일 원본으로 사용하지 않는다.

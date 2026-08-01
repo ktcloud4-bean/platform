@@ -24,17 +24,36 @@ PROD_ACCOUNT="le-production"
 STAGING_DIRECTORY="https://acme-staging-v02.api.letsencrypt.org/directory"
 PROD_DIRECTORY="https://acme-v02.api.letsencrypt.org/directory"
 
+# 비밀은 저장소 밖 mode 0600 파일에 둔다. git clean이나 worktree 정리가 지우지 못하고,
+# 실수로 commit할 경로에 아예 존재하지 않게 하기 위해서다.
+DEFAULT_ENV_FILE="${HOME}/secrets/ktcloud4-bean/proxmox/acme/env"
+
+# ACME 계정 연락처. Let's Encrypt는 2025-06-04부로 만료 알림을 보내지 않으므로 이 값은
+# 발급·갱신 동작에 영향이 없다. 저장소의 다른 ACME 설정과 같은 운영자 identity를 쓴다.
+DEFAULT_ACME_EMAIL="imcherry5778@gmail.com"
+
 # Load environment variables without sourcing (prevent shell pollute / code execution)
 load_env() {
-    local env_file=""
-    if [[ -f "${ACME_DIR}/.env" ]]; then
+    local env_file="${PVE_ACME_ENV_FILE:-}"
+    if [[ -n "${env_file}" ]]; then
+        [[ -f "${env_file}" ]] \
+            || { echo "[ERROR] PVE_ACME_ENV_FILE not found: ${env_file}" >&2; exit 1; }
+    elif [[ -f "${DEFAULT_ENV_FILE}" ]]; then
+        env_file="${DEFAULT_ENV_FILE}"
+    elif [[ -f "${ACME_DIR}/.env" ]]; then
         env_file="${ACME_DIR}/.env"
     elif [[ -f "${REPO_ROOT}/.env" ]]; then
         env_file="${REPO_ROOT}/.env"
     else
-        echo "[ERROR] No .env file found in ${ACME_DIR} or ${REPO_ROOT}" >&2
+        echo "[ERROR] No env file found. Set PVE_ACME_ENV_FILE or create ${DEFAULT_ENV_FILE}" >&2
         exit 1
     fi
+
+    # 비밀 입력은 symlink로 대체되지 않아야 하고 소유자 전용이어야 한다.
+    [[ ! -L "${env_file}" ]] \
+        || { echo "[ERROR] env file must not be a symlink: ${env_file}" >&2; exit 1; }
+    [[ "$(stat -c '%a' "${env_file}")" == "600" ]] \
+        || { echo "[ERROR] env file must be mode 0600: ${env_file}" >&2; exit 1; }
 
     # Read keys safely
     CF_TOKEN="$(grep -E '^CLOUDFLARE_API_TOKEN=' "${env_file}" | cut -d'=' -f2- | tr -d '\r"' || true)"
@@ -45,7 +64,7 @@ load_env() {
 
     ACME_EMAIL="$(grep -E '^PROXMOX_ACME_EMAIL=' "${env_file}" | cut -d'=' -f2- | tr -d '\r"' || true)"
     if [[ -z "${ACME_EMAIL}" ]]; then
-        ACME_EMAIL="admin@imcherry5778.xyz"
+        ACME_EMAIL="${DEFAULT_ACME_EMAIL}"
     fi
 }
 

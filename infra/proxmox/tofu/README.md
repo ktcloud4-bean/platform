@@ -42,18 +42,19 @@ tofu plan -var-file=<저장소 밖>  # 현재 운영 상태: No changes
 
 토큰 값을 **커밋하지 않는다.** 채팅·이슈·커밋 메시지·plan·state·`*.tfvars`·명령 인자에도 남기지 않는다.
 
-값은 `infra/proxmox/.env`에 두고 mode `0600`으로 유지한다. 루트 `.gitignore`가 `.env`를 막고 `!.env.example`만 추적한다. `infra/proxmox/acme`와 같은 규약이다.
+값은 `~/secrets/ktcloud4-bean/proxmox/env`에 두고 mode `0600`으로 유지한다. 저장소 안에는 두지 않는다. `.gitignore`는 커밋만 막을 뿐이고 `git clean -xfd`와 worktree 정리는 저장소 안 파일을 지운다. `infra/proxmox/acme`와 같은 규약이다.
 
 ```sh
-cp infra/proxmox/.env.example infra/proxmox/.env
-chmod 600 infra/proxmox/.env
+mkdir -p ~/secrets/ktcloud4-bean/proxmox
+cp infra/proxmox/.env.example ~/secrets/ktcloud4-bean/proxmox/env
+chmod 600 ~/secrets/ktcloud4-bean/proxmox/env
 # PROXMOX_VE_API_TOKEN=<user>@<realm>!<token-id>=<uuid> 한 줄만 채운다
 ```
 
 파일은 셸로 `source`하지 않는다. 해당 줄만 파싱해 OpenTofu 프로세스 환경으로만 넘긴다.
 
 ```sh
-PROXMOX_VE_API_TOKEN="$(grep -E '^PROXMOX_VE_API_TOKEN=' infra/proxmox/.env | cut -d= -f2-)" \
+PROXMOX_VE_API_TOKEN="$(grep -E '^PROXMOX_VE_API_TOKEN=' ~/secrets/ktcloud4-bean/proxmox/env | cut -d= -f2-)" \
   tofu plan
 ```
 

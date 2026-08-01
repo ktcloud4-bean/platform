@@ -24,8 +24,8 @@
   propagation check를 끄지 않는다.
 - 저장소의 서명된 Git 운영자 identity와 같은 `imcherry5778@gmail.com`을 두 ACME
   account의 contact로 사용한다.
-- Cloudflare token은 추적되는 [`.env.example`](.env.example)을 복사한 Git 제외·mode
-  `0600` `.env` 또는 저장소 밖의 같은 형식 입력에서
+- Cloudflare token은 추적되는 [`.env.example`](.env.example) 형식으로 만든 저장소 밖
+  mode `0600` 파일 `~/secrets/ktcloud4-bean/ingress/env`에서
   `kube-system/ingress-01-cloudflare-dns` Secret으로 주입한다. manifest에는 Secret
   이름과 key 이름만 둔다.
 
@@ -59,13 +59,14 @@ DNS-01 staging 또는 production 요청을 실행하지 않는다.
 Secret 주입은 승인 뒤에만
 [`gitops/tools/ingress-01/inject-cloudflare-secret.sh`](../../tools/ingress-01/inject-cloudflare-secret.sh)를
 사용한다. 스크립트는 env 파일을 `source`하지 않고 `CLOUDFLARE_API_TOKEN` 한 항목만
-읽는다. 기본 입력은 `gitops/apps/ingress/.env`이며, 파일을 Git에서 제외하고 mode
+읽는다. 기본 입력은 저장소 밖의 `~/secrets/ktcloud4-bean/ingress/env`이며 mode
 `0600`으로 유지한다. token 값, Secret YAML, ACME account와 private key를 출력하지
 않는다.
 
 ```bash
-cp gitops/apps/ingress/.env.example gitops/apps/ingress/.env
-chmod 600 gitops/apps/ingress/.env
+mkdir -p ~/secrets/ktcloud4-bean/ingress
+cp gitops/apps/ingress/.env.example ~/secrets/ktcloud4-bean/ingress/env
+chmod 600 ~/secrets/ktcloud4-bean/ingress/env
 ```
 
 편집 뒤에는 token을 채팅·셸 명령 인자에 넣지 않고 다음처럼 실행한다.
@@ -76,10 +77,10 @@ K3S_SSH_KNOWN_HOSTS="$HOME/.ssh/known_hosts" \
 ./gitops/tools/ingress-01/inject-cloudflare-secret.sh
 ```
 
-`.gitignore`는 실수 커밋만 막는다. `git clean -xfd`는 `.env`를 삭제하므로 암호화 장기
-보관소의 원본 token을 별도로 유지한다. 이 작업에서는 사용자의 명시적 요청에 따라
-worktree의 mode `0600` `.env`를 merge 뒤 main worktree의 같은 Git 제외 경로로 옮기며,
-그 밖의 임시 token 복사본은 만들거나 남기지 않는다.
+`.gitignore`는 실수 커밋만 막을 뿐이고 `git clean -xfd`와 worktree 정리는 저장소 안
+파일을 지운다. 그래서 `SECRET-01` 이후 실제 token은 저장소 안에 두지 않고
+`~/secrets/ktcloud4-bean/ingress/env` 하나만 원본으로 유지한다. worktree를 오가며
+복사하지 않으므로 merge 뒤 파일을 옮기는 절차도 필요하지 않다.
 
 ## task commit과 main 전환
 

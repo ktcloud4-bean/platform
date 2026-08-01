@@ -11,7 +11,7 @@ usage() {
   ./gitops/tools/ingress-01/inject-cloudflare-secret.sh [mode-0600-env-file]
 
 Cloudflare/public DNS staging 승인 뒤에만 실행한다. token은 화면이나 Secret YAML로
-출력하지 않는다. env 파일을 생략하면 gitops/apps/ingress/.env를 사용한다.
+출력하지 않는다. env 파일을 생략하면 ~/secrets/ktcloud4-bean/ingress/env를 사용한다.
 USAGE
 }
 
@@ -23,7 +23,9 @@ fi
 : "${K3S_SSH_TARGET:?K3S_SSH_TARGET을 지정해야 합니다}"
 : "${K3S_SSH_KNOWN_HOSTS:?K3S_SSH_KNOWN_HOSTS를 지정해야 합니다}"
 
-env_input=${1:-"$repo_root/gitops/apps/ingress/.env"}
+# 비밀은 저장소 밖 mode 0600 파일에 둔다. `git clean -xfd`와 worktree 정리가 저장소 안
+# 파일을 지우고, 실수로 commit할 경로에 아예 존재하지 않게 하기 위해서다.
+env_input=${1:-"$HOME/secrets/ktcloud4-bean/ingress/env"}
 if [[ ! -f $env_input || -L $env_input ]]; then
   printf '%s\n' '오류: env 입력은 존재하는 symlink 아닌 일반 파일이어야 합니다.' >&2
   exit 2

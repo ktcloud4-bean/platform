@@ -25,7 +25,9 @@ Proxmox VE 내장 ACME 기능과 Cloudflare DNS-01 API를 이용해 `proxmox-01.
 ## 시크릿 입력 및 저장 경계
 
 1. **저장 위치**:
-   - `infra/proxmox/acme/.env` (또는 저장소 루트 `.env`) 파일에 mode `0600` (`chmod 600 .env`)으로 보관한다.
+   - 저장소 밖 `~/secrets/ktcloud4-bean/proxmox/acme/env`에 mode `0600`으로 보관한다. 다른 경로는 `PVE_ACME_ENV_FILE` 환경변수로 지정한다.
+   - 저장소 안에는 두지 않는다. `.gitignore`는 커밋만 막을 뿐이고 `git clean -xfd`와 worktree 정리는 저장소 안 파일을 지운다.
+   - 스크립트가 symlink를 거부하고 mode `0600`이 아니면 중단한다.
    - 셸 환경으로 `source` 하지 않으며, 스크립트를 통해 마스킹된 Key-Value 파싱으로만 접근한다.
 2. **Proxmox 저장 경계**:
    - Proxmox 노드의 보호된 ACME 플러그인 구성(`/etc/pve/priv/acme/plugins.cfg`)에 자동 갱신용으로 보관된다.

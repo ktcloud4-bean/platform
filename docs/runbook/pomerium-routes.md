@@ -74,7 +74,7 @@ Git bootstrap은 기존 `kc-verify`만 소유한다. POM 선언은 기존 realm/
 읽기 전용 확인:
 
 ```bash
-OPN_ENV=/home/imcherry/projects/ktcloud4-bean/platform/infra/opnsense/.env
+OPN_ENV="$HOME/secrets/ktcloud4-bean/opnsense/env"
 gitops/tools/pom-01/opnsense-alias.py --env-file "$OPN_ENV" check
 infra/opnsense/scripts/check-drift.sh --env-file "$OPN_ENV"
 ```

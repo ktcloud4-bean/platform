@@ -25,12 +25,13 @@
 
 ## 3. 시크릿 입력 및 설정 준비
 
-`infra/proxmox/acme/.env` (또는 저장소 루트의 `.env`)에 다음 항목을 선언한다 (파일 mode `0600` 필수).
+`~/secrets/ktcloud4-bean/proxmox/acme/env`에 다음 항목을 선언한다 (파일 mode `0600` 필수). 저장소 안에는 두지 않는다. 다른 경로를 쓰려면 `PVE_ACME_ENV_FILE` 환경변수로 지정한다. 스크립트는 symlink를 거부하고 mode `0600`이 아니면 중단한다.
 
 ```env
 CLOUDFLARE_API_TOKEN=your_scoped_cloudflare_api_token
-PROXMOX_ACME_EMAIL=admin@imcherry5778.xyz
 ```
+
+`PROXMOX_ACME_EMAIL`은 이 파일에 두지 않는다. Let's Encrypt가 2025-06-04부로 만료 알림을 보내지 않아 발급·갱신 동작에 영향이 없고 비밀도 아니므로, `scripts/setup-acme.sh`의 `DEFAULT_ACME_EMAIL`이 단일 원본을 소유한다. 저장소의 다른 ACME 설정과 같은 운영자 identity를 쓴다.
 
 `CLOUDFLARE_API_TOKEN`은 Proxmox 전용 토큰이어야 한다. 같은 zone을 쓰는 다른 ACME
 client(OPNsense, k3s Traefik, Warpgate)의 토큰을 재사용하면 한쪽을 회전·폐기할 때 다른
