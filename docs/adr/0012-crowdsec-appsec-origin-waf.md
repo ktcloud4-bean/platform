@@ -88,35 +88,6 @@ LF가 사라져 AppSec init hash gate를 통과하지 못했고, 즉시 main에�
 
 이 보정은 bouncer, route, AppSec policy, 금지 항목과 성능 기준을 바꾸지 않는다.
 
-### 2026-08-01 offline startup 보정
-
-두 번째 enablement에서는 byte-preserving init과 LAPI 등록을 통과했지만, 고정 CrowdSec
-image의 `/docker_start.sh`가 `prepare_hub()`에서 docker/cri parser 설치를 무조건 실행하고
-실패 시 Hub update를 시도했다. NetworkPolicy가 외부 egress를 거부해 AppSec가 기동하지
-않았으며 즉시 enablement를 revert했다. 기존 Docker 검증은 AppSec 컨테이너의 외부 egress와
-Hub 호출 부재를 검증하지 않아 이 경로를 놓쳤다.
-
-사용자는 이를 `CROWDSEC-FIX-01`의 미완료 live gate로 계속 처리하는 작업별 예외를
-승인했다. 전역 작업 규칙과 공개 main의 enablement·revert 이력은 다시 쓰지 않는다.
-다음 불변 경계를 추가한다.
-
-1. pinned image 내부 `/docker_start.sh`와 같은 commit의 upstream source hash를 확인한다.
-   정확히 한 번 존재하는 실행 지점의 `prepare_hub` 호출만 offline marker로 바꾸며,
-   builder와 결과 script도 SHA-256으로 고정한다. source·호출 수·결과 hash가 다르면 main
-   container 전에 실패한다.
-2. emptyDir에 정확한 결과가 이미 있으면 재사용하고 다른 byte가 있으면 덮어쓰지 않는다.
-   k3s·container runtime 재기동 뒤 init 재실행에서도 같은 hash를 유지해야 한다.
-3. Hub 선택 env는 모두 빈 값으로 고정한다. egress 없는 Docker와 route/HCC 없는 격리
-   Kubernetes startup에서 AppSec→LAPI만 허용되고 외부 TCP는 거부되며 Hub 설치·update
-   요청이 0건이어야 corrected enablement를 허용한다.
-4. NetworkPolicy selector는 실제 release label을 단일 원본으로 사용한다. Traefik은 AppSec
-   port에만 접근하고 LAPI에 접근하지 않으며, AppSec는 LAPI port와 cluster DNS 이외 egress를
-   갖지 않는다.
-
-이 보정도 bouncer module, route/exact 예외, fail policy, 금지 항목과 성능 기준을 바꾸지
-않는다. 변경된 startup source/hash와 격리 결과를 포함해 위 5개 항목의 live 승인을 다시
-받는다.
-
 ### 2026-08-01 성능 측정 계약 보정
 
 수정 enablement의 control/WAF 측정은 각 요청마다 별도 `curl` process를 실행해 DNS 조회와
