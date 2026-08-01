@@ -2445,7 +2445,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785618080.18" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785619257.04" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2663,7 +2663,7 @@
           <domain>imcherry5778.xyz</domain>
           <description>Warpgate SSO service alias (WG-02)</description>
         </alias>
-        <alias uuid="3e11e1ea-e733-44ef-a425-8ab14d23c113">
+        <alias uuid="48b277f6-0452-4dd8-9fbd-a07531d7bac7">
           <enabled>1</enabled>
           <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
           <hostname>headlamp</hostname>

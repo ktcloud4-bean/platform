@@ -107,7 +107,16 @@ remote_vault_status | jq -e '
   ' >/dev/null
 
 argo_state=$(remote_kubectl -n argocd get application platform-root headlamp pomerium keycloak vault \
-  -o 'jsonpath={range .items[*]}{.metadata.name}{"|"}{.status.sync.status}{"|"}{.status.health.status}{"|"}{.spec.source.targetRevision}{"\n"}{end}')
+  -o json | jq -r '
+    .items[]
+    | [
+        .metadata.name,
+        (.status.sync.status // ""),
+        (.status.health.status // ""),
+        (.spec.source.targetRevision // "")
+      ]
+    | @tsv
+  ')
 for expected in \
   'platform-root|Synced|Healthy|main' \
   'headlamp|Synced|Healthy|main' \
