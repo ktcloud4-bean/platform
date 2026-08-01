@@ -181,7 +181,7 @@ traffic selector는 `10.10.50.0/24 ↔ 10.20.0.0/16`이며, 이 selector 밖 출
 | `sso.imcherry5778.xyz` | service alias | Keycloak | 외부 인증 연동 가능 | Unbound alias → `k3s-01` (`10.10.20.10`) |
 | `access.imcherry5778.xyz` | service alias | Pomerium 보호 Dashy 포털 | 보호된 외부 접근 가능 | Unbound alias → `k3s-01` (`10.10.20.10`); POM-01 등록 |
 | `argo.imcherry5778.xyz` | service alias | Argo CD | Pomerium | 미등록 |
-| `headlamp.imcherry5778.xyz` | service alias | Headlamp | Pomerium | `TARGET`; HEADLAMP-02 `OPNSENSE-LIVE` 승인 뒤 Unbound alias → `k3s-01` (`10.10.20.10`), 내부 AAAA·공개 A/AAAA 0건 |
+| `headlamp.imcherry5778.xyz` | service alias | Headlamp | Pomerium | 미등록 |
 | `vault.imcherry5778.xyz` | service alias | Vault | 내부 관리 경로만 | 미등록 |
 | `git.imcherry5778.xyz` | service alias | Gitea | Pomerium | 미등록 |
 | `jenkins.imcherry5778.xyz` | service alias | Jenkins | Pomerium | 미등록 |
