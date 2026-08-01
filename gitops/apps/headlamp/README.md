@@ -47,7 +47,7 @@ Argo sync와 TokenRequest를 실행하지 않는다.
 않는다.
 
 ```bash
-ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+ssh -tt -o BatchMode=yes -o StrictHostKeyChecking=yes \
   -o ExitOnForwardFailure=yes \
   -L 127.0.0.1:8446:127.0.0.1:18446 \
   rocky@k3s-01.imcherry5778.xyz \
@@ -56,6 +56,8 @@ ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
 ```
 
 브라우저는 `http://127.0.0.1:8446`만 연다. 외부 DNS·NAT·Ingress를 만들지 않는다.
+`-tt`는 `Ctrl-C`와 터미널 종료를 원격 `kubectl`까지 전달해 k3s 노드의
+`127.0.0.1:18446` listener가 남지 않게 한다.
 
 ## 단기 reader token 검증
 
