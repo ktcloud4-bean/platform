@@ -1,0 +1,5 @@
+name: crowdsec-01/crs-inband
+default_remediation: ban
+inband_rules:
+  - crowdsec-01/exact-913100-exception
+  - crowdsec-01/crs

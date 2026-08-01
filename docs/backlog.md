@@ -253,7 +253,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
 | `CORAZA-01 DEFERRED` | Traefik HTTP-WASM Coraza + CRS 직접 PoC; 호환 실패로 폐기하고 `CROWDSEC-01`이 대체 | `INGRESS-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)의 재검토 조건이 생기면 새 결정·새 작업으로만 검토 |
 | `CROWDSEC-01 DEFERRED` | CrowdSec AppSec(Coraza + OWASP CRS) route-scoped PoC 최초 시도; CRS ConfigMap 바이트 훼손과 AppProject prune 순서 결함으로 revert | `INGRESS-01`, `WAF-DESIGN-01` | 없음 | `CROWDSEC-FIX-01` | 공개 main enablement와 rollback 이력을 재작성하지 않음; [실패 증거](evidence/crowdsec-fix-01/README.md)를 기준으로 FIX에서만 보정 |
-| `CROWDSEC-FIX-01 READY` | byte-preserving CRS snapshot·API round-trip·영구 AppProject로 CrowdSec AppSec PoC 보정 및 live gate 재수행 | `INGRESS-01`, `WAF-DESIGN-01` | `TRAEFIK-LIVE` | 공개 HTTP·`EDGE-01` | 소스·digest·plugin/rule hash 고정, Kubernetes API 후 49개 byte hash, Traefik 3.7.4 격리 호환, 정상 200·공격 403·exact 예외·control, p95·CPU·RSS, AppSec fail policy, 기존 ingress 회귀 없음, finalizer prune·Argo rollback·Git revert |
+| `CROWDSEC-FIX-01 READY` | byte-preserving CRS snapshot·offline AppSec startup·API round-trip·영구 AppProject로 CrowdSec AppSec PoC 보정 및 live gate 재수행 | `INGRESS-01`, `WAF-DESIGN-01` | `TRAEFIK-LIVE` | 공개 HTTP·`EDGE-01` | 소스·digest·plugin/rule/startup hash 고정, Kubernetes API 후 49개 byte hash, egress 없는 startup과 Hub 요청 0건, Traefik 3.7.4 격리 호환, 정상 200·공격 403·exact 예외·control, p95·CPU·RSS, AppSec fail policy, 기존 ingress 회귀 없음, finalizer prune·Argo rollback·Git revert |
 | `POM-01 READY` | Pomerium Core·선언형 Route·Routes Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음 | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
 | `HEADLAMP-02 BLOCKED` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
 | `NB-02 READY` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
@@ -362,6 +362,19 @@ enablement보다 먼저 영구 기반으로 남기고, CRS를 deterministic bina
 예외를 승인했다. Traefik 재기동은 enablement 후 한 번만 허용하며 직전에
 `KC-01` 상태와 시점을 다시 확인한다. `EDGE-01`은 이 FIX와 `POM-01`·`NB-02`·
 `NET-04`가 모두 완료될 때까지 `BLOCKED`를 유지한다.
+
+같은 날 `CROWDSEC-FIX-01`의 두 번째 enablement에서 byte-preserving init과 LAPI 등록은
+통과했지만, 고정 CrowdSec image의 `/docker_start.sh`가 AppSec 기동 중 docker/cri parser
+설치를 무조건 실행하고 실패 시 Hub update를 시도하는 결함을 live NetworkPolicy가
+차단했다. 기능 route를 열기 전 enablement를 즉시 revert해 root·ingress·keycloak과
+Traefik을 기준선으로 복구했고 영구 AppProject만 남겼다.
+
+사용자는 이 결함을 별도 FIX ID로 분리하지 않고 `CROWDSEC-FIX-01`의 미완료 live gate로
+계속 처리하는 작업별 예외를 명시적으로 승인했다. 전역 AGENTS.md 규칙과 공개 main의 기존
+enablement·revert 이력은 바꾸지 않는다. 같은 branch/worktree에서 image startup hash를
+검증한 offline 경계를 추가하고, egress 없는 Docker와 격리 Kubernetes startup에서 Hub
+요청 0건을 확인한다. 변경된 startup 자산을 포함한 ADR-0012의 5항목을 다시 제시해 live
+승인을 받은 뒤 corrected enablement와 성공 evidence·`DONE`을 순서대로 main에 남긴다.
 
 2026-07-31 `VAULT-01`에서 `hashicorp/vault:2.0.3`(Docker Hub 공식 organization, digest
 `sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54`, BUSL-1.1
