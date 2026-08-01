@@ -1,0 +1,260 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-vault-agent
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: secret-consumer
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  runtime.hcl: |
+    exit_after_auth = true
+    pid_file = "/tmp/vault-agent.pid"
+
+    vault {
+      address = "https://vault.vault.svc.cluster.local:8200"
+      ca_cert = "/vault/tls/vault.crt"
+      retry {
+        num_retries = 12
+      }
+    }
+
+    auto_auth {
+      method "kubernetes" {
+        mount_path = "auth/kubernetes"
+        config = {
+          role       = "keycloak"
+          token_path = "/var/run/secrets/vault/token"
+        }
+      }
+    }
+
+    template {
+      destination          = "/vault/secrets/db.env"
+      perms                = "0440"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/keycloak/runtime" -}}
+    KC_DB_PASSWORD={{ .Data.data.db_password }}
+    {{- end -}}
+    EOT
+    }
+
+  bootstrap.hcl: |
+    exit_after_auth = true
+    pid_file = "/tmp/vault-agent.pid"
+
+    vault {
+      address = "https://vault.vault.svc.cluster.local:8200"
+      ca_cert = "/vault/tls/vault.crt"
+      retry {
+        num_retries = 12
+      }
+    }
+
+    auto_auth {
+      method "kubernetes" {
+        mount_path = "auth/kubernetes"
+        config = {
+          role       = "keycloak"
+          token_path = "/var/run/secrets/vault/token"
+        }
+      }
+    }
+
+    template {
+      destination          = "/vault/secrets/db.env"
+      perms                = "0440"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/keycloak/runtime" -}}
+    KC_DB_PASSWORD={{ .Data.data.db_password }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/bootstrap.env"
+      perms                = "0440"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/keycloak/bootstrap" -}}
+    KC01_BOOTSTRAP_CLIENT_SECRET={{ .Data.data.bootstrap_client_secret }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/platform-realm.json"
+      perms                = "0440"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/keycloak/bootstrap" -}}
+    {
+      "realm": "platform",
+      "displayName": "ktcloud4-bean Platform",
+      "enabled": true,
+      "sslRequired": "external",
+      "registrationAllowed": false,
+      "registrationEmailAsUsername": false,
+      "rememberMe": false,
+      "resetPasswordAllowed": false,
+      "loginWithEmailAllowed": false,
+      "duplicateEmailsAllowed": false,
+      "verifyEmail": false,
+      "bruteForceProtected": true,
+      "permanentLockout": false,
+      "failureFactor": 5,
+      "waitIncrementSeconds": 60,
+      "minimumQuickLoginWaitSeconds": 60,
+      "quickLoginCheckMilliSeconds": 1000,
+      "maxFailureWaitSeconds": 900,
+      "maxDeltaTimeSeconds": 43200,
+      "accessTokenLifespan": 300,
+      "ssoSessionIdleTimeout": 1800,
+      "ssoSessionMaxLifespan": 36000,
+      "passwordPolicy": "length(20) and digits(1) and upperCase(1) and lowerCase(1)",
+      "otpPolicyType": "totp",
+      "otpPolicyAlgorithm": "HmacSHA256",
+      "otpPolicyDigits": 6,
+      "otpPolicyInitialCounter": 0,
+      "otpPolicyLookAheadWindow": 1,
+      "otpPolicyPeriod": 30,
+      "otpPolicyCodeReusable": false,
+      "eventsEnabled": true,
+      "adminEventsEnabled": true,
+      "adminEventsDetailsEnabled": false,
+      "eventsListeners": ["jboss-logging"],
+      "requiredActions": [
+        {"alias":"TERMS_AND_CONDITIONS","name":"Terms and Conditions","providerId":"TERMS_AND_CONDITIONS","enabled":false,"defaultAction":false,"priority":20},
+        {"alias":"UPDATE_PROFILE","name":"Update Profile","providerId":"UPDATE_PROFILE","enabled":true,"defaultAction":false,"priority":40},
+        {"alias":"VERIFY_EMAIL","name":"Verify Email","providerId":"VERIFY_EMAIL","enabled":true,"defaultAction":false,"priority":50},
+        {"alias":"CONFIGURE_TOTP","name":"Configure OTP","providerId":"CONFIGURE_TOTP","enabled":true,"defaultAction":true,"priority":54},
+        {"alias":"UPDATE_PASSWORD","name":"Update Password","providerId":"UPDATE_PASSWORD","enabled":true,"defaultAction":false,"priority":57},
+        {"alias":"delete_account","name":"Delete Account","providerId":"delete_account","enabled":false,"defaultAction":false,"priority":60},
+        {"alias":"UPDATE_EMAIL","name":"Update Email","providerId":"UPDATE_EMAIL","enabled":false,"defaultAction":false,"priority":70},
+        {"alias":"webauthn-register","name":"Webauthn Register","providerId":"webauthn-register","enabled":true,"defaultAction":false,"priority":80},
+        {"alias":"webauthn-register-passwordless","name":"Webauthn Register Passwordless","providerId":"webauthn-register-passwordless","enabled":true,"defaultAction":false,"priority":90},
+        {"alias":"VERIFY_PROFILE","name":"Verify Profile","providerId":"VERIFY_PROFILE","enabled":true,"defaultAction":false,"priority":100},
+        {"alias":"delete_credential","name":"Delete Credential","providerId":"delete_credential","enabled":true,"defaultAction":false,"priority":110},
+        {"alias":"idp_link","name":"Linking Identity Provider","providerId":"idp_link","enabled":true,"defaultAction":false,"priority":120},
+        {"alias":"CONFIGURE_RECOVERY_AUTHN_CODES","name":"Recovery Authentication Codes","providerId":"CONFIGURE_RECOVERY_AUTHN_CODES","enabled":true,"defaultAction":false,"priority":130},
+        {"alias":"update_user_locale","name":"Update User Locale","providerId":"update_user_locale","enabled":true,"defaultAction":false,"priority":1000}
+      ],
+      "clients": [
+        {
+          "clientId": "kc-verify",
+          "name": "KC-01 claim and least-privilege verifier",
+          "description": "KC-01 회귀 검증 전용 confidential direct-grant client",
+          "enabled": true,
+          "protocol": "openid-connect",
+          "publicClient": false,
+          "secret": "{{ .Data.data.verify_client_secret }}",
+          "standardFlowEnabled": false,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": true,
+          "serviceAccountsEnabled": false,
+          "frontchannelLogout": false,
+          "fullScopeAllowed": false,
+          "protocolMappers": [
+            {
+              "name": "groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "groups",
+                "full.path": "true",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        }
+      ],
+      "groups": [
+        {"name":"platform-users"},
+        {"name":"platform-privileged"},
+        {
+          "name":"keycloak-readers",
+          "clientRoles":{"realm-management":["view-users"]}
+        }
+      ],
+      "clientScopeMappings": {
+        "realm-management": [
+          {"client":"kc-verify","roles":["view-users"]}
+        ]
+      },
+      "users": [
+        {
+          "username": "imcherry",
+          "enabled": true,
+          "firstName": "Imcherry",
+          "lastName": "Daily",
+          "email": "imcherry5778@gmail.com",
+          "emailVerified": true,
+          "groups": ["/platform-users"],
+          "credentials": [
+            {"type":"password","value":"{{ .Data.data.daily_password }}","temporary":false},
+            {
+              "type":"otp",
+              "userLabel":"KC-01 TOTP",
+              "secretData":"{\"value\":\"{{ .Data.data.daily_totp }}\"}",
+              "credentialData":"{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA256\",\"secretEncoding\":\"BASE32\"}"
+            }
+          ]
+        },
+        {
+          "username": "imcherry-admin",
+          "enabled": true,
+          "firstName": "Imcherry",
+          "lastName": "Privileged",
+          "email": "imcherry5778+admin@gmail.com",
+          "emailVerified": true,
+          "groups": ["/platform-privileged","/keycloak-readers"],
+          "credentials": [
+            {"type":"password","value":"{{ .Data.data.privileged_password }}","temporary":false},
+            {
+              "type":"otp",
+              "userLabel":"KC-01 TOTP",
+              "secretData":"{\"value\":\"{{ .Data.data.privileged_totp }}\"}",
+              "credentialData":"{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA256\",\"secretEncoding\":\"BASE32\"}"
+            }
+          ]
+        }
+      ]
+    }
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/master-user.json"
+      perms                = "0440"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/keycloak/bootstrap" -}}
+    {
+      "username":"imcherry-kc-recovery",
+      "enabled":true,
+      "firstName":"Keycloak",
+      "lastName":"Recovery",
+      "email":"imcherry5778+keycloak-recovery@gmail.com",
+      "emailVerified":true,
+      "credentials":[
+        {"type":"password","value":"{{ .Data.data.local_admin_password }}","temporary":false},
+        {
+          "type":"otp",
+          "userLabel":"KC-01 recovery TOTP",
+          "secretData":"{\"value\":\"{{ .Data.data.local_admin_totp }}\"}",
+          "credentialData":"{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA256\",\"secretEncoding\":\"BASE32\"}"
+        }
+      ]
+    }
+    {{- end -}}
+    EOT
+    }

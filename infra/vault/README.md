@@ -70,3 +70,11 @@ database 연결을 만든 직후 `rotate-root`를 호출해 사람이 아는 비
 | `scripts/policies/*.hcl` | 앱별 policy 원문 |
 
 policy 파일은 Git이 소유한다. 값이 아니라 **권한 경계**라 커밋해도 비밀이 새지 않는다.
+
+## 앱 소비 결정
+
+VAULT-02는 소비 기반까지만 만들었다. 첫 소비자인 Keycloak은
+[ADR-0013](../../docs/adr/0013-keycloak-secret-consumption.md)에 따라 cluster-wide injector나
+CSI provider를 설치하지 않고, 자기 Pod에 명시한 Vault Agent init으로 기동 시점 값만
+메모리에 렌더링한다. 이후 앱이 같은 방식을 자동 승계한다는 뜻은 아니며 지속 회전과
+consumer 수를 기준으로 다시 선택한다.

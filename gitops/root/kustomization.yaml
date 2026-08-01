@@ -9,5 +9,7 @@ resources:
   - vault-application.yaml
   - headlamp-project.yaml
   - headlamp-application.yaml
+  - keycloak-project.yaml
+  - keycloak-application.yaml
   - velero-project.yaml
   - velero-application.yaml

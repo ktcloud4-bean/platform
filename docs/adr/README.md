@@ -26,6 +26,7 @@ ADR(Architecture Decision Record)은 목표 구조를 선택한 이유, 검토�
 | [ADR-0010](0010-seaweedfs-local-s3.md) | 로컬 S3 구현을 SeaweedFS로 전환 | `Accepted` | 클라이언트 호환 실패·독립 storage 확보·유지 상태 변화 |
 | [ADR-0011](0011-aws-site-to-site-vpn-boundary.md) | AWS 사설 연동을 policy-based Site-to-Site VPN으로 구현 | `Accepted` | VPC·사이트 증가·터널 이중화 요구·WAN 주소 정책 변화 |
 | [ADR-0012](0012-crowdsec-appsec-origin-waf.md) | 오리진 WAF를 CrowdSec AppSec 경로로 전환 | `Accepted` | bouncer 유지 중단·Traefik plugin 정책 변화·격리 PoC 실패 |
+| [ADR-0013](0013-keycloak-secret-consumption.md) | Keycloak 시크릿을 명시적 Vault Agent init으로 소비 | `Accepted` | 소비 앱 증가·무중단 DB 자격증명 회전 |
 
 ## 형식
 

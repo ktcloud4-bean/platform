@@ -1,0 +1,164 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-bootstrap-v1
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: bootstrap
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: bootstrap
+        app.kubernetes.io/part-of: platform-gitops
+    spec:
+      serviceAccountName: keycloak
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/bootstrap.hcl
+          securityContext:
+            runAsUser: 100
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config
+              readOnly: true
+            - name: vault-trust
+              mountPath: /vault/tls
+              readOnly: true
+            - name: vault-secrets
+              mountPath: /vault/secrets
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+      containers:
+        - name: bootstrap
+          image: quay.io/keycloak/keycloak:26.7.0@sha256:0f198be292568439d700cdbfb893e69a6009bb43a94a06a945b1d3d506c76b13
+          imagePullPolicy: IfNotPresent
+          command: ["/opt/keycloak/scripts/bootstrap.sh"]
+          env:
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://postgres-01.imcherry5778.xyz:5432/keycloak
+            - name: KC_DB_USERNAME
+              value: keycloak_user
+            - name: KC_DB_TLS_MODE
+              value: verify-server
+            - name: KC_DB_TLS_TRUST_STORE_FILE
+              value: /etc/keycloak/trust/postgres-01.crt
+            - name: KC_HOSTNAME
+              value: https://sso.imcherry5778.xyz
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_PROXY_TRUSTED_ADDRESSES
+              value: 10.42.0.0/24
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_METRICS_ENABLED
+              value: "true"
+            - name: KC_HTTP_MANAGEMENT_SCHEME
+              value: http
+            - name: KC_CACHE
+              value: ispn
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: scripts
+              mountPath: /opt/keycloak/scripts
+              readOnly: true
+            - name: trust-bundles
+              mountPath: /etc/keycloak/trust
+              readOnly: true
+            - name: vault-secrets
+              mountPath: /vault/secrets
+            - name: vault-secrets
+              mountPath: /opt/keycloak/data/import/platform-realm.json
+              subPath: platform-realm.json
+              readOnly: true
+            - name: keycloak-tmp
+              mountPath: /tmp
+      volumes:
+        - name: vault-agent-config
+          configMap:
+            name: keycloak-vault-agent
+            items:
+              - key: bootstrap.hcl
+                path: bootstrap.hcl
+        - name: scripts
+          configMap:
+            name: keycloak-scripts
+            defaultMode: 0550
+        - name: trust-bundles
+          configMap:
+            name: keycloak-trust-bundles
+        - name: vault-trust
+          configMap:
+            name: keycloak-trust-bundles
+            items:
+              - key: vault.crt
+                path: vault.crt
+        - name: vault-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: keycloak-tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600

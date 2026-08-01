@@ -77,6 +77,16 @@ VLAN 번호는 보안 등급 순서가 아니라 역할 식별자다. 실제 신
 등록됐고, 이전 `minio-01` canonical override는 제거했다. 두 canonical 이름은 동시에
 유지하지 않는다.
 
+### Kubernetes 내부 대역
+
+| 대역 | 용도 | 상태 |
+|---|---|---|
+| `10.42.0.0/24` | 단일 `k3s-01` node의 Pod CIDR | `LIVE`; Node `spec.podCIDR` 실측 |
+
+이 node slice만 Keycloak의 신뢰 proxy 범위로 쓴다. Traefik 밖 출발지가
+`X-Forwarded-*`를 보내도 Keycloak이 신뢰하지 않는다. 노드 추가로 Pod CIDR이 늘어나면
+전체 cluster CIDR을 넓게 신뢰하지 말고 실제 ingress source 범위를 다시 검증한다.
+
 ## 물리 토폴로지
 
 ```text
@@ -168,7 +178,7 @@ traffic selector는 `10.10.50.0/24 ↔ 10.20.0.0/16`이며, 이 selector 밖 출
 | `object-01.imcherry5778.xyz` | canonical host | SeaweedFS 로컬 S3 VM | 내부 | Unbound 등록; A/PTR `10.10.50.20` |
 | `warpgate-01.imcherry5778.xyz` | canonical host | Warpgate VM | 내부 | Unbound 등록 |
 | `netbird-01.imcherry5778.xyz` | canonical host | NetBird VM | 내부 | Unbound 등록 |
-| `sso.imcherry5778.xyz` | service alias | Keycloak | 외부 인증 연동 가능 | 미등록 |
+| `sso.imcherry5778.xyz` | service alias | Keycloak | 외부 인증 연동 가능 | Unbound alias → `k3s-01` (`10.10.20.10`) |
 | `access.imcherry5778.xyz` | service alias | Pomerium Routes Portal | 보호된 외부 접근 가능 | 미등록 |
 | `argo.imcherry5778.xyz` | service alias | Argo CD | Pomerium | 미등록 |
 | `headlamp.imcherry5778.xyz` | service alias | Headlamp | Pomerium | 미등록 |

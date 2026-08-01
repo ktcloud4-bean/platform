@@ -205,6 +205,10 @@ Vault PKI는 내부 workload 인증서용이며 Proxmox·OPNsense·ingress의 �
 
 root token은 초기화와 복구에만 사용한다. GitOps가 Vault의 원문 시크릿을 소유하지 않으며, 애플리케이션별 policy와 auth role을 분리한다.
 
+Keycloak은 cluster-wide injector나 privileged CSI DaemonSet 없이 Pod에 명시한 Vault Agent init
+container로 기동 시점 값만 메모리에 렌더링한다. 상시 Keycloak container에는 Kubernetes
+ServiceAccount token을 주지 않는다. 상세 선택과 회전 조건은 [ADR-0013](adr/0013-keycloak-secret-consumption.md)이 소유한다.
+
 ## 데이터와 백업
 
 같은 물리 노드의 VM·SeaweedFS는 빠른 복구 사본이지 물리 장애 대비 오프사이트 백업이 아니다.

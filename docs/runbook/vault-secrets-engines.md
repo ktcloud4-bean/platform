@@ -106,8 +106,9 @@ policy는 남지만 `client_token`은 HMAC-SHA256으로 가려졌다. **KV에 �
   `configure.sh` 실행에 의존한다.
 - `configure.sh`는 재실행 가능하지만 완전한 멱등성 도구는 아니다. 이미 있는 mount는 건너뛰되
   `vault write`는 값을 덮어쓴다. 삭제된 항목을 감지하지는 못한다.
-- 이 작업은 기반을 만든 것이지 앱이 시크릿을 받아가는 경로(Agent injector·CSI 등)를 정하지
-  않았다. 그 선택은 `KC-01`이 한다.
+- 앱 소비 방식은 `KC-01`의 [ADR-0013](../adr/0013-keycloak-secret-consumption.md)이 처음
+  결정했다. Keycloak은 cluster-wide injector·privileged CSI 없이 명시적 Vault Agent init이
+  메모리 볼륨에 렌더링하며, 다른 앱은 자기 회전·자원 조건을 다시 검토한다.
 - TTL 만료는 revoke로 대체 검증했다. 1시간 경과 관측은 포함하지 않는다.
 
 ## 실패 시 원상복구

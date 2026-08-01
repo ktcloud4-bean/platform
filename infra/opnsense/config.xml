@@ -2333,7 +2333,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785489156.16" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785561586.29" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2529,6 +2529,13 @@
           <hostname>s3</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>SeaweedFS TLS S3 service alias</description>
+        </alias>
+        <alias uuid="47a89f8d-4e36-44f3-86fb-4ab998a44a89">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>sso</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>Keycloak service alias (KC-01)</description>
         </alias>
       </aliases>
     </unboundplus>

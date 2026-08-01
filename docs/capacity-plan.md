@@ -205,6 +205,18 @@ Pod, PVC, PV와 실제 시험 경로를 모두 제거하고 다시 측정했다.
 확인했다. 이는 64MiB 이하의 제한 시험 결과이며, nodefs 소진이나 kubelet eviction
 임계 자체를 시험한 것이 아니다. 자동 삭제 뒤 PVC 선언 합계와 storage child는 0이다.
 
+### `KC-01` 배포 예산
+
+Keycloak 상시 Pod의 scheduler 기준 유효 request는 CPU 250m·RAM 1GiB이고 limit는 CPU 2·RAM
+2GiB다. Vault Agent init request 10m·32MiB는 상시 container와 동시에 실행되지 않아 더 큰
+상시 request가 Pod 유효값이 된다. 최초 bootstrap Job도 같은 250m·1GiB를 일시 사용하고 완료
+후 실행 자원을 소비하지 않는다.
+
+Keycloak 데이터는 `postgres-01`에 두므로 KC-01이 추가하는 PVC는 0개다. 최초 배포 후 실제
+working set, node `available`, image·container 로그 증가량을 다시 기록한다. 상시 working set이
+1.5GiB를 넘거나 node `available`이 8GiB 아래면 replica·heap·limit을 늘리지 않고 원인을 먼저
+분류한다.
+
 ## 나머지 VM 디스크 구획
 
 | VM | 총량 | 구획 |

@@ -1,0 +1,199 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-scripts
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  bootstrap.sh: |
+    #!/usr/bin/env bash
+    set -Eeuo pipefail
+
+    readonly keycloak_home=/opt/keycloak
+    readonly secret_dir=/vault/secrets
+    readonly kcadm_config=/tmp/kcadm.config
+    readonly bootstrap_client_id=kc01-bootstrap
+    keycloak_pid=
+
+    cleanup() {
+      local cleanup_status=$?
+      set +e
+      if [[ -n "${keycloak_pid}" ]] && kill -0 "${keycloak_pid}" 2>/dev/null; then
+        kill -TERM "${keycloak_pid}"
+        wait "${keycloak_pid}"
+      fi
+      rm -f "${kcadm_config}"
+      find "${secret_dir}" -maxdepth 1 -type f -delete
+      exit "${cleanup_status}"
+    }
+    trap cleanup EXIT INT TERM
+
+    echo "KC-01 bootstrap: Vault가 렌더링한 입력을 불러옵니다."
+    set -a
+    # shellcheck disable=SC1091
+    source "${secret_dir}/db.env"
+    # shellcheck disable=SC1091
+    source "${secret_dir}/bootstrap.env"
+    set +a
+
+    export KC01_BOOTSTRAP_CLIENT_ID="${bootstrap_client_id}"
+    "${keycloak_home}/bin/kc.sh" bootstrap-admin service \
+      --client-id:env KC01_BOOTSTRAP_CLIENT_ID \
+      --client-secret:env KC01_BOOTSTRAP_CLIENT_SECRET \
+      --no-prompt
+
+    echo "KC-01 bootstrap: platform realm을 최초 import합니다."
+    "${keycloak_home}/bin/kc.sh" start --import-realm &
+    keycloak_pid=$!
+
+    export KC_CLI_CLIENT_SECRET="${KC01_BOOTSTRAP_CLIENT_SECRET}"
+    authenticated=false
+    for attempt in $(seq 1 60); do
+      if "${keycloak_home}/bin/kcadm.sh" config credentials \
+        --config "${kcadm_config}" \
+        --server http://127.0.0.1:8080 \
+        --realm master \
+        --client "${bootstrap_client_id}" >/dev/null 2>&1; then
+        authenticated=true
+        break
+      fi
+      if ! kill -0 "${keycloak_pid}" 2>/dev/null; then
+        echo "KC-01 bootstrap: Keycloak이 준비 전에 종료했습니다." >&2
+        wait "${keycloak_pid}"
+      fi
+      echo "KC-01 bootstrap: 관리자 API 준비 대기 (${attempt}/60)"
+      sleep 5
+    done
+    if [[ "${authenticated}" != true ]]; then
+      echo "KC-01 bootstrap: 관리자 API 준비 시간이 초과했습니다." >&2
+      exit 1
+    fi
+
+    "${keycloak_home}/bin/kcadm.sh" update realms/master \
+      --config "${kcadm_config}" \
+      -s otpPolicyType=totp \
+      -s otpPolicyAlgorithm=HmacSHA256 \
+      -s otpPolicyDigits=6 \
+      -s otpPolicyPeriod=30 \
+      -s otpPolicyLookAheadWindow=1 \
+      -s otpPolicyCodeReusable=false >/dev/null
+
+    local_admin_id=$(
+      "${keycloak_home}/bin/kcadm.sh" get users \
+        --config "${kcadm_config}" \
+        -r master \
+        -q username=imcherry-kc-recovery \
+        -q exact=true \
+        -F id | sed -n 's/.*"id" : "\([^"]*\)".*/\1/p' | head -n 1
+    )
+    if [[ -z "${local_admin_id}" ]]; then
+      echo "KC-01 bootstrap: 독립 로컬 복구 관리자를 만듭니다."
+      local_admin_id=$(
+        "${keycloak_home}/bin/kcadm.sh" create users \
+          --config "${kcadm_config}" \
+          -r master \
+          -f "${secret_dir}/master-user.json" \
+          -i
+      )
+    fi
+
+    "${keycloak_home}/bin/kcadm.sh" add-roles \
+      --config "${kcadm_config}" \
+      -r master \
+      --uid "${local_admin_id}" \
+      --rolename admin >/dev/null
+
+    recovery_client_id=$(
+      "${keycloak_home}/bin/kcadm.sh" get clients \
+        --config "${kcadm_config}" \
+        -r master \
+        -q clientId=kc-recovery \
+        -q exact=true \
+        -F id | sed -n 's/.*"id" : "\([^"]*\)".*/\1/p' | head -n 1
+    )
+    if [[ -z "${recovery_client_id}" ]]; then
+      recovery_client_id=$(
+        "${keycloak_home}/bin/kcadm.sh" create clients \
+          --config "${kcadm_config}" \
+          -r master \
+          -s clientId=kc-recovery \
+          -s name='KC-01 local recovery' \
+          -s enabled=true \
+          -s publicClient=true \
+          -s standardFlowEnabled=true \
+          -s directAccessGrantsEnabled=false \
+          -s implicitFlowEnabled=false \
+          -s serviceAccountsEnabled=false \
+          -s fullScopeAllowed=true \
+          -s 'redirectUris=["https://sso.imcherry5778.xyz/realms/master/account/*"]' \
+          -i
+      )
+    fi
+
+    credentials=$(
+      "${keycloak_home}/bin/kcadm.sh" get \
+        "users/${local_admin_id}/credentials" \
+        --config "${kcadm_config}" \
+        -r master \
+        -F type
+    )
+    grep -q '"type" : "password"' <<<"${credentials}"
+    grep -q '"type" : "otp"' <<<"${credentials}"
+    unset credentials
+
+    roles=$(
+      "${keycloak_home}/bin/kcadm.sh" get \
+        "users/${local_admin_id}/role-mappings/realm/composite" \
+        --config "${kcadm_config}" \
+        -r master \
+        -F name
+    )
+    grep -q '"name" : "admin"' <<<"${roles}"
+    unset roles
+
+    recovery_client=$(
+      "${keycloak_home}/bin/kcadm.sh" get "clients/${recovery_client_id}" \
+        --config "${kcadm_config}" \
+        -r master \
+        -F clientId,publicClient,standardFlowEnabled,directAccessGrantsEnabled,fullScopeAllowed
+    )
+    grep -q '"clientId" : "kc-recovery"' <<<"${recovery_client}"
+    grep -q '"publicClient" : true' <<<"${recovery_client}"
+    grep -q '"standardFlowEnabled" : true' <<<"${recovery_client}"
+    grep -q '"directAccessGrantsEnabled" : false' <<<"${recovery_client}"
+    grep -q '"fullScopeAllowed" : true' <<<"${recovery_client}"
+    unset recovery_client
+
+    temporary_client_id=$(
+      "${keycloak_home}/bin/kcadm.sh" get clients \
+        --config "${kcadm_config}" \
+        -r master \
+        -q clientId="${bootstrap_client_id}" \
+        -q exact=true \
+        -F id | sed -n 's/.*"id" : "\([^"]*\)".*/\1/p' | head -n 1
+    )
+    if [[ -z "${temporary_client_id}" ]]; then
+      echo "KC-01 bootstrap: 임시 관리 client를 찾지 못했습니다." >&2
+      exit 1
+    fi
+    "${keycloak_home}/bin/kcadm.sh" delete \
+      "clients/${temporary_client_id}" \
+      --config "${kcadm_config}" \
+      -r master
+    unset KC01_BOOTSTRAP_CLIENT_SECRET KC_CLI_CLIENT_SECRET KC_DB_PASSWORD
+
+    echo "KC-01 bootstrap: realm, MFA 사용자, 독립 복구 관리자 구성이 끝났습니다."
+
+  server-entrypoint.sh: |
+    #!/usr/bin/env bash
+    set -Eeuo pipefail
+
+    set -a
+    # shellcheck disable=SC1091
+    source /vault/secrets/db.env
+    set +a
+    exec /opt/keycloak/bin/kc.sh start
