@@ -1,0 +1,14 @@
+---
+
+bkp03_rclone_version: "1.74.4"
+bkp03_rclone_archive: "rclone-v{{ bkp03_rclone_version }}-linux-amd64.zip"
+bkp03_rclone_url: "https://github.com/rclone/rclone/releases/download/v{{ bkp03_rclone_version }}/{{ bkp03_rclone_archive }}"
+bkp03_rclone_sha256: "fe435e0c36228e7c2f116a8701f01127bb1f694005fc11d1f27186c8bca4115d"
+bkp03_rclone_license_url: "https://raw.githubusercontent.com/rclone/rclone/v{{ bkp03_rclone_version }}/COPYING"
+bkp03_rclone_license_sha256: "8cd2e9e750b90a04b7d82dbbca3930c696ae0309d7c10464f90a44f45754cd04"
+bkp03_rclone_path: /usr/local/bin/rclone
+bkp03_s3_endpoint: "https://s3.imcherry5778.xyz:8333"
+bkp03_s3_ca_path: "{{ bkp03_config_dir }}/s3-ca.crt"
+bkp03_retention_count: 7
+bkp03_health_max_age_seconds: 129600
+bkp03_backup_ip_allow: []

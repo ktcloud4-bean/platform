@@ -1,0 +1,12 @@
+---
+
+- name: PostgreSQL backup 인증 reload
+  ansible.builtin.systemd:
+    name: postgresql.service
+    state: reloaded
+  when: not ansible_check_mode
+
+- name: PostgreSQL native backup systemd 재적재
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: not ansible_check_mode

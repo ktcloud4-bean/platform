@@ -1,0 +1,11 @@
+[Unit]
+Description=BKP-03 PostgreSQL physical base backup 정기 실행
+
+[Timer]
+OnCalendar={{ postgres_backup_timer_oncalendar }}
+RandomizedDelaySec={{ postgres_backup_timer_randomized_delay_sec }}
+Persistent=true
+Unit=postgres-native-backup.service
+
+[Install]
+WantedBy=timers.target

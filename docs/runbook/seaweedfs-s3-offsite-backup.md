@@ -22,6 +22,7 @@ AWS 계정 ID, bucket 전체 이름, ARN과 access key는 이 문서에 적지 �
 | 전송 호스트 | `object-01` | 원본과 같은 host라 8333용 신규 방화벽 규칙이 필요 없고, 필요한 것은 outbound 443뿐이다 |
 | 전송 도구 | rclone 1.74.4 `linux-amd64` | 고정 버전·digest, S3→S3 스트리밍 |
 | 방향 | push, `rclone copy` 전용 | `sync`와 `--delete-*`를 쓰지 않는다 |
+| 사본 검증 | `rclone check --download --one-way` | 양쪽 object 본문을 내려받아 source 기준 byte 차이 0을 강제한다 |
 | AWS 착지 경로 | `s3://<bucket>/seaweedfs/<로컬 bucket>/<key>` | 원본 bucket 이름이 한 단계 아래에 그대로 보존된다 |
 | liveness 경로 | `s3://<bucket>/_heartbeat/<host FQDN>.txt` | 매 실행이 AWS 자격증명·네트워크·쓰기 권한을 실제로 사용한다 |
 | 암호화 | SSE-S3 `AES256` | bucket 기본 암호화 + rclone이 헤더를 명시 |
@@ -189,13 +190,13 @@ Ansible은 syntax-check, check/diff, 실제 적용을 모두 실행했다. check
 `ok=16 changed=9`, 최초 적용은 `ok=26 changed=15`, 같은 입력의 2회차는
 `ok=23 changed=0`이다. 설치된 rclone이 고정 버전인지 role assertion이 확인한다.
 
-현재 `offsite_source_buckets`는 비어 있다. 로컬 S3에 백업을 만드는 생산자(`BKP-01`,
-`BKP-02`, `BKP-03`)가 아직 없기 때문이다. 이 상태에서도 timer는 매일 돌며 heartbeat
-object를 쓰고 성공 metric을 발행한다. 옮길 원본이 없다는 사실은 실행 로그가 그대로
-말한다. 첫 실제 백업 날에야 자격증명 만료나 경로 단절을 발견하는 상황을 막으려는 canary다.
+`BKP-03` 완료 뒤 `offsite_source_buckets`에는 `bkp-03-postgres`와 `bkp-03-vault`가 들어 있고,
+두 bucket의 `Read/List`만 가진 별도 identity가 source를 읽는다. 매 실행은 `rclone copy` 뒤
+`rclone check --download --one-way`를 수행한다. 2026-08-01 최종 재실행에서 두 source 모두
+AWS destination과 byte 차이 0건이었다. heartbeat와 성공 metric 경로도 그대로 유지한다.
 
-생산자가 생기면 다음 두 가지를 함께 넣고 playbook을 다시 적용한다. 하나만 넣으면 job이
-403으로 실패하고 경보가 울린다.
+후속 backup producer를 추가할 때는 다음 두 가지를 함께 넣고 playbook을 다시 적용한다.
+하나만 넣으면 job이 403으로 실패하고 경보가 울린다.
 
 1. `offsite_source_buckets`에 로컬 bucket 이름 추가
 2. 같은 bucket에 `Read`·`List`만 가진 SeaweedFS identity와 그 credential
@@ -245,7 +246,7 @@ state 원문, access key secret, S3 secret은 기록·Git·일반 log에 넣지 
   확인했다.
 - 재부팅 후 timer 자동 시작은 `enabled` 상태와 `Persistent=true` 선언으로만 확인했다.
   `object-01`은 다른 작업자가 함께 쓸 수 있는 host라 이 작업에서 재부팅하지 않았다.
-- 현재 오프사이트 사본의 대상 데이터는 0이다. 이 작업이 만든 것은 검증된 경로이지 실제
-  백업 자산이 아니다. 무엇을 언제 얼마나 잃을 수 있는지는 `BKP-05`의 통합 drill이 답한다.
+- 현재 오프사이트 사본은 BKP-03의 PostgreSQL·Vault 백업 자산을 포함한다. 전체 플랫폼을
+  얼마나 빨리 복구하고 무엇을 잃을 수 있는지는 `BKP-05`의 통합 drill이 답한다.
 - AWS 착지점은 단일 region 단일 bucket이다. region 장애나 계정 자체의 상실은 이 구성이
   다루지 않는다.

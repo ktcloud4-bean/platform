@@ -1,0 +1,87 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+STATE_DIR={{ bkp03_state_dir }}
+CACHE_DIR={{ bkp03_cache_dir }}
+CONFIG_DIR={{ bkp03_config_dir }}
+RCLONE={{ bkp03_rclone_path }}
+BUCKET=${BKP03_S3_BUCKET:?BKP03_S3_BUCKET is required}
+RETENTION=${BKP03_RETENTION_COUNT:?BKP03_RETENTION_COUNT is required}
+
+exec 9>"${STATE_DIR}/backup.lock"
+flock -n 9 || { echo "다른 PostgreSQL backup이 실행 중이다" >&2; exit 75; }
+
+STAGE=$(mktemp -d "${CACHE_DIR}/backup.XXXXXX")
+cleanup() { rm -rf -- "${STAGE}"; }
+trap cleanup EXIT INT TERM
+
+RUN_LOG="${STATE_DIR}/last-run.log"
+: >"${RUN_LOG}"
+log() {
+  local line
+  line="$(date -u '+%Y-%m-%dT%H:%M:%SZ') $*"
+  printf '%s\n' "${line}" | tee -a "${RUN_LOG}"
+}
+
+STAMP=$(date -u '+%Y%m%dT%H%M%SZ')
+ARCHIVE="postgres-base-${STAMP}.tar.gz"
+OBJECT="postgres/${ARCHIVE}"
+MANIFEST="${ARCHIVE}.sha256"
+
+RCLONE_COMMON=(
+  --config "${CONFIG_DIR}/rclone.conf"
+  --ca-cert "{{ bkp03_s3_ca_path }}"
+  --retries 3
+  --low-level-retries 10
+  --log-level NOTICE
+)
+
+if "${RCLONE}" lsf "local:${BUCKET}/${OBJECT}" "${RCLONE_COMMON[@]}" 2>/dev/null | grep -q .; then
+  log "동일 object가 이미 있어 덮어쓰지 않는다 object=${OBJECT}"
+  exit 75
+fi
+
+log "physical base backup 시작 role={{ postgres_backup_db_role }}"
+/usr/bin/pg_basebackup \
+  --dbname="host={{ postgres_backup_socket_dir }} user={{ postgres_backup_db_role }}" \
+  --pgdata="${STAGE}/pgdata" \
+  --format=plain \
+  --wal-method=stream \
+  --checkpoint=spread \
+  --max-rate={{ postgres_backup_max_rate }} \
+  --manifest-checksums=SHA256 \
+  --label="BKP-03 ${STAMP}" \
+  --no-password
+
+/usr/bin/pg_verifybackup --quiet "${STAGE}/pgdata"
+log "pg_verifybackup 통과"
+
+tar -C "${STAGE}" -czf "${STAGE}/${ARCHIVE}" pgdata
+ARCHIVE_SHA=$(sha256sum "${STAGE}/${ARCHIVE}" | awk '{print $1}')
+printf '%s  %s\n' "${ARCHIVE_SHA}" "${ARCHIVE}" >"${STAGE}/${MANIFEST}"
+
+"${RCLONE}" copyto "${STAGE}/${ARCHIVE}" "local:${BUCKET}/${OBJECT}" "${RCLONE_COMMON[@]}"
+"${RCLONE}" copyto "${STAGE}/${MANIFEST}" "local:${BUCKET}/postgres/${MANIFEST}" "${RCLONE_COMMON[@]}"
+"${RCLONE}" copyto "local:${BUCKET}/${OBJECT}" "${STAGE}/download-${ARCHIVE}" "${RCLONE_COMMON[@]}"
+DOWNLOADED_SHA=$(sha256sum "${STAGE}/download-${ARCHIVE}" | awk '{print $1}')
+[ "${ARCHIVE_SHA}" = "${DOWNLOADED_SHA}" ] || { log "S3 round-trip SHA-256 불일치"; exit 1; }
+log "S3 round-trip 검증 완료 sha256=${ARCHIVE_SHA}"
+
+mapfile -t BACKUPS < <(
+  "${RCLONE}" lsf "local:${BUCKET}/postgres" "${RCLONE_COMMON[@]}" --files-only \
+    --include 'postgres-base-*.tar.gz' | sort -r
+)
+for OLD in "${BACKUPS[@]:${RETENTION}}"; do
+  [[ "${OLD}" =~ ^postgres-base-[0-9]{8}T[0-9]{6}Z\.tar\.gz$ ]] \
+    || { log "보존 삭제 대상 형식이 안전하지 않다 name=${OLD}"; exit 1; }
+  "${RCLONE}" deletefile "local:${BUCKET}/postgres/${OLD}" "${RCLONE_COMMON[@]}"
+  "${RCLONE}" deletefile "local:${BUCKET}/postgres/${OLD}.sha256" "${RCLONE_COMMON[@]}" || true
+  log "보존 세대 초과 object 삭제 name=${OLD}"
+done
+
+printf '%s\n' "${OBJECT}" >"${STATE_DIR}/last-object"
+printf '%s\n' "${ARCHIVE_SHA}" >"${STATE_DIR}/last-sha256"
+date -u +%s >"${STATE_DIR}/last-success.epoch"
+rm -f "${STATE_DIR}/last-failure"
+log "PostgreSQL physical base backup 완료 object=${OBJECT} retained=${RETENTION}"

@@ -68,6 +68,9 @@ database 연결을 만든 직후 `rotate-root`를 호출해 사람이 아는 비
 |---|---|
 | `scripts/configure.sh` | mount·auth·policy·role 생성 (재실행 가능) |
 | `scripts/policies/*.hcl` | 앱별 policy 원문 |
+| `scripts/configure-bkp03-snapshot.sh` | BKP-03 snapshot read policy·periodic token 선언 |
+| `scripts/verify-bkp03-isolated-restore.sh` | Service 없는 별도 Vault에서 Raft restore 검증·정리 |
+| `restore/bkp03-isolated-restore.yaml` | loopback·default-deny·임시 Raft restore Pod |
 
 policy 파일은 Git이 소유한다. 값이 아니라 **권한 경계**라 커밋해도 비밀이 새지 않는다.
 
@@ -78,3 +81,16 @@ VAULT-02는 소비 기반까지만 만들었다. 첫 소비자인 Keycloak은
 CSI provider를 설치하지 않고, 자기 Pod에 명시한 Vault Agent init으로 기동 시점 값만
 메모리에 렌더링한다. 이후 앱이 같은 방식을 자동 승계한다는 뜻은 아니며 지속 회전과
 consumer 수를 기준으로 다시 선택한다.
+
+## BKP-03 snapshot 경계
+
+BKP-03 정기 job은 `sys/storage/raft/snapshot` read와 자기 token 조회·갱신만 가진 전용
+periodic token을 사용한다. root token은 policy·token 최초 선언 때 stdin으로만 쓰고 정기
+job에는 저장하지 않는다. live Vault가 sealed이면 작업자가 unseal하지 않고 중단한다.
+
+restore API는 live `vault/vault-0`에 절대 호출하지 않는다. 검증 스크립트는 고정 격리
+namespace의 Service 없는 Pod에만 snapshot-force하고, 원본 unseal key는 저장소 밖 mode
+`0600` 파일에서 요청 본문으로 전달한다. KV marker, Kubernetes auth role의 고정 필드,
+`keycloak` policy를 `set -eu` 검증 shell에서 조회하고 SHA-256을 live 값과 비교한다. 요청별
+응답 필드는 비교에서 제외하며 결과 report에는 hash와 격리 조건만 기록한다. 실행 gate와 정리 증거는
+[BKP-03 런북](../../docs/runbook/postgres-vault-native-backup.md)이 소유한다.

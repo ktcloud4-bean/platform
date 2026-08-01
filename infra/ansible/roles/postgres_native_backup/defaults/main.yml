@@ -1,0 +1,11 @@
+---
+
+postgres_data_dir: /var/lib/pgsql/data
+postgres_backup_db_role: bkp03_backup
+postgres_backup_peer_map: bkp03_backup_map
+postgres_backup_socket_dir: /var/run/postgresql
+postgres_backup_timer_oncalendar: "*-*-* 02:10:00"
+postgres_backup_timer_randomized_delay_sec: 600
+postgres_backup_timeout_sec: 3600
+postgres_backup_max_rate: 64M
+postgres_restore_port: 55432

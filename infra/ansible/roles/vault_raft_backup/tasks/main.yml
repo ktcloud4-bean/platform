@@ -1,0 +1,160 @@
+---
+
+- name: Vault Raft backup 대상과 경계 확인
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.hostname == 'k3s-01'
+      - bkp03_backup_kind == 'vault'
+      - bkp03_s3_bucket == 'bkp-03-vault'
+      - vault_backup_namespace == 'vault'
+      - vault_backup_pod == 'vault-0'
+    fail_msg: k3s-01의 live vault-0은 snapshot read 대상일 뿐 restore 대상이 아니다.
+
+- name: live Vault seal·leader 상태 조회
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ vault_backup_namespace }}"
+      - exec
+      - "{{ vault_backup_pod }}"
+      - --
+      - vault
+      - status
+      - -format=json
+  register: vault_backup_status_raw
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: live Vault가 unsealed Raft leader인지 확인
+  ansible.builtin.assert:
+    that:
+      - vault_backup_status_raw.rc == 0
+      - (vault_backup_status_raw.stdout | from_json).initialized
+      - not (vault_backup_status_raw.stdout | from_json).sealed
+      - (vault_backup_status_raw.stdout | from_json).storage_type == 'raft'
+      - (vault_backup_status_raw.stdout | from_json).is_self
+    fail_msg: live Vault가 sealed이거나 Raft leader가 아니다. 직접 unseal하지 말고 사용자에게 요청한다.
+
+- name: Vault ClusterIP 조회
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ vault_backup_namespace }}"
+      - get
+      - service
+      - "{{ vault_backup_service }}"
+      - -o
+      - jsonpath={.spec.clusterIP}
+  register: vault_backup_service_ip_raw
+  changed_when: false
+  check_mode: false
+
+- name: live Vault Pod IP 조회
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ vault_backup_namespace }}"
+      - get
+      - pod
+      - "{{ vault_backup_pod }}"
+      - -o
+      - jsonpath={.status.podIP}
+  register: vault_backup_endpoint_ip_raw
+  changed_when: false
+  check_mode: false
+
+- name: live Vault public certificate 읽기
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - -n
+      - "{{ vault_backup_namespace }}"
+      - exec
+      - "{{ vault_backup_pod }}"
+      - --
+      - cat
+      - /vault/data/tls/vault.crt
+  register: vault_backup_ca_raw
+  changed_when: false
+  check_mode: false
+
+- name: Vault endpoint 입력 계산
+  ansible.builtin.set_fact:
+    vault_backup_service_ip: "{{ vault_backup_service_ip_raw.stdout }}"
+    vault_backup_endpoint_ip: "{{ vault_backup_endpoint_ip_raw.stdout }}"
+
+- name: Vault ClusterIP 형식 확인
+  ansible.builtin.assert:
+    that:
+      - vault_backup_service_ip is regex('^[0-9]{1,3}(\.[0-9]{1,3}){3}$')
+      - vault_backup_endpoint_ip is regex('^[0-9]{1,3}(\.[0-9]{1,3}){3}$')
+      - "'BEGIN CERTIFICATE' in vault_backup_ca_raw.stdout"
+    fail_msg: live Vault Service ClusterIP, Pod IP와 public certificate를 읽을 수 있어야 한다.
+
+- name: 인증된 live Vault public certificate 배치
+  ansible.builtin.copy:
+    content: "{{ vault_backup_ca_raw.stdout }}\n"
+    dest: "{{ vault_backup_ca_path }}"
+    owner: root
+    group: "{{ bkp03_backup_group }}"
+    mode: "0644"
+
+- name: live Vault endpoint 설정 선언
+  ansible.builtin.template:
+    src: vault.env.j2
+    dest: "{{ bkp03_config_dir }}/vault.env"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Vault Raft snapshot·restore download 스크립트 선언
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/usr/local/libexec/{{ item }}"
+    owner: root
+    group: "{{ bkp03_backup_group }}"
+    mode: "0750"
+  loop:
+    - vault-raft-backup.sh
+    - vault-raft-restore-download.sh
+
+- name: Vault Raft backup systemd unit 선언
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - vault-raft-backup.service
+    - vault-raft-backup.timer
+    - vault-raft-restore-download.service
+  notify: Vault Raft backup systemd 재적재
+
+- name: Vault Raft backup executable SELinux 기본 label 적용
+  ansible.builtin.command:
+    argv: [restorecon, -Fv, "{{ item }}"]
+  loop:
+    - /usr/local/libexec/vault-raft-backup.sh
+    - /usr/local/libexec/vault-raft-restore-download.sh
+  register: vault_backup_restorecon
+  changed_when: "'Relabeled' in vault_backup_restorecon.stdout"
+  when: not ansible_check_mode
+
+- name: Vault Raft backup systemd handler 반영
+  ansible.builtin.meta: flush_handlers
+
+- name: Vault Raft backup timer 활성화
+  ansible.builtin.systemd:
+    name: vault-raft-backup.timer
+    enabled: true
+    state: started
+  when: not ansible_check_mode

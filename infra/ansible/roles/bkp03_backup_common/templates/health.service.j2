@@ -1,0 +1,17 @@
+[Unit]
+Description=BKP-03 {{ bkp03_backup_kind }} backup freshness 검사
+OnFailure={{ bkp03_service_name }}-failure@{{ bkp03_service_name }}-health.service.service
+
+[Service]
+Type=oneshot
+User={{ bkp03_backup_user }}
+Group={{ bkp03_backup_group }}
+ExecStart=/usr/local/libexec/{{ bkp03_service_name }}-health-check.sh
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths={{ bkp03_state_dir }}
+CapabilityBoundingSet=
+AmbientCapabilities=

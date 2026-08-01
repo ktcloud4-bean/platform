@@ -1,0 +1,12 @@
+---
+
+vault_backup_namespace: vault
+vault_backup_pod: vault-0
+vault_backup_service: vault
+vault_backup_hostname: vault.vault.svc.cluster.local
+vault_backup_port: 8200
+vault_backup_token_path: "{{ bkp03_config_dir }}/token"
+vault_backup_ca_path: "{{ bkp03_config_dir }}/vault-ca.crt"
+vault_backup_timer_oncalendar: "*-*-* 02:40:00"
+vault_backup_timer_randomized_delay_sec: 600
+vault_backup_timeout_sec: 1800

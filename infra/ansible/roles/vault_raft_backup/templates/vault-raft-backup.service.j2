@@ -1,0 +1,51 @@
+[Unit]
+Description=BKP-03 Vault Raft snapshot to SeaweedFS S3
+Documentation=https://developer.hashicorp.com/vault/api-docs/system/storage/raft
+After=network-online.target
+Wants=network-online.target
+OnFailure=vault-raft-backup-failure@vault-raft-backup.service.service
+
+[Service]
+Type=oneshot
+User={{ bkp03_backup_user }}
+Group={{ bkp03_backup_group }}
+UMask=0077
+Environment=HOME={{ bkp03_state_dir }}
+Environment=XDG_CACHE_HOME={{ bkp03_cache_dir }}
+EnvironmentFile={{ bkp03_config_dir }}/s3.env
+EnvironmentFile={{ bkp03_config_dir }}/vault.env
+ExecStart=/usr/local/libexec/vault-raft-backup.sh
+TimeoutStartSec={{ vault_backup_timeout_sec }}
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+ReadOnlyPaths={{ bkp03_config_dir }}
+ReadWritePaths={{ bkp03_state_dir }} {{ bkp03_cache_dir }}
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+IPAddressAllow=localhost
+IPAddressAllow={{ vault_backup_service_ip }}/32
+IPAddressAllow={{ vault_backup_endpoint_ip }}/32
+{% for source in bkp03_backup_ip_allow %}
+IPAddressAllow={{ source }}
+{% endfor %}
+IPAddressDeny=any

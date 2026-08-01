@@ -1,0 +1,14 @@
+---
+
+bkp03_postgres_bucket: bkp-03-postgres
+bkp03_vault_bucket: bkp-03-vault
+bkp03_postgres_identity: bkp-03-postgres
+bkp03_vault_identity: bkp-03-vault
+bkp03_offsite_identity: bkp-03-offsite-reader
+bkp03_postgres_source_cidr: 10.10.50.10/32
+bkp03_s3_config_path: /etc/seaweedfs/s3.json
+bkp03_s3_ca_path: /etc/seaweedfs/tls/s3.crt
+bkp03_s3_endpoint: https://s3.imcherry5778.xyz:8333
+bkp03_rclone_path: /usr/local/bin/rclone
+bkp03_volume_service_path: /etc/systemd/system/seaweedfs-volume.service
+bkp03_required_volume_max_count: 10

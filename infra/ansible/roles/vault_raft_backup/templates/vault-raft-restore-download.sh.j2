@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+STATE_DIR={{ bkp03_state_dir }}
+CONFIG_DIR={{ bkp03_config_dir }}
+RCLONE={{ bkp03_rclone_path }}
+BUCKET=${BKP03_S3_BUCKET:?BKP03_S3_BUCKET is required}
+
+read -r OBJECT <"${STATE_DIR}/last-object"
+read -r EXPECTED_SHA <"${STATE_DIR}/last-sha256"
+[[ "${OBJECT}" =~ ^vault/vault-raft-[0-9]{8}T[0-9]{6}Z\.snap$ ]] \
+  || { echo "restore object 형식이 안전하지 않다" >&2; exit 1; }
+[[ "${EXPECTED_SHA}" =~ ^[0-9a-f]{64}$ ]] \
+  || { echo "snapshot SHA-256 형식이 잘못됐다" >&2; exit 1; }
+
+TMP=$(mktemp "${STATE_DIR}/.restore-input.XXXXXX")
+cleanup() { rm -f -- "${TMP}"; }
+trap cleanup EXIT INT TERM
+
+"${RCLONE}" copyto "local:${BUCKET}/${OBJECT}" "${TMP}" \
+  --config "${CONFIG_DIR}/rclone.conf" \
+  --ca-cert "{{ bkp03_s3_ca_path }}" \
+  --retries 3 --low-level-retries 10 --log-level NOTICE
+ACTUAL_SHA=$(sha256sum "${TMP}" | awk '{print $1}')
+[ "${EXPECTED_SHA}" = "${ACTUAL_SHA}" ] || { echo "restore input SHA-256 불일치" >&2; exit 1; }
+
+mv -f "${TMP}" "${STATE_DIR}/restore-input.snap"
+trap - EXIT INT TERM
+printf 'Vault restore input ready sha256=%s\n' "${ACTUAL_SHA}"

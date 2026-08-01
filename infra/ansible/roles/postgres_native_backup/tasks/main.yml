@@ -1,0 +1,167 @@
+---
+
+- name: PostgreSQL native backup 대상과 경계 확인
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.hostname == 'postgres-01'
+      - bkp03_backup_kind == 'postgres'
+      - bkp03_s3_bucket == 'bkp-03-postgres'
+      - postgres_backup_db_role != 'postgres'
+      - postgres_restore_port | int != 5432
+    fail_msg: postgres-01, 전용 bucket·role과 라이브가 아닌 restore port를 확인한다.
+
+- name: PostgreSQL service active 확인
+  ansible.builtin.command:
+    argv: [systemctl, is-active, postgresql.service]
+  register: postgres_backup_pg_active
+  changed_when: false
+  check_mode: false
+
+- name: PostgreSQL version·WAL·tablespace 전제 조회
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: >-
+      SELECT current_setting('server_version_num')::int AS version_num,
+             current_setting('wal_level') AS wal_level,
+             current_setting('max_wal_senders')::int AS max_wal_senders,
+             (SELECT count(*) FROM pg_tablespace
+                WHERE spcname NOT IN ('pg_default','pg_global')) AS external_tablespaces
+  register: postgres_backup_preflight
+  changed_when: false
+  check_mode: false
+
+- name: 무중단 physical base backup 전제 확인
+  ansible.builtin.assert:
+    that:
+      - postgres_backup_pg_active.stdout == 'active'
+      - postgres_backup_preflight.query_result[0].version_num | int >= 160000
+      - postgres_backup_preflight.query_result[0].wal_level == 'replica'
+      - postgres_backup_preflight.query_result[0].max_wal_senders | int >= 2
+      - postgres_backup_preflight.query_result[0].external_tablespaces | int == 0
+    fail_msg: PostgreSQL 16+, wal_level=replica, WAL sender 2개 이상, 외부 tablespace 0이 필요하다.
+
+- name: physical backup 전용 PostgreSQL replication role 선언
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_user:
+    name: "{{ postgres_backup_db_role }}"
+    role_attr_flags: LOGIN,REPLICATION,NOSUPERUSER,NOCREATEDB,NOCREATEROLE,NOBYPASSRLS
+    state: present
+  when: not ansible_check_mode
+
+- name: 전용 OS user와 PostgreSQL role의 peer map 선언
+  ansible.builtin.lineinfile:
+    path: "{{ postgres_data_dir }}/pg_ident.conf"
+    regexp: "^{{ postgres_backup_peer_map | regex_escape }}\\s+"
+    line: "{{ postgres_backup_peer_map }} {{ bkp03_backup_user }} {{ postgres_backup_db_role }}"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  notify: PostgreSQL backup 인증 reload
+
+- name: replication socket을 전용 peer map으로만 허용
+  ansible.builtin.lineinfile:
+    path: "{{ postgres_data_dir }}/pg_hba.conf"
+    regexp: '^local\s+replication\s+bkp03_backup\s+'
+    line: "local   replication     {{ postgres_backup_db_role }}                            peer map={{ postgres_backup_peer_map }}"
+    insertbefore: '^local\s+all\s+all\s+'
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  notify: PostgreSQL backup 인증 reload
+
+- name: PostgreSQL backup 인증 handler 반영
+  ansible.builtin.meta: flush_handlers
+
+- name: pg_hba parse 오류 조회
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: SELECT count(*)::int AS errors FROM pg_hba_file_rules WHERE error IS NOT NULL
+  register: postgres_backup_hba_errors
+  changed_when: false
+  check_mode: false
+
+- name: replication role 권한과 hba 오류 0 확인
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: >-
+      SELECT rolreplication, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls
+        FROM pg_roles WHERE rolname = 'bkp03_backup'
+  register: postgres_backup_role_state
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: PostgreSQL backup 최소권한 판정
+  ansible.builtin.assert:
+    that:
+      - postgres_backup_hba_errors.query_result[0].errors | int == 0
+      - postgres_backup_role_state.query_result | length == 1
+      - postgres_backup_role_state.query_result[0].rolreplication
+      - not postgres_backup_role_state.query_result[0].rolsuper
+      - not postgres_backup_role_state.query_result[0].rolcreatedb
+      - not postgres_backup_role_state.query_result[0].rolcreaterole
+      - not postgres_backup_role_state.query_result[0].rolbypassrls
+    fail_msg: backup role은 replication만 허용되고 hba parse 오류가 없어야 한다.
+  when: not ansible_check_mode
+
+- name: PostgreSQL native backup·격리 restore 스크립트 선언
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: postgres-native-backup.sh.j2
+      dest: /usr/local/libexec/postgres-native-backup.sh
+      group: "{{ bkp03_backup_group }}"
+      mode: "0750"
+    - src: postgres-native-restore-worker.sh.j2
+      dest: /usr/local/libexec/postgres-native-restore-worker.sh
+      group: "{{ bkp03_backup_group }}"
+      mode: "0750"
+    - src: postgres-native-restore-verify.sh.j2
+      dest: /usr/local/sbin/postgres-native-restore-verify
+      group: root
+      mode: "0750"
+
+- name: PostgreSQL native backup systemd unit 선언
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - postgres-native-backup.service
+    - postgres-native-backup.timer
+    - postgres-native-restore-verify.service
+  notify: PostgreSQL native backup systemd 재적재
+
+- name: PostgreSQL native backup executable SELinux 기본 label 적용
+  ansible.builtin.command:
+    argv: [restorecon, -Fv, "{{ item }}"]
+  loop:
+    - /usr/local/libexec/postgres-native-backup.sh
+    - /usr/local/libexec/postgres-native-restore-worker.sh
+    - /usr/local/sbin/postgres-native-restore-verify
+  register: postgres_backup_restorecon
+  changed_when: "'Relabeled' in postgres_backup_restorecon.stdout"
+  when: not ansible_check_mode
+
+- name: PostgreSQL native backup systemd handler 반영
+  ansible.builtin.meta: flush_handlers
+
+- name: PostgreSQL native backup timer 활성화
+  ansible.builtin.systemd:
+    name: postgres-native-backup.timer
+    enabled: true
+    state: started
+  when: not ansible_check_mode

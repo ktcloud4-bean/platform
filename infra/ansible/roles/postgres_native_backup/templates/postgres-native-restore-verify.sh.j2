@@ -1,0 +1,65 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+[ "$(id -u)" -eq 0 ] || { echo "root로 실행해야 한다" >&2; exit 1; }
+STATE_DIR={{ bkp03_state_dir }}
+MARKER_PRESENT=0
+
+drop_marker() {
+  if [ "${MARKER_PRESENT}" -eq 1 ]; then
+    sudo -u postgres /usr/bin/psql -X -v ON_ERROR_STOP=1 -d verify_db \
+      -c 'DROP TABLE IF EXISTS public.bkp03_restore_marker' >/dev/null || true
+  fi
+  rm -f "${STATE_DIR}/expected-marker.sha256"
+}
+trap drop_marker EXIT INT TERM
+
+EXISTING=$(
+  sudo -u postgres /usr/bin/psql -XAt -d verify_db \
+    -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname='bkp03_restore_marker'"
+)
+[ "${EXISTING}" = 0 ] || { echo "기존 marker table이 있어 중단한다" >&2; exit 1; }
+
+KEYCLOAK_BEFORE=$(
+  sudo -u postgres /usr/bin/psql -XAt -d postgres <<'SQL' | sha256sum | awk '{print $1}'
+SELECT datname, pg_get_userbyid(datdba) FROM pg_database WHERE datname='keycloak';
+SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolreplication FROM pg_roles WHERE rolname='keycloak_user';
+SQL
+)
+
+MARKER=$(openssl rand -hex 32)
+EXPECTED_MARKER_SHA=$(printf '%s\n' "${MARKER}" | sha256sum | awk '{print $1}')
+sudo -u postgres /usr/bin/psql -X -v ON_ERROR_STOP=1 -d verify_db >/dev/null <<SQL
+CREATE TABLE public.bkp03_restore_marker (marker text NOT NULL);
+REVOKE ALL ON public.bkp03_restore_marker FROM PUBLIC;
+INSERT INTO public.bkp03_restore_marker(marker) VALUES ('${MARKER}');
+SQL
+MARKER_PRESENT=1
+printf '%s\n' "${EXPECTED_MARKER_SHA}" >"${STATE_DIR}/expected-marker.sha256"
+chown {{ bkp03_backup_user }}:{{ bkp03_backup_group }} "${STATE_DIR}/expected-marker.sha256"
+
+systemctl reset-failed postgres-native-backup.service postgres-native-restore-verify.service \
+  >/dev/null 2>&1 || true
+systemctl start postgres-native-backup.service
+
+sudo -u postgres /usr/bin/psql -X -v ON_ERROR_STOP=1 -d verify_db \
+  -c 'DROP TABLE public.bkp03_restore_marker' >/dev/null
+MARKER_PRESENT=0
+
+systemctl start postgres-native-restore-verify.service
+grep -Fxq "marker_sha256=${EXPECTED_MARKER_SHA}" "${STATE_DIR}/last-restore-report"
+
+KEYCLOAK_AFTER=$(
+  sudo -u postgres /usr/bin/psql -XAt -d postgres <<'SQL' | sha256sum | awk '{print $1}'
+SELECT datname, pg_get_userbyid(datdba) FROM pg_database WHERE datname='keycloak';
+SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolreplication FROM pg_roles WHERE rolname='keycloak_user';
+SQL
+)
+[ "${KEYCLOAK_BEFORE}" = "${KEYCLOAK_AFTER}" ] \
+  || { echo "keycloak DB/role 구조가 검증 전후 달라졌다" >&2; exit 1; }
+
+rm -f "${STATE_DIR}/expected-marker.sha256"
+trap - EXIT INT TERM
+printf 'PostgreSQL BKP-03 PASS marker_sha256=%s keycloak_structure_sha256=%s\n' \
+  "${EXPECTED_MARKER_SHA}" "${KEYCLOAK_AFTER}"

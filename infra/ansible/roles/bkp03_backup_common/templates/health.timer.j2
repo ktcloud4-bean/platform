@@ -1,0 +1,11 @@
+[Unit]
+Description=BKP-03 {{ bkp03_backup_kind }} backup freshness 정기 검사
+
+[Timer]
+OnCalendar=*-*-* 04:15:00
+RandomizedDelaySec=300
+Persistent=true
+Unit={{ bkp03_service_name }}-health.service
+
+[Install]
+WantedBy=timers.target

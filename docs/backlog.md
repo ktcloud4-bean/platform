@@ -502,9 +502,9 @@ Git 추적 파일과 전체 Keycloak Pod 로그의 시크릿 원문은 0건이�
 |---|---|---|---|---|---|
 | `BKP-01 DONE` | K3s SQLite·server token 전용 backup/restore | `K3S-01`, `S3-01` | `K3S-BOOTSTRAP` | 클러스터 복구 | 격리된 빈 VM에서 API 객체 복원; Velero와 별도임을 검증 |
 | `BKP-02 DONE` | Velero + node-agent/Kopia와 local PV restore PoC | `GITOPS-01`, `STOR-01`, `S3-01` | 없음 | 모든 k3s PVC | 테스트 namespace 삭제 후 리소스·파일 복원, hostPath 제약 판정 |
-| `BKP-03 READY` | PostgreSQL native backup·Vault Raft snapshot | `PG-01`, `VAULT-02`, `S3-01` | 없음 | 인증·플랫폼 데이터 | 별도 DB/namespace에 point-in-time 또는 snapshot restore |
+| `BKP-03 DONE` | PostgreSQL native backup·Vault Raft snapshot | `PG-01`, `VAULT-02`, `S3-01` | 없음 | 인증·플랫폼 데이터 | 별도 DB/namespace에 point-in-time 또는 snapshot restore |
 | `BKP-04 DONE` | SeaweedFS 로컬 S3에서 AWS S3로 오프사이트 사본 생성 | `S3-01` | 없음 | 모든 백업의 물리 장애 대응 | 별도 최소권한 자격증명과 검증한 방식으로 전송, AWS S3에서 샘플 복원, 암호화·버전·보존·실패 경보 검증 |
-| `BKP-05 BLOCKED` | 통합 재해복구 drill·RPO/RTO 기록 | `BKP-01`, `BKP-02`, `BKP-03`, `BKP-04` | `K3S-BOOTSTRAP` | 공급망·공개 전환 gate | Git+S3만으로 핵심 서비스 복구, 누락·시간·수동 절차 기록 |
+| `BKP-05 READY` | 통합 재해복구 drill·RPO/RTO 기록 | `BKP-01`, `BKP-02`, `BKP-03`, `BKP-04` | `K3S-BOOTSTRAP` | 공급망·공개 전환 gate | Git+S3만으로 핵심 서비스 복구, 누락·시간·수동 절차 기록 |
 | `PVE-BKP-01 DEFERRED` | 두 번째 SSD에 Proxmox VM backup | 두 번째 SSD 장착 | `PVE-LIVE` | 빠른 VM 복구 | 원본 NVMe와 다른 장치에 backup·restore; S3 앱 백업은 유지 |
 
 2026-08-01 `BKP-02`에서 Velero 1.18.2와 AWS plugin 1.14.2를 고정 digest로,
@@ -583,6 +583,40 @@ Application `Synced/Healthy`, Velero BSL `Available`, 기존 PVC/PV Bound를 재
 파일과 전체 history의 credential·server token·private key 원문은 0건이다. 상세 증거와
 rollback은 [BKP-01 runbook](runbook/k3s-sqlite-datastore-backup-restore.md)이 소유한다.
 직접 후속 `BKP-05`는 `BKP-03`이 아직 `READY`라 `BLOCKED`를 유지하며 새로 여는 작업은 없다.
+
+2026-08-01 `BKP-03`에서 PostgreSQL physical base backup과 Vault Raft snapshot을 각각 전용
+SeaweedFS bucket·최소권한 identity로 매일 실행하고 최신 7세대를 보존하도록 선언했다. 두 producer는
+자기 bucket의 `Read/List/Write`만 가지며 상대 bucket List/Write는 거부됐다. 오프사이트 reader는
+두 bucket의 `Read/List`만 가진다. volume slot은 기존 ID를 삭제·재사용하지 않고 승인된 max 10으로
+늘렸고, systemd 의존성에 따른 volume → filer → S3 연쇄 재시작 뒤 네 SeaweedFS 서비스가 active다.
+
+PostgreSQL은 `pg_basebackup`·`pg_verifybackup`·S3 round-trip 뒤 별도 PGDATA와 Unix socket에서
+복원했다. live·복원 marker SHA-256
+`a16e36c7442722e6f9ec585b20e2b11525d4115ca11522d595b90f1e9009ada9`이 일치했고,
+복원본 `keycloak_user` 1개·TCP listener 0개, live Keycloak DB·role 구조 불변을 확인했다. Vault는
+live `vault-0`에 restore하지 않고 Service·ServiceAccount token·egress가 없는 별도 namespace의
+loopback Vault에만 snapshot-force했다. 복원본 KV marker
+`fd9035cd80cda74b8c6e70dfa79a8b8d575dcc8832212a9116f8b47c0fb2f85a`, Kubernetes auth role,
+`keycloak` policy hash가 live와 일치했다.
+
+두 제품 모두 8번째 생성을 통해 7세대 prune을 실증했고, freshness 실패는 새 systemd failure
+InvocationID로 탐지한 뒤 정상 main/health 성공으로 복구했다. BKP-04 전송은 두 source와 AWS 사본의
+본문 byte 차이 0건이었다. 최종 Ansible 재실행은 네 host 모두 `changed=0`, `failed=0`이며 임시 PG
+cluster·marker와 Vault namespace·port-forward·restore input·bootstrap identity는 모두 제거됐다.
+Node Ready, Argo 7/7 `Synced/Healthy`, `platform-root: main`, live Vault unsealed leader를 재확인했다.
+
+검증 중 과거 root token이 orchestration 출력에 한 번 노출되어 사용자 승인으로 새 root token을
+발급·원자 교체하고 구 accessor와 중복 snapshot token을 revoke했다. 현재 snapshot policy token은
+1개다. 최종 secret scan 명령 오류로 당시 PostgreSQL S3 secret key도 출력에 한 번 노출되어 사용자
+승인으로 producer credential pair를 교체했다. 구 pair는 자기 bucket에서 거부되고 새 pair는 자기
+bucket 성공·Vault bucket 거부를 확인했으며 격리 파일도 제거했다. Git·대상 host journal/state log의
+현재 유효한 token·secret key·unseal key 원문은 0건이다.
+SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 증거로 남고 secret key는 0건이다.
+상세 절차·증거·rollback은
+[PostgreSQL·Vault native backup 런북](runbook/postgres-vault-native-backup.md)이 소유한다.
+
+직접 후속 `BKP-05`의 선행 `BKP-01`·`BKP-02`·`BKP-03`·`BKP-04`가 모두 `DONE`이고 현재
+`K3S-BOOTSTRAP` 잠금 소유 작업도 없으므로 `BKP-05`만 `READY`로 연다.
 
 ## 6. 공급망과 정책
 

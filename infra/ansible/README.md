@@ -177,6 +177,36 @@ ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 offsite-vars.y
 [`docs/runbook/seaweedfs-s3-offsite-backup.md`](../../docs/runbook/seaweedfs-s3-offsite-backup.md)가
 소유한다.
 
+## PostgreSQL·Vault native backup
+
+`playbooks/native-backup.yml`과 `roles/bkp03_*`, `roles/postgres_native_backup`,
+`roles/vault_raft_backup`은 `BKP-03`의 정기 native snapshot을 소유한다. PostgreSQL은
+전용 local peer replication role로 `pg_basebackup`과 `pg_verifybackup`을 실행하고,
+Vault는 별도 periodic token의 인증된 Raft snapshot API만 사용한다. 두 producer는 서로
+다른 SeaweedFS S3 identity·bucket을 가지며 최신 7세대만 유지한다. BKP-04 reader는 두
+bucket의 `Read/List`만 받아 기존 AWS 오프사이트 경로로 전달하고,
+`rclone check --download --one-way`로 source와 destination의 object bytes를 대조한다.
+
+```bash
+cd infra/ansible
+export ANSIBLE_SSH_COMMON_ARGS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<저장소 밖 인증된 known_hosts> -o PasswordAuthentication=no"
+export BKP03_SECRET_DIR=<저장소 밖 mode-0700 디렉터리>
+export BKP03_OFFSITE_VARS_FILE=<BKP-04 mode-0600 offsite-vars.yml>
+ansible-playbook -i <저장소 밖 inventory> playbooks/native-backup.yml --syntax-check
+ansible-playbook -i <저장소 밖 inventory> playbooks/native-backup.yml --check --diff
+# 명시적 승인 뒤에만 실제 적용
+ansible-playbook -i <저장소 밖 inventory> playbooks/native-backup.yml
+```
+
+live Vault에는 restore API를 호출하지 않는다. PostgreSQL 별도 cluster와 Service 없는
+Vault 격리 Pod에서만 복원하고, 상세 승인 gate·검증·정리·rollback은
+[`docs/runbook/postgres-vault-native-backup.md`](../../docs/runbook/postgres-vault-native-backup.md)가
+소유한다.
+
+BKP-03 volume slot을 위해 승인된 `seaweedfs_volume_max_count: 10` 변경은 systemd 의존성에
+따라 volume → filer → S3를 연쇄 재시작한다. master와 기존 volume은 유지하며 이미 volume이
+할당된 뒤에는 max를 낮추거나 volume을 삭제하지 않는다.
+
 ## NTP source
 
 `NET-03`은 각 project VLAN에서 **해당 VLAN gateway의 UDP 123만** 허용한다. Rocky 기본 설정의 공개 pool은 차단되므로 그대로 두면 게스트가 영원히 동기화되지 않는다.

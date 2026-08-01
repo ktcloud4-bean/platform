@@ -1,0 +1,6 @@
+---
+
+- name: Vault Raft backup systemd 재적재
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: not ansible_check_mode

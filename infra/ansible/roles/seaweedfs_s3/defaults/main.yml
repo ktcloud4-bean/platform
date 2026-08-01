@@ -36,9 +36,9 @@ seaweedfs_volume_port: 8080
 seaweedfs_volume_grpc_port: 18080
 seaweedfs_filer_port: 8888
 seaweedfs_filer_grpc_port: 18888
-# 공용 volume 1개와 BKP-02 collection volume 4개가 실측 사용 중이다.
-# BKP-01 전용 collection을 기존 volume 삭제·재사용 없이 놓기 위한 최소 한도다.
-seaweedfs_volume_max_count: 6
+# 실측 사용 중인 default collection 1개, BKP-02 4개, BKP-01 1개와 BKP-03 PostgreSQL
+# archive·manifest 2개, Vault snapshot·manifest 2개를 보존할 최소 slot이다.
+seaweedfs_volume_max_count: 10
 seaweedfs_volume_min_free_space: "20GiB"
 
 seaweedfs_tls_cert_path: "{{ seaweedfs_config_dir }}/tls/s3.crt"

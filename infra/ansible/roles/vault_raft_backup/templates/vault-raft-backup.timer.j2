@@ -1,0 +1,11 @@
+[Unit]
+Description=BKP-03 Vault Raft snapshot 정기 실행
+
+[Timer]
+OnCalendar={{ vault_backup_timer_oncalendar }}
+RandomizedDelaySec={{ vault_backup_timer_randomized_delay_sec }}
+Persistent=true
+Unit=vault-raft-backup.service
+
+[Install]
+WantedBy=timers.target

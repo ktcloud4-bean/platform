@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+STATE_DIR={{ bkp03_state_dir }}
+FAILED_UNIT=${1:-unknown}
+case "${FAILED_UNIT}" in
+  {{ bkp03_service_name }}.service|{{ bkp03_service_name }}-health.service) ;;
+  *) FAILED_UNIT=unknown ;;
+esac
+
+printf 'failed_at=%s\nunit=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "${FAILED_UNIT}" \
+  >"${STATE_DIR}/last-failure"
+logger -p daemon.err -t {{ bkp03_service_name }} "BKP-03 failure detected unit=${FAILED_UNIT}"

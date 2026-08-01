@@ -349,6 +349,23 @@ disk의 배정은 불변이다.
 단일 VM·단일 thin-backed disk이므로 이 수치는 HA 또는 물리 장애 복구 증거가 아니다.
 `BKP-04`의 AWS S3 오프사이트 사본과 이후 복구 drill이 별도로 필요하다.
 
+### `BKP-03` 7세대·오프사이트 검증 뒤 실측 (2026-08-01)
+
+PostgreSQL physical archive·manifest와 Vault Raft snapshot·manifest를 각각 7세대 유지하고,
+두 bucket의 AWS 사본 byte 검증을 끝낸 뒤 측정했다.
+
+| 지표 | 실측 | 경고·정지 기준 | 판정 |
+|---|---|---|---|
+| `object-01` guest root | 총 213,524,656,128 bytes · 사용 3,294,466,048 · 여유 210,230,190,080 · 2% | 여유 25% 미만 경고, 20% 미만 정지 | 정상 |
+| SeaweedFS 영속 경로 | master 3,028 · volume 84,536,184 · filer 107,437 bytes | 버킷 데이터 170 GiB 구획 안에서 관측 | 정상 |
+| guest memory | 총 3,833,053,184 · available 2,961,133,568 bytes | Day 1 4 GiB | 정상 |
+| volume slot | max 10 · 할당 10 · free 0 · ID `1`, `10`~`18` | 새 collection 전 기존 volume 삭제·재사용 금지 | 관측 필요 |
+| 서비스 | master·volume·filer·S3 active, offsite job success | 백업·전송 성공 필수 | 정상 |
+
+`free=0`은 디스크가 찼다는 뜻이 아니라 현재 collection에 volume slot 10개가 모두 할당됐다는
+뜻이다. 기존 volume은 계속 object를 담을 수 있다. 새 collection이 필요하면 이 값을 자동으로
+낮추거나 volume을 재사용하지 말고, disk 여유와 의존 서비스 재시작 영향을 다시 승인받아 올린다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.

@@ -93,6 +93,18 @@ else
             "local:${bucket}" \
             "aws:${OFFSITE_AWS_BUCKET}/${OFFSITE_COPY_PREFIX}/${bucket}" \
             2>&1 | tee -a "${RUN_LOG}" || fail "bucket ${bucket} 사본 생성"
+
+        # 두 S3 구현 모두 SHA-256 server-side hash를 제공한다는 전제에 기대지 않고,
+        # 양쪽 object 본문을 내려받아 byte-for-byte로 비교한다. AWS에 과거 object가
+        # 더 있어도 보존 정책상 정상이라 --one-way로 local 원본의 누락·불일치만 막는다.
+        log "사본 byte 검증 local:${bucket} -> aws:${OFFSITE_AWS_BUCKET}/${OFFSITE_COPY_PREFIX}/${bucket}"
+        "${RCLONE}" check "${RCLONE_COMMON[@]}" \
+            --download \
+            --one-way \
+            --checkers {{ offsite_rclone_checkers }} \
+            "local:${bucket}" \
+            "aws:${OFFSITE_AWS_BUCKET}/${OFFSITE_COPY_PREFIX}/${bucket}" \
+            2>&1 | tee -a "${RUN_LOG}" || fail "bucket ${bucket} byte 검증"
     done
 fi
 

@@ -1,0 +1,17 @@
+[Unit]
+Description=BKP-03 {{ bkp03_backup_kind }} backup 실패 탐지 marker
+
+[Service]
+Type=oneshot
+User={{ bkp03_backup_user }}
+Group={{ bkp03_backup_group }}
+UMask=0077
+ExecStart=/usr/local/libexec/{{ bkp03_service_name }}-failure-marker.sh %i
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths={{ bkp03_state_dir }}
+CapabilityBoundingSet=
+AmbientCapabilities=
