@@ -118,8 +118,8 @@ BOUNCER_KEY_CROWDSEC_01=
 
 `inject-secrets.sh`는 이 입력에서 `crowdsec-01/crowdsec-01-bootstrap`(세 key 그대로)과
 `kube-system/crowdsec-01-bouncer`(`bouncer-key` 한 key) 두 Secret을 만든다.
-`platform-root.targetRevision`은 `main`을 유지한다. branch pointer를 사용하지 않고 최종
-선언이 main에 통합된 뒤에만 Argo를 동기화한다.
+Argo 검증 시점과 `targetRevision` 전환 경계는 `AGENTS.md`의 merge 전 라이브 검증 규칙을
+따른다. 이 문서는 그 규칙을 복제하지 않는다.
 
 ## live gate
 

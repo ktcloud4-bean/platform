@@ -39,6 +39,17 @@
 |---|---|---|---|---|---|
 | `GIT-WF-01 DONE` | 병렬 worktree·rebase·단일 squash merge·사후 FIX 규칙을 `AGENTS.md`에 단일 원본으로 보강 | 없음 | 없음 | 모든 작업 | 작업 ID·브랜치·worktree 1:1, main 통합 직렬화, 재검증, 공개 main 재작성 금지, merge 후 정리 경계 |
 | `GIT-WF-02 DONE` | 개발 작업의 승인·main 선행 live 검증·실패 rollback 규칙을 간소화 | `GIT-WF-01` | 없음 | 모든 작업 | 작업 배정 범위는 재승인하지 않음, production Argo는 main 유지, 성공은 main 1커밋·실패만 revert, 재시도는 새 FIX ID |
+| `GIT-WF-03 DONE` | Argo 검증을 merge 전으로 옮겨 실패가 main 이력에 쌓이지 않게 규칙 교체 | `GIT-WF-02` | 없음 | 모든 작업 | `ARGO-ROOT` 잠금과 rebase 선행 아래 merge 전 라이브 검증, 실패는 같은 브랜치에서 재시도, main revert·OPS 스냅샷·재시도 FIX ID 커밋 폐지, 작업 ID 하나당 main 커밋 하나 |
+
+2026-08-02 `GIT-WF-03`은 `GIT-WF-02`가 만든 "실패는 main에서 revert하고 재시도는 새 FIX ID"
+규칙을 폐기했다. 그 규칙은 Argo 검증을 main에서만 할 수 있다고 전제해 실패 한 번마다 적용·
+revert·rollback 스냅샷 커밋 세 개와 새 작업 ID·브랜치·worktree 한 벌을 만들었다. `HEADLAMP-02`는
+이 경로로 `FIX-04`까지 가며 main 커밋 15개와 worktree 12개를 남기고도 `READY`에 머물렀다.
+이제 Argo 검증은 `ARGO-ROOT` 잠금 아래 merge 전에 하고, 실패와 재시도는 작업 브랜치 안에서
+끝내며, main에는 작업 ID 하나당 커밋 하나만 들어간다. `platform-root`를 브랜치 SHA로 고정하기
+전 최신 `origin/main` rebase를 요구하는 것은 `VAULT-02` 때 다른 작업자의 선언이 원복된 사고를
+막기 위해서다. 이 작업은 문서 규칙만 바꾸므로 라이브 검증 대상이 없다. 규칙 본문은
+[`AGENTS.md`](../AGENTS.md)가 소유한다.
 
 ### 공유 잠금
 
@@ -48,6 +59,7 @@
 | `OPNSENSE-LIVE` | OPNsense API/UI·방화벽·DNS |
 | `TOFU-STATE` | 동일 OpenTofu state의 plan/apply |
 | `K3S-BOOTSTRAP` | k3s·Argo CD 초기 제어면 |
+| `ARGO-ROOT` | `platform-root`의 `targetRevision` 검증용 전환 |
 | `TRAEFIK-LIVE` | packaged Traefik HelmChartConfig·정적 plugin 등록·Pod 재기동 |
 | `VAULT-INIT` | Vault initialize·unseal·seal migration |
 | `PUBLIC-DNS` | Cloudflare DNS·공개 origin 변경 |
