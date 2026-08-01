@@ -57,6 +57,13 @@ vault write auth/kubernetes/role/keycloak \
   bound_service_account_namespaces="keycloak" \
   token_policies="keycloak" \
   token_ttl=1h token_max_ttl=4h
+vault write auth/kubernetes/role/pomerium \
+  bound_service_account_names="pomerium" \
+  bound_service_account_namespaces="pomerium" \
+  audience="vault" \
+  token_policies="pomerium" \
+  token_no_default_policy=true \
+  token_ttl=15m token_max_ttl=1h
 EOF
 
 echo "== 5. 내부 PKI =="

@@ -2389,7 +2389,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785561586.29" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785581953.82" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2592,6 +2592,13 @@
           <hostname>sso</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>Keycloak service alias (KC-01)</description>
+        </alias>
+        <alias uuid="01b57020-0f78-4314-93a8-6ebc6e45f30a">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>access</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>Pomerium protected Dashy Portal alias (POM-01)</description>
         </alias>
       </aliases>
     </unboundplus>

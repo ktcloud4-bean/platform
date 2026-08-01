@@ -1,0 +1,30 @@
+pageInfo:
+  title: Platform Access
+  description: 그룹별 온프레미스 애플리케이션 포털
+
+appConfig:
+  theme: dashy-docs
+  layout: auto
+  preventWriteToDisk: true
+  disableConfigurationForNonAdmin: true
+  enableServiceWorker: false
+  auth:
+    enableKeycloak: true
+    enableGuestAccess: false
+    keycloak:
+      serverUrl: https://sso.imcherry5778.xyz
+      realm: platform
+      clientId: dashy-portal
+
+sections:
+  - name: Platform
+    icon: fas fa-shield-halved
+    items:
+      - title: POM-01 보호 Route
+        description: /platform-users groups claim 검증
+        icon: fas fa-user-shield
+        url: https://access.imcherry5778.xyz/pom01-platform-user-check
+        target: sametab
+        displayData:
+          showForGroups:
+            - /platform-users

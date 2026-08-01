@@ -11,6 +11,8 @@ resources:
   - headlamp-application.yaml
   - keycloak-project.yaml
   - keycloak-application.yaml
+  - pomerium-project.yaml
+  - pomerium-application.yaml
   - crowdsec-project.yaml
   - crowdsec-application.yaml
   - velero-project.yaml

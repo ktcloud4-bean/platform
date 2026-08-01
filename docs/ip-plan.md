@@ -179,7 +179,7 @@ traffic selector는 `10.10.50.0/24 ↔ 10.20.0.0/16`이며, 이 selector 밖 출
 | `warpgate-01.imcherry5778.xyz` | canonical host | Warpgate VM | 내부 | Unbound 등록 |
 | `netbird-01.imcherry5778.xyz` | canonical host | NetBird VM | 내부 | Unbound 등록 |
 | `sso.imcherry5778.xyz` | service alias | Keycloak | 외부 인증 연동 가능 | Unbound alias → `k3s-01` (`10.10.20.10`) |
-| `access.imcherry5778.xyz` | service alias | Pomerium Routes Portal | 보호된 외부 접근 가능 | 미등록 |
+| `access.imcherry5778.xyz` | service alias | Pomerium 보호 Dashy 포털 | 보호된 외부 접근 가능 | Unbound alias → `k3s-01` (`10.10.20.10`); POM-01 등록 |
 | `argo.imcherry5778.xyz` | service alias | Argo CD | Pomerium | 미등록 |
 | `headlamp.imcherry5778.xyz` | service alias | Headlamp | Pomerium | 미등록 |
 | `vault.imcherry5778.xyz` | service alias | Vault | 내부 관리 경로만 | 미등록 |

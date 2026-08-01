@@ -1,0 +1,50 @@
+{
+  "clientId": "pomerium",
+  "name": "POM-01 Pomerium Core",
+  "description": "POM-01 self-hosted authenticate와 groups claim 전용 confidential client",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "clientAuthenticatorType": "client-secret",
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "authorizationServicesEnabled": false,
+  "consentRequired": false,
+  "frontchannelLogout": false,
+  "fullScopeAllowed": false,
+  "rootUrl": "https://k3s-01.imcherry5778.xyz",
+  "baseUrl": "https://access.imcherry5778.xyz/.pomerium/routes",
+  "redirectUris": [
+    "https://k3s-01.imcherry5778.xyz/oauth2/callback"
+  ],
+  "webOrigins": [
+    "https://k3s-01.imcherry5778.xyz"
+  ],
+  "attributes": {
+    "post.logout.redirect.uris": "https://access.imcherry5778.xyz/"
+  },
+  "defaultClientScopes": [
+    "profile",
+    "email"
+  ],
+  "optionalClientScopes": [
+    "offline_access"
+  ],
+  "protocolMappers": [
+    {
+      "name": "groups",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "groups",
+        "full.path": "true",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }
+  ]
+}

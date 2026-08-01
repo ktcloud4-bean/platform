@@ -1,0 +1,57 @@
+address: :8080
+insecure_server: true
+health_check_addr: :28080
+log_level: info
+
+# Pomerium은 보호 Route와 다른 authenticate URL을 요구한다. access alias 외의
+# DNS 변경을 만들지 않기 위해 이미 내부 DNS와 공인 인증서가 있는 k3s canonical
+# 이름을 OIDC callback에만 사용한다.
+authenticate_service_url: https://k3s-01.imcherry5778.xyz
+signout_redirect_url: https://access.imcherry5778.xyz/
+
+shared_secret_file: /pomerium/secrets/shared-secret
+cookie_secret_file: /pomerium/secrets/cookie-secret
+signing_key_file: /pomerium/secrets/signing-key.pem
+cookie_expire: 5m
+cookie_http_only: true
+cookie_same_site: lax
+
+idp_provider: oidc
+idp_provider_url: https://sso.imcherry5778.xyz/realms/platform
+idp_client_id: pomerium
+idp_client_secret_file: /pomerium/secrets/idp-client-secret
+idp_scopes:
+  - openid
+  - profile
+  - email
+
+# 외부 X-Forwarded-For는 Traefik이 버리고 자기 관측값으로 다시 만들며,
+# Pomerium은 바로 앞 Traefik 한 hop만 신뢰한다.
+xff_num_trusted_hops: 1
+
+routes:
+  # Core에서는 Enterprise Directory Sync 전용 groups criterion이 아니라
+  # Keycloak이 발급한 OIDC claim 자체를 claim/groups로 판정한다.
+  - name: platform-user-check
+    description: POM-01 platform-users 최소권한 검증 Route
+    from: https://access.imcherry5778.xyz
+    path: /pom01-platform-user-check
+    response:
+      status: 200
+      body: "POM-01 protected route\n"
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users
+
+  # Dashy는 포털 UI만 제공한다. 포털 자체도 Pomerium 뒤에 두고 명시적
+  # 그룹이 없는 사용자는 로그인 성공 여부와 무관하게 통과시키지 않는다.
+  - name: access-portal
+    description: POM-01 Dashy application portal
+    from: https://access.imcherry5778.xyz
+    to: http://dashy.pomerium.svc.cluster.local:8080
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users
+            - claim/groups: /platform-privileged

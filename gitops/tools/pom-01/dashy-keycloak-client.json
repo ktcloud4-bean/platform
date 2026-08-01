@@ -1,0 +1,49 @@
+{
+  "clientId": "dashy-portal",
+  "name": "POM-01 Dashy Portal",
+  "description": "POM-01 Dashy 브라우저 Authorization Code + PKCE 공개 client",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": true,
+  "clientAuthenticatorType": "client-secret",
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "authorizationServicesEnabled": false,
+  "consentRequired": false,
+  "frontchannelLogout": false,
+  "fullScopeAllowed": false,
+  "rootUrl": "https://access.imcherry5778.xyz",
+  "baseUrl": "https://access.imcherry5778.xyz/",
+  "redirectUris": [
+    "https://access.imcherry5778.xyz/*"
+  ],
+  "webOrigins": [
+    "https://access.imcherry5778.xyz"
+  ],
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "post.logout.redirect.uris": "https://access.imcherry5778.xyz/*"
+  },
+  "defaultClientScopes": [
+    "profile",
+    "email"
+  ],
+  "optionalClientScopes": [],
+  "protocolMappers": [
+    {
+      "name": "groups",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "groups",
+        "full.path": "true",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }
+  ]
+}

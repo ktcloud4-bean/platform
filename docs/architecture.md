@@ -83,7 +83,8 @@ Git에는 PVC 선언만 저장하고 PVC 데이터나 노드 디렉터리명을 
 | 영역 | 서비스 | 위치 |
 |---|---|---|
 | 인증 | Keycloak | k3s |
-| 웹 접근 정책·포털 | Pomerium Core | k3s |
+| 웹 접근 정책 | Pomerium Core | k3s |
+| 애플리케이션 포털 | Dashy | k3s; Pomerium 뒤 |
 | ingress·리버스 프록시 | Traefik | k3s |
 | 오리진 WAF | CrowdSec AppSec(Coraza + OWASP CRS) | k3s; Traefik route middleware가 판정 연결 |
 | 네트워크 IDS | Suricata alert-only | OPNsense |
@@ -176,13 +177,23 @@ Keycloak은 팀 사용자, MFA, OIDC/SAML의 중앙 IdP다. 프로젝트 realm�
 - 그룹은 팀·직무 소속을 나타낸다.
 - Keycloak client role은 애플리케이션 권한을 나타낸다.
 - 그룹에 client role을 매핑하고 사용자에게 직접 권한을 붙이는 것은 예외로 한다.
-- Pomerium은 명시적인 `groups` claim으로 Route를 허용한다.
+- Pomerium Core는 명시적인 OIDC `claim/groups` 조건으로 Route를 허용한다.
 - AWS는 전용 SAML client와 role 매핑으로 `AssumeRoleWithSAML`을 사용한다.
 - EKS 워크로드 AWS 권한은 Keycloak이 아니라 Pod Identity 또는 IRSA가 담당한다.
 
 일상 계정과 특권 계정을 분리한다. 초기 특권 계정은 온프레미스 총괄 운영자 한 명만 발급하고, 다른 사용자는 필요한 client role만 추가한다. 공동 관리자·공유 계정은 만들지 않는다.
 
-Pomerium Routes Portal에는 일상 관리 UI만 노출한다. OPNsense, Proxmox, Keycloak 관리, Vault 복구, NetBird 복구와 Pomerium 복구는 Pomerium을 유일한 경로로 삼지 않는다.
+Dashy 포털에는 일상 관리 UI만 노출하고 `showForGroups`로 타일을 선별한다. 이 숨김은 탐색
+편의일 뿐 접근 통제가 아니며 각 URL의 Pomerium Route와 애플리케이션 RBAC가 권한을 다시
+판정한다. OPNsense, Proxmox, Keycloak 관리, Vault 복구, NetBird 복구와 Pomerium 복구는
+Pomerium이나 Dashy를 유일한 경로로 삼지 않는다.
+
+Pomerium Core는 기존 Traefik의 표준 Kubernetes Ingress 뒤 all-in-one upstream으로 둔다.
+별도 Traefik entrypoint·정적 plugin·Pod 재기동은 요구하지 않는다. self-hosted authenticate
+endpoint는 보호 Route URL과 분리해야 하므로, POM-01의 단일 `access` alias 경계에서는 기존
+`k3s-01` canonical HTTPS 이름을 OIDC callback에만 재사용한다. k3s API·SSH·관리 kubeconfig는
+Pomerium으로 프록시하지 않으며 trusted SSH와 root-only kubeconfig가 Keycloak/Pomerium 장애의
+독립 복구 경로다.
 
 Headlamp는 k3s의 일상 조회·로그·exec·장애 분석을 위한 관리 UI다. Pomerium은 Headlamp Route 진입을 제한하고, Keycloak OIDC 토큰을 신뢰하도록 구성한 Kubernetes API와 Kubernetes RBAC가 실제 API 권한을 결정한다. Headlamp에 공유 `cluster-admin` ServiceAccount를 주지 않는다. Argo CD가 소유한 선언 리소스는 Git으로 변경하며, Headlamp 직접 변경은 복구 작업으로 제한하고 즉시 Git 상태와 대조한다. IdP나 Headlamp 장애 때 사용할 관리자 kubeconfig는 클러스터 밖에 break-glass로 유지한다.
 
@@ -266,7 +277,7 @@ S3 복구 자격증명, K3s server token과 Shamir share처럼 전체 장애 때
 - [SeaweedFS](https://github.com/seaweedfs/seaweedfs), [SeaweedFS Amazon S3 API](https://github.com/seaweedfs/seaweedfs/wiki/Amazon-S3-API)
 - [Velero file-system backup](https://velero.io/docs/v1.18/file-system-backup/)
 - [Vault seal/unseal](https://developer.hashicorp.com/vault/docs/concepts/seal), [AWS KMS seal](https://developer.hashicorp.com/vault/docs/configuration/seal/awskms)
-- [Pomerium Routes Portal](https://www.pomerium.com/docs/capabilities/routes-portal)
+- [Pomerium Policy Language](https://www.pomerium.com/docs/internals/ppl), [Dashy groups 표시](https://dashy.to/docs/configuring/)
 - [Headlamp in-cluster](https://headlamp.dev/docs/latest/installation/in-cluster/), [Headlamp OIDC](https://headlamp.dev/docs/latest/installation/in-cluster/oidc/)
 - [OPNsense intrusion detection](https://docs.opnsense.org/manual/ips.html), [OPNsense Wazuh Agent](https://docs.opnsense.org/manual/wazuh-agent.html)
 - [CrowdSec AppSec](https://docs.crowdsec.net/docs/log_processor/data_sources/appsec/), [Traefik Kubernetes bouncer](https://docs.crowdsec.net/u/bouncers/traefik/), [Traefik plugin install configuration](https://doc.traefik.io/traefik/reference/install-configuration/experimental/plugins/)

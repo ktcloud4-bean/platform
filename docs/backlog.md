@@ -256,11 +256,38 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `CROWDSEC-01 DEFERRED` | CrowdSec AppSec(Coraza + OWASP CRS) route-scoped PoC 최초 시도; CRS ConfigMap 바이트 훼손과 AppProject prune 순서 결함으로 revert | `INGRESS-01`, `WAF-DESIGN-01` | 없음 | `CROWDSEC-FIX-01` | 공개 main enablement와 rollback 이력을 재작성하지 않음; [실패 증거](evidence/crowdsec-fix-01/README.md)를 기준으로 FIX에서만 보정 |
 | `CROWDSEC-PERF-01 DONE` | rollback 상태에서 CrowdSec 성능 실패의 client/DNS/TCP/TLS 측정 경로를 분리하고 warm-up 계약 보정 | `INGRESS-01`, `WAF-DESIGN-01` | 없음 | `CROWDSEC-FIX-01` | read-only 1,000건 cold 대조, concurrency 10 지속 HTTP/2 1,000건×3회, 신규 연결·실패 0, 라이브 Argo/HCC/Traefik 불변, ADR 기준값 미완화 |
 | `CROWDSEC-FIX-01 READY` | byte-preserving CRS snapshot·offline AppSec startup·API round-trip·영구 AppProject로 CrowdSec AppSec PoC 보정 및 live gate 재수행 | `INGRESS-01`, `WAF-DESIGN-01`, `CROWDSEC-PERF-01` | `TRAEFIK-LIVE` | 공개 HTTP·`EDGE-01` | 소스·digest·plugin/rule/startup hash 고정, Kubernetes API 후 49개 byte hash, egress 없는 startup과 Hub 요청 0건, Traefik 3.7.4 격리 호환, 정상 200·공격 403·exact 예외·control, warmed HTTP/2 1,000건×3회 p95·CPU·RSS와 별도 cold phase, AppSec fail policy, 기존 ingress 회귀 없음, finalizer prune·Argo rollback·Git revert |
-| `POM-01 READY` | Pomerium Core·선언형 Route·Routes Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음 | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
-| `HEADLAMP-02 BLOCKED` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
+| `POM-01 DONE` | Pomerium Core·선언형 Route·Dashy Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음(단, 내부 DNS 적용은 실제 `OPNSENSE-LIVE` 승인 필요) | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
+| `HEADLAMP-02 READY` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
 | `NB-02 DONE` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
 | `WG-02 READY` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | 없음 | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
 | `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
+
+2026-08-01 `POM-01`에서 Pomerium Core `v0.33.0`과 Dashy `4.5.0`을 각 공식
+multi-arch image index digest로 고정하고 전용 AppProject·child Application·namespace에
+GitOps 배포했다. 기존 packaged Traefik 뒤의 ClusterIP HTTP upstream과 표준 Ingress만 써서
+HelmChartConfig·정적 plugin·entrypoint·Traefik Pod를 바꾸지 않았고, 적용 전후 Traefik
+UID `046738f1-1b1a-4709-a0c3-f41d4168420d`, restart 0과 HelmChartConfig
+resourceVersion/generation `66161/10`이 같았다. Argo root·child는 immutable revision에서
+`Synced/Healthy`, Pomerium namespace Secret은 0건이며 confidential client secret은 Vault
+KV v2에서 전용 ServiceAccount·`audience=vault` Agent init container와 memory `emptyDir`로만
+소비한다.
+
+실제 Keycloak claim에서 `imcherry`의 `/platform-users`만 보호 Route 200과 Dashy 보호 타일
+표시를 얻고, `/platform-users`가 없는 `imcherry-admin`은 같은 시점 Route 403과 타일 미표시가
+됐다. MFA 없는 token 요청 거부, logout 뒤 재인증, 5분 session 실제 만료 뒤 재인증,
+정확한 `access` TLS hostname 성공·잘못된 hostname 실패·HTTP 301을 확인했다. Pomerium과
+Dashy Pod를 각각 재생성한 뒤 UID 변경·Ready와 같은 전체 검증·session 만료를 다시 통과했다.
+승인된 복구 drill에서는 `platform` realm 비활성 중에도 trusted SSH와 root-only k3s
+kubeconfig로 Pomerium health를 조회하고 Pod를 90초 안에 재생성했으며, master realm 복구
+ID로 즉시 realm을 활성화해 일상 token 200과 전체 검증을 재확인했다. Git 추적 파일과 전체
+Pomerium/Dashy Pod 로그의 client secret·JWT 원문은 0건이다.
+
+승인된 `OPNSENSE-LIVE` 범위에서는 기존 `k3s-01` override에
+`access.imcherry5778.xyz → 10.10.20.10` Unbound alias 한 건만 추가했다. 내부 A만 응답하고
+내부 AAAA와 공개 A/AAAA는 0건이며 공개 DNS·NAT·Cloudflare는 변경하지 않았고 sanitized
+snapshot 갱신 뒤 drift 없음이다. 직접 후속 중 모든 선행이 충족된 `HEADLAMP-02`와
+`POL-01`만 `READY`로 열었다. `NET-04`와 `EDGE-01`은 각각 다른 미완료 선행이 남아
+`BLOCKED`를 유지한다.
 
 2026-08-01 `AWS-ID-01`은 세 번째 AWS identity state root에서 Keycloak SAML provider와
 일상/특권 분리 temporary role을 적용했다. daily/privileged console SAML, 무그룹 role 없음·STS
@@ -660,7 +687,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `UPDATE-01 BLOCKED` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
 | `SCAN-01 BLOCKED` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
 | `SIGN-01 BLOCKED` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
-| `POL-01 BLOCKED` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
+| `POL-01 READY` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
 | `E2E-01 BLOCKED` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
 | `POL-02 BLOCKED` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
 | `FALCO-01 BLOCKED` | Falco runtime rule·출력 기준선 | `E2E-01`, `POL-01` | 없음 | Wazuh·Shuffle | 전용 테스트 이벤트 탐지, noise 기준, 대응 runbook 초안 |

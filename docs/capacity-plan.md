@@ -217,6 +217,23 @@ working set, node `available`, image·container 로그 증가량을 다시 기�
 1.5GiB를 넘거나 node `available`이 8GiB 아래면 replica·heap·limit을 늘리지 않고 원인을 먼저
 분류한다.
 
+### `POM-01` 배포 예산
+
+Pomerium Core all-in-one 한 replica의 scheduler 기준 상시 request는 CPU 100m·RAM 256Mi이고
+limit는 CPU 1·RAM 1GiB다. Vault Agent init request 10m·32MiB는 상시 container와 동시에
+실행되지 않아 Pod 유효 request는 상시 Pomerium 값이다. Dashy 한 replica는 CPU 50m·RAM
+128Mi request, CPU 500m·RAM 512Mi limit다. 따라서 POM-01 전체 상시 request는 CPU 150m·RAM
+384Mi, limit 합계는 CPU 1.5·RAM 1.5GiB다.
+
+Pomerium Databroker와 session은 메모리이며 Envoy 추출용 256Mi, data 64Mi `emptyDir`와 8Mi
+메모리 볼륨 두 개를 사용한다. Dashy는 설정을 read-only ConfigMap에서 읽고 64Mi `emptyDir`
+두 개만 사용한다. 두 Deployment 모두 PVC 요청은 0개다.
+
+최초 배포와 groups/Portal/session 검증 뒤 실제 working set, node `available`, guest disk와
+container log 증가량을 기록한다. Pomerium working set이 768Mi 또는 Dashy가 384Mi를 넘거나
+Node memory가 기존 정지 기준에 접근하면 replica·limit을 늘리지 않고 Envoy·session·빌드
+자산·log 사용량을 먼저 분류한다.
+
 ## 나머지 VM 디스크 구획
 
 | VM | 총량 | 구획 |
