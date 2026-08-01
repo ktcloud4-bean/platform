@@ -2,8 +2,8 @@
 
 - 상태: `Accepted`
 - 날짜: 2026-08-01
-- 관련 작업: `WAF-DESIGN-01`, `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-FIX-01`,
-  `EDGE-01`, `AUDIT-01`
+- 관련 작업: `WAF-DESIGN-01`, `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-PERF-01`,
+  `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01`
 - 부분 대체: ADR-0007의 탐지 계층·배포 순서는 유지하고 Traefik process 내부의 direct
   Coraza HTTP-WASM connector 선택만 대체한다.
 
@@ -87,6 +87,37 @@ LF가 사라져 AppSec init hash gate를 통과하지 못했고, 즉시 main에�
    `git revert`하고 영구 AppProject는 유지한다.
 
 이 보정은 bouncer, route, AppSec policy, 금지 항목과 성능 기준을 바꾸지 않는다.
+
+### 2026-08-01 성능 측정 계약 보정
+
+수정 enablement의 control/WAF 측정은 각 요청마다 별도 `curl` process를 실행해 DNS 조회와
+TCP·TLS 연결을 1,000번 새로 만들었다. 그 결과 control과 WAF p95가 모두 약 `333ms`였고
+두 round의 WAF 증분은 각각 `-1.521ms`, `3.348ms`였지만 절대 `100ms` gate를 넘었다.
+승인된 기준을 사후 완화하지 않고 enablement를 즉시 revert했다.
+
+`CROWDSEC-PERF-01` 읽기 전용 진단에서 측정 client와 ingress 사이 경로는 `tailscale0`,
+10회 ping 평균은 `72.472ms`였다. rollback 상태의 같은 HTTPS 경로를 1,000회 측정하면
+매번 DNS·TCP·TLS를 새로 만든 p95는 `336.934ms`, DNS만 고정하고 TCP·TLS를 새로 만든
+p95는 `360.639ms`였다. 반면 concurrency 10의 HTTP/2 연결을 먼저 만들고 각 연결의 첫
+transfer를 버린 뒤 총 1,000 transfer를 재사용한 세 round p95는 `72.517ms`, `72.827ms`,
+`72.867ms`였고 측정 중 새 연결과 실패는 모두 0이었다. k3s node에서 같은 인증서와
+주소로 수행한 100개의 새 TLS 연결 p95는 `15.549ms`였다.
+
+따라서 기존의 WAF p95 증분 `20ms` 이하·절대 `100ms` 이하 기준은 그대로 유지하되,
+“warm-up 뒤”를 다음과 같이 해석한다.
+
+1. 같은 client·backend에서 concurrency 10에 대응하는 10개의 지속 HTTP/2 연결을 먼저
+   수립하고 각 연결의 첫 transfer를 결과에서 제외한다.
+2. control과 WAF 각각 총 1,000개의 정상 GET을 그 연결 pool에서 전송하고 이를 3회
+   반복한다. 각 round는 HTTP 상태, remote IP, HTTP/2, 측정 구간의 신규 연결 0을 함께
+   검증한다.
+3. cold DNS·TCP·TLS 지연은 별도 진단 표로 기록하며 WAF 처리시간 합격·실패 판정에
+   합산하지 않는다. phase별 percentile은 서로 다른 요청의 값일 수 있으므로 단순 합산하지
+   않는다.
+4. 이 보정은 rollback 상태의 측정 계약 진단일 뿐 WAF 성능 합격 증거가 아니다. 다음
+   enablement는 기존 기능·CPU·RSS·장애·회귀 gate와 함께 보정된 방식으로 control/WAF를
+   다시 측정하고, 정적 등록·유일한 Traefik Pod 재기동 전에 다섯 항목과 적용 시점을 다시
+   승인받는다.
 
 ## 검토한 대안
 

@@ -1,0 +1,7 @@
+mode	count	failures	measured_new_connections	p50_total_ms	p95_total_ms	p99_total_ms	p95_dns_ms	p95_tcp_ms	p95_tls_ms	p95_app_ms	expected_status
+fresh-dns	1000	0	1000	322.615	336.934	346.328	72.626	73.491	126.003	72.606	404
+fresh-resolve	1000	0	1000	228.459	360.639	501.615	0.020	126.871	134.850	123.428	404
+reuse-resolve-round1	1000	0	0	70.775	72.517	73.469	0.000	0.000	0.000	72.469	404
+reuse-resolve-round2	1000	0	0	70.751	72.827	73.335	0.000	0.000	0.000	72.765	404
+reuse-resolve-round3	1000	0	0	70.663	72.867	75.862	0.000	0.000	0.000	72.644	404
+node-fresh-resolve	100	0	100	9.874	15.549	17.397	0.020	0.084	15.152	0.403	404

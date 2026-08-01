@@ -62,7 +62,7 @@ PVE-01 + REC-01 + NET-01 → NET-02 → NET-02R → NET-03
 CAP-01 + OS-01 + IAC-01 + PVE-ACME-01 + NET-03 → VM-01
 VM-01 → NIDS-01 · K3S-01 · PG-01 · S3-DESIGN-01 · NB-01 · WG-01
 VM-01 + S3-DESIGN-01 → S3-01
-GITOPS-01 → INGRESS-01 → WAF-DESIGN-01 → CROWDSEC-FIX-01
+GITOPS-01 → INGRESS-01 → WAF-DESIGN-01 → CROWDSEC-PERF-01 → CROWDSEC-FIX-01
 
 기반 병렬 작업 → 백업 복구 gate → 공급망·정책 → 공개·최소권한
 → Loki → kube-prometheus-stack → Wazuh → Shuffle
@@ -250,10 +250,11 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `VAULT-02 DONE` | KV v2·Kubernetes auth·DB engine·PKI·audit policy ([runbook](runbook/vault-secrets-engines.md)) | `VAULT-01`, `PG-01`, `NET-03A` | 없음 | 모든 플랫폼 앱 | 바인딩 SA만 로그인·타 SA/role 403, policy allow/deny 403, 동적 DB credential의 TLSv1.3 verify-full 접속·타 DB 거부·revoke 후 인증 실패와 role 삭제, PKI 체인 검증·CRL 폐기·공인 이름 거부, audit 108건과 평문 시크릿 0건, vault ns Secret 0건 유지 |
 | `KC-01 DONE` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `KC-01-FIX-01 DONE` | bootstrap 메모리 시크릿 정리를 fail-closed로 보정 | `KC-01` 배포 선언 | 없음 | Keycloak bootstrap | Agent/bootstrap 동일 UID, 렌더링 파일 정리 실패 시 Job 실패, v1 prune·v2 성공 |
-| `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
+| `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-PERF-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
 | `CORAZA-01 DEFERRED` | Traefik HTTP-WASM Coraza + CRS 직접 PoC; 호환 실패로 폐기하고 `CROWDSEC-01`이 대체 | `INGRESS-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)의 재검토 조건이 생기면 새 결정·새 작업으로만 검토 |
 | `CROWDSEC-01 DEFERRED` | CrowdSec AppSec(Coraza + OWASP CRS) route-scoped PoC 최초 시도; CRS ConfigMap 바이트 훼손과 AppProject prune 순서 결함으로 revert | `INGRESS-01`, `WAF-DESIGN-01` | 없음 | `CROWDSEC-FIX-01` | 공개 main enablement와 rollback 이력을 재작성하지 않음; [실패 증거](evidence/crowdsec-fix-01/README.md)를 기준으로 FIX에서만 보정 |
-| `CROWDSEC-FIX-01 READY` | byte-preserving CRS snapshot·API round-trip·영구 AppProject로 CrowdSec AppSec PoC 보정 및 live gate 재수행 | `INGRESS-01`, `WAF-DESIGN-01` | `TRAEFIK-LIVE` | 공개 HTTP·`EDGE-01` | 소스·digest·plugin/rule hash 고정, Kubernetes API 후 49개 byte hash, Traefik 3.7.4 격리 호환, 정상 200·공격 403·exact 예외·control, p95·CPU·RSS, AppSec fail policy, 기존 ingress 회귀 없음, finalizer prune·Argo rollback·Git revert |
+| `CROWDSEC-PERF-01 DONE` | rollback 상태에서 CrowdSec 성능 실패의 client/DNS/TCP/TLS 측정 경로를 분리하고 warm-up 계약 보정 | `INGRESS-01`, `WAF-DESIGN-01` | 없음 | `CROWDSEC-FIX-01` | read-only 1,000건 cold 대조, concurrency 10 지속 HTTP/2 1,000건×3회, 신규 연결·실패 0, 라이브 Argo/HCC/Traefik 불변, ADR 기준값 미완화 |
+| `CROWDSEC-FIX-01 READY` | byte-preserving CRS snapshot·API round-trip·영구 AppProject로 CrowdSec AppSec PoC 보정 및 live gate 재수행 | `INGRESS-01`, `WAF-DESIGN-01`, `CROWDSEC-PERF-01` | `TRAEFIK-LIVE` | 공개 HTTP·`EDGE-01` | 소스·digest·plugin/rule hash 고정, Kubernetes API 후 49개 byte hash, Traefik 3.7.4 격리 호환, 정상 200·공격 403·exact 예외·control, warmed HTTP/2 1,000건×3회 p95·CPU·RSS와 별도 cold phase, AppSec fail policy, 기존 ingress 회귀 없음, finalizer prune·Argo rollback·Git revert |
 | `POM-01 READY` | Pomerium Core·선언형 Route·Routes Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음 | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
 | `HEADLAMP-02 BLOCKED` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
 | `NB-02 READY` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
@@ -362,6 +363,27 @@ enablement보다 먼저 영구 기반으로 남기고, CRS를 deterministic bina
 예외를 승인했다. Traefik 재기동은 enablement 후 한 번만 허용하며 직전에
 `KC-01` 상태와 시점을 다시 확인한다. `EDGE-01`은 이 FIX와 `POM-01`·`NB-02`·
 `NET-04`가 모두 완료될 때까지 `BLOCKED`를 유지한다.
+
+2026-08-01 수정 enablement `0d6ff16125d49e282f9ea01c765b3dd428f0e5cf`는 CRS 49개
+Kubernetes API byte hash, 정상·공격·exact 예외·control과 기존 ingress 회귀를
+통과했다. 그러나 성능 도구가 1,000개 요청마다 별도 process로 DNS·TCP·TLS 연결을
+새로 만들어 control/WAF p95가 모두 약 `333ms`였고 ADR의 절대 `100ms` gate를 넘었다.
+증분은 `-1.521ms`, `3.348ms`였지만 gate를 완화하지 않고 round 3을 중단한 뒤 rollback
+`f4841207ca71901566117a03c3c8998b42bfafef`로 AppSec Application·namespace·Secret과
+Traefik 정적 등록을 제거했다. root·ingress·keycloak은 rollback SHA에서
+`Synced/Healthy`, HCC generation `9`, Traefik Pod UID
+`30abf3ac-5239-498e-b2e1-e445f17ea9c5`, restart `0`, Ready로 회복했다.
+
+`CROWDSEC-PERF-01`은 이 상태를 변경하지 않고 [성능 측정 진단](evidence/crowdsec-perf-01/README.md)을
+수행했다. client→ingress RTT 평균 `72.472ms`에서 cold DNS/TCP/TLS 포함 p95는
+`336.934ms`, concurrency 10의 warmed HTTP/2 연결을 재사용한 1,000건 세 round p95는
+`72.517ms`·`72.827ms`·`72.867ms`였다. 전체 실패와 측정 구간의 신규 연결은 0이었고
+전후 Argo revision, HCC generation/resourceVersion, Traefik Pod UID·restart·imageID가
+동일했다. ADR의 p95 증분 `20ms`·절대 `100ms`는 유지하고 warm-up 의미만 고정했다.
+따라서 `CROWDSEC-PERF-01`은 `DONE`, 직접 후속 `CROWDSEC-FIX-01`은 `READY`다. 다음
+enablement는 이 측정 방식으로 WAF/control을 다시 검증하며, Traefik 재기동 전에 다섯
+항목과 현재 적용 시점을 다시 승인받는다. `EDGE-01`은 `CROWDSEC-FIX-01` 외에도
+`POM-01`·`NB-02`·`NET-04`가 남아 `BLOCKED`를 유지한다.
 
 2026-07-31 `VAULT-01`에서 `hashicorp/vault:2.0.3`(Docker Hub 공식 organization, digest
 `sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54`, BUSL-1.1
