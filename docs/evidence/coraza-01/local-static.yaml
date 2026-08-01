@@ -1,0 +1,20 @@
+# 폐기된 CORAZA-01 Docker 격리 재현 전용. packaged Traefik 설정이 아니다.
+entryPoints:
+  web:
+    address: :18080
+
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yaml
+
+log:
+  level: INFO
+
+accessLog: {}
+
+experimental:
+  plugins:
+    coraza:
+      moduleName: github.com/jcchavezs/coraza-http-wasm-traefik
+      version: v0.3.0
+      hash: b96680b46e61287faae243e360db5de34e4f315e2a8ee105fedddc176e79b1e7

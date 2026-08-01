@@ -1,0 +1,14 @@
+# 폐기된 CORAZA-01 Docker 격리 재현 전용. Kubernetes에 적용하지 않는다.
+http:
+  routers:
+    control:
+      rule: PathPrefix(`/control`)
+      entryPoints:
+        - web
+      service: whoami
+
+  services:
+    whoami:
+      loadBalancer:
+        servers:
+          - url: http://coraza-01-local-backend:8080

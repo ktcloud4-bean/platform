@@ -47,6 +47,7 @@
 | `OPNSENSE-LIVE` | OPNsense API/UI·방화벽·DNS |
 | `TOFU-STATE` | 동일 OpenTofu state의 plan/apply |
 | `K3S-BOOTSTRAP` | k3s·Argo CD 초기 제어면 |
+| `TRAEFIK-LIVE` | packaged Traefik HelmChartConfig·정적 plugin 등록·Pod 재기동 |
 | `VAULT-INIT` | Vault initialize·unseal·seal migration |
 | `PUBLIC-DNS` | Cloudflare DNS·공개 origin 변경 |
 | `K3S-HEAVY` | Wazuh·관측·SOAR처럼 큰 워크로드의 최초 적용 |
@@ -61,6 +62,7 @@ PVE-01 + REC-01 + NET-01 → NET-02 → NET-02R → NET-03
 CAP-01 + OS-01 + IAC-01 + PVE-ACME-01 + NET-03 → VM-01
 VM-01 → NIDS-01 · K3S-01 · PG-01 · S3-DESIGN-01 · NB-01 · WG-01
 VM-01 + S3-DESIGN-01 → S3-01
+GITOPS-01 → INGRESS-01 → WAF-DESIGN-01 → CROWDSEC-01
 
 기반 병렬 작업 → 백업 복구 gate → 공급망·정책 → 공개·최소권한
 → Loki → kube-prometheus-stack → Wazuh → Shuffle
@@ -247,7 +249,9 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `VAULT-01 DONE` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
 | `VAULT-02 READY` | KV v2·Kubernetes auth·DB engine·PKI·audit policy | `VAULT-01`, `PG-01`, `NET-03A` | 없음 | 모든 플랫폼 앱 | 앱별 policy 격리, 단기 DB credential 폐기, 인증서·감사 이벤트 검증 |
 | `KC-01 BLOCKED` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
-| `CORAZA-01 READY` | Traefik HTTP-WASM Coraza + CRS PoC | `INGRESS-01` | 없음 | 공개 HTTP | 정상 요청·대표 CRS 차단·예외 정책·성능 기준 검증 |
+| `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
+| `CORAZA-01 DEFERRED` | Traefik HTTP-WASM Coraza + CRS 직접 PoC; 호환 실패로 폐기하고 `CROWDSEC-01`이 대체 | `INGRESS-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)의 재검토 조건이 생기면 새 결정·새 작업으로만 검토 |
+| `CROWDSEC-01 READY` | CrowdSec AppSec(Coraza + OWASP CRS) route-scoped PoC | `INGRESS-01`, `WAF-DESIGN-01` | `TRAEFIK-LIVE` | 공개 HTTP·`EDGE-01` | source·version·digest·plugin hash·rule snapshot 고정, Traefik 3.7.4 격리 호환, 전용 내부 route만 정상 200·대표 공격 403·exact 예외, p95·CPU·RSS, 기존 ingress 회귀 없음, Argo rollback·Git revert |
 | `POM-01 BLOCKED` | Pomerium Core·선언형 Route·Routes Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음 | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
 | `HEADLAMP-02 BLOCKED` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
 | `NB-02 BLOCKED` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
@@ -319,6 +323,26 @@ Git/live HCC 일치, 단일 Traefik·IngressClass·ServiceLB, 전체 Pod·Node·
 failed unit·OPNsense drift를 확인하고 임시 namespace·TXT·port-forward를 제거했다.
 `INGRESS-01`을 `DONE`, 직접 후속 `CORAZA-01`만 `READY`로 열며 `VAULT-02`가 남은
 `KC-01`은 `BLOCKED`를 유지한다.
+
+2026-08-01 `WAF-DESIGN-01`에서 packaged Traefik `3.7.4`와 catalog 고정
+`coraza-http-wasm-traefik v0.3.0`을 같은 image digest에서 격리 재검증했다. plugin을
+정적으로 load한 control route는 200이지만 최소 middleware와 full CRS middleware를
+attach하면 OOM 없이 Traefik이 exit 2와 `fatal error: runtime: split stack overflow`로
+종료됐다. 라이브 HelmChartConfig·route·Argo·DNS·인증서에는 Coraza 자원을 만들지
+않았고 이 설계 작업도 라이브 변경을 수행하지 않았다. direct connector 구현은
+`CORAZA-01 DEFERRED`로 폐기하고, 재현 파일은 활성 `gitops/` 경로가 아닌
+[폐기 증거](evidence/coraza-01/README.md)로 격리했다.
+
+대체 경로는 [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)에 따라 Traefik process
+안에서 Coraza WASM을 실행하지 않고 별도 CrowdSec AppSec가 Coraza·OWASP CRS 검사를
+수행하며 route-scoped community bouncer가 판정만 연결한다. `CROWDSEC-01`은 전용 내부
+test route 이외 middleware 적용, community blocklist·IP ban·Console enrollment,
+Cloudflare·OPNsense·DNS·인증서·entrypoint 변경을 금지한다. bouncer 정적 등록은
+middleware attach 범위와 달리 HelmChartConfig 변경과 유일한 Traefik Pod 재기동을
+일으키므로 source·고정값·정상 트래픽 영향·성능 기준·rollback을 제시한 별도 승인을
+받기 전에는 적용하지 않는다. `INGRESS-01`과 `WAF-DESIGN-01`이 `DONE`이므로
+`CROWDSEC-01`만 `READY`로 열었다. `EDGE-01`은 `POM-01`·`NB-02`·`NET-04`가 남아
+`BLOCKED`, `AUDIT-01`도 기존 선행이 남아 `BLOCKED`를 유지한다.
 
 2026-07-31 `VAULT-01`에서 `hashicorp/vault:2.0.3`(Docker Hub 공식 organization, digest
 `sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54`, BUSL-1.1
@@ -429,7 +453,7 @@ CloudWatch alarm이 울린다. 상세 증거와 rollback은
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `NET-04 BLOCKED` | 실제 통신표로 VLAN 규칙 최소화·hardened 검증 | `NB-02`, `WG-02`, `POM-01`, `BKP-05`, `E2E-01` | `OPNSENSE-LIVE` | 외부 공개·운영 통신 | 임시 rule 제거, `vlan-verify hardened`, drift 없음 |
-| `EDGE-01 BLOCKED` | Cloudflare WAF·origin 제한·공개 DNS/NAT | `CORAZA-01`, `POM-01`, `NB-02`, `NIDS-01`, `NET-04` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 사용자 | 허용 hostname만 공개, origin 직접 우회 차단, IDS 경보·복구 경로 독립 |
+| `EDGE-01 BLOCKED` | Cloudflare WAF·origin 제한·공개 DNS/NAT | `CROWDSEC-01`, `POM-01`, `NB-02`, `NIDS-01`, `NET-04` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 사용자 | 허용 hostname만 공개, origin 직접 우회 차단, IDS 경보·복구 경로 독립 |
 | `NIPS-01 DEFERRED` | 검증된 Suricata rule만 선택적 IPS로 승격 | `NIDS-01`, `NET-04` | `OPNSENSE-LIVE` | 전체 프로젝트 통신 | 정상 트래픽·오탐·부모 인터페이스·offloading·처리량·장애·즉시 rollback 검증; 공개의 필수 gate 아님 |
 | `KMS-01 DEFERRED` | Vault Shamir→AWS KMS auto-unseal migration | `BKP-05` | `VAULT-INIT` | Vault 부팅·복구 | 사전 snapshot, KMS 장애 시험, seal rollback drill; VPN은 선행 아님 |
 
@@ -453,7 +477,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `AUDIT-01 BLOCKED` | Suricata·Coraza·Falco·Kubernetes·Vault·Keycloak·Pomerium·접근 서비스 이벤트 분류 | `EDGE-01`, `POL-02`, `FALCO-01` | 없음 | Loki·Wazuh | 보안/운영 경계, 시각·사용자·요청 ID, 마스킹, 보존 기준 |
+| `AUDIT-01 BLOCKED` | Suricata·CrowdSec AppSec(Coraza/CRS)·Falco·Kubernetes·Vault·Keycloak·Pomerium·접근 서비스 이벤트 분류 | `EDGE-01`, `POL-02`, `FALCO-01` | 없음 | Loki·Wazuh | 보안/운영 경계, 시각·사용자·요청 ID, 마스킹, 보존 기준 |
 | `LOKI-01 BLOCKED` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
 | `OBS-01 BLOCKED` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·OPNsense·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
 | `WAZUH-01 BLOCKED` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |

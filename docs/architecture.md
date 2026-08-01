@@ -85,7 +85,7 @@ Git에는 PVC 선언만 저장하고 PVC 데이터나 노드 디렉터리명을 
 | 인증 | Keycloak | k3s |
 | 웹 접근 정책·포털 | Pomerium Core | k3s |
 | ingress·리버스 프록시 | Traefik | k3s |
-| 오리진 WAF | Coraza + OWASP CRS | Traefik middleware |
+| 오리진 WAF | CrowdSec AppSec(Coraza + OWASP CRS) | k3s; Traefik route middleware가 판정 연결 |
 | 네트워크 IDS | Suricata alert-only | OPNsense |
 | 원격 네트워크 접근 | NetBird | 전용 VM |
 | 특권 세션 | Warpgate | 전용 VM |
@@ -110,10 +110,11 @@ NetBox는 채택하지 않았다. 물리 장비 증가, 포트·케이블 관리
 
 ```text
 보호된 웹 애플리케이션
-Client → [Cloudflare WAF] → OPNsense PF/NAT (Suricata IDS 관찰) → Traefik → Coraza → Pomerium → Service
+Client → [Cloudflare WAF] → OPNsense PF/NAT (Suricata IDS 관찰) → Traefik
+       → route-scoped bouncer → CrowdSec AppSec(Coraza + CRS) 판정 → Pomerium → Service
 
 Keycloak 인증 endpoint
-Client → Cloudflare WAF → OPNsense PF/NAT (Suricata IDS 관찰) → Traefik → Coraza → Keycloak
+Client → Cloudflare WAF → OPNsense PF/NAT (Suricata IDS 관찰) → Traefik → Keycloak
 
 NetBird control·relay
 Client → OPNsense의 명시적 공개 port → netbird-01
@@ -133,11 +134,19 @@ Service → Kubernetes Service DNS → Service
 | Suricata | north-south·라우팅된 VLAN 간 흐름의 네트워크 위협 탐지; 신원 정책이나 WAF가 아님 |
 | Cloudflare | 공개 HTTP의 엣지 WAF·프록시 |
 | Traefik | k3s 진입·TLS·호스트/경로 라우팅 |
-| Coraza | 오리진에 도달한 HTTP 공격 검사 |
+| CrowdSec AppSec | 별도 process에서 Coraza·OWASP CRS로 선택한 route의 HTTP 공격 검사 |
 | Pomerium | Keycloak 신원으로 Route 접근 결정·업스트림 프록시 |
 | 애플리케이션 | 서비스 내부 RBAC |
 
 OPNsense, Proxmox와 k3s ingress는 같은 공개 DNS zone을 사용해도 인증서 private key와 DNS API token을 공유하지 않는다. 각 계층이 별도 인증서를 발급하고, Vault PKI는 내부 TLS·mTLS에 사용한다.
+
+오리진 WAF middleware는 전역 기본값이 아니다. 먼저 전용 내부 test route에서만 검증하고,
+Keycloak·NetBird·관리 UI와 기존 공개 route에는 각 소유 작업의 별도 승인·회귀 검증 없이
+붙이지 않는다. CrowdSec AppSec의 검사 process는 Traefik 밖에 두지만, community bouncer
+plugin 등록은 Traefik의 전역 정적 설정과 Pod 재기동을 요구한다. 따라서 실제 attach 범위가
+route 하나여도 plugin source·version·hash, AppSec image·rule snapshot, 재기동 영향과
+rollback을 적용 전에 승인받는다. 선택 이유와 금지 범위는
+[ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)를 따른다.
 
 ## 탐지·관측 경계
 
@@ -145,14 +154,15 @@ Suricata는 OPNsense에서 PCAP 기반 alert-only IDS로 운영한다. 외부·V
 
 Suricata가 모든 공격면을 볼 수 있는 것은 아니다.
 
-- origin TLS의 HTTP 본문은 Traefik에서 복호화된 뒤 Coraza가 검사한다.
+- origin TLS의 HTTP 요청은 Traefik에서 복호화된 뒤 해당 route의 bouncer가 별도 CrowdSec
+  AppSec(Coraza + OWASP CRS)에 전달해 판정을 받는다.
 - 같은 k3s 노드 안의 Pod 간 트래픽은 OPNsense를 지나지 않으므로 NetworkPolicy와 Falco가 담당한다.
 - Pomerium·애플리케이션 RBAC는 신원과 리소스 권한을 결정하며 IDS 경보로 대체하지 않는다.
 
 보안 이벤트와 운영 데이터는 다음처럼 분리한다.
 
 ```text
-Suricata · Coraza · Falco · 각종 audit event → Wazuh → Wazuh Dashboard → Shuffle
+Suricata · CrowdSec AppSec(Coraza/CRS) · Falco · 각종 audit event → Wazuh → Wazuh Dashboard → Shuffle
 서비스 · 수집기 · 탐지 엔진 운영 로그       → Loki  → Grafana
 노드 · 서비스 · 파이프라인 숫자형 상태      → Prometheus → Alertmanager · Grafana
 ```
@@ -255,6 +265,6 @@ S3 복구 자격증명, K3s server token과 Shamir share처럼 전체 장애 때
 - [Pomerium Routes Portal](https://www.pomerium.com/docs/capabilities/routes-portal)
 - [Headlamp in-cluster](https://headlamp.dev/docs/latest/installation/in-cluster/), [Headlamp OIDC](https://headlamp.dev/docs/latest/installation/in-cluster/oidc/)
 - [OPNsense intrusion detection](https://docs.opnsense.org/manual/ips.html), [OPNsense Wazuh Agent](https://docs.opnsense.org/manual/wazuh-agent.html)
-- [Coraza connectors](https://www.coraza.io/connectors/)
+- [CrowdSec AppSec](https://docs.crowdsec.net/docs/log_processor/data_sources/appsec/), [Traefik Kubernetes bouncer](https://docs.crowdsec.net/u/bouncers/traefik/), [Traefik plugin install configuration](https://doc.traefik.io/traefik/reference/install-configuration/experimental/plugins/)
 - [NetBox source-of-truth model](https://netboxlabs.com/docs/netbox/introduction/)
 - [Shuffle self-hosted install](https://github.com/Shuffle/Shuffle/blob/main/.github/install-guide.md)
