@@ -27,7 +27,14 @@ data:
         wait "${keycloak_pid}"
       fi
       rm -f "${kcadm_config}"
-      find "${secret_dir}" -maxdepth 1 -type f -delete
+      if ! find "${secret_dir}" -maxdepth 1 -type f -delete; then
+        echo "KC-01 bootstrap: Vault 렌더링 파일 삭제에 실패했습니다." >&2
+        [[ "${cleanup_status}" -ne 0 ]] || cleanup_status=1
+      fi
+      if find "${secret_dir}" -maxdepth 1 -type f -print -quit | grep -q .; then
+        echo "KC-01 bootstrap: Vault 렌더링 파일이 남았습니다." >&2
+        [[ "${cleanup_status}" -ne 0 ]] || cleanup_status=1
+      fi
       exit "${cleanup_status}"
     }
     trap cleanup EXIT INT TERM

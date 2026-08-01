@@ -6,7 +6,9 @@ import base64
 import hashlib
 import hmac
 from html.parser import HTMLParser
+import http.client
 import http.cookiejar
+import ipaddress
 import json
 import os
 import secrets
@@ -18,6 +20,45 @@ import urllib.request
 
 
 CURRENT_STAGE = "initialization"
+
+
+class FixedAddressHTTPSConnection(http.client.HTTPSConnection):
+    """Connect to one IP while preserving URL host, SNI, and certificate checks."""
+
+    def __init__(self, host, *, fixed_ip: str, expected_host: str, **kwargs):
+        self.fixed_ip = fixed_ip
+        self.expected_host = expected_host
+        super().__init__(host, **kwargs)
+
+    def connect(self):
+        if self.host != self.expected_host:
+            raise OSError("fixed-address redirect left the expected issuer host")
+        self.sock = self._create_connection(
+            (self.fixed_ip, self.port), self.timeout, self.source_address
+        )
+        if self._tunnel_host:
+            self._tunnel()
+        self.sock = self._context.wrap_socket(
+            self.sock, server_hostname=self.expected_host
+        )
+
+
+class FixedAddressHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, fixed_ip: str, expected_host: str):
+        super().__init__()
+        self.fixed_ip = fixed_ip
+        self.expected_host = expected_host
+
+    def https_open(self, request):
+        def connection(host, **kwargs):
+            return FixedAddressHTTPSConnection(
+                host,
+                fixed_ip=self.fixed_ip,
+                expected_host=self.expected_host,
+                **kwargs,
+            )
+
+        return self.do_open(connection, request, context=self._context)
 
 
 class LoginFormParser(HTMLParser):
@@ -86,8 +127,26 @@ def main():
     parser.add_argument("--totp-file", required=True)
     parser.add_argument("--header-file", required=True)
     parser.add_argument("--expect-realm-role", action="append", default=[])
+    parser.add_argument("--connect-ip")
     parser.add_argument("--allow-insecure-localhost", action="store_true")
     args = parser.parse_args()
+
+    issuer_url = urllib.parse.urlsplit(args.issuer)
+    if not issuer_url.hostname:
+        raise RuntimeError("issuer must contain a hostname")
+    if issuer_url.scheme != "https":
+        if not (
+            args.allow_insecure_localhost
+            and issuer_url.scheme == "http"
+            and issuer_url.hostname in {"127.0.0.1", "localhost"}
+        ):
+            raise RuntimeError("issuer must be an HTTPS hostname URL")
+    if args.connect_ip:
+        if issuer_url.scheme != "https":
+            raise RuntimeError("connect-ip requires an HTTPS issuer")
+        address = ipaddress.ip_address(args.connect_ip)
+        if address.version != 4:
+            raise RuntimeError("connect-ip must be IPv4")
 
     with open(args.password_file, encoding="utf-8") as stream:
         password = stream.read().strip()
@@ -111,7 +170,15 @@ def main():
         }
     )
     cookie_jar = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    handlers = [
+        urllib.request.ProxyHandler({}),
+        urllib.request.HTTPCookieProcessor(cookie_jar),
+    ]
+    if args.connect_ip:
+        handlers.append(
+            FixedAddressHTTPSHandler(args.connect_ip, issuer_url.hostname)
+        )
+    opener = urllib.request.build_opener(*handlers)
     CURRENT_STAGE = "authorization-page"
     with opener.open(
         f"{args.issuer}/realms/{args.realm}/protocol/openid-connect/auth?{query}",

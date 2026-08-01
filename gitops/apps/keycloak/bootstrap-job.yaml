@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: keycloak-bootstrap-v1
+  name: keycloak-bootstrap-v2
   namespace: keycloak
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
@@ -39,7 +39,9 @@ spec:
             - agent
             - -config=/vault/config/bootstrap.hcl
           securityContext:
-            runAsUser: 100
+            # bootstrap 컨테이너와 같은 UID로 렌더링해야 종료 시 원문 파일을
+            # 삭제할 수 있다. runtime Pod는 읽기 전용이므로 UID 100을 유지한다.
+            runAsUser: 1000
             runAsGroup: 1000
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false

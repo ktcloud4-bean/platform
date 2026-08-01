@@ -4,13 +4,30 @@ set -Eeuo pipefail
 
 : "${KC01_SECRET_DIR:?저장소 밖 KC-01 비밀 디렉터리가 필요하다}"
 readonly issuer=https://sso.imcherry5778.xyz
+readonly issuer_host=sso.imcherry5778.xyz
 readonly k3s_host=${K3S_HOST:-rocky@10.10.20.10}
 readonly kubectl_command=${KUBECTL:-sudo /usr/local/bin/k3s kubectl}
+readonly connect_ip=${KC01_CONNECT_IP:-}
 repo_root=$(git rev-parse --show-toplevel)
 readonly repo_root
 temp_dir=$(mktemp -d)
 readonly temp_dir
 umask 077
+curl_route=()
+browser_route=()
+
+if [[ -n "${connect_ip}" ]]; then
+  python3 - "${connect_ip}" <<'PY'
+import ipaddress, sys
+address = ipaddress.ip_address(sys.argv[1])
+assert address.version == 4
+PY
+  curl_route=(
+    --resolve "${issuer_host}:443:${connect_ip}"
+    --resolve "${issuer_host}:80:${connect_ip}"
+  )
+  browser_route=(--connect-ip "${connect_ip}")
+fi
 
 cleanup() {
   rm -rf "${temp_dir}"
@@ -86,6 +103,7 @@ request_token() {
   make_password_form "${form_file}" "${realm}" "${username}" "${password_file}" \
     "${totp_file}" "${include_totp}" "${client_id}" "${client_secret_file}"
   curl --silent --show-error \
+    "${curl_route[@]}" \
     --output "${response_file}" \
     --write-out '%{http_code}' \
     --header 'Content-Type: application/x-www-form-urlencoded' \
@@ -132,6 +150,7 @@ PY
 echo "KC-01: HTTPS 인증서, 고정 issuer, HTTP 영구 redirect를 확인합니다."
 discovery=${temp_dir}/discovery.json
 curl --silent --show-error --fail \
+  "${curl_route[@]}" \
   "${issuer}/realms/platform/.well-known/openid-configuration" >"${discovery}"
 python3 - "${discovery}" "${issuer}/realms/platform" <<'PY'
 import json, sys
@@ -141,6 +160,7 @@ assert document["issuer"] == sys.argv[2], document["issuer"]
 PY
 redirect_headers=${temp_dir}/redirect.headers
 http_status=$(curl --silent --show-error --output /dev/null \
+  "${curl_route[@]}" \
   --dump-header "${redirect_headers}" --write-out '%{http_code}' \
   http://sso.imcherry5778.xyz/realms/platform/)
 [[ "${http_status}" == 301 ]]
@@ -177,12 +197,15 @@ make_bearer_header_and_check_claims "${privileged_response}" privileged "${privi
 
 echo "KC-01: 최소 view-users 권한의 양성/음성 API를 확인합니다."
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  "${curl_route[@]}" \
   --header "@${daily_header}" "${issuer}/admin/realms/platform/users")
 [[ "${http_status}" == 403 ]]
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  "${curl_route[@]}" \
   --header "@${privileged_header}" "${issuer}/admin/realms/platform/users")
 [[ "${http_status}" == 200 ]]
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  "${curl_route[@]}" \
   --header "@${privileged_header}" "${issuer}/admin/realms/platform/clients")
 [[ "${http_status}" == 403 ]]
 
@@ -197,8 +220,10 @@ python3 "${repo_root}/gitops/tools/kc-01/browser-login.py" \
   --password-file "${KC01_SECRET_DIR}/local-admin-password" \
   --totp-file "${KC01_SECRET_DIR}/local-admin-totp" \
   --header-file "${local_header}" \
+  "${browser_route[@]}" \
   --expect-realm-role admin
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  "${curl_route[@]}" \
   --header "@${local_header}" "${issuer}/admin/realms/platform")
 [[ "${http_status}" == 200 ]]
 

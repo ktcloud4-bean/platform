@@ -61,7 +61,8 @@ PostgreSQL에서는 먼저 `log_statement=none`과 `keycloak_user` 최소 속성
 
 ## 최초 bootstrap과 재현
 
-`keycloak-bootstrap-v1` Job은 배포보다 먼저 실행한다.
+`keycloak-bootstrap-v2` Job은 배포보다 먼저 실행한다. Vault Agent와 bootstrap 컨테이너는
+같은 UID로 메모리 파일을 소유하며, 종료 시 렌더링 파일을 모두 지우지 못하면 Job이 실패한다.
 
 1. Vault Agent init이 메모리 볼륨에 DB·realm·개인 복구 관리자 입력을 렌더링한다.
 2. offline `bootstrap-admin service`로 임시 관리 client를 만든다.
@@ -79,6 +80,9 @@ Git 선언의 차이를 먼저 분류한 별도 작업으로 수행한다. Job�
 
 ```bash
 export KC01_SECRET_DIR=/home/imcherry/secrets/ktcloud4-bean/keycloak
+# 실행 호스트의 기본 resolver가 랩 Unbound를 쓰지 않을 때만 docs/ip-plan.md의
+# sso alias 대상을 지정한다. TLS hostname과 issuer 검증은 그대로 유지된다.
+export KC01_CONNECT_IP='<docs/ip-plan.md의 sso alias 대상 IPv4>'
 gitops/tools/kc-01/verify-live.sh
 ```
 
@@ -104,6 +108,7 @@ unseal을 요청한다.**
 
 ```bash
 export KC01_SECRET_DIR=/home/imcherry/secrets/ktcloud4-bean/keycloak
+export KC01_CONNECT_IP='<기본 resolver가 랩 Unbound가 아닐 때만 지정>'
 gitops/tools/kc-01/verify-recovery.sh
 ```
 

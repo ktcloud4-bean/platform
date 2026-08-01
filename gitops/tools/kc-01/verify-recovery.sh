@@ -5,12 +5,29 @@ set -Eeuo pipefail
 
 : "${KC01_SECRET_DIR:?저장소 밖 KC-01 비밀 디렉터리가 필요하다}"
 readonly issuer=https://sso.imcherry5778.xyz
+readonly issuer_host=sso.imcherry5778.xyz
+readonly connect_ip=${KC01_CONNECT_IP:-}
 repo_root=$(git rev-parse --show-toplevel)
 readonly repo_root
 temp_dir=$(mktemp -d)
 readonly temp_dir
 umask 077
 realm_disabled=false
+curl_route=()
+browser_route=()
+
+if [[ -n "${connect_ip}" ]]; then
+  python3 - "${connect_ip}" <<'PY'
+import ipaddress, sys
+address = ipaddress.ip_address(sys.argv[1])
+assert address.version == 4
+PY
+  curl_route=(
+    --resolve "${issuer_host}:443:${connect_ip}"
+    --resolve "${issuer_host}:80:${connect_ip}"
+  )
+  browser_route=(--connect-ip "${connect_ip}")
+fi
 
 cleanup() {
   local cleanup_status=$?
@@ -18,6 +35,7 @@ cleanup() {
   if [[ "${realm_disabled}" == true && -s "${temp_dir}/local.header" ]]; then
     printf '{"enabled":true}\n' >"${temp_dir}/enable.json"
     curl --silent --show-error --output /dev/null \
+      "${curl_route[@]}" \
       --request PUT \
       --header "@${temp_dir}/local.header" \
       --header 'Content-Type: application/json' \
@@ -83,15 +101,18 @@ python3 "${repo_root}/gitops/tools/kc-01/browser-login.py" \
   --password-file "${KC01_SECRET_DIR}/local-admin-password" \
   --totp-file "${KC01_SECRET_DIR}/local-admin-totp" \
   --header-file "${temp_dir}/local.header" \
+  "${browser_route[@]}" \
   --expect-realm-role admin
 
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  "${curl_route[@]}" \
   --header "@${temp_dir}/local.header" "${issuer}/admin/realms/platform")
 [[ "${http_status}" == 200 ]]
 
 echo "KC-01 복구 시험: platform realm을 일시 비활성화합니다."
 printf '{"enabled":false}\n' >"${temp_dir}/disable.json"
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  "${curl_route[@]}" \
   --request PUT \
   --header "@${temp_dir}/local.header" \
   --header 'Content-Type: application/json' \
@@ -102,6 +123,7 @@ realm_disabled=true
 
 make_daily_form "${temp_dir}/daily-disabled.form"
 http_status=$(curl --silent --show-error --output "${temp_dir}/daily-disabled.json" \
+  "${curl_route[@]}" \
   --write-out '%{http_code}' \
   --header 'Content-Type: application/x-www-form-urlencoded' \
   --data-binary "@${temp_dir}/daily-disabled.form" \
@@ -115,12 +137,14 @@ assert response.get("error") == "access_denied", response.get("error")
 assert response.get("error_description") == "Realm not enabled"
 PY
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  "${curl_route[@]}" \
   --header "@${temp_dir}/local.header" "${issuer}/admin/realms/platform")
 [[ "${http_status}" == 200 ]]
 
 echo "KC-01 복구 시험: master 로컬 관리 경로로 platform realm을 복구합니다."
 printf '{"enabled":true}\n' >"${temp_dir}/enable.json"
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  "${curl_route[@]}" \
   --request PUT \
   --header "@${temp_dir}/local.header" \
   --header 'Content-Type: application/json' \
@@ -130,6 +154,7 @@ http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_
 realm_disabled=false
 make_daily_form "${temp_dir}/daily-restored.form"
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  "${curl_route[@]}" \
   --header 'Content-Type: application/x-www-form-urlencoded' \
   --data-binary "@${temp_dir}/daily-restored.form" \
   "${issuer}/realms/platform/protocol/openid-connect/token")
