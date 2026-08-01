@@ -64,6 +64,15 @@ spec:
               mountPath: /vault/config
             - name: data
               mountPath: /vault/data
+            # Kubernetes auth의 TokenReview 호출에 쓰는 자기 신분증.
+            # SA의 automountServiceAccountToken 은 false 로 두고 여기서만 명시적으로 준다.
+            - name: kube-api-access
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+            # database engine이 postgres-01에 sslmode=verify-full 로 붙을 때 쓰는 신뢰 앵커.
+            - name: postgres-ca
+              mountPath: /vault/userconfig/postgres-ca
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
@@ -87,3 +96,24 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: vault-data
+        # 만료 1시간짜리 ServiceAccount token. kubelet이 자동 갱신하므로
+        # 만료 없는 token을 Secret에 저장할 필요가 없다.
+        - name: kube-api-access
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        fieldPath: metadata.namespace
+        - name: postgres-ca
+          configMap:
+            name: vault-postgres-ca

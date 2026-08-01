@@ -15,6 +15,9 @@ spec:
   clusterResourceWhitelist:
     - group: ''
       kind: Namespace
+    # VAULT-02: Kubernetes auth의 TokenReview 호출 권한만 바인딩한다.
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
   namespaceResourceWhitelist:
     - group: ''
       kind: ServiceAccount

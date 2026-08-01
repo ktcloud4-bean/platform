@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-postgres-ca
+  namespace: vault
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+    app.kubernetes.io/name: vault
+data:
+  # postgres-01의 self-signed 서버 인증서. 비밀이 아니라 신뢰 앵커다.
+  # Vault database engine이 sslmode=verify-full 로 접속할 때 sslrootcert 로 쓴다.
+  # PG-01이 발급했고 2027-07-30 만료다. 갱신하면 이 파일도 함께 갱신한다.
+  # SHA-256(DER): c3f83a6c7d8b94281efc80d56702f59defdb06b804dccb5f5705cf243164565c
+  postgres-01.crt: |
+    -----BEGIN CERTIFICATE-----
+    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
+    -----END CERTIFICATE-----

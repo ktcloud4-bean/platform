@@ -1,0 +1,24 @@
+# Vault가 Kubernetes auth에서 클라이언트 ServiceAccount token을 검증하려면
+# TokenReview API를 호출할 수 있어야 한다. 그 권한만 준다.
+#
+# system:auth-delegator 는 TokenReview 와 SubjectAccessReview 생성만 허용한다.
+# 다른 리소스를 읽거나 바꾸지 못하므로 이 바인딩으로 클러스터를 장악할 수 없다.
+#
+# 이 방식을 고른 이유는 장기 reviewer token을 Kubernetes Secret에 두지 않기 위해서다.
+# Vault Pod는 StatefulSet의 projected volume으로 만료 1시간짜리 token을 받고
+# kubelet이 자동으로 갱신한다. 그래서 vault namespace의 Secret은 계속 0건이다.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-tokenreview
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+    app.kubernetes.io/name: vault
+subjects:
+  - kind: ServiceAccount
+    name: vault
+    namespace: vault
+roleRef:
+  kind: ClusterRole
+  name: system:auth-delegator
+  apiGroup: rbac.authorization.k8s.io
