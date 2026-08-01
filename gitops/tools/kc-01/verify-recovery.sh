@@ -102,6 +102,7 @@ python3 "${repo_root}/gitops/tools/kc-01/browser-login.py" \
   --totp-file "${KC01_SECRET_DIR}/local-admin-totp" \
   --header-file "${temp_dir}/local.header" \
   "${browser_route[@]}" \
+  --capture-callback \
   --expect-realm-role admin
 
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
