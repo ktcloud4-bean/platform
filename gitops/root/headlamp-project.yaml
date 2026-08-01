@@ -8,13 +8,11 @@ metadata:
   labels:
     app.kubernetes.io/part-of: platform-gitops
 spec:
-  description: HEADLAMP-02 사용자 OIDC·최소 Kubernetes RBAC Headlamp 배포 경계
+  description: HEADLAMP-01 내부 관리 UI와 최소 reader identity 배포 경계
   sourceRepos:
     - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
   destinations:
     - namespace: headlamp
-      server: https://kubernetes.default.svc
-    - namespace: headlamp-rbac-test
       server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: ""
@@ -30,7 +28,3 @@ spec:
       kind: Service
     - group: apps
       kind: Deployment
-    - group: rbac.authorization.k8s.io
-      kind: Role
-    - group: rbac.authorization.k8s.io
-      kind: RoleBinding

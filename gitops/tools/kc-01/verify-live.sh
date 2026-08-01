@@ -211,10 +211,6 @@ http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_
 
 echo "KC-01: master realm의 독립 로컬 관리자를 확인합니다."
 local_header=${temp_dir}/local.header
-# master realm은 otpPolicyCodeReusable=false다. 이 verifier 직전에 다른 check가
-# 같은 recovery identity를 썼더라도 재사용되지 않도록 새 TOTP 구간에서 시작한다.
-local_totp_wait_seconds=$((31 - $(date +%s) % 30))
-sleep "${local_totp_wait_seconds}"
 python3 "${repo_root}/gitops/tools/kc-01/browser-login.py" \
   --issuer "${issuer}" \
   --realm master \
@@ -225,7 +221,6 @@ python3 "${repo_root}/gitops/tools/kc-01/browser-login.py" \
   --totp-file "${KC01_SECRET_DIR}/local-admin-totp" \
   --header-file "${local_header}" \
   "${browser_route[@]}" \
-  --capture-callback \
   --expect-realm-role admin
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
   "${curl_route[@]}" \
