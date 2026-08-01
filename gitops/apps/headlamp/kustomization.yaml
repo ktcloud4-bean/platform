@@ -3,6 +3,6 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - serviceaccounts.yaml
-  - oidc-rbac.yaml
+  - reader-rbac.yaml
   - service.yaml
   - deployment.yaml
