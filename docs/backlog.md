@@ -248,16 +248,17 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `INGRESS-01 DONE` | Traefik 단일 ingress·별도 DNS-01 인증서 | `GITOPS-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 모든 HTTP 앱 | 80→443, 내부·외부 split DNS, OPNsense 개인키 미복사, source IP 판정 |
 | `VAULT-01 DONE` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
 | `VAULT-02 DONE` | KV v2·Kubernetes auth·DB engine·PKI·audit policy ([runbook](runbook/vault-secrets-engines.md)) | `VAULT-01`, `PG-01`, `NET-03A` | 없음 | 모든 플랫폼 앱 | 바인딩 SA만 로그인·타 SA/role 403, policy allow/deny 403, 동적 DB credential의 TLSv1.3 verify-full 접속·타 DB 거부·revoke 후 인증 실패와 role 삭제, PKI 체인 검증·CRL 폐기·공인 이름 거부, audit 108건과 평문 시크릿 0건, vault ns Secret 0건 유지 |
-| `KC-01 READY` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
+| `KC-01 DONE` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
+| `KC-01-FIX-01 DONE` | bootstrap 메모리 시크릿 정리를 fail-closed로 보정 | `KC-01` 배포 선언 | 없음 | Keycloak bootstrap | Agent/bootstrap 동일 UID, 렌더링 파일 정리 실패 시 Job 실패, v1 prune·v2 성공 |
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
 | `CORAZA-01 DEFERRED` | Traefik HTTP-WASM Coraza + CRS 직접 PoC; 호환 실패로 폐기하고 `CROWDSEC-01`이 대체 | `INGRESS-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)의 재검토 조건이 생기면 새 결정·새 작업으로만 검토 |
 | `CROWDSEC-01 DEFERRED` | CrowdSec AppSec(Coraza + OWASP CRS) route-scoped PoC 최초 시도; CRS ConfigMap 바이트 훼손과 AppProject prune 순서 결함으로 revert | `INGRESS-01`, `WAF-DESIGN-01` | 없음 | `CROWDSEC-FIX-01` | 공개 main enablement와 rollback 이력을 재작성하지 않음; [실패 증거](evidence/crowdsec-fix-01/README.md)를 기준으로 FIX에서만 보정 |
 | `CROWDSEC-FIX-01 READY` | byte-preserving CRS snapshot·API round-trip·영구 AppProject로 CrowdSec AppSec PoC 보정 및 live gate 재수행 | `INGRESS-01`, `WAF-DESIGN-01` | `TRAEFIK-LIVE` | 공개 HTTP·`EDGE-01` | 소스·digest·plugin/rule hash 고정, Kubernetes API 후 49개 byte hash, Traefik 3.7.4 격리 호환, 정상 200·공격 403·exact 예외·control, p95·CPU·RSS, AppSec fail policy, 기존 ingress 회귀 없음, finalizer prune·Argo rollback·Git revert |
-| `POM-01 BLOCKED` | Pomerium Core·선언형 Route·Routes Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음 | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
+| `POM-01 READY` | Pomerium Core·선언형 Route·Routes Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음 | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
 | `HEADLAMP-02 BLOCKED` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
-| `NB-02 BLOCKED` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
-| `WG-02 BLOCKED` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | 없음 | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
-| `AWS-ID-01 BLOCKED` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
+| `NB-02 READY` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
+| `WG-02 READY` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | 없음 | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
+| `AWS-ID-01 READY` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
 
 2026-07-31 `GITOPS-01`에서 Kubernetes `v1.36.2+k3s1`에 Argo CD `v3.5.0-rc3`
 pre-release를 fixed tag·commit·manifest SHA-256·image digest로 bootstrap했다. root
@@ -420,6 +421,49 @@ CSI 등)는 정하지 않았으며 `KC-01`이 결정한다. 상세는
 소유한다. 선행을 다시 계산해 `KC-01`(`PG-01`·`VAULT-02`·`INGRESS-01` 충족)과
 `BKP-03`(`PG-01`·`VAULT-02`·`S3-01` 충족)을 `READY`로 연다. `POM-01`은 `KC-01`이 남아
 `BLOCKED`를 유지한다.
+
+2026-08-01 `KC-01`에서 Keycloak `26.7.0` 공식 image를 digest로 고정하고 `platform` realm과
+고정 issuer `https://sso.imcherry5778.xyz`를 GitOps로 배포했다. 일상 ID `imcherry`는
+`/platform-users`만, 특권 ID `imcherry-admin`은 `/platform-privileged`와
+`/keycloak-readers`만 가진다. `kc-verify`는 `fullScopeAllowed=false`이며 groups mapper와
+`realm-management/view-users` scope만 명시했다. 실제 access token에서 일상 groups만 있고
+관리 role은 0개였으며, 특권 token에는 `view-users`와 내장 composite `query-users`·
+`query-groups`만 있었다. MFA 미입력은 `400 invalid_grant`, HMAC-SHA256 TOTP 입력은 200이었다.
+Users API는 일상 403·특권 200, Clients API는 특권에도 403이었다.
+
+master realm의 개인 복구 ID `imcherry-kc-recovery`는 public `kc-recovery` client의
+Authorization Code + PKCE + TOTP만 사용하고 password grant·implicit·service account·client
+secret은 쓰지 않는다. 이 로컬 ID로 `platform` realm을 비활성화했을 때 platform token은
+`403 access_denied`였지만 master 관리 API는 200이었고, 같은 경로로 realm을 다시 활성화한 뒤
+일상 token 200을 확인했다. 최초 bootstrap v1은 Agent UID 100이 만든 메모리 파일을 UID 1000
+컨테이너가 지우지 못하는 결함을 라이브에서 발견해 완료 Pod를 즉시 삭제했다. 공개 main 뒤
+결함이므로 별도 `KC-01-FIX-01` branch·worktree와 main 커밋으로 v2를 만들었다. v2는 두
+컨테이너가 UID 1000을 쓰고 정리 실패를 exit 1로 처리하며, init/main exit 0·정리 오류 0건과
+v1 prune를 확인했다.
+
+시크릿 소비는 [ADR-0013](adr/0013-keycloak-secret-consumption.md)에 따라 cluster-wide injector,
+privileged CSI DaemonSet, Kubernetes Secret 동기화 operator를 추가하지 않고 명시적 Vault Agent
+init이 projected ServiceAccount token으로 자기 KV 경로만 읽어 메모리 `emptyDir`에 렌더링한다.
+상시 Keycloak 컨테이너에는 ServiceAccount token이 없다. 장기 DB pool이 만료되는 동적 계정을
+안전하게 다시 읽는 경로가 없어 PG-01의 고정 `keycloak_user` 암호를 KV에 두고 승인된 Pod
+재생성과 함께 회전한다. 프로비저닝에서 `keycloak` DB에 `verify-full` TLSv1.3으로 접속했고
+비 TLS와 `verify_db` 접속은 거부됐다. 실제 Keycloak 세션도 `keycloak_user`·TLSv1.3이었다.
+
+OPNsense에는 기존 `k3s-01` host의 `sso` alias 한 건만 지원 API로 추가했다. 내부 A는
+`10.10.20.10`, 내부 AAAA와 공개 resolver의 A·AAAA는 없고, Unbound 저장 모델·runtime·drift
+없음을 확인했다. 공인 인증서는 정확한 hostname으로 TLS 1.3 검증에 성공하고 HTTP는 301로
+HTTPS에 전환됐다. Argo root·Keycloak은 계속 `targetRevision: main`에서 Synced/Healthy이고
+Keycloak namespace의 Secret은 0건이다. Deployment Pod 삭제 뒤 UID가 바뀐 새 Pod에서 전체
+인증 검증을 반복했다. 노드 boot ID가 `2ec08a0c-0dcf-461f-acb7-7bf8bbd67695`에서
+`5bbaeac3-55f3-4f22-bdd2-16618c7dc415`로 바뀐 재부팅 뒤에는 예상대로 Shamir Vault가 sealed여서
+사용자 승인으로 key 원문을 출력하지 않고 stdin `sys/unseal key=-` 경로만 사용했다. Vault·
+Keycloak·모든 Argo 앱이 복귀한 뒤 MFA·issuer·claim·권한·복구 ID·PostgreSQL TLS를 다시
+검증했다. 최종 Keycloak 사용량은 CPU 112m·RAM 568Mi, 노드는 CPU 1%·RAM 3,493Mi(14%)였다.
+Git 추적 파일과 전체 Keycloak Pod 로그의 시크릿 원문은 0건이다.
+
+선행을 다시 계산하면 `POM-01`은 `KC-01`·`INGRESS-01`·`VAULT-02`, `NB-02`는 `NB-01`·
+`KC-01`, `WG-02`는 `WG-01`·`KC-01`, `AWS-ID-01`은 `KC-01`이 모두 `DONE`이므로 이 네 직접
+후속만 `READY`로 연다. `HEADLAMP-02`는 `POM-01`이 아직 `READY`라 `BLOCKED`를 유지한다.
 
 ## 5. 데이터 보호 gate
 
