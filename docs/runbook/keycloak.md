@@ -96,9 +96,6 @@ gitops/tools/kc-01/verify-live.sh
 - Argo `Synced/Healthy`, targetRevision `main`, namespace Secret 0건
 - 상시 컨테이너 SA token 미마운트, Git·전체 Keycloak Pod 로그의 비밀 원문 0건
 
-master recovery 검증은 Authorization Code callback을 캡처해 account console이 code를 소비하기 전에
-PKCE 교환을 끝낸다. callback URL·code·token·cookie는 출력하지 않고 mode `0600` 임시 파일을 종료 trap에서 제거한다.
-
 Pod 재시작 유지는 Deployment Pod를 삭제한 뒤 새 UID와 Ready, 동일 issuer/MFA/claim을 다시
 확인한다. 노드 재부팅 유지는 k3s 재부팅 소유 작업과 조율한 뒤 같은 검증과 PostgreSQL TLS
 session을 다시 확인한다. **Vault Pod가 재생성돼 sealed면 Keycloak을 재시작하지 말고 사용자에게
