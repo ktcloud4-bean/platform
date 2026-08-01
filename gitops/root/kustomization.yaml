@@ -7,3 +7,5 @@ resources:
   - ingress-application.yaml
   - vault-project.yaml
   - vault-application.yaml
+  - headlamp-project.yaml
+  - headlamp-application.yaml

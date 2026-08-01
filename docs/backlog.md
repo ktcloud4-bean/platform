@@ -235,7 +235,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `GITOPS-01 DONE` | `gitops/` 생성·Argo CD bootstrap·root Application | `K3S-01` | `K3S-BOOTSTRAP` | 이후 k3s 앱 | 새 clone에서 bootstrap, Synced/Healthy, secret 원문 없음 |
-| `HEADLAMP-01 READY` | Headlamp 기본 GitOps 배포·내부 bootstrap 접근 | `GITOPS-01` | 없음 | 초기 k3s 조회·`HEADLAMP-02` | Argo Synced/Healthy, 외부 ingress 없음, Headlamp SA 무권한, port-forward와 단기 reader token으로 리소스·로그 조회 |
+| `HEADLAMP-01 DONE` | Headlamp 기본 GitOps 배포·내부 bootstrap 접근 | `GITOPS-01` | 없음 | 초기 k3s 조회·`HEADLAMP-02` | Argo Synced/Healthy, 외부 ingress 없음, Headlamp SA 무권한, port-forward와 단기 reader token으로 리소스·로그 조회 |
 | `STOR-01 DONE` | local-path 경로·`local` PV 타입·disk-pressure 검증 | `K3S-01` | `K3S-BOOTSTRAP` | 모든 PVC·`BKP-02` | 동적 PVC, capacity 미강제, 재부팅 후 데이터, SELinux 삭제 helper, 임계치 기준 |
 | `INGRESS-01 DONE` | Traefik 단일 ingress·별도 DNS-01 인증서 | `GITOPS-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 모든 HTTP 앱 | 80→443, 내부·외부 split DNS, OPNsense 개인키 미복사, source IP 판정 |
 | `VAULT-01 DONE` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
@@ -258,6 +258,20 @@ Application은 GitHub private repository의 signed commit
 선행조건으로 재계산해 `HEADLAMP-01`, `INGRESS-01`, `VAULT-01`을 `READY`로 열었다.
 `BKP-02`는 `S3-01`이 아직 `DONE`이 아니므로 `BLOCKED`를 유지한다. 적용·fresh clone·
 rollback 경계는 [GITOPS-01 runbook](runbook/argocd-gitops-bootstrap.md)이 소유한다.
+
+2026-08-01 `HEADLAMP-01`에서 Headlamp `v0.44.0` 공식 image를 digest로 고정하고
+원시 manifest(Kustomize)와 전용 AppProject·child Application으로 배포했다. Service는
+`ClusterIP`만 사용하고 Ingress·IngressRoute는 0개다. 서버 `headlamp` ServiceAccount에는
+workload 리소스 RBAC binding이 없으며, 자동 token mount 대신 만료 600초의 projected
+token만 명시적으로 사용한다. 별도 `headlamp-reader`는 namespace·node·Pod·Service·Event·
+기본 workload·Job 조회와 `pods/log get`만 허용한다. TokenRequest로 받은 TTL 600초 token을
+mode 0600 임시 파일과 이중 loopback port-forward에만 두고 Headlamp proxy에서 리소스·로그
+200을 확인했다. Secret 조회와 create·추가 TokenRequest·update·delete·exec는 403이었고
+모든 변경 요청은 dry-run으로 제한했다. 장기 ServiceAccount token Secret과 token 원문의
+Git·로그 잔류는 0건이다. immutable revision 재동기화 뒤 Argo root·child
+`Synced/Healthy`, Pod 1/1·restart 0, Node `Ready`·DiskPressure `False`를 확인했다.
+`HEADLAMP-02`는 `POM-01` 선행이 남아 `BLOCKED`를 유지한다. 접근·검증·Git revert rollback은
+[Headlamp 내부 bootstrap 기준선](../gitops/apps/headlamp/README.md)이 소유한다.
 
 2026-07-31 `INGRESS-01` staging preflight에서 Unbound가 공인 zone 전체를 Dnsmasq로
 forward해 내부 exact A override 밖의 공개 SOA·NS를 NODATA로 만드는 것을 확인했다.
