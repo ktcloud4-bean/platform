@@ -427,7 +427,7 @@ CSI 등)는 정하지 않았으며 `KC-01`이 결정한다. 상세는
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `BKP-01 READY` | K3s SQLite·server token 전용 backup/restore | `K3S-01`, `S3-01` | `K3S-BOOTSTRAP` | 클러스터 복구 | 격리된 빈 VM에서 API 객체 복원; Velero와 별도임을 검증 |
+| `BKP-01 DONE` | K3s SQLite·server token 전용 backup/restore | `K3S-01`, `S3-01` | `K3S-BOOTSTRAP` | 클러스터 복구 | 격리된 빈 VM에서 API 객체 복원; Velero와 별도임을 검증 |
 | `BKP-02 DONE` | Velero + node-agent/Kopia와 local PV restore PoC | `GITOPS-01`, `STOR-01`, `S3-01` | 없음 | 모든 k3s PVC | 테스트 namespace 삭제 후 리소스·파일 복원, hostPath 제약 판정 |
 | `BKP-03 READY` | PostgreSQL native backup·Vault Raft snapshot | `PG-01`, `VAULT-02`, `S3-01` | 없음 | 인증·플랫폼 데이터 | 별도 DB/namespace에 point-in-time 또는 snapshot restore |
 | `BKP-04 DONE` | SeaweedFS 로컬 S3에서 AWS S3로 오프사이트 사본 생성 | `S3-01` | 없음 | 모든 백업의 물리 장애 대응 | 별도 최소권한 자격증명과 검증한 방식으로 전송, AWS S3에서 샘플 복원, 암호화·버전·보존·실패 경보 검증 |
@@ -486,6 +486,30 @@ CloudWatch alarm이 울린다. 상세 증거와 rollback은
 [오프사이트 백업 runbook](runbook/seaweedfs-s3-offsite-backup.md), 착지점 운영은
 [AWS OpenTofu README](../infra/aws/tofu/README.md)가 소유한다. 직접 후속 `BKP-05`는
 `BKP-01`·`BKP-02`·`BKP-03`이 남아 `BLOCKED`를 유지하므로 새로 `READY`로 여는 작업은 없다.
+
+2026-08-01 `BKP-01`에서 실행 중인 k3s SQLite를 Online Backup API로 복사하고 source·사본의
+`quick_check=ok`를 확인한 뒤 server token과 API proof를 GPG 암호화 archive로 묶었다. 전용
+versioning bucket `bkp-01-k3s-datastore`와 그 bucket의 `Read/List/Write`만 가진 identity를
+사용해 PUT·HEAD·GET hash·LIST를 검증했고, 같은 identity의 기존 `bkp-02-velero` bucket 접근은
+HTTP 403이었다. 기존 BKP-02 identity는 보존하고 일회성 Admin bootstrap identity는 제거했다.
+실측 volume slot이 5/5라 사용자 승인 후 기존 volume 삭제 없이 최소 한도를 6으로 늘렸고,
+SeaweedFS와 backup role 최종 재적용은 각각 `changed=0`이었다.
+
+OpenTofu state 밖의 2 vCPU·2 GiB·10 GiB 임시 VM에서 blank k3s를 만든 뒤 외부 통신과 라이브
+cluster 경로를 nftables로 차단했다. token 없이 동일 DB를 복원하면 bootstrap 복호화 실패로
+API가 준비되지 않았고, DB와 원본 token을 함께 복원하면 `/readyz=ok`와 SQLite
+`quick_check=ok`가 됐다. 원래 `velero` Namespace, CoreDNS ConfigMap, Velero CRD,
+`platform-root` Application, Velero Deployment UID가 모두 돌아왔고 Velero Restore CR은 0개였다.
+node-agent가 datastore/token path를 보호하지 않는 것도 확인해 두 보호 계층을 대조했다.
+양성 복원 재실행에서 UID가 불변이었으며 Ansible 선언들도 최종 `changed=0`이었다.
+
+임시 VM·disk·주소·restore state와 object helper를 전량 제거했고 Proxmox에는 기존 5개 VM과
+template만 남았다. OpenTofu 1.12.5 plan은 `No changes`, state와 network hash는 불변이었다.
+라이브 k3s boot ID·PID·restart count·active timestamp가 backup 전후 같고 Node Ready, 모든 Argo
+Application `Synced/Healthy`, Velero BSL `Available`, 기존 PVC/PV Bound를 재확인했다. Git 현재
+파일과 전체 history의 credential·server token·private key 원문은 0건이다. 상세 증거와
+rollback은 [BKP-01 runbook](runbook/k3s-sqlite-datastore-backup-restore.md)이 소유한다.
+직접 후속 `BKP-05`는 `BKP-03`이 아직 `READY`라 `BLOCKED`를 유지하며 새로 여는 작업은 없다.
 
 ## 6. 공급망과 정책
 

@@ -60,6 +60,22 @@ local PV·capacity·SELinux helper의 적용·검증·rollback은
 [`docs/runbook/k3s-local-path-storage.md`](../../docs/runbook/k3s-local-path-storage.md)가
 소유한다.
 
+## k3s SQLite datastore·server token backup
+
+`playbooks/k3s-datastore-backup.yml`과 `roles/k3s_datastore_backup/`은 `BKP-01`의
+전용 보호 계층을 소유한다. 실행 중 SQLite는 Python이 노출하는 SQLite Online Backup
+API로 일관 사본을 만들고 source와 사본 모두 `quick_check=ok`인지 확인한다. server token과
+선택한 API object proof를 같은 tar stream에 넣되 plaintext tar는 만들지 않고 저장소 밖
+recovery GPG public key로 즉시 암호화한다.
+
+전용 SeaweedFS bucket에는 `Read/List/Write`만 가진 전용 identity를 사용한다. bucket 생성용
+`Admin` identity는 생성·versioning 직후 제거하며 기존 BKP-02 identity를 renderer 입력에서
+명시적으로 보존한다. runtime credential은 root `0600`, public certificate/key는 비밀이
+아니지만 일반 diff 출력을 막는다. role 적용이나 backup은 라이브 k3s를 stop/restart하지 않는다.
+
+격리 복원 VM staging과 token 없는 음성 시험, API object 복원, Velero 경계, 임시 VM 정리는
+[`BKP-01 runbook`](../../docs/runbook/k3s-sqlite-datastore-backup-restore.md)이 소유한다.
+
 ## Warpgate 특권 세션 기준선
 
 `playbooks/warpgate-baseline.yml`과 `roles/warpgate_baseline/`은 `WG-01`의 Warpgate
@@ -198,6 +214,8 @@ infra/ansible/
 │   └── hosts.example        # 비밀 없는 인벤토리 예시 (Git 추적)
 ├── playbooks/
 │   ├── baseline.yml         # 공통 baseline 엔트리 플레이북
+│   ├── bkp-01-restore-stage.yml # BKP-01 임시 VM staging·격리 도구
+│   ├── k3s-datastore-backup.yml # BKP-01 온라인 datastore/token backup
 │   ├── k3s-baseline.yml     # K3S-01 단일 server 엔트리 플레이북
 │   ├── postgres-baseline.yml # PG-01 PostgreSQL 엔트리 플레이북
 │   ├── netbird-server.yml   # NB-01 NetBird 엔트리 플레이북
@@ -205,6 +223,7 @@ infra/ansible/
 │   └── seaweedfs-s3.yml     # S3-01 SeaweedFS TLS S3 엔트리 플레이북
 └── roles/
     ├── common_baseline/     # 공통 baseline 검증 및 태스크
+    ├── k3s_datastore_backup/ # BKP-01 online SQLite·GPG·S3 선언
     ├── k3s_baseline/        # 고정 k3s·local-path·SELinux·systemd 선언
     ├── postgres_baseline/   # PostgreSQL 16·TLS·최소권한 role 선언
     ├── netbird_server/      # NetBird control/relay compose 선언

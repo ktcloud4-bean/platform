@@ -1,0 +1,11 @@
+[Unit]
+Description=BKP-01 daily k3s datastore backup schedule
+
+[Timer]
+OnCalendar={{ k3s_datastore_backup_on_calendar }}
+RandomizedDelaySec={{ k3s_datastore_backup_randomized_delay }}
+Persistent=true
+Unit=k3s-datastore-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,13 @@
+{{ {
+  'bucket': k3s_datastore_backup_bucket,
+  'prefix': k3s_datastore_backup_prefix,
+  's3_host': k3s_datastore_backup_s3_host,
+  's3_port': k3s_datastore_backup_s3_port | int,
+  's3_region': k3s_datastore_backup_s3_region,
+  's3_access_key': k3s_datastore_backup_s3_access_key,
+  's3_secret_key': k3s_datastore_backup_s3_secret_key,
+  's3_ca_file': k3s_datastore_backup_ca_path,
+  'gpg_recipient': k3s_datastore_backup_gpg_recipient,
+  'gpg_public_key_file': k3s_datastore_backup_gpg_public_key_path,
+  'state_dir': k3s_datastore_backup_state_dir
+} | to_nice_json }}

@@ -1,0 +1,79 @@
+---
+# BKP-01 격리 복원 VM 전용. 라이브 k3s-01에서는 hostname·sentinel guard로 거부한다.
+
+- name: BKP-01 임시 restore VM staging 선언
+  hosts: k3s_servers
+  gather_facts: true
+  become: true
+  tasks:
+    - name: 임시 restore VM hostname과 inventory guard
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'bkp01-restore'
+          - ansible_facts.hostname is regex('^bkp01-restore-[a-z0-9-]+$')
+          - ansible_facts.hostname != 'k3s-01'
+        fail_msg: BKP-01 restore staging은 전용 임시 VM에서만 실행한다.
+
+    - name: BKP-01 restore sentinel 조회
+      ansible.builtin.stat:
+        path: /etc/bkp01-restore-drill.json
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      register: bkp01_restore_sentinel
+
+    - name: root-only BKP-01 restore sentinel 확인
+      ansible.builtin.assert:
+        that:
+          - bkp01_restore_sentinel.stat.exists
+          - bkp01_restore_sentinel.stat.isreg
+          - bkp01_restore_sentinel.stat.pw_name == 'root'
+          - bkp01_restore_sentinel.stat.gr_name == 'root'
+          - bkp01_restore_sentinel.stat.mode == '0600'
+
+    - name: 임시 restore VM nftables 설치
+      ansible.builtin.dnf:
+        name: nftables
+        state: present
+
+    - name: BKP-01 restore staging directory 선언
+      ansible.builtin.file:
+        path: /var/lib/bkp01-restore/staging
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: BKP-01 restore와 isolation 도구 배치
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - src: "{{ playbook_dir }}/../tools/bkp-01/k3s-datastore-restore.py"
+          dest: /usr/local/sbin/bkp01-k3s-datastore-restore
+        - src: "{{ playbook_dir }}/../tools/bkp-01/apply-restore-isolation.sh"
+          dest: /usr/local/sbin/bkp01-apply-restore-isolation
+
+    - name: 임시 restore VM k3s 정지
+      ansible.builtin.systemd:
+        name: k3s
+        state: stopped
+      when: not ansible_check_mode
+
+    - name: 임시 restore VM k3s 정지 상태 조회
+      ansible.builtin.command:
+        argv: [systemctl, is-active, k3s]
+      register: bkp01_restore_k3s_state
+      changed_when: false
+      failed_when: bkp01_restore_k3s_state.rc not in [0, 3]
+      check_mode: false
+      when: not ansible_check_mode
+
+    - name: 임시 restore VM k3s inactive 확인
+      ansible.builtin.assert:
+        that:
+          - bkp01_restore_k3s_state.stdout == 'inactive'
+      when: not ansible_check_mode

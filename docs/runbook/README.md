@@ -34,6 +34,7 @@ UI 위치나 명령을 추측해 미리 작성하지 않는다. 첫 PoC는 백�
 - [`proxmox-opentofu-vm-creation.md`](proxmox-opentofu-vm-creation.md) — 2026-07-31 `VM-01`에서 적용·게스트 검증·재부팅·무변경 재계획까지 확인한 서비스 VM 생성 절차
 - [`opnsense-suricata-ids.md`](opnsense-suricata-ids.md) — 2026-07-31 `NIDS-01`에서 적용·재부팅·DMZ 런타임 및 경보 검증 완료한 Suricata alert-only IDS 절차
 - [`k3s-single-node-baseline.md`](k3s-single-node-baseline.md) — 2026-07-31 `K3S-01`에서 단일 Node·SQLite·기본 구성요소·PVC·재부팅·NET-03을 검증한 k3s 기준선
+- [`k3s-sqlite-datastore-backup-restore.md`](k3s-sqlite-datastore-backup-restore.md) — 2026-08-01 `BKP-01`에서 온라인 SQLite·server token 암호화 backup, 최소권한 S3, 격리 VM 음성·양성 복원과 정리를 검증한 절차
 - [`netbird-selfhost.md`](netbird-selfhost.md) — 2026-07-31 `NB-01`에서 배포·재부팅·로컬 Owner 로그인과 백업을 검증한 NetBird self-host 절차
 - [`warpgate-privileged-access.md`](warpgate-privileged-access.md) — 2026-07-31 `WG-01`에서 버전 선정·선언형 배포·역할 제한·감사/세션 기록·재부팅·격리 복원을 검증한 Warpgate 기준선
 - [`vault-raft-baseline.md`](vault-raft-baseline.md) — 2026-07-31 `VAULT-01`에서 GitOps 배포·TLS·초기화/unseal·Pod 재시작 복구를 검증한 Vault 단일 replica Raft 기준선

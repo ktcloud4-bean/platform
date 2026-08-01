@@ -1,0 +1,168 @@
+---
+
+- name: BKP-01 라이브 전제와 비밀 아닌 입력 확인
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname != 'bkp01-restore'
+      - ansible_facts.distribution == 'Rocky'
+      - ansible_facts.distribution_major_version == '9'
+      - k3s_datastore_backup_bucket == 'bkp-01-k3s-datastore'
+      - k3s_datastore_backup_prefix == 'cluster-k3s-01'
+      - k3s_datastore_backup_s3_host | length > 0
+      - k3s_datastore_backup_s3_port | int > 0
+      - k3s_datastore_backup_s3_port | int < 65536
+      - k3s_datastore_backup_s3_region | length > 0
+      - k3s_datastore_backup_gpg_recipient is regex('^[0-9A-F]{40,64}$')
+      - k3s_datastore_backup_gpg_public_key is search('BEGIN PGP PUBLIC KEY BLOCK')
+      - k3s_datastore_backup_s3_ca_pem is search('BEGIN CERTIFICATE')
+    fail_msg: BKP-01은 라이브 k3s와 고정 bucket/prefix, TLS CA, GPG public key 입력이 필요하다.
+
+- name: BKP-01 S3 credential 최소 형식 확인
+  ansible.builtin.assert:
+    that:
+      - k3s_datastore_backup_s3_access_key | length >= 16
+      - k3s_datastore_backup_s3_secret_key | length >= 32
+    fail_msg: BKP-01 S3 credential은 저장소 밖 mode 0600 입력으로 제공한다.
+  no_log: true
+
+- name: BKP-01 필수 binary와 라이브 SQLite/token 존재 확인
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: true
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop:
+    - /usr/bin/gpg
+    - /usr/bin/python3
+    - /usr/local/bin/k3s
+    - /var/lib/rancher/k3s/server/db/state.db
+    - /var/lib/rancher/k3s/server/token
+  register: k3s_datastore_backup_required_files
+
+- name: BKP-01 필수 파일 누락 거부
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg | default(false)
+    fail_msg: "BKP-01 필수 파일이 없습니다: {{ item.item }}"
+  loop: "{{ k3s_datastore_backup_required_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: k3s service 실행 상태 조회
+  ansible.builtin.command:
+    argv: [systemctl, is-active, k3s]
+  register: k3s_datastore_backup_service_state
+  changed_when: false
+  check_mode: false
+
+- name: 라이브 k3s 중단 상태에서 backup 선언 적용 거부
+  ansible.builtin.assert:
+    that:
+      - k3s_datastore_backup_service_state.stdout == 'active'
+    fail_msg: k3s가 active가 아니므로 BKP-01을 적용하지 않는다.
+
+- name: BKP-01 root-only directory 선언
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - "{{ k3s_datastore_backup_config_dir }}"
+    - "{{ k3s_datastore_backup_state_dir }}"
+    - "{{ k3s_datastore_backup_libexec_dir }}"
+
+- name: BKP-01 backup과 S3 library 배치
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - src: k3s_datastore_backup.py
+      dest: "{{ k3s_datastore_backup_script_path }}"
+    - src: s3_sigv4.py
+      dest: "{{ k3s_datastore_backup_s3_library_path }}"
+
+- name: BKP-01 S3 TLS CA certificate 배치
+  ansible.builtin.copy:
+    content: "{{ k3s_datastore_backup_s3_ca_pem }}"
+    dest: "{{ k3s_datastore_backup_ca_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+
+- name: BKP-01 recovery GPG public key 배치
+  ansible.builtin.copy:
+    content: "{{ k3s_datastore_backup_gpg_public_key }}"
+    dest: "{{ k3s_datastore_backup_gpg_public_key_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+
+- name: BKP-01 root-only runtime config 배치
+  ansible.builtin.template:
+    src: config.json.j2
+    dest: "{{ k3s_datastore_backup_config_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: BKP-01 oneshot service 선언
+  ansible.builtin.template:
+    src: k3s-datastore-backup.service.j2
+    dest: /etc/systemd/system/k3s-datastore-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: k3s_datastore_backup_service_unit
+
+- name: BKP-01 timer 선언
+  ansible.builtin.template:
+    src: k3s-datastore-backup.timer.j2
+    dest: /etc/systemd/system/k3s-datastore-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  register: k3s_datastore_backup_timer_unit
+
+- name: BKP-01 systemd unit 변경 반영
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - not ansible_check_mode
+    - k3s_datastore_backup_service_unit.changed or k3s_datastore_backup_timer_unit.changed
+
+- name: BKP-01 timer 활성화와 대기 상태 선언
+  ansible.builtin.systemd:
+    name: k3s-datastore-backup.timer
+    enabled: true
+    state: started
+  when: not ansible_check_mode
+
+- name: BKP-01 timer 상태 조회
+  ansible.builtin.command:
+    argv: [systemctl, show, k3s-datastore-backup.timer, "--property=ActiveState,UnitFileState"]
+  register: k3s_datastore_backup_timer_state
+  changed_when: false
+  check_mode: false
+  until:
+    - "'ActiveState=active' in k3s_datastore_backup_timer_state.stdout"
+    - "'UnitFileState=enabled' in k3s_datastore_backup_timer_state.stdout"
+  retries: 5
+  delay: 1
+  when: not ansible_check_mode
+
+- name: BKP-01 timer enabled/active 확인
+  ansible.builtin.assert:
+    that:
+      - "'ActiveState=active' in k3s_datastore_backup_timer_state.stdout"
+      - "'UnitFileState=enabled' in k3s_datastore_backup_timer_state.stdout"
+  when: not ansible_check_mode

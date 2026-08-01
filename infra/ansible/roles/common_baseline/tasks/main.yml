@@ -28,6 +28,15 @@
     dest: /etc/localtime
     state: link
     force: true
+  register: timezone_link
+
+- name: 1.1.1. systemd-timedated timezone cache 새로고침
+  ansible.builtin.systemd:
+    name: systemd-timedated.service
+    state: restarted
+  when:
+    - not ansible_check_mode
+    - timezone_link.changed or current_tz.stdout != system_timezone
 
 - name: 1.2. 적용된 Timezone 재확인
   ansible.builtin.command:

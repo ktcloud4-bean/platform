@@ -1,0 +1,29 @@
+[Unit]
+Description=BKP-01 k3s SQLite datastore and server token backup
+Documentation=file://{{ k3s_datastore_backup_config_path }}
+After=network-online.target k3s.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+ExecStart={{ k3s_datastore_backup_script_path }} --config {{ k3s_datastore_backup_config_path }}
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadOnlyPaths=/var/lib/rancher/k3s/server
+ReadWritePaths={{ k3s_datastore_backup_state_dir }}
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes

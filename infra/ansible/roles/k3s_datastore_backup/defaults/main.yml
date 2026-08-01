@@ -1,0 +1,24 @@
+---
+
+k3s_datastore_backup_config_dir: /etc/k3s-datastore-backup
+k3s_datastore_backup_state_dir: /var/lib/k3s-datastore-backup
+k3s_datastore_backup_libexec_dir: /usr/local/libexec/k3s-datastore-backup
+k3s_datastore_backup_config_path: "{{ k3s_datastore_backup_config_dir }}/config.json"
+k3s_datastore_backup_ca_path: "{{ k3s_datastore_backup_config_dir }}/s3-ca.crt"
+k3s_datastore_backup_gpg_public_key_path: "{{ k3s_datastore_backup_config_dir }}/recovery-public.asc"
+k3s_datastore_backup_script_path: "{{ k3s_datastore_backup_libexec_dir }}/k3s_datastore_backup.py"
+k3s_datastore_backup_s3_library_path: "{{ k3s_datastore_backup_libexec_dir }}/s3_sigv4.py"
+
+k3s_datastore_backup_bucket: bkp-01-k3s-datastore
+k3s_datastore_backup_prefix: cluster-k3s-01
+k3s_datastore_backup_s3_host: ""
+k3s_datastore_backup_s3_port: 8333
+k3s_datastore_backup_s3_region: us-east-1
+k3s_datastore_backup_s3_access_key: ""
+k3s_datastore_backup_s3_secret_key: ""
+k3s_datastore_backup_s3_ca_pem: ""
+k3s_datastore_backup_gpg_recipient: ""
+k3s_datastore_backup_gpg_public_key: ""
+
+k3s_datastore_backup_on_calendar: "*-*-* 03:30:00"
+k3s_datastore_backup_randomized_delay: 30m
