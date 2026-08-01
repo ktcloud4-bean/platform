@@ -5,9 +5,10 @@ infra/opnsense/config.raw.xml
 infra/opnsense/*.raw.xml
 
 # 자격증명 일반
+# credential 입력은 저장소 밖 $KTC_SECRET_ROOT/<component>/env 에만 둔다 (SECRET-02).
+# 형식 계약은 각 컴포넌트 README가 소유하므로 저장소 안 .env* 는 예외 없이 제외한다.
 .env
 .env.*
-!.env.example
 *secret*.yaml
 !**/sealed-secret*.yaml
 *.pem

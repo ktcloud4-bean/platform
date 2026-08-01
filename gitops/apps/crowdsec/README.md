@@ -102,7 +102,22 @@ K3S_SSH_KNOWN_HOSTS="$HOME/.ssh/known_hosts" \
 ./gitops/tools/crowdsec-01/inject-secrets.sh
 ```
 
-생성되는 `.env`는 Git 제외·mode `0600`이며 스크립트는 파일을 `source`하지 않는다.
+`prepare-secret-input.sh`는 저장소 밖 `$KTC_SECRET_ROOT/crowdsec/env`에 mode `0600`으로
+입력 파일을 만든다. `KTC_SECRET_ROOT`를 지정하지 않으면 `~/secrets/ktcloud4-bean`을 쓴다.
+저장소 안에는 두지 않는다. `.gitignore`는 실수 커밋만 막을 뿐이고 `git clean -xfd`와
+worktree 정리는 저장소 안 파일을 지우기 때문이다. 기존 경로는 덮어쓰지 않으며 스크립트는
+파일을 `source`하지 않는다.
+
+파일은 주석과 아래 세 key만 허용하고 각 값은 `openssl rand -hex 32`로 생성된다.
+
+```env
+CS_LAPI_SECRET=
+REGISTRATION_TOKEN=
+BOUNCER_KEY_CROWDSEC_01=
+```
+
+`inject-secrets.sh`는 이 입력에서 `crowdsec-01/crowdsec-01-bootstrap`(세 key 그대로)과
+`kube-system/crowdsec-01-bouncer`(`bouncer-key` 한 key) 두 Secret을 만든다.
 `platform-root.targetRevision`은 `main`을 유지한다. branch pointer를 사용하지 않고 최종
 선언이 main에 통합된 뒤에만 Argo를 동기화한다.
 
