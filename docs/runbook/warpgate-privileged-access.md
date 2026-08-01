@@ -106,9 +106,11 @@ Warpgate 는 role·target·user 를 설정 파일이 아니라 제품 DB 에 둔
 `{"kind": "Ssh", ..., "auth": {"kind": "PublicKey"}}` 이며 `ssh`/`publickey` 는 400 이다.
 `port` 는 정수여야 하므로 body 를 하나의 Jinja 식으로 만들어 native 형을 유지한다.
 
-setup 이 만든 TLS 인증서는 `warpgate.local`/`localhost` 자체서명이다. loopback 한정
-부트스트랩이므로 관리 API 호출에서만 인증서 검증을 끄며, 내부 PKI 배치는 `VAULT-02`,
-공개 경로 인증서는 `INGRESS-01` 범위로 남긴다.
+setup 이 만든 TLS 인증서는 `warpgate.local`/`localhost` 자체서명이다. loopback 관리
+API는 service alias와 SAN이 달라 인증서 검증을 끈다. 브라우저 SSO callback에 쓰는
+`warpgate.imcherry5778.xyz` 단일-host DNS-01 인증서와 갱신은 `WG-02`가 소유하며
+[`warpgate-keycloak-sso.md`](warpgate-keycloak-sso.md)를 따른다. public A/AAAA·NAT와
+공개 진입은 계속 `EDGE-01` 범위다.
 
 ## 5. 로컬 복구(break-glass) 계정
 

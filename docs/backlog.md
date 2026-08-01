@@ -264,7 +264,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `POM-01 DONE` | Pomerium Core·선언형 Route·Dashy Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음(단, 내부 DNS 적용은 실제 `OPNSENSE-LIVE` 승인 필요) | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
 | `HEADLAMP-02 READY` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
 | `NB-02 DONE` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
-| `WG-02 READY` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | 없음 | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
+| `WG-02 DONE` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | `OPNSENSE-LIVE`, `PUBLIC-DNS` | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
 | `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
 
 2026-08-01 `POM-01`에서 Pomerium Core `v0.33.0`과 Dashy `4.5.0`을 각 공식
@@ -612,8 +612,41 @@ state 1, TCP 444 timeout의 기존 BLOCK 5 packets, drift 없음이 확인됐다
 secret 원문 0건을 확인했다. 외부 peer 대화형 로그인은 공개 `sso` DNS·NAT가 없어 미검증이며
 `EDGE-01` 전 우회 노출하지 않는다.
 
-직접 후속 `NET-04`는 `WG-02`·`POM-01`·`BKP-05`·`E2E-01`이, `EDGE-01`은
-`CROWDSEC-FIX-01`·`POM-01`·`NET-04`가 남아 있으므로 둘 다 `BLOCKED`를 유지한다.
+2026-08-01 `WG-02`에서 Warpgate `v0.26.1`의 custom OIDC schema와 실제 관리 API를
+기준으로 Keycloak 전용 confidential client·client-local full-path `groups` mapper와
+`/platform-users → platform-users`, `/platform-privileged → platform-privileged` exact
+mapping을 선언했다. 자동 사용자 생성과 기본 role 없이 일상·특권 SSO 사용자를 미리 만들고
+공유 계정·password credential·수동 direct role은 두지 않았다. 실제 로그인 뒤에는 claim으로
+동기화된 role만 남았고, 일상 ID는 일상 target만 성공·특권 target 403, 특권 ID는 특권 target만
+성공·일상 target 403이었다. 잘못된 자격증명과 무그룹 경로도 거부됐으며 감사 로그에서 인증
+성공·실패, 세션 시작·종료, `Target ... not authorized`를 구분했다. Terminal recording은
+제품 API와 `0600 warpgate:warpgate`·`var_lib_t` 파일로 함께 확인했다.
+
+승인된 IdP 복구 drill에서는 `platform` realm 비활성 중 SSO가 실패하는 동안 로컬 `admin`
+로그인이 201이었고 master realm 복구 ID로 즉시 원복한 뒤 discovery와 SSO를 재통과했다.
+Warpgate VMID 130만 재부팅해 boot ID 변경, failed unit 0, AVC 0, SELinux Enforcing, 서비스와
+ACME timer 자동 시작, 기존 recording SHA-256 불변과 SSO·로컬 복구 재통과를 확인했다.
+Warpgate 전용 DNS-01 인증서는 내부 service alias 한 이름만 포함하며 공개 A/AAAA·NAT는 0건,
+잔여 ACME TXT도 0건이다.
+
+승인된 `OPNSENSE-LIVE` 범위에서는 ACCESS의 `10.10.30.10 → 10.10.20.10:443/TCP` 한 경로만
+기존 RFC1918 block보다 앞에 열고 `warpgate.imcherry5778.xyz → 10.10.30.10` Unbound alias
+한 건만 추가했다. OPNsense 재부팅 뒤 저장 rule·alias와 PF runtime이 유지됐고 discovery 200의
+PASS 598 packets, 같은 목적지 TCP 80과 다른 VLAN TCP 443 차단의 기존 BLOCK 6 packets를
+같은 시점에 대조했다. 단일 DNS 의존성으로 Keycloak readiness가 약 10분 3초 지연됐지만 Pod
+restart나 추가 조작 없이 복구됐고, 일상·특권 SSO와 로컬 admin을 다시 통과했다. strict 관리
+TLS, sanitized drift 없음, OPNsense 테스트 18개도 통과했다.
+
+Ansible syntax-check·check/diff·적용·2차 `changed=0`, Warpgate 재부팅 후 check `changed=0`,
+최종 cleanup 적용 뒤 2차 적용과 check의 `changed=0`을 확인했다. 검증 target·known-host·임시
+제품 사용자·OS 계정은 모두 0건이며 최종 운영 사용자는 `admin`, `imcherry`, `imcherry-admin`
+세 명이다. 저장소 밖 비밀 18개와 tracked 파일·브랜치 blob·Warpgate journal을 exact 대조해
+비밀 원문 0건, journal의 세션 marker 원문 0건, tracked recording payload 0건을 확인했다.
+운영·복구 절차와 세션 정책은
+[Warpgate Keycloak SSO·역할·세션 운영](runbook/warpgate-keycloak-sso.md)이 소유한다.
+
+직접 후속 `NET-04`는 `BKP-05`·`E2E-01`이 남아 있고, `EDGE-01`은 `NET-04`가 남아 있으므로
+둘 다 `BLOCKED`를 유지한다.
 
 ## 5. 데이터 보호 gate
 

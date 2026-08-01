@@ -139,7 +139,7 @@ Service → Kubernetes Service DNS → Service
 | Pomerium | Keycloak 신원으로 Route 접근 결정·업스트림 프록시 |
 | 애플리케이션 | 서비스 내부 RBAC |
 
-OPNsense, Proxmox와 k3s ingress는 같은 공개 DNS zone을 사용해도 인증서 private key와 DNS API token을 공유하지 않는다. 각 계층이 별도 인증서를 발급하고, Vault PKI는 내부 TLS·mTLS에 사용한다.
+OPNsense, Proxmox, k3s ingress와 Warpgate는 같은 공개 DNS zone을 사용해도 인증서 private key와 DNS API token을 공유하지 않는다. 각 계층이 별도 인증서를 발급하고, Vault PKI는 내부 TLS·mTLS에 사용한다. Warpgate의 공인 단일-host 인증서는 브라우저 SSO callback 신뢰를 위한 것이며 public A/AAAA·NAT·공개 진입을 뜻하지 않는다.
 
 오리진 WAF middleware는 전역 기본값이 아니다. 먼저 전용 내부 test route에서만 검증하고,
 Keycloak·NetBird·관리 UI와 기존 공개 route에는 각 소유 작업의 별도 승인·회귀 검증 없이

@@ -1,5 +1,5 @@
 {{ ansible_managed | comment }}
-# WG-01: warpgate-01 Warpgate 설정. 이 파일은 Ansible role 이 소유한다.
+# WG-01/WG-02: warpgate-01 Warpgate 설정. 이 파일은 Ansible role 이 소유한다.
 # 수동 편집은 다음 실행에서 덮어써진다.
 database_url: sqlite:{{ warpgate_data_dir }}/db
 external_host: {{ warpgate_external_host }}
@@ -9,14 +9,14 @@ ssh:
   listen: '{{ warpgate_ssh_listen }}'
   keys: {{ warpgate_data_dir }}/ssh-keys
   host_key_verification: {{ warpgate_ssh_host_key_verification }}
-  inactivity_timeout: 5m
+  inactivity_timeout: {{ warpgate_ssh_inactivity_timeout }}
 
 http:
   listen: '{{ warpgate_http_listen }}'
   certificate: {{ warpgate_data_dir }}/tls.certificate.pem
   key: {{ warpgate_data_dir }}/tls.key.pem
-  session_max_age: 30m
-  cookie_max_age: 1day
+  session_max_age: {{ warpgate_http_session_max_age }}
+  cookie_max_age: {{ warpgate_http_cookie_max_age }}
   trust_x_forwarded_headers: false
 
 # 아직 필요하지 않은 프로토콜은 열지 않는다.
@@ -36,5 +36,24 @@ log:
   retention: {{ warpgate_log_retention }}
   audit_retention: {{ warpgate_audit_retention }}
 
-# SSO 는 WG-02 (Keycloak 연동) 범위다. 여기서는 로컬 자격증명만 사용한다.
+{% if warpgate_sso_enabled | bool %}
+# v0.26.1 custom OIDC 의 실제 schema 를 사용한다. wildcard/default mapping 이 없으므로
+# groups claim 에 명시된 두 그룹 이외에는 target role 이 생기지 않는다.
+sso_providers:
+  - name: {{ warpgate_sso_name | to_json }}
+    label: {{ warpgate_sso_label | to_json }}
+    auto_create_users: {{ warpgate_sso_auto_create_users | bool | lower }}
+    return_url_domain: external_host
+    return_url_prefix: "@"
+    provider:
+      type: custom
+      client_id: {{ warpgate_sso_client_id | to_json }}
+      client_secret: {{ warpgate_sso_client_secret | to_json }}
+      issuer_url: {{ warpgate_sso_issuer | to_json }}
+      scopes: {{ warpgate_sso_scopes | to_json }}
+      roles_claim: {{ warpgate_sso_roles_claim | to_json }}
+      role_mappings: {{ warpgate_sso_role_mappings | to_json }}
+      trust_unknown_audiences: false
+{% else %}
 sso_providers: []
+{% endif %}

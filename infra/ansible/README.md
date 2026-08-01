@@ -79,7 +79,8 @@ recovery GPG public key로 즉시 암호화한다.
 ## Warpgate 특권 세션 기준선
 
 `playbooks/warpgate-baseline.yml`과 `roles/warpgate_baseline/`은 `WG-01`의 Warpgate
-배포를 소유한다. 작업 시점의 최신 안정 릴리스를 정확히 고정하고 GitHub Release asset
+배포와 `WG-02`의 Keycloak SSO·역할·세션·전용 DNS-01 인증서를 소유한다.
+작업 시점의 최신 안정 릴리스를 정확히 고정하고 GitHub Release asset
 digest 의 SHA-256 을 `get_url`의 `checksum`으로 강제한다. 같은 릴리스의 CycloneDX SBOM 도
 checksum 검증 후 게스트에 보관한다. `floating latest`나 `curl | sh`는 쓰지 않는다.
 
@@ -88,13 +89,15 @@ checksum 검증 후 게스트에 보관한다. `floating latest`나 `curl | sh`�
 `/var/lib/warpgate` `0700`, 설정은 `/etc/warpgate.yaml` `0600`이다. systemd unit 에는
 `ProtectSystem=strict`, 빈 `CapabilityBoundingSet`, `SystemCallFilter` 등을 적용한다.
 
-Warpgate 는 role·target·user 를 설정 파일이 아니라 제품 DB 에 둔다. `provision.yml`이
-loopback 관리 API 로 `warpgate_roles`·`warpgate_targets`·`warpgate_users`·
-`warpgate_known_hosts` 선언을 반영하며 각 항목은 `state: present|absent`를 가진다.
-기본값은 모두 빈 목록이고 실제 값과 비밀번호는 저장소 밖에서 주입한다.
+Warpgate 는 role·target·user·SSO credential을 설정 파일이 아니라 제품 DB 에 둔다.
+`provision.yml`이 loopback 관리 API 로 `warpgate_roles`·`warpgate_targets`·
+`warpgate_users`·`warpgate_known_hosts` 선언을 반영하며 각 항목은
+`state: present|absent`를 가진다. WG-02의 두 SSO role과 두 사전등록 사용자는 기본
+선언이고, target·known-host와 비밀번호는 승인된 운영 대상에 맞춰 저장소 밖에서 주입한다.
 
-로컬 break-glass 관리자 비밀번호(`warpgate_admin_password`)는 저장소에 두지 않는다.
-기본값은 빈 문자열이며 role 이 12자 미만이면 적용을 거부한다.
+로컬 break-glass 관리자 비밀번호(`warpgate_admin_password`), Keycloak client secret·
+단기 Admin bearer token, Warpgate 전용 Cloudflare token은 저장소에 두지 않는다.
+role은 길이와 주입 여부를 먼저 확인하고 secret 처리 task를 `no_log`로 실행한다.
 
 ```bash
 cd infra/ansible
@@ -105,8 +108,10 @@ ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 secrets.yml>" 
 ansible-playbook -i <저장소 밖 inventory> -e "@<저장소 밖 secrets.yml>" playbooks/warpgate-baseline.yml
 ```
 
-버전 선정 근거, 라이브 검증, 재부팅, 백업·복원과 rollback 은
-[`docs/runbook/warpgate-privileged-access.md`](../../docs/runbook/warpgate-privileged-access.md)가
+버전 선정 근거와 기준선 복구는
+[`docs/runbook/warpgate-privileged-access.md`](../../docs/runbook/warpgate-privileged-access.md),
+SSO·역할·인증서·IdP 장애 검증은
+[`docs/runbook/warpgate-keycloak-sso.md`](../../docs/runbook/warpgate-keycloak-sso.md)가
 소유한다.
 
 ## SeaweedFS 로컬 S3 기준선

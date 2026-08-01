@@ -1,0 +1,84 @@
+---
+# WG-02 라이브 검증 동안에만 Warpgate의 client key로 접속 가능한 비특권 loopback
+# SSH 계정을 선언한다. 기본 false이며 최종 run에서 home과 함께 제거한다.
+
+- name: WG-02 검증용 비특권 OS 계정 선언
+  ansible.builtin.user:
+    name: "{{ warpgate_validation_target_user }}"
+    comment: "WG-02 temporary loopback validation target"
+    shell: /bin/bash
+    create_home: true
+    password_lock: true
+    state: present
+  when: warpgate_validation_target_enabled | bool
+
+- name: Warpgate client 공개키 도출
+  ansible.builtin.command:
+    argv:
+      - "{{ warpgate_binary_path }}"
+      - --config
+      - "{{ warpgate_config_path }}"
+      - client-keys
+  register: wg_validation_client_keys
+  changed_when: false
+  check_mode: false
+  when: warpgate_validation_target_enabled | bool
+
+- name: Warpgate ed25519 client 공개키 한 개 확인
+  ansible.builtin.assert:
+    that:
+      - >-
+        wg_validation_client_keys.stdout_lines
+        | select('match', '^ssh-ed25519 ') | list | length == 1
+    fail_msg: "Warpgate client-keys 출력에서 ed25519 공개키 한 개를 찾지 못했다."
+  when: warpgate_validation_target_enabled | bool
+
+- name: Warpgate ed25519 client 공개키 확정
+  ansible.builtin.set_fact:
+    wg_validation_client_public_key: >-
+      {{
+        wg_validation_client_keys.stdout_lines
+        | select('match', '^ssh-ed25519 ') | first
+      }}
+  when: warpgate_validation_target_enabled | bool
+
+- name: WG-02 검증 계정 현재 존재 확인
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/getent
+      - passwd
+      - "{{ warpgate_validation_target_user }}"
+  register: wg_validation_target_account
+  changed_when: false
+  failed_when: wg_validation_target_account.rc not in [0, 2]
+  check_mode: false
+  when: warpgate_validation_target_enabled | bool
+
+- name: WG-02 검증 계정 SSH 디렉터리 선언
+  ansible.builtin.file:
+    path: "/home/{{ warpgate_validation_target_user }}/.ssh"
+    state: directory
+    owner: "{{ warpgate_validation_target_user }}"
+    group: "{{ warpgate_validation_target_user }}"
+    mode: "0700"
+  when:
+    - warpgate_validation_target_enabled | bool
+    - not ansible_check_mode or wg_validation_target_account.rc == 0
+
+- name: WG-02 검증 계정에 Warpgate client key 하나만 허용
+  ansible.builtin.copy:
+    content: "{{ wg_validation_client_public_key }}\n"
+    dest: "/home/{{ warpgate_validation_target_user }}/.ssh/authorized_keys"
+    owner: "{{ warpgate_validation_target_user }}"
+    group: "{{ warpgate_validation_target_user }}"
+    mode: "0600"
+  when:
+    - warpgate_validation_target_enabled | bool
+    - not ansible_check_mode or wg_validation_target_account.rc == 0
+
+- name: WG-02 검증 종료 시 OS 계정과 home 제거
+  ansible.builtin.user:
+    name: "{{ warpgate_validation_target_user }}"
+    state: absent
+    remove: true
+  when: not (warpgate_validation_target_enabled | bool)

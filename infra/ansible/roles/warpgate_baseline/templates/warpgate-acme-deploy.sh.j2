@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+
+readonly source_certificate={{ (warpgate_acme_dir + '/certificates/' + warpgate_external_host + '.crt') | quote }}
+readonly source_key={{ (warpgate_acme_dir + '/certificates/' + warpgate_external_host + '.key') | quote }}
+readonly target_certificate={{ (warpgate_data_dir + '/tls.certificate.pem') | quote }}
+readonly target_key={{ (warpgate_data_dir + '/tls.key.pem') | quote }}
+
+/usr/bin/openssl x509 -in "${source_certificate}" -noout -checkhost {{ warpgate_external_host | quote }}
+/usr/bin/openssl x509 -in "${source_certificate}" -noout -checkend 86400
+certificate_public_key=$(
+  /usr/bin/openssl x509 -in "${source_certificate}" -pubkey -noout |
+    /usr/bin/openssl pkey -pubin -outform DER |
+    /usr/bin/sha256sum |
+    /usr/bin/cut -d ' ' -f 1
+)
+private_public_key=$(
+  /usr/bin/openssl pkey -in "${source_key}" -pubout -outform DER |
+    /usr/bin/sha256sum |
+    /usr/bin/cut -d ' ' -f 1
+)
+[[ "${certificate_public_key}" == "${private_public_key}" ]]
+
+[[ ! -L "${target_certificate}" && -f "${target_certificate}" ]]
+[[ ! -L "${target_key}" && -f "${target_key}" ]]
+[[ "$(/usr/bin/stat -c '%U:%G:%a' "${target_certificate}")" == "{{ warpgate_user }}:{{ warpgate_group }}:600" ]]
+[[ "$(/usr/bin/stat -c '%U:%G:%a' "${target_key}")" == "{{ warpgate_user }}:{{ warpgate_group }}:600" ]]
+
+if /usr/bin/cmp --silent "${source_certificate}" "${target_certificate}" &&
+  /usr/bin/cmp --silent "${source_key}" "${target_key}"; then
+  echo "WG_CERT_UNCHANGED"
+  exit 0
+fi
+
+# 기존 inode를 덮어써 owner, mode, SELinux label을 보존한다. 갱신 service의
+# capability를 chown·setxattr까지 넓히지 않는다.
+/usr/bin/cp "${source_certificate}" "${target_certificate}"
+/usr/bin/cp "${source_key}" "${target_key}"
+[[ "$(/usr/bin/stat -c '%U:%G:%a' "${target_certificate}")" == "{{ warpgate_user }}:{{ warpgate_group }}:600" ]]
+[[ "$(/usr/bin/stat -c '%U:%G:%a' "${target_key}")" == "{{ warpgate_user }}:{{ warpgate_group }}:600" ]]
+/usr/bin/systemctl try-restart warpgate.service
+echo "WG_CERT_DEPLOYED"

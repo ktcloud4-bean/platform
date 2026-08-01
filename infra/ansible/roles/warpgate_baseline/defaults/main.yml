@@ -1,6 +1,6 @@
 ---
 # infra/ansible/roles/warpgate_baseline/defaults/main.yml
-# WG-01 warpgate-01 기준선 기본값.
+# WG-01/WG-02 warpgate-01 기준선과 Keycloak SSO 기본값.
 #
 # 버전과 checksum 은 고정한다. `latest` 나 미검증 설치 스크립트, curl|sh 는 쓰지 않는다.
 # 선정 근거와 무결성 검증 절차는 docs/runbook/warpgate-privileged-access.md 가 소유한다.
@@ -38,11 +38,18 @@ warpgate_data_dir: "/var/lib/warpgate"
 warpgate_http_listen: "[::]:8888"
 warpgate_ssh_listen: "[::]:2222"
 
-# canonical 내부 이름. docs/ip-plan.md 가 단일 원본이다.
-warpgate_external_host: "warpgate-01.imcherry5778.xyz"
+# 브라우저 SSO callback 과 service cookie 가 사용하는 내부 service alias.
+# 공개 A/AAAA 또는 NAT 를 뜻하지 않으며 docs/ip-plan.md 가 단일 원본이다.
+warpgate_external_host: "warpgate.imcherry5778.xyz"
 
 # 세션 기록
 warpgate_recordings_enable: true
+
+# v0.26.1 이 제공하는 세션 경계. SSH 에는 유휴 timeout 만 있고 별도의 절대 최대
+# duration 키는 없다. 존재하지 않는 설정을 추측해서 넣지 않는다.
+warpgate_ssh_inactivity_timeout: "5m"
+warpgate_http_session_max_age: "30m"
+warpgate_http_cookie_max_age: "8h"
 
 # 로그·감사 보존기간. 보존기간으로 통제하고 용량으로 통제하지 않는다
 # (docs/capacity-plan.md 의 warpgate-01 구획 참조).
@@ -57,6 +64,72 @@ warpgate_ssh_host_key_verification: "prompt"
 # 로컬 break-glass 관리자 비밀번호. 저장소에 두지 않는다.
 # 저장소 밖 mode 0600 vars 파일 또는 --extra-vars 로만 주입한다.
 warpgate_admin_password: ""
+
+# Keycloak OIDC. client secret 과 Admin API bearer token 은 저장소 밖 mode 0600
+# vars 에서만 주입한다. bearer token 은 전용 client 선언 시에만 사용하고 게스트에
+# 저장하지 않는다.
+warpgate_sso_enabled: true
+warpgate_sso_name: "keycloak"
+warpgate_sso_label: "Keycloak"
+warpgate_sso_issuer: "https://sso.imcherry5778.xyz/realms/platform"
+warpgate_sso_client_id: "warpgate"
+warpgate_sso_client_secret_file: ""
+warpgate_sso_client_secret: >-
+  {{
+    (lookup('ansible.builtin.file', warpgate_sso_client_secret_file) | trim)
+    if warpgate_sso_client_secret_file | length > 0 else ''
+  }}
+warpgate_sso_scopes:
+  - email
+  - profile
+warpgate_sso_roles_claim: "groups"
+warpgate_sso_role_mappings:
+  /platform-users: "platform-users"
+  /platform-privileged: "platform-privileged"
+warpgate_sso_auto_create_users: false
+
+warpgate_keycloak_manage_client: true
+warpgate_keycloak_admin_bearer_header_file: ""
+warpgate_keycloak_admin_bearer_token: >-
+  {{
+    (lookup('ansible.builtin.file', warpgate_keycloak_admin_bearer_header_file)
+     | trim | regex_replace('^Authorization: Bearer ', ''))
+    if warpgate_keycloak_admin_bearer_header_file | length > 0 else ''
+  }}
+warpgate_keycloak_client_owner_attribute: "warpgate_baseline/WG-02"
+warpgate_keycloak_realm: "platform"
+warpgate_keycloak_admin_base: >-
+  {{ warpgate_sso_issuer | regex_replace('/realms/[^/]+$', '') }}/admin/realms/{{ warpgate_keycloak_realm }}
+warpgate_keycloak_redirect_uri: >-
+  https://{{ warpgate_external_host }}:{{ warpgate_http_listen | regex_replace('^.*:', '') }}/@warpgate/api/sso/return
+
+# Warpgate 전용 public DNS-01 인증서. OPNsense·Proxmox·k3s token 또는 private key 를
+# 재사용하지 않는다. Cloudflare token 은 대상 zone 의 Zone:Read + DNS:Edit 만 가진다.
+warpgate_acme_enabled: true
+warpgate_acme_email: "admin@imcherry5778.xyz"
+warpgate_acme_server: "https://acme-v02.api.letsencrypt.org/directory"
+warpgate_acme_cloudflare_token_file: ""
+warpgate_acme_cloudflare_token: >-
+  {{
+    (lookup('ansible.builtin.file', warpgate_acme_cloudflare_token_file) | trim)
+    if warpgate_acme_cloudflare_token_file | length > 0 else ''
+  }}
+warpgate_acme_dir: "/var/lib/warpgate-acme"
+warpgate_acme_credentials_dir: "/etc/warpgate-acme"
+warpgate_acme_renew_days: 30
+# ACCESS VLAN 은 외부 UDP/TCP 53을 직접 열지 않고 OPNsense Unbound만 사용한다.
+# Unbound의 내부 imcherry5778.xyz local-zone은 ACME TXT를 NXDOMAIN으로 답하므로
+# Cloudflare API 생성 뒤 고정 대기하고 CA의 authoritative 검증에 맡긴다.
+warpgate_acme_dns_propagation_wait: "60s"
+
+# 공식 go-acme/lego release archive 를 checksum 으로 고정한다.
+warpgate_lego_version: "v5.2.1"
+warpgate_lego_archive_sha256: "c5c7f34594daa8d05ec568069fa6c97ace1ef428367533a6d42bf9b3d5164169"
+warpgate_lego_archive_url: >-
+  https://github.com/go-acme/lego/releases/download/{{ warpgate_lego_version }}/lego_{{ warpgate_lego_version }}_linux_amd64.tar.gz
+warpgate_lego_archive_path: "/var/cache/warpgate/lego-{{ warpgate_lego_version }}-linux-amd64.tar.gz"
+warpgate_lego_binary_path: "/usr/local/bin/lego-{{ warpgate_lego_version }}"
+warpgate_lego_binary_link: "/usr/local/bin/lego"
 
 # 선언형 provisioning 목록. 기본은 비어 있고 저장소 밖 vars 파일로 주입한다.
 # 각 항목은 state: present|absent 를 가진다.
@@ -73,14 +146,39 @@ warpgate_admin_password: ""
 #   - name: "<user>"
 #     description: ""
 #     password: "<저장소 밖에서 주입>"
-#     roles: ["<role>"]
+#     roles: ["<role>"]  # 생략하면 direct role 을 관리하지 않는다.
+#     sso_credentials:
+#       - { provider: "keycloak", email: "<검증된 이메일>" }
 #     state: present
 # warpgate_known_hosts:
 #   - { host: "<대상>", port: 22, key_type: "ssh-ed25519", key_base64: "<인증 경로로 확인한 값>", state: present }
-warpgate_roles: []
+warpgate_roles:
+  - name: "platform-users"
+    description: "Keycloak /platform-users 일상 접근"
+    state: present
+  - name: "platform-privileged"
+    description: "Keycloak /platform-privileged 승인 특권 접근"
+    state: present
 warpgate_targets: []
-warpgate_users: []
+warpgate_users:
+  - name: "imcherry"
+    description: "Keycloak 일상 ID"
+    sso_credentials:
+      - provider: "keycloak"
+        email: "imcherry5778@gmail.com"
+    state: present
+  - name: "imcherry-admin"
+    description: "Keycloak 특권 ID"
+    sso_credentials:
+      - provider: "keycloak"
+        email: "imcherry5778+admin@gmail.com"
+    state: present
 warpgate_known_hosts: []
+
+# WG-02 라이브 권한·recording 검증용 loopback OS 계정. 검증 run에서만 true로
+# 올리고 최종 run은 false로 되돌려 계정과 home을 제거한다.
+warpgate_validation_target_enabled: false
+warpgate_validation_target_user: "wg02-validation-target"
 
 # provisioning 을 수행할지 여부. false 면 설치·설정·서비스만 선언한다.
 warpgate_provision_enabled: >-
@@ -88,6 +186,6 @@ warpgate_provision_enabled: >-
       + warpgate_users | length + warpgate_known_hosts | length) > 0 }}
 
 # admin API 호출에 쓰는 loopback base URL.
-# setup 이 생성하는 인증서는 warpgate.local/localhost 자체서명이므로 loopback 한정으로만 쓴다.
-# 공인·내부 PKI 인증서 배치는 INGRESS-01 / VAULT-02 범위이며 이 role 이 소유하지 않는다.
+# WG-02 공인 인증서는 service alias 단일 SAN이라 127.0.0.1 URL과 일치하지 않는다.
+# 관리 API는 외부로 열지 않고 loopback 한정으로 호출한다.
 warpgate_api_base: "https://127.0.0.1:{{ warpgate_http_listen | regex_replace('^.*:', '') }}"

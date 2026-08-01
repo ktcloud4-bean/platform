@@ -1,0 +1,427 @@
+---
+# WG-02: 기존 realm/group/user 를 건드리지 않고 Warpgate 전용 confidential client 와
+# client-local groups mapper 하나만 Keycloak Admin API 로 선언한다.
+
+- name: Keycloak client 목표 표현 구성
+  ansible.builtin.set_fact:
+    wg_keycloak_groups_mapper:
+      name: "groups"
+      protocol: "openid-connect"
+      protocolMapper: "oidc-group-membership-mapper"
+      consentRequired: false
+      config:
+        claim.name: "groups"
+        full.path: "true"
+        id.token.claim: "true"
+        access.token.claim: "true"
+        userinfo.token.claim: "true"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Keycloak client 목표 본문 구성
+  ansible.builtin.set_fact:
+    wg_keycloak_client_desired:
+      clientId: "{{ warpgate_sso_client_id }}"
+      name: "Warpgate"
+      description: "WG-02 Warpgate Keycloak OIDC client"
+      enabled: true
+      protocol: "openid-connect"
+      publicClient: false
+      clientAuthenticatorType: "client-secret"
+      bearerOnly: false
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      authorizationServicesEnabled: false
+      consentRequired: false
+      frontchannelLogout: false
+      fullScopeAllowed: false
+      redirectUris:
+        - "{{ warpgate_keycloak_redirect_uri }}"
+      webOrigins: []
+      defaultClientScopes:
+        - email
+        - profile
+      optionalClientScopes: []
+      attributes:
+        wg02.owner: "{{ warpgate_keycloak_client_owner_attribute }}"
+      secret: "{{ warpgate_sso_client_secret }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Keycloak Warpgate client 현재 상태 조회
+  ansible.builtin.uri:
+    url: "{{ warpgate_keycloak_admin_base }}/clients?clientId={{ warpgate_sso_client_id | urlencode }}&exact=true"
+    headers:
+      Authorization: "Bearer {{ warpgate_keycloak_admin_bearer_token }}"
+    validate_certs: true
+    status_code: 200
+  register: wg_keycloak_client_search
+  delegate_to: localhost
+  become: false
+  run_once: true
+  check_mode: false
+  no_log: true
+
+- name: Keycloak 기존 client 충돌 방지
+  ansible.builtin.assert:
+    that:
+      - wg_keycloak_client_search.json | length <= 1
+      - >-
+        wg_keycloak_client_search.json | length == 0
+        or (wg_keycloak_client_search.json[0].attributes | default({})).get('wg02.owner', '')
+           == warpgate_keycloak_client_owner_attribute
+    fail_msg: >-
+      같은 clientId 의 미소유 Keycloak client 가 있거나 중복 client 가 있다.
+      기존 객체를 수정하지 않고 중단한다.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Keycloak Warpgate client 생성
+  ansible.builtin.uri:
+    url: "{{ warpgate_keycloak_admin_base }}/clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ warpgate_keycloak_admin_bearer_token }}"
+    body_format: json
+    body: "{{ wg_keycloak_client_desired }}"
+    validate_certs: true
+    status_code: 201
+  changed_when: true
+  when:
+    - wg_keycloak_client_search.json | length == 0
+    - not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Keycloak Warpgate client 재조회
+  ansible.builtin.uri:
+    url: "{{ warpgate_keycloak_admin_base }}/clients?clientId={{ warpgate_sso_client_id | urlencode }}&exact=true"
+    headers:
+      Authorization: "Bearer {{ warpgate_keycloak_admin_bearer_token }}"
+    validate_certs: true
+    status_code: 200
+  register: wg_keycloak_client_search_after_create
+  delegate_to: localhost
+  become: false
+  run_once: true
+  check_mode: false
+  no_log: true
+
+- name: Keycloak Warpgate client ID 확정
+  ansible.builtin.set_fact:
+    wg_keycloak_client_current: "{{ wg_keycloak_client_search_after_create.json[0] }}"
+    wg_keycloak_client_id: "{{ wg_keycloak_client_search_after_create.json[0].id }}"
+  when: wg_keycloak_client_search_after_create.json | length == 1
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Keycloak Warpgate client secret 조회
+  ansible.builtin.uri:
+    url: "{{ warpgate_keycloak_admin_base }}/clients/{{ wg_keycloak_client_id }}/client-secret"
+    headers:
+      Authorization: "Bearer {{ warpgate_keycloak_admin_bearer_token }}"
+    validate_certs: true
+    status_code: 200
+  register: wg_keycloak_client_secret_current
+  when: wg_keycloak_client_id is defined
+  delegate_to: localhost
+  become: false
+  run_once: true
+  check_mode: false
+  no_log: true
+
+- name: Keycloak Warpgate client 교정 필요 여부 판정
+  ansible.builtin.set_fact:
+    wg_keycloak_client_update_required: >-
+      {{
+        wg_keycloak_client_current.clientId | default('') != warpgate_sso_client_id
+        or wg_keycloak_client_current.name | default('') != 'Warpgate'
+        or wg_keycloak_client_current.description | default('')
+           != 'WG-02 Warpgate Keycloak OIDC client'
+        or wg_keycloak_client_current.enabled | default(false) != true
+        or wg_keycloak_client_current.protocol | default('') != 'openid-connect'
+        or wg_keycloak_client_current.publicClient | default(true) != false
+        or wg_keycloak_client_current.clientAuthenticatorType | default('')
+           != 'client-secret'
+        or wg_keycloak_client_current.bearerOnly | default(true) != false
+        or wg_keycloak_client_current.standardFlowEnabled | default(false) != true
+        or wg_keycloak_client_current.implicitFlowEnabled | default(true) != false
+        or wg_keycloak_client_current.directAccessGrantsEnabled | default(true) != false
+        or wg_keycloak_client_current.serviceAccountsEnabled | default(true) != false
+        or wg_keycloak_client_current.authorizationServicesEnabled | default(false) != false
+        or wg_keycloak_client_current.consentRequired | default(false) != false
+        or wg_keycloak_client_current.frontchannelLogout | default(false) != false
+        or wg_keycloak_client_current.fullScopeAllowed | default(true) != false
+        or wg_keycloak_client_current.redirectUris | default([]) != [warpgate_keycloak_redirect_uri]
+        or wg_keycloak_client_current.webOrigins | default([]) != []
+        or wg_keycloak_client_current.defaultClientScopes | default([]) | sort != ['email', 'profile']
+        or wg_keycloak_client_current.optionalClientScopes | default([]) != []
+        or (wg_keycloak_client_current.attributes | default({})).get('wg02.owner', '')
+           != warpgate_keycloak_client_owner_attribute
+        or wg_keycloak_client_secret_current.json.value | default('') != warpgate_sso_client_secret
+      }}
+  when: wg_keycloak_client_id is defined
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Keycloak Warpgate 전용 client 만 목표 상태로 교정
+  ansible.builtin.uri:
+    url: "{{ warpgate_keycloak_admin_base }}/clients/{{ wg_keycloak_client_id }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ warpgate_keycloak_admin_bearer_token }}"
+    body_format: json
+    body: >-
+      {{ wg_keycloak_client_current | combine(wg_keycloak_client_desired, recursive=true) }}
+    validate_certs: true
+    status_code: 204
+  changed_when: true
+  when:
+    - wg_keycloak_client_id is defined
+    - wg_keycloak_client_update_required | bool
+    - not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Keycloak Warpgate client-local mapper 현재 상태 조회
+  ansible.builtin.uri:
+    url: "{{ warpgate_keycloak_admin_base }}/clients/{{ wg_keycloak_client_id }}/protocol-mappers/models"
+    headers:
+      Authorization: "Bearer {{ warpgate_keycloak_admin_bearer_token }}"
+    validate_certs: true
+    status_code: 200
+  register: wg_keycloak_mappers_current
+  when: wg_keycloak_client_id is defined
+  delegate_to: localhost
+  become: false
+  run_once: true
+  check_mode: false
+  no_log: true
+
+- name: Keycloak groups mapper 중복 방지
+  ansible.builtin.assert:
+    that:
+      - >-
+        wg_keycloak_mappers_current.json
+        | selectattr('name', 'equalto', 'groups') | list | length <= 1
+    fail_msg: "Warpgate client에 groups mapper가 중복되어 자동 변경하지 않는다."
+  when: wg_keycloak_client_id is defined
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Keycloak Warpgate client의 선언 밖 mapper 제거
+  ansible.builtin.uri:
+    url: >-
+      {{ warpgate_keycloak_admin_base }}/clients/{{ wg_keycloak_client_id
+      }}/protocol-mappers/models/{{ item.id }}
+    method: DELETE
+    headers:
+      Authorization: "Bearer {{ warpgate_keycloak_admin_bearer_token }}"
+    validate_certs: true
+    status_code: 204
+  changed_when: true
+  loop: "{{ wg_keycloak_mappers_current.json | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - wg_keycloak_client_id is defined
+    - item.name != "groups"
+    - not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Keycloak groups mapper 생성
+  ansible.builtin.uri:
+    url: "{{ warpgate_keycloak_admin_base }}/clients/{{ wg_keycloak_client_id }}/protocol-mappers/models"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ warpgate_keycloak_admin_bearer_token }}"
+    body_format: json
+    body: "{{ wg_keycloak_groups_mapper }}"
+    validate_certs: true
+    status_code: 201
+  changed_when: true
+  when:
+    - wg_keycloak_client_id is defined
+    - >-
+      wg_keycloak_mappers_current.json
+      | selectattr('name', 'equalto', 'groups') | list | length == 0
+    - not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Keycloak groups mapper 목표 필드 차이 판정
+  ansible.builtin.set_fact:
+    wg_keycloak_groups_mapper_current: >-
+      {{
+        wg_keycloak_mappers_current.json
+        | selectattr('name', 'equalto', 'groups') | first | default({})
+      }}
+    wg_keycloak_groups_mapper_update_required: >-
+      {{
+        (wg_keycloak_mappers_current.json
+         | selectattr('name', 'equalto', 'groups') | list | length == 1)
+        and (
+          (wg_keycloak_mappers_current.json
+           | selectattr('name', 'equalto', 'groups') | first).protocol
+             != wg_keycloak_groups_mapper.protocol
+          or (wg_keycloak_mappers_current.json
+              | selectattr('name', 'equalto', 'groups') | first).protocolMapper
+             != wg_keycloak_groups_mapper.protocolMapper
+          or (wg_keycloak_mappers_current.json
+              | selectattr('name', 'equalto', 'groups') | first).consentRequired
+             | default(false) != false
+          or (wg_keycloak_mappers_current.json
+              | selectattr('name', 'equalto', 'groups') | first).config.get('claim.name', '')
+             != wg_keycloak_groups_mapper.config['claim.name']
+          or (wg_keycloak_mappers_current.json
+              | selectattr('name', 'equalto', 'groups') | first).config.get('full.path', '')
+             != wg_keycloak_groups_mapper.config['full.path']
+          or (wg_keycloak_mappers_current.json
+              | selectattr('name', 'equalto', 'groups') | first).config.get('id.token.claim', '')
+             != wg_keycloak_groups_mapper.config['id.token.claim']
+          or (wg_keycloak_mappers_current.json
+              | selectattr('name', 'equalto', 'groups') | first).config.get('access.token.claim', '')
+             != wg_keycloak_groups_mapper.config['access.token.claim']
+          or (wg_keycloak_mappers_current.json
+              | selectattr('name', 'equalto', 'groups') | first).config.get('userinfo.token.claim', '')
+             != wg_keycloak_groups_mapper.config['userinfo.token.claim']
+        )
+      }}
+  when: wg_keycloak_client_id is defined
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Keycloak groups mapper 목표 필드만 교정
+  ansible.builtin.uri:
+    url: >-
+      {{ warpgate_keycloak_admin_base }}/clients/{{ wg_keycloak_client_id
+      }}/protocol-mappers/models/{{ wg_keycloak_groups_mapper_current.id }}
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ warpgate_keycloak_admin_bearer_token }}"
+    body_format: json
+    body: >-
+      {{ wg_keycloak_groups_mapper_current
+         | combine(wg_keycloak_groups_mapper, recursive=true) }}
+    validate_certs: true
+    status_code: 204
+  changed_when: true
+  when:
+    - wg_keycloak_client_id is defined
+    - wg_keycloak_groups_mapper_update_required | bool
+    - not ansible_check_mode
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Keycloak Warpgate client 최종 의미값 조회
+  ansible.builtin.uri:
+    url: "{{ warpgate_keycloak_admin_base }}/clients/{{ wg_keycloak_client_id }}"
+    headers:
+      Authorization: "Bearer {{ warpgate_keycloak_admin_bearer_token }}"
+    validate_certs: true
+    status_code: 200
+  register: wg_keycloak_client_final
+  when: wg_keycloak_client_id is defined
+  delegate_to: localhost
+  become: false
+  run_once: true
+  check_mode: false
+  no_log: true
+
+- name: Keycloak Warpgate mapper 최종 의미값 조회
+  ansible.builtin.uri:
+    url: "{{ warpgate_keycloak_admin_base }}/clients/{{ wg_keycloak_client_id }}/protocol-mappers/models"
+    headers:
+      Authorization: "Bearer {{ warpgate_keycloak_admin_bearer_token }}"
+    validate_certs: true
+    status_code: 200
+  register: wg_keycloak_mappers_final
+  when: wg_keycloak_client_id is defined
+  delegate_to: localhost
+  become: false
+  run_once: true
+  check_mode: false
+  no_log: true
+
+- name: Keycloak Warpgate client 최소 권한 계약 확인
+  ansible.builtin.assert:
+    that:
+      - wg_keycloak_client_final.json.enabled | bool
+      - not (wg_keycloak_client_final.json.publicClient | bool)
+      - wg_keycloak_client_final.json.clientAuthenticatorType == "client-secret"
+      - wg_keycloak_client_final.json.standardFlowEnabled | bool
+      - not (wg_keycloak_client_final.json.implicitFlowEnabled | bool)
+      - not (wg_keycloak_client_final.json.directAccessGrantsEnabled | bool)
+      - not (wg_keycloak_client_final.json.serviceAccountsEnabled | bool)
+      - not (wg_keycloak_client_final.json.authorizationServicesEnabled | default(false) | bool)
+      - not (wg_keycloak_client_final.json.consentRequired | default(false) | bool)
+      - not (wg_keycloak_client_final.json.frontchannelLogout | default(false) | bool)
+      - not (wg_keycloak_client_final.json.fullScopeAllowed | bool)
+      - wg_keycloak_client_final.json.redirectUris == [warpgate_keycloak_redirect_uri]
+      - wg_keycloak_client_final.json.defaultClientScopes | sort == ['email', 'profile']
+      - wg_keycloak_client_final.json.optionalClientScopes | default([]) | length == 0
+      - wg_keycloak_mappers_final.json | length == 1
+      - >-
+        wg_keycloak_mappers_final.json
+        | selectattr('name', 'equalto', 'groups') | list | length == 1
+      - >-
+        (wg_keycloak_mappers_final.json
+         | selectattr('name', 'equalto', 'groups') | first).protocol
+        == wg_keycloak_groups_mapper.protocol
+      - >-
+        (wg_keycloak_mappers_final.json
+         | selectattr('name', 'equalto', 'groups') | first).protocolMapper
+        == wg_keycloak_groups_mapper.protocolMapper
+      - >-
+        (wg_keycloak_mappers_final.json
+         | selectattr('name', 'equalto', 'groups') | first).config.get('claim.name', '')
+        == wg_keycloak_groups_mapper.config['claim.name']
+      - >-
+        (wg_keycloak_mappers_final.json
+         | selectattr('name', 'equalto', 'groups') | first).config.get('full.path', '')
+        == wg_keycloak_groups_mapper.config['full.path']
+      - >-
+        (wg_keycloak_mappers_final.json
+         | selectattr('name', 'equalto', 'groups') | first).config.get('id.token.claim', '')
+        == wg_keycloak_groups_mapper.config['id.token.claim']
+      - >-
+        (wg_keycloak_mappers_final.json
+         | selectattr('name', 'equalto', 'groups') | first).config.get('access.token.claim', '')
+        == wg_keycloak_groups_mapper.config['access.token.claim']
+      - >-
+        (wg_keycloak_mappers_final.json
+         | selectattr('name', 'equalto', 'groups') | first).config.get('userinfo.token.claim', '')
+        == wg_keycloak_groups_mapper.config['userinfo.token.claim']
+    fail_msg: >-
+      Warpgate 전용 Keycloak client 의 redirect, flow, scope 또는 groups mapper 가
+      최소 권한 계약과 다르다.
+  when: wg_keycloak_client_id is defined
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true

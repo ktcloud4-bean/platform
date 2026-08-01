@@ -190,7 +190,7 @@ traffic selector는 `10.10.50.0/24 ↔ 10.20.0.0/16`이며, 이 selector 밖 출
 | `awx.imcherry5778.xyz` | service alias | AWX | Pomerium | 미등록 |
 | `grafana.imcherry5778.xyz` | service alias | Grafana | Pomerium | 미등록 |
 | `netbird.imcherry5778.xyz` | service alias | NetBird control plane | 외부 | 미등록 |
-| `warpgate.imcherry5778.xyz` | service alias | Warpgate 서비스 | 내부·NetBird 경유 | 미등록 |
+| `warpgate.imcherry5778.xyz` | service alias | Warpgate 서비스 | 내부·NetBird 경유 | Unbound alias → `warpgate-01` (`10.10.30.10`); WG-02 등록 |
 | `postgres.imcherry5778.xyz` | service alias | PostgreSQL | 내부, 비 HTTP | 미등록 |
 | `s3.imcherry5778.xyz` | service alias | SeaweedFS S3 API | 내부, 비 Pomerium 데이터 경로 | Unbound alias 등록; TLS S3 TCP 8333 |
 
@@ -200,10 +200,11 @@ Keycloak issuer는 `https://sso.imcherry5778.xyz`로 고정한다. k3s 웹 서�
 
 ## 인증서 이름과 공개 DNS 경계
 
-공인 인증서는 서비스 계층별로 발급한다. OPNsense, Proxmox와 k3s는 인증서 private key와 DNS API token을 공유하지 않는다.
+공인 인증서는 서비스 계층별로 발급한다. OPNsense, Proxmox, k3s와 Warpgate는 인증서 private key와 DNS API token을 공유하지 않는다.
 
 - Proxmox 인증서 식별자는 위 표의 canonical host 하나다. 별도 service alias나 wildcard 이름을 추가하지 않는다.
 - Proxmox 관리 endpoint는 내부 주소의 HTTPS 8006을 유지한다. 공인 인증서 발급은 public A/AAAA, Cloudflare proxy, NAT 또는 443 공개를 뜻하지 않는다.
+- Warpgate 인증서 식별자는 `warpgate.imcherry5778.xyz` 한 이름이다. 내부 Unbound alias와 TCP 8888을 유지하며 public A/AAAA·NAT를 만들지 않는다.
 - DNS-01은 공개 zone에 임시 `_acme-challenge` TXT만 만들며 발급 후 제거한다. 내부 Unbound host override는 그대로 유지한다.
 - 공인 CA의 Certificate Transparency log에는 canonical hostname이 공개될 수 있지만 내부 주소는 인증서에 넣지 않는다.
 

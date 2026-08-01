@@ -6,9 +6,9 @@
 # 선언은 loopback 관리 API 호출로 반영한다. 모든 호출은 127.0.0.1 로만 나가며
 # 이 role 은 공개 경로나 방화벽을 만들지 않는다.
 #
-# setup 이 만든 TLS 인증서는 warpgate.local/localhost 자체서명이다. loopback
-# 한정 부트스트랩이므로 validate_certs 를 끄고, 내부 PKI 배치는 VAULT-02,
-# 공개 경로 인증서는 INGRESS-01 범위로 남긴다.
+# 관리 API 는 외부 공개 없이 loopback 으로만 호출한다. 외부 브라우저용 인증서는
+# 같은 role 의 WG-02 전용 DNS-01 선언이 소유하지만, loopback URL 과 SAN 이 다르므로
+# 이 내부 호출은 validate_certs 를 끈다.
 
 - name: 관리 API 로그인 (loopback 한정)
   ansible.builtin.uri:
@@ -51,6 +51,7 @@
       description: "{{ item.description | default('') }}"
     validate_certs: false
     status_code: [200, 201]
+  changed_when: true
   loop: "{{ warpgate_roles | selectattr('state', 'defined') | selectattr('state', 'eq', 'present') | list }}"
   loop_control:
     label: "{{ item.name }}"
@@ -65,6 +66,7 @@
     headers: "{{ wg_headers }}"
     validate_certs: false
     status_code: [200, 204]
+  changed_when: true
   loop: "{{ warpgate_roles | selectattr('state', 'defined') | selectattr('state', 'eq', 'absent') | list }}"
   loop_control:
     label: "{{ item.name }}"
@@ -111,6 +113,7 @@
       }}
     validate_certs: false
     status_code: [200, 201]
+  changed_when: true
   loop: "{{ warpgate_known_hosts | selectattr('state', 'defined') | selectattr('state', 'eq', 'present') | list }}"
   loop_control:
     label: "{{ item.host }}:{{ item.port | default(22) }} {{ item.key_type }}"
@@ -134,6 +137,7 @@
     headers: "{{ wg_headers }}"
     validate_certs: false
     status_code: [200, 204]
+  changed_when: true
   loop: "{{ warpgate_known_hosts | selectattr('state', 'defined') | selectattr('state', 'eq', 'absent') | list }}"
   loop_control:
     label: "{{ item.host }}:{{ item.port | default(22) }} {{ item.key_type }}"
@@ -178,6 +182,7 @@
       }}
     validate_certs: false
     status_code: [200, 201]
+  changed_when: true
   loop: "{{ warpgate_targets | selectattr('state', 'defined') | selectattr('state', 'eq', 'present') | list }}"
   loop_control:
     label: "{{ item.name }}"
@@ -192,6 +197,7 @@
     headers: "{{ wg_headers }}"
     validate_certs: false
     status_code: [200, 204]
+  changed_when: true
   loop: "{{ warpgate_targets | selectattr('state', 'defined') | selectattr('state', 'eq', 'absent') | list }}"
   loop_control:
     label: "{{ item.name }}"
@@ -230,10 +236,26 @@
     headers: "{{ wg_headers }}"
     validate_certs: false
     status_code: [200, 201, 409]
+  changed_when: true
   loop: "{{ wg_target_roles_current.results | subelements('item.roles', skip_missing=True) }}"
   loop_control:
     label: "{{ item.0.item.name }} → {{ item.1 }}"
   when: item.1 not in (item.0.json | map(attribute='name') | list)
+
+- name: target 의 선언 밖 role 제거
+  ansible.builtin.uri:
+    url: >-
+      {{ warpgate_api_base }}/@warpgate/admin/api/targets/{{
+        wg_target_ids[item.0.item.name] }}/roles/{{ item.1.id }}
+    method: DELETE
+    headers: "{{ wg_headers }}"
+    validate_certs: false
+    status_code: [200, 204, 404]
+  changed_when: true
+  loop: "{{ wg_target_roles_current.results | subelements('json', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.item.name }} ↛ {{ item.1.name }}"
+  when: item.1.name not in (item.0.item.roles | default([]))
 
 # --- user ------------------------------------------------------------------
 
@@ -256,6 +278,7 @@
       description: "{{ item.description | default('') }}"
     validate_certs: false
     status_code: [200, 201]
+  changed_when: true
   loop: "{{ warpgate_users | selectattr('state', 'defined') | selectattr('state', 'eq', 'present') | list }}"
   loop_control:
     label: "{{ item.name }}"
@@ -270,6 +293,7 @@
     headers: "{{ wg_headers }}"
     validate_certs: false
     status_code: [200, 204]
+  changed_when: true
   loop: "{{ warpgate_users | selectattr('state', 'defined') | selectattr('state', 'eq', 'absent') | list }}"
   loop_control:
     label: "{{ item.name }}"
@@ -286,6 +310,18 @@
 - name: user 이름 → id 색인
   ansible.builtin.set_fact:
     wg_user_ids: "{{ dict(wg_users_current.json | map(attribute='username') | zip(wg_users_current.json | map(attribute='id'))) }}"
+
+- name: 선언한 user 의 SSO credential 정확 일치
+  ansible.builtin.include_tasks: user_sso_credentials.yml
+  loop: >-
+    {{ warpgate_users
+       | selectattr('state', 'defined')
+       | selectattr('state', 'eq', 'present')
+       | selectattr('sso_credentials', 'defined')
+       | list }}
+  loop_control:
+    loop_var: wg_managed_sso_user
+    label: "{{ wg_managed_sso_user.name }}"
 
 - name: user 별 기존 password credential 조회
   ansible.builtin.uri:
@@ -309,6 +345,7 @@
       password: "{{ item.item.password }}"
     validate_certs: false
     status_code: [200, 201]
+  changed_when: true
   loop: "{{ wg_user_pw_current.results }}"
   loop_control:
     label: "{{ item.item.name }}"
@@ -339,7 +376,27 @@
     body: {}
     validate_certs: false
     status_code: [200, 201, 409]
+  changed_when: true
   loop: "{{ wg_user_roles_current.results | subelements('item.roles', skip_missing=True) }}"
   loop_control:
     label: "{{ item.0.item.name }} → {{ item.1 }}"
   when: item.1 not in (item.0.json | map(attribute='name') | list)
+
+# roles 키를 명시한 local/API user 만 direct assignment 를 정확히 관리한다.
+# Keycloak SSO user 는 roles 키를 생략하고 로그인 시 groups mapping 이 동기화한다.
+- name: user 의 선언 밖 direct role 제거
+  ansible.builtin.uri:
+    url: >-
+      {{ warpgate_api_base }}/@warpgate/admin/api/users/{{
+        wg_user_ids[item.0.item.name] }}/roles/{{ item.1.id }}
+    method: DELETE
+    headers: "{{ wg_headers }}"
+    validate_certs: false
+    status_code: [200, 204, 404]
+  changed_when: true
+  loop: "{{ wg_user_roles_current.results | subelements('json', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.item.name }} ↛ {{ item.1.name }}"
+  when:
+    - item.0.item.roles is defined
+    - item.1.name not in item.0.item.roles

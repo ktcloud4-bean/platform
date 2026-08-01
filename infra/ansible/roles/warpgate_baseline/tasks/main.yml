@@ -34,6 +34,52 @@
       저장소에는 placeholder 만 둔다.
   no_log: true
 
+- name: WG-02 외부 비밀 파일 metadata 확인
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: >-
+    {{
+      [
+        warpgate_sso_client_secret_file,
+        warpgate_keycloak_admin_bearer_header_file,
+        warpgate_acme_cloudflare_token_file
+      ]
+      | reject('equalto', '')
+      | list
+    }}
+  register: wg_external_secret_files
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: WG-02 외부 비밀 파일 최소 권한 확인
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg | default(false)
+      - item.stat.mode == "0600"
+    fail_msg: "WG-02 외부 비밀 입력은 symlink가 아닌 mode 0600 regular file이어야 한다."
+  loop: "{{ wg_external_secret_files.results }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: 전제 확인 — WG-02 SSO·ACME 비밀 주입
+  ansible.builtin.assert:
+    that:
+      - not (warpgate_sso_enabled | bool) or warpgate_sso_client_secret | length >= 32
+      - >-
+        not (warpgate_sso_enabled | bool and warpgate_keycloak_manage_client | bool)
+        or warpgate_keycloak_admin_bearer_token | length >= 32
+      - not (warpgate_acme_enabled | bool) or warpgate_acme_cloudflare_token | length >= 32
+    fail_msg: >-
+      WG-02 client secret, 단기 Keycloak Admin bearer token, Warpgate 전용 Cloudflare
+      DNS token 을 저장소 밖 mode 0600 vars 에 주입해야 한다.
+  no_log: true
+
 - name: 전용 그룹 생성
   ansible.builtin.group:
     name: "{{ warpgate_group }}"
@@ -131,6 +177,25 @@
     recurse: true
   when: not warpgate_config_stat.stat.exists
 
+# 자기 loopback 검증은 cross-VLAN 증거가 아니다. 임시 계정의 생성·제거도 role 선언이
+# 소유하며 최종값 false에서 계정과 home을 제거한다.
+- name: WG-02 임시 loopback 검증 계정 선언
+  ansible.builtin.include_tasks: validation_target.yml
+
+# Keycloak 기존 realm/group/user/bootstrap Job 은 건드리지 않는다. WG-02 전용 client 와
+# groups mapper 하나만 Admin API 로 소유한다.
+- name: Keycloak WG-02 전용 OIDC client 선언
+  ansible.builtin.include_tasks: keycloak_client.yml
+  when:
+    - warpgate_sso_enabled | bool
+    - warpgate_keycloak_manage_client | bool
+
+# setup 자체서명 자료를 공인 단일-host DNS-01 인증서로 교체한다. 발급과 자동 갱신,
+# 배포 경로는 이 role 이 함께 소유한다.
+- name: Warpgate 전용 ACME 인증서 선언
+  ansible.builtin.include_tasks: acme.yml
+  when: warpgate_acme_enabled | bool
+
 # --- 선언형 설정 -----------------------------------------------------------
 
 - name: Warpgate 설정 선언
@@ -142,6 +207,7 @@
     mode: "0600"
     validate: "{{ omit if ansible_check_mode else warpgate_binary_path + ' --config %s check' }}"
   notify: restart warpgate
+  no_log: "{{ warpgate_sso_enabled | bool }}"
 
 - name: 데이터 디렉터리 권한 재확인
   ansible.builtin.file:

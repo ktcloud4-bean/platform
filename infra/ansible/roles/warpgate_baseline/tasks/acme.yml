@@ -1,0 +1,211 @@
+---
+# WG-02: Warpgate 단일 service FQDN 인증서를 전용 lego + Cloudflare DNS-01로
+# 발급·갱신한다. 다른 계층의 token, certificate, private key 를 복사하지 않는다.
+
+- name: ACME root 전용 디렉터리 생성
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "/var/cache/warpgate", mode: "0750" }
+    - { path: "{{ warpgate_acme_credentials_dir }}", mode: "0700" }
+    - { path: "{{ warpgate_acme_dir }}", mode: "0700" }
+    - { path: "/usr/local/libexec", mode: "0755" }
+
+- name: ACME check mode 디렉터리 현황 확인
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "/var/cache/warpgate"
+    - "{{ warpgate_acme_credentials_dir }}"
+  register: wg_acme_parent_directories
+
+- name: lego 공식 archive 다운로드 (고정 버전·SHA-256)
+  ansible.builtin.get_url:
+    url: "{{ warpgate_lego_archive_url }}"
+    dest: "{{ warpgate_lego_archive_path }}"
+    checksum: "sha256:{{ warpgate_lego_archive_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - not ansible_check_mode or wg_acme_parent_directories.results[0].stat.exists
+
+- name: lego archive 전용 해제 디렉터리
+  ansible.builtin.file:
+    path: "/var/cache/warpgate/lego-{{ warpgate_lego_version }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: lego archive 존재 확인
+  ansible.builtin.stat:
+    path: "{{ warpgate_lego_archive_path }}"
+  register: wg_lego_archive
+
+- name: lego archive 해제
+  ansible.builtin.unarchive:
+    src: "{{ warpgate_lego_archive_path }}"
+    dest: "/var/cache/warpgate/lego-{{ warpgate_lego_version }}"
+    remote_src: true
+    creates: "/var/cache/warpgate/lego-{{ warpgate_lego_version }}/lego"
+    owner: root
+    group: root
+  when:
+    - wg_lego_archive.stat.exists
+    - not ansible_check_mode
+
+- name: 해제한 lego 바이너리 존재 확인
+  ansible.builtin.stat:
+    path: "/var/cache/warpgate/lego-{{ warpgate_lego_version }}/lego"
+  register: wg_lego_extracted
+
+- name: lego 버전 고정 바이너리 설치
+  ansible.builtin.copy:
+    src: "/var/cache/warpgate/lego-{{ warpgate_lego_version }}/lego"
+    remote_src: true
+    dest: "{{ warpgate_lego_binary_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  when: wg_lego_extracted.stat.exists
+
+- name: lego 현재 버전 symlink
+  ansible.builtin.file:
+    src: "{{ warpgate_lego_binary_path }}"
+    dest: "{{ warpgate_lego_binary_link }}"
+    state: link
+    force: true
+    owner: root
+    group: root
+
+- name: lego 실행 버전 확인
+  ansible.builtin.command:
+    argv:
+      - "{{ warpgate_lego_binary_path }}"
+      - --version
+  register: wg_lego_version_result
+  changed_when: false
+  check_mode: false
+  when: wg_lego_extracted.stat.exists
+
+- name: lego 버전 계약 확인
+  ansible.builtin.assert:
+    that:
+      - warpgate_lego_version | regex_replace('^v', '') in wg_lego_version_result.stdout
+    fail_msg: "고정한 lego 버전과 실행 바이너리 버전이 다르다."
+  when: wg_lego_extracted.stat.exists
+
+- name: Cloudflare DNS-01 전용 env 배치
+  ansible.builtin.template:
+    src: cloudflare-acme.env.j2
+    dest: "{{ warpgate_acme_credentials_dir }}/cloudflare.env"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - not ansible_check_mode or wg_acme_parent_directories.results[1].stat.exists
+  no_log: true
+
+- name: 기존 setup 자체서명 인증서 rollback 사본 보존
+  ansible.builtin.copy:
+    src: "{{ warpgate_data_dir }}/{{ item.src }}"
+    remote_src: true
+    dest: "{{ warpgate_data_dir }}/{{ item.dest }}"
+    owner: "{{ warpgate_user }}"
+    group: "{{ warpgate_group }}"
+    mode: "0600"
+    force: false
+  loop:
+    - { src: "tls.certificate.pem", dest: "tls.setup.certificate.pem" }
+    - { src: "tls.key.pem", dest: "tls.setup.key.pem" }
+  no_log: true
+
+- name: Warpgate ACME 배포 hook 선언
+  ansible.builtin.template:
+    src: warpgate-acme-deploy.sh.j2
+    dest: /usr/local/libexec/warpgate-acme-deploy
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Warpgate ACME 인증서 존재 확인
+  ansible.builtin.stat:
+    path: "{{ warpgate_acme_dir }}/certificates/{{ warpgate_external_host }}.crt"
+  register: wg_acme_certificate
+
+- name: Warpgate 단일 FQDN production 인증서 최초 발급
+  ansible.builtin.command:
+    argv:
+      - "{{ warpgate_lego_binary_path }}"
+      - run
+      - --accept-tos
+      - --email
+      - "{{ warpgate_acme_email }}"
+      - --server
+      - "{{ warpgate_acme_server }}"
+      - --dns
+      - cloudflare
+      - --dns.propagation.wait
+      - "{{ warpgate_acme_dns_propagation_wait }}"
+      - --domains
+      - "{{ warpgate_external_host }}"
+      - --path
+      - "{{ warpgate_acme_dir }}"
+      - --env-file
+      - "{{ warpgate_acme_credentials_dir }}/cloudflare.env"
+  when:
+    - not wg_acme_certificate.stat.exists
+    - not ansible_check_mode
+  no_log: true
+
+- name: Warpgate ACME 인증서 존재 재확인
+  ansible.builtin.stat:
+    path: "{{ warpgate_acme_dir }}/certificates/{{ warpgate_external_host }}.crt"
+  register: wg_acme_certificate_after
+
+- name: 검증된 ACME 인증서와 key 를 Warpgate 경로에 배치
+  ansible.builtin.command:
+    argv:
+      - /usr/local/libexec/warpgate-acme-deploy
+  register: wg_acme_deploy
+  when:
+    - wg_acme_certificate_after.stat.exists
+    - not ansible_check_mode
+  changed_when: "'WG_CERT_DEPLOYED' in wg_acme_deploy.stdout"
+
+- name: Warpgate ACME renewal service 선언
+  ansible.builtin.template:
+    src: warpgate-acme-renew.service.j2
+    dest: /etc/systemd/system/warpgate-acme-renew.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload systemd
+
+- name: Warpgate ACME renewal timer 선언
+  ansible.builtin.template:
+    src: warpgate-acme-renew.timer.j2
+    dest: /etc/systemd/system/warpgate-acme-renew.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload systemd
+
+- name: Warpgate ACME renewal timer unit 존재 확인
+  ansible.builtin.stat:
+    path: /etc/systemd/system/warpgate-acme-renew.timer
+  register: wg_acme_timer_unit
+
+- name: Warpgate ACME renewal timer 활성화
+  ansible.builtin.systemd:
+    name: warpgate-acme-renew.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when:
+    - not ansible_check_mode or wg_acme_timer_unit.stat.exists
