@@ -2,7 +2,6 @@
 netbird_domain: "netbird.imcherry5778.xyz"
 netbird_acme_email: "admin@imcherry5778.xyz"
 netbird_admin_email: "admin@imcherry5778.xyz"
-cloudflare_api_token: "cfat_QY1fumjBjmKBp9UL0PNrdrtT4Y0qUQLgIBoHUx4m6e895359"
 
 netbird_config_dir: "/etc/netbird"
 netbird_data_dir: "/var/lib/netbird"

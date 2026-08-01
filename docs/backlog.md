@@ -117,6 +117,7 @@ GITOPS-01 → INGRESS-01 → WAF-DESIGN-01 → CROWDSEC-PERF-01 → CROWDSEC-FIX
 | `S3-01 DONE` | 기존 VM을 `object-01`로 제자리 이름 전환하고 SeaweedFS master·volume·filer·S3를 선언형 배포 | `VM-01`, `S3-DESIGN-01` | `TOFU-STATE`, `PVE-LIVE`, `OPNSENSE-LIVE` | 모든 백업 | state 복구 사본·`moved` 선언과 destroy/create 0 plan, VMID·주소·디스크 보존, canonical DNS·hostname 일치, 고정 version·digest·license, TLS S3, 최소권한 계정·bucket policy, versioning·multipart·presigned URL·checksum, 재부팅 후 object 유지, Ansible check/diff·2회차 changed=0, 임시 자원·자격증명 제거 |
 | `MINIO-01 DEFERRED` | 배포 시작 전 upstream 유지 중단으로 폐기한 MinIO 구현 계획; `S3-01`이 대체 | `VM-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0010](adr/0010-seaweedfs-local-s3.md)의 재검토 조건이 생기면 새 결정으로만 검토 |
 | `NB-01 DONE` | NetBird 기본 self-host와 로컬 Owner 복구 계정 | `VM-01` | `PUBLIC-DNS · OPNSENSE-LIVE` | 원격 진입 | 외부 peer 연결, relay 경로, 로컬 Owner 로그인과 백업 가능 |
+| `NB-01-FIX-01 DONE` | NetBird role에 커밋된 폐기 Cloudflare 토큰 기본값 제거 | `NB-01` | 없음 | NetBird 구성 입력 경계 | 현재 HEAD 실제 토큰 0건, 역할 내 Cloudflare 입력 참조 0건, Ansible 검증, 토큰 폐기 확인 및 공개 과거 이력 잔존 기록 |
 | `WG-01 DONE` | Warpgate 기본 배포와 로컬 복구 계정 | `VM-01` | 없음 | 특권 접근 | Warpgate v0.26.1 고정·checksum·SBOM, 비-root + systemd hardening + SELinux label, 세션 중계와 기록 생성·제품 조회, 대상별 역할 허용/거부, 로컬 복구 로그인 성공·실패, 재부팅 후 유지, 격리 인스턴스 복원, Ansible 멱등(changed=0) |
 | `AWS-NET-01 DONE` | OPNsense↔AWS Site-to-Site VPN | `NET-03` | `OPNSENSE-LIVE` | AWS 사설 연동 | 양쪽 관점 일치한 IKEv2 SA, 실제 VM의 payload 정방향과 selector 밖 대조 차단, 역방향 허용·차단 양쪽 실증, 기본 경로 불변, 재부팅 후 자동 복구, 장애 격리·복구, 임시 자원 제거·plan 무변경·PSK 미커밋 |
 
