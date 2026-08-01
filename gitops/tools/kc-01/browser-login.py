@@ -22,30 +22,6 @@ import urllib.request
 CURRENT_STAGE = "initialization"
 
 
-SAFE_RUNTIME_ERRORS = {
-    "issuer must contain a hostname",
-    "issuer must be an HTTPS hostname URL",
-    "connect-ip requires an HTTPS issuer",
-    "connect-ip must be IPv4",
-    "insecure cookie override is localhost-only",
-    "missing form: kc-form-login",
-    "missing form: kc-otp-login-form",
-    "TOTP rejected or replayed",
-    "authorization callback missing",
-    "authorization state mismatch",
-    "authorization code missing",
-    "issuer mismatch",
-    "expected realm role missing",
-}
-
-
-def safe_error_detail(error: Exception) -> str:
-    """Return a fixed diagnostic only; never print response, URL, token, or secret."""
-    if isinstance(error, RuntimeError) and str(error) in SAFE_RUNTIME_ERRORS:
-        return str(error)
-    return "redacted"
-
-
 class FixedAddressHTTPSConnection(http.client.HTTPSConnection):
     """Connect to one IP while preserving URL host, SNI, and certificate checks."""
 
@@ -96,10 +72,15 @@ class CaptureCallbackRedirectHandler(urllib.request.HTTPRedirectHandler):
 
     def __init__(self, expected_url: str):
         super().__init__()
-        self.expected_url = expected_url
+        self.expected = urllib.parse.urlsplit(expected_url)
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        if url_matches_callback(newurl, self.expected_url):
+        target = urllib.parse.urlsplit(newurl)
+        if (
+            target.scheme == self.expected.scheme
+            and target.netloc == self.expected.netloc
+            and target.path == self.expected.path
+        ):
             raise CallbackRedirect(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
@@ -122,16 +103,6 @@ def form_action(document: bytes, form_id: str) -> str:
     if not parser.action:
         raise RuntimeError(f"missing form: {form_id}")
     return parser.action
-
-
-def url_matches_callback(actual_url: str, expected_url: str) -> bool:
-    actual = urllib.parse.urlsplit(actual_url)
-    expected = urllib.parse.urlsplit(expected_url)
-    return (
-        actual.scheme == expected.scheme
-        and actual.netloc == expected.netloc
-        and actual.path == expected.path
-    )
 
 
 def post_form(opener, url: str, values: dict[str, str]):
@@ -264,17 +235,9 @@ def main():
             {"otp": totp(args.totp_file)},
         ) as response:
             final_url = response.geturl()
-            final_document = response.read()
+            response.read()
     except CallbackRedirect as redirect:
         final_url = redirect.url
-        final_document = b""
-
-    if not url_matches_callback(final_url, args.redirect_uri):
-        try:
-            form_action(final_document, "kc-otp-login-form")
-        except RuntimeError:
-            raise RuntimeError("authorization callback missing") from None
-        raise RuntimeError("TOTP rejected or replayed")
 
     final_query = urllib.parse.parse_qs(urllib.parse.urlsplit(final_url).query)
     if final_query.get("state", [None])[0] != state:
@@ -319,8 +282,7 @@ if __name__ == "__main__":
         status = getattr(error, "code", "n/a")
         print(
             f"browser-login failed: stage={CURRENT_STAGE}, "
-            f"type={type(error).__name__}, status={status}, "
-            f"detail={safe_error_detail(error)}",
+            f"type={type(error).__name__}, status={status}",
             file=sys.stderr,
         )
         raise SystemExit(1)
