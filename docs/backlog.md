@@ -258,7 +258,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `CROWDSEC-FIX-01 READY` | byte-preserving CRS snapshot·offline AppSec startup·API round-trip·영구 AppProject로 CrowdSec AppSec PoC 보정 및 live gate 재수행 | `INGRESS-01`, `WAF-DESIGN-01`, `CROWDSEC-PERF-01` | `TRAEFIK-LIVE` | 공개 HTTP·`EDGE-01` | 소스·digest·plugin/rule/startup hash 고정, Kubernetes API 후 49개 byte hash, egress 없는 startup과 Hub 요청 0건, Traefik 3.7.4 격리 호환, 정상 200·공격 403·exact 예외·control, warmed HTTP/2 1,000건×3회 p95·CPU·RSS와 별도 cold phase, AppSec fail policy, 기존 ingress 회귀 없음, finalizer prune·Argo rollback·Git revert |
 | `POM-01 READY` | Pomerium Core·선언형 Route·Routes Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음 | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
 | `HEADLAMP-02 BLOCKED` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
-| `NB-02 READY` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
+| `NB-02 DONE` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
 | `WG-02 READY` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | 없음 | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
 | `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
 
@@ -493,6 +493,33 @@ Git 추적 파일과 전체 Keycloak Pod 로그의 시크릿 원문은 0건이�
 선행을 다시 계산하면 `POM-01`은 `KC-01`·`INGRESS-01`·`VAULT-02`, `NB-02`는 `NB-01`·
 `KC-01`, `WG-02`는 `WG-01`·`KC-01`, `AWS-ID-01`은 `KC-01`이 모두 `DONE`이므로 이 네 직접
 후속만 `READY`로 연다. `HEADLAMP-02`는 `POM-01`이 아직 `READY`라 `BLOCKED`를 유지한다.
+
+2026-08-01 `NB-02`에서 NetBird v0.73.0의 embedded Dex 단일 IdP 제약을 확인하고 control plane을
+digest 고정 management·signal·relay 이미지로 분리해 Keycloak `platform` realm에 연결했다.
+Admin API는 전용 public `netbird-client`와 service `netbird-backend`, 최소 groups mapper만
+선언했으며 기존 realm 객체와 bootstrap Job은 수정하지 않았다. 실제 dashboard `/nb-auth`
+Authorization Code + PKCE + TOTP에서 `/platform-users` ID는 Management API 200, 비그룹 ID는
+401이었다. MFA 누락, 무자격 token, 수명 300초가 지난 실제 token도 거부됐다.
+
+일회성·1회 사용·ephemeral setup key로 v0.73.0 peer가 Management·Signal·Relay에 연결되고
+overlay IP를 받은 뒤 peer·key·client state를 모두 제거했다. 전환 백업 SHA-256은
+`60d779277f9540f741f286cf017bc4bca9fca56d4ea248ef16b1b96786ef8bb3`이고 세 SQLite DB
+`quick_check`가 전환·재부팅 뒤에도 모두 통과했다. Keycloak과 Dex는 동시에 운용할 수 없어
+로컬 Owner 복구를 백업 복원과 실제 Dex Authorization Code 로그인으로 정의했고, 두 차례
+성공한 뒤 최종 상태를 Ansible role의 Keycloak OIDC로 재적용했다.
+
+DMZ의 기존 RFC1918 BLOCK 실측에 따라 `10.10.40.10 → 10.10.20.10:443` 한 경로만 sequence
+1216·logging enabled로 열었다. OPNsense 재부팅 뒤 UUID
+`6bcca3bc-b23f-4713-987f-dd4c34790f8a`가 PF `@112`에 유지되고 discovery 200의 PASS 68 packets·
+state 1, TCP 444 timeout의 기존 BLOCK 5 packets, drift 없음이 확인됐다. 재부팅 중 OPNsense의
+단일 DNS 의존성으로 Keycloak readiness가 약 10분 9초 지연됐지만 Pod restart 없이 자동 복구된
+뒤 그룹 허용·거부를 다시 통과했다. `netbird-01`만 재부팅한 뒤 unit enabled+active와 다섯
+컨테이너 자동 시작, 인증 재통과, Ansible 2회차 `changed=0 failed=0`, 임시 자원·추적 파일의
+secret 원문 0건을 확인했다. 외부 peer 대화형 로그인은 공개 `sso` DNS·NAT가 없어 미검증이며
+`EDGE-01` 전 우회 노출하지 않는다.
+
+직접 후속 `NET-04`는 `WG-02`·`POM-01`·`BKP-05`·`E2E-01`이, `EDGE-01`은
+`CROWDSEC-FIX-01`·`POM-01`·`NET-04`가 남아 있으므로 둘 다 `BLOCKED`를 유지한다.
 
 ## 5. 데이터 보호 gate
 

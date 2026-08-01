@@ -2,13 +2,33 @@
 netbird_domain: "netbird.imcherry5778.xyz"
 netbird_acme_email: "admin@imcherry5778.xyz"
 netbird_admin_email: "admin@imcherry5778.xyz"
+netbird_keycloak_issuer: "https://sso.imcherry5778.xyz/realms/platform"
+netbird_keycloak_admin_endpoint: "https://sso.imcherry5778.xyz/admin/realms/platform"
+netbird_keycloak_client_id: "netbird-client"
+netbird_keycloak_management_client_id: "netbird-backend"
+netbird_keycloak_allowed_groups:
+  - "/platform-users"
+# netbird-01의 compose bridge 대역. Traefik만 X-Forwarded-*를 전달하도록 한정한다.
+netbird_trusted_proxy_cidr: "172.18.0.0/16"
+netbird_secret_vars_file: ""
+netbird_keycloak_recovery_password_file: ""
+netbird_keycloak_recovery_totp_file: ""
+netbird_keycloak_account_owner_username: "imcherry"
+netbird_keycloak_account_owner_password_file: ""
+netbird_keycloak_account_owner_totp_file: ""
+netbird_keycloak_connect_ip: "10.10.20.10"
+netbird_keycloak_browser_login_script: "{{ playbook_dir }}/../../../gitops/tools/kc-01/browser-login.py"
 
 netbird_config_dir: "/etc/netbird"
 netbird_data_dir: "/var/lib/netbird"
 netbird_idp_data_dir: "/var/lib/netbird/idp"
 netbird_letsencrypt_dir: "/var/lib/netbird/letsencrypt"
 
-# Fixed container image digests
-netbird_server_image: "netbirdio/netbird-server:v0.73.0@sha256:8d7fe3f415a35d8bef22e6bf036f66d2085aae43cdf5e6cf3a74a6ac6f0c7fa1"
+# Fixed container image digests. NB-02 keeps the v0.73.0 control-plane version;
+# the separate images are required because v0.73.0 combined mode always enables
+# the embedded IdP and ignores external IdP settings.
+netbird_management_image: "netbirdio/management:v0.73.0@sha256:9a9d86443f63f99677ed8ac67658c9c357f84e167a33e9a94b547733a9341b72"
+netbird_signal_image: "netbirdio/signal:v0.73.0@sha256:d75f0613432c1dcd84d3bd8c7bc663f93f931bed4260c0bf066cd0da2912d733"
+netbird_relay_image: "netbirdio/relay:v0.73.0@sha256:2fc6ac6106ba6b43ecf77568ed35550dd37a55c4053818eef8566b6159fded62"
 netbird_dashboard_image: "netbirdio/dashboard:v2.90.8@sha256:6b3df5d07cbcf8fb81a6a18bb99fadb220e66a554c0e0fe71cd17a93c15769b1"
 traefik_image: "traefik:v3.7.9@sha256:652929a140a32d7cafafb13c6cdfab5376cfeff800f51397b87b524501ed02a8"

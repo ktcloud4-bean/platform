@@ -61,6 +61,30 @@ class FixedAddressHTTPSHandler(urllib.request.HTTPSHandler):
         return self.do_open(connection, request, context=self._context)
 
 
+class CallbackRedirect(Exception):
+    def __init__(self, url: str):
+        super().__init__(url)
+        self.url = url
+
+
+class CaptureCallbackRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """OIDC callback으로 접속하지 않고 authorization redirect를 보존한다."""
+
+    def __init__(self, expected_url: str):
+        super().__init__()
+        self.expected = urllib.parse.urlsplit(expected_url)
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urllib.parse.urlsplit(newurl)
+        if (
+            target.scheme == self.expected.scheme
+            and target.netloc == self.expected.netloc
+            and target.path == self.expected.path
+        ):
+            raise CallbackRedirect(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class LoginFormParser(HTMLParser):
     def __init__(self, form_id: str):
         super().__init__()
@@ -129,6 +153,7 @@ def main():
     parser.add_argument("--expect-realm-role", action="append", default=[])
     parser.add_argument("--connect-ip")
     parser.add_argument("--allow-insecure-localhost", action="store_true")
+    parser.add_argument("--capture-callback", action="store_true")
     args = parser.parse_args()
 
     issuer_url = urllib.parse.urlsplit(args.issuer)
@@ -174,6 +199,8 @@ def main():
         urllib.request.ProxyHandler({}),
         urllib.request.HTTPCookieProcessor(cookie_jar),
     ]
+    if args.capture_callback:
+        handlers.append(CaptureCallbackRedirectHandler(args.redirect_uri))
     if args.connect_ip:
         handlers.append(
             FixedAddressHTTPSHandler(args.connect_ip, issuer_url.hostname)
@@ -201,13 +228,16 @@ def main():
         otp_page = response.read()
 
     CURRENT_STAGE = "totp-form"
-    with post_form(
-        opener,
-        form_action(otp_page, "kc-otp-login-form"),
-        {"otp": totp(args.totp_file)},
-    ) as response:
-        final_url = response.geturl()
-        response.read()
+    try:
+        with post_form(
+            opener,
+            form_action(otp_page, "kc-otp-login-form"),
+            {"otp": totp(args.totp_file)},
+        ) as response:
+            final_url = response.geturl()
+            response.read()
+    except CallbackRedirect as redirect:
+        final_url = redirect.url
 
     final_query = urllib.parse.parse_qs(urllib.parse.urlsplit(final_url).query)
     if final_query.get("state", [None])[0] != state:

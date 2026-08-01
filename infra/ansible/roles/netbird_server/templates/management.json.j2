@@ -1,0 +1,88 @@
+{
+  "Stuns": [
+    {
+      "Proto": "udp",
+      "URI": "stun:{{ netbird_domain }}:3478",
+      "Username": "",
+      "Password": null
+    }
+  ],
+  "Relay": {
+    "Addresses": ["rels://{{ netbird_domain }}:443"],
+    "CredentialsTTL": "24h",
+    "Secret": {{ netbird_auth_secret | to_json }}
+  },
+  "Signal": {
+    "Proto": "https",
+    "URI": "{{ netbird_domain }}:443",
+    "Username": "",
+    "Password": null
+  },
+  "ReverseProxy": {
+    "TrustedHTTPProxies": [],
+    "TrustedHTTPProxiesCount": 0,
+    "TrustedPeers": ["{{ netbird_trusted_proxy_cidr }}"]
+  },
+  "DisableDefaultPolicy": false,
+  "Datadir": "{{ netbird_data_dir }}",
+  "DataStoreEncryptionKey": {{ netbird_encryption_key | to_json }},
+  "StoreConfig": {
+    "Engine": "sqlite"
+  },
+  "HttpConfig": {
+    "Address": "0.0.0.0:8080",
+    "AuthIssuer": "{{ netbird_keycloak_issuer }}",
+    "AuthAudience": "{{ netbird_keycloak_client_id }}",
+    "AuthKeysLocation": "{{ netbird_keycloak_issuer }}/protocol/openid-connect/certs",
+    "AuthUserIDClaim": "sub",
+    "IdpSignKeyRefreshEnabled": true,
+    "OIDCConfigEndpoint": "{{ netbird_keycloak_issuer }}/.well-known/openid-configuration"
+  },
+  "IdpManagerConfig": {
+    "ManagerType": "keycloak",
+    "ClientConfig": {
+      "Issuer": "{{ netbird_keycloak_issuer }}",
+      "TokenEndpoint": "{{ netbird_keycloak_issuer }}/protocol/openid-connect/token",
+      "ClientID": "{{ netbird_keycloak_management_client_id }}",
+      "ClientSecret": {{ netbird_keycloak_management_client_secret | to_json }},
+      "GrantType": "client_credentials"
+    },
+    "ExtraConfig": {
+      "AdminEndpoint": "{{ netbird_keycloak_admin_endpoint }}"
+    },
+    "Auth0ClientCredentials": null,
+    "AzureClientCredentials": null,
+    "KeycloakClientCredentials": null,
+    "ZitadelClientCredentials": null
+  },
+  "DeviceAuthorizationFlow": {
+    "Provider": "hosted",
+    "ProviderConfig": {
+      "Audience": "{{ netbird_keycloak_client_id }}",
+      "AuthorizationEndpoint": "",
+      "Domain": "sso.imcherry5778.xyz",
+      "ClientID": "{{ netbird_keycloak_client_id }}",
+      "ClientSecret": "",
+      "TokenEndpoint": "{{ netbird_keycloak_issuer }}/protocol/openid-connect/token",
+      "DeviceAuthEndpoint": "{{ netbird_keycloak_issuer }}/protocol/openid-connect/auth/device",
+      "Scope": "openid profile email groups",
+      "UseIDToken": false,
+      "RedirectURLs": null
+    }
+  },
+  "PKCEAuthorizationFlow": {
+    "ProviderConfig": {
+      "Audience": "{{ netbird_keycloak_client_id }}",
+      "ClientID": "{{ netbird_keycloak_client_id }}",
+      "ClientSecret": "",
+      "Domain": "",
+      "AuthorizationEndpoint": "{{ netbird_keycloak_issuer }}/protocol/openid-connect/auth",
+      "TokenEndpoint": "{{ netbird_keycloak_issuer }}/protocol/openid-connect/token",
+      "Scope": "openid profile email groups",
+      "RedirectURLs": ["http://localhost:53000/"],
+      "UseIDToken": false,
+      "DisablePromptLogin": false,
+      "LoginFlag": 0
+    }
+  }
+}

@@ -22,6 +22,84 @@
     enabled: true
     state: started
 
+- name: NB-02 저장소 밖 NetBird 비밀 vars 경로 확인
+  ansible.builtin.assert:
+    that:
+      - netbird_secret_vars_file | length > 0
+      - netbird_secret_vars_file is match('^/home/imcherry/secrets/')
+      - netbird_keycloak_recovery_password_file | length > 0
+      - netbird_keycloak_recovery_totp_file | length > 0
+      - netbird_keycloak_account_owner_password_file | length > 0
+      - netbird_keycloak_account_owner_totp_file | length > 0
+    fail_msg: >-
+      NB-02는 /home/imcherry/secrets/ 아래 mode 0600 NetBird vars와
+      Keycloak 로컬 복구 자격증명 파일 경로를 명시해야 한다.
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: NB-02 기존 NetBird 비밀 vars 읽기
+  ansible.builtin.include_vars:
+    file: "{{ netbird_secret_vars_file }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: NB-02 Keycloak NetBird 전용 client 선언 반영
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - "{{ role_path }}/files/keycloak_netbird_clients.py"
+      - --browser-login-script
+      - "{{ netbird_keycloak_browser_login_script }}"
+      - --issuer-base
+      - "https://sso.imcherry5778.xyz"
+      - --connect-ip
+      - "{{ netbird_keycloak_connect_ip }}"
+      - --recovery-password-file
+      - "{{ netbird_keycloak_recovery_password_file }}"
+      - --recovery-totp-file
+      - "{{ netbird_keycloak_recovery_totp_file }}"
+      - --secret-vars-file
+      - "{{ netbird_secret_vars_file }}"
+      - --dashboard-url
+      - "https://{{ netbird_domain }}"
+      - --public-client-id
+      - "{{ netbird_keycloak_client_id }}"
+      - --management-client-id
+      - "{{ netbird_keycloak_management_client_id }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: netbird_keycloak_clients
+  changed_when: "'changed=true' in netbird_keycloak_clients.stdout"
+  when: not ansible_check_mode
+  no_log: true
+
+- name: NB-02 생성된 Keycloak management client 비밀 vars 다시 읽기
+  ansible.builtin.include_vars:
+    file: "{{ netbird_secret_vars_file }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: NB-02 외부 비밀 vars 사전 조건 확인
+  ansible.builtin.assert:
+    that:
+      - netbird_auth_secret is defined
+      - netbird_auth_secret | length >= 32
+      - netbird_encryption_key is defined
+      - netbird_encryption_key | length >= 32
+      - netbird_keycloak_management_client_secret is defined
+      - netbird_keycloak_management_client_secret | length >= 32
+    fail_msg: >-
+      NB-02는 Git 밖 mode 0600 extra-vars에 auth_secret, encryption_key,
+      Keycloak management client secret을 받아야 한다.
+  no_log: true
+
 - name: NetBird 데이터 및 설정 디렉터리 생성
   ansible.builtin.file:
     path: "{{ item }}"
@@ -48,14 +126,63 @@
     cmd: "restorecon -R {{ netbird_data_dir }} {{ netbird_letsencrypt_dir }}"
   changed_when: false
 
-- name: NetBird config.yaml 설정 파일 배치
+- name: NB-02 전환 전 Dex 설정과 SQLite 온라인 백업 존재 확인
+  ansible.builtin.stat:
+    path: /var/backups/netbird/nb02-pre-switch.tar.gz
+  register: netbird_nb02_backup
+
+- name: NB-02 전환 전 Dex 설정과 SQLite 온라인 백업 생성
+  ansible.builtin.shell:
+    cmd: |
+      set -Eeuo pipefail
+      umask 077
+      backup_root=/var/backups/netbird
+      stage_dir=$(mktemp -d "${backup_root}/.nb02-pre-switch.XXXXXX")
+      cleanup() {
+        rm -rf -- "${stage_dir}"
+      }
+      trap cleanup EXIT
+      install -d -m 0700 "${stage_dir}/etc/systemd/system" "${stage_dir}/var/lib/netbird"
+      cp -a /etc/netbird "${stage_dir}/etc/netbird"
+      cp -a /etc/systemd/system/netbird-compose.service "${stage_dir}/etc/systemd/system/netbird-compose.service"
+      sqlite3 /var/lib/netbird/store.db ".backup '${stage_dir}/var/lib/netbird/store.db'"
+      sqlite3 /var/lib/netbird/events.db ".backup '${stage_dir}/var/lib/netbird/events.db'"
+      sqlite3 /var/lib/netbird/idp.db ".backup '${stage_dir}/var/lib/netbird/idp.db'"
+      sqlite3 "${stage_dir}/var/lib/netbird/store.db" 'PRAGMA quick_check;' | grep -qx 'ok'
+      sqlite3 "${stage_dir}/var/lib/netbird/events.db" 'PRAGMA quick_check;' | grep -qx 'ok'
+      sqlite3 "${stage_dir}/var/lib/netbird/idp.db" 'PRAGMA quick_check;' | grep -qx 'ok'
+      tar -C "${stage_dir}" -czf "${backup_root}/nb02-pre-switch.tar.gz" etc var
+      chmod 0600 "${backup_root}/nb02-pre-switch.tar.gz"
+      sha256sum "${backup_root}/nb02-pre-switch.tar.gz" >"${backup_root}/nb02-pre-switch.sha256"
+      chmod 0600 "${backup_root}/nb02-pre-switch.sha256"
+    creates: /var/backups/netbird/nb02-pre-switch.tar.gz
+  when:
+    - not ansible_check_mode
+    - not netbird_nb02_backup.stat.exists
+  no_log: true
+
+- name: NB-02 전환 전 백업 내용 검증
+  ansible.builtin.command:
+    cmd: >-
+      bash -o pipefail -c
+      'sha256sum -c /var/backups/netbird/nb02-pre-switch.sha256 >/dev/null &&
+       contents=$(tar -tzf /var/backups/netbird/nb02-pre-switch.tar.gz) &&
+       [[ "${contents}" == *"var/lib/netbird/store.db"* ]] &&
+       [[ "${contents}" == *"var/lib/netbird/events.db"* ]] &&
+       [[ "${contents}" == *"var/lib/netbird/idp.db"* ]] &&
+       [[ "${contents}" == *"etc/netbird/config.yaml"* ]]'
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: NetBird external OIDC management.json 설정 파일 배치
   ansible.builtin.template:
-    src: config.yaml.j2
-    dest: "{{ netbird_config_dir }}/config.yaml"
+    src: management.json.j2
+    dest: "{{ netbird_config_dir }}/management.json"
     owner: root
     group: root
     mode: '0600'
   notify: Restart NetBird Compose Service
+  no_log: true
 
 - name: Traefik dynamic TLS 설정 파일 배치
   ansible.builtin.template:
@@ -65,6 +192,7 @@
     group: root
     mode: '0600'
   notify: Restart NetBird Compose Service
+  no_log: true
 
 - name: NetBird docker-compose.yml 파일 배치
   ansible.builtin.template:
@@ -74,6 +202,7 @@
     group: root
     mode: '0600'
   notify: Restart NetBird Compose Service
+  no_log: true
 
 - name: netbird-compose.service systemd 유닛 파일 배치
   ansible.builtin.template:
@@ -89,3 +218,40 @@
     name: netbird-compose.service
     enabled: true
     state: started
+
+- name: NB-02 선언 변경 handler 적용 완료
+  ansible.builtin.meta: flush_handlers
+
+- name: NB-02 NetBird 단일 account JWT groups 정책 선언 반영
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - "{{ role_path }}/files/netbird_account_groups.py"
+      - --browser-login-script
+      - "{{ netbird_keycloak_browser_login_script }}"
+      - --issuer-base
+      - "https://sso.imcherry5778.xyz"
+      - --issuer-connect-ip
+      - "{{ netbird_keycloak_connect_ip }}"
+      - --netbird-url
+      - "https://{{ netbird_domain }}"
+      - --netbird-connect-ip
+      - "{{ ansible_host }}"
+      - --client-id
+      - "{{ netbird_keycloak_client_id }}"
+      - --username
+      - "{{ netbird_keycloak_account_owner_username }}"
+      - --password-file
+      - "{{ netbird_keycloak_account_owner_password_file }}"
+      - --totp-file
+      - "{{ netbird_keycloak_account_owner_totp_file }}"
+      - --allow-group
+      - "{{ item }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  loop: "{{ netbird_keycloak_allowed_groups }}"
+  register: netbird_account_group_policy
+  changed_when: "'changed=true' in netbird_account_group_policy.stdout"
+  when: not ansible_check_mode
+  no_log: true
