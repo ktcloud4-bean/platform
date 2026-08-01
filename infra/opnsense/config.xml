@@ -2663,6 +2663,13 @@
           <domain>imcherry5778.xyz</domain>
           <description>Warpgate SSO service alias (WG-02)</description>
         </alias>
+        <alias uuid="3e11e1ea-e733-44ef-a425-8ab14d23c113">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>headlamp</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>Headlamp Keycloak OIDC Kubernetes RBAC alias (HEADLAMP-02)</description>
+        </alias>
       </aliases>
     </unboundplus>
     <AcmeClient version="4.4.0" persisted_at="1785570866.54" description="A secure ACME Client plugin">
