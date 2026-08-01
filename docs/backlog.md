@@ -38,6 +38,7 @@
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `GIT-WF-01 DONE` | 병렬 worktree·rebase·단일 squash merge·사후 FIX 규칙을 `AGENTS.md`에 단일 원본으로 보강 | 없음 | 없음 | 모든 작업 | 작업 ID·브랜치·worktree 1:1, main 통합 직렬화, 재검증, 공개 main 재작성 금지, merge 후 정리 경계 |
+| `GIT-WF-02 DONE` | 개발 작업의 승인·main 선행 live 검증·실패 rollback 규칙을 간소화 | `GIT-WF-01` | 없음 | 모든 작업 | 작업 배정 범위는 재승인하지 않음, production Argo는 main 유지, 성공은 main 1커밋·실패만 revert, 재시도는 새 FIX ID |
 
 ### 공유 잠금
 
