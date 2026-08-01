@@ -55,3 +55,16 @@ routes:
           or:
             - claim/groups: /platform-users
             - claim/groups: /platform-privileged
+
+  # HEADLAMP-02: Pomerium은 browser Route 입장만 groups claim으로 판정한다.
+  # upstream Headlamp에는 Pomerium token/header를 권한으로 전달하지 않으며,
+  # Keycloak OIDC ID token과 Kubernetes RBAC가 API 요청마다 별도로 판정한다.
+  - name: headlamp
+    description: HEADLAMP-02 Keycloak OIDC Kubernetes RBAC console
+    from: https://headlamp.imcherry5778.xyz
+    to: http://headlamp.headlamp.svc.cluster.local:80
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users
+            - claim/groups: /platform-privileged
