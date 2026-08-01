@@ -247,8 +247,8 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `STOR-01 DONE` | local-path 경로·`local` PV 타입·disk-pressure 검증 | `K3S-01` | `K3S-BOOTSTRAP` | 모든 PVC·`BKP-02` | 동적 PVC, capacity 미강제, 재부팅 후 데이터, SELinux 삭제 helper, 임계치 기준 |
 | `INGRESS-01 DONE` | Traefik 단일 ingress·별도 DNS-01 인증서 | `GITOPS-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 모든 HTTP 앱 | 80→443, 내부·외부 split DNS, OPNsense 개인키 미복사, source IP 판정 |
 | `VAULT-01 DONE` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
-| `VAULT-02 READY` | KV v2·Kubernetes auth·DB engine·PKI·audit policy | `VAULT-01`, `PG-01`, `NET-03A` | 없음 | 모든 플랫폼 앱 | 앱별 policy 격리, 단기 DB credential 폐기, 인증서·감사 이벤트 검증 |
-| `KC-01 BLOCKED` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
+| `VAULT-02 DONE` | KV v2·Kubernetes auth·DB engine·PKI·audit policy ([runbook](runbook/vault-secrets-engines.md)) | `VAULT-01`, `PG-01`, `NET-03A` | 없음 | 모든 플랫폼 앱 | 바인딩 SA만 로그인·타 SA/role 403, policy allow/deny 403, 동적 DB credential의 TLSv1.3 verify-full 접속·타 DB 거부·revoke 후 인증 실패와 role 삭제, PKI 체인 검증·CRL 폐기·공인 이름 거부, audit 108건과 평문 시크릿 0건, vault ns Secret 0건 유지 |
+| `KC-01 READY` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
 | `CORAZA-01 DEFERRED` | Traefik HTTP-WASM Coraza + CRS 직접 PoC; 호환 실패로 폐기하고 `CROWDSEC-01`이 대체 | `INGRESS-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)의 재검토 조건이 생기면 새 결정·새 작업으로만 검토 |
 | `CROWDSEC-01 READY` | CrowdSec AppSec(Coraza + OWASP CRS) route-scoped PoC | `INGRESS-01`, `WAF-DESIGN-01` | `TRAEFIK-LIVE` | 공개 HTTP·`EDGE-01` | source·version·digest·plugin hash·rule snapshot 고정, Traefik 3.7.4 격리 호환, 전용 내부 route만 정상 200·대표 공격 403·exact 예외, p95·CPU·RSS, 기존 ingress 회귀 없음, Argo rollback·Git revert |
@@ -362,6 +362,47 @@ mode 0600 임시 파일에만 남겨 사용자가 직접 암호화 장기 보관
 직접 후속 `VAULT-02`만 `READY`로 열었다. `KC-01`과 `BKP-03`은 각각 `INGRESS-01`·`VAULT-02`
 등 남은 선행이 있어 `BLOCKED`를 유지한다.
 
+2026-08-01 `VAULT-02`에서 Vault의 앱 소비 기반을 만들고 라이브 검증했다. KV v2, Kubernetes
+auth, PostgreSQL database engine, 내부 PKI, audit device를 두고 앱별 policy로 경계를 나눴다.
+Vault 내부 구성은 Argo의 대상이 아니므로 `infra/vault/scripts/configure.sh`가 재현을 소유하고
+policy 원문은 Git이 소유한다.
+
+Kubernetes auth는 Vault Pod에 만료 1시간 projected ServiceAccount token을 마운트하고
+`system:auth-delegator`만 바인딩해 TokenReview를 호출하게 했다. 장기 reviewer token을
+Kubernetes Secret에 두는 방식을 쓰지 않았고, 그 결과 `vault` namespace의 Secret은 계속 0건이다.
+대가로 StatefulSet 변경 때 Pod가 재생성되어 수동 unseal이 필요했고 사용자가 직접 수행했다.
+
+라이브 검증에서 바인딩된 ServiceAccount만 로그인했고 다른 SA와 다른 namespace에 바인딩된
+role은 `403 service account name not authorized`였다. `keycloak` policy를 가진 token은 자기
+경로만 읽었고 타 앱 경로·자기 경로 쓰기·`sys/mounts`는 모두 `403 permission denied`였다.
+동적 PostgreSQL 자격증명은 k3s 안에서 `sslmode=verify-full`로 붙어 `pg_stat_ssl`이 TLSv1.3을
+보고했고, `keycloak_user`만 상속하며 superuser가 아니고 다른 DB는 CONNECT 권한 없음으로
+거부됐다. `sslmode=disable`은 `pg_hba.conf`가 거절했다. revoke 후 같은 자격증명은 인증에
+실패했고 PostgreSQL에서 role이 실제로 사라졌다. 내부 PKI는 발급 인증서가 `openssl verify` OK,
+폐기 후 CRL 등재를 확인했고 공인 zone 이름 발급은 role이 거부했다. audit은 108건이 기록되고
+거부 12건도 남았으며 `client_token`은 HMAC으로 가려지고 KV 시험값 문자열은 로그에서 0건이었다.
+
+PostgreSQL 관리 계정 `vault_admin`은 superuser가 아니라 `CREATEROLE`과 `keycloak_user`의
+ADMIN OPTION만 가진다. 연결 직후 `rotate-root`로 사람이 아는 비밀번호를 폐기했다. 검증용
+Pod·namespace·ServiceAccount·auth role·KV 시험값·동적 lease를 모두 제거했고 PostgreSQL에 남은
+동적 role은 0개다. Vault init·unseal·seal migration·Raft 구성과 공인 인증서·공개 경로는
+건드리지 않았다.
+
+이 작업은 `gitops/root/`와 Argo `platform-root`가 실질적 공유 자원임을 드러냈다. 작업 중
+다른 작업자가 `platform-root`의 targetRevision을 자기 브랜치로 고정하면서 이미 적용됐던 Vault
+Pod 선언이 원복됐고, Pod가 다시 만들어져 unseal을 한 번 더 해야 했다. 그래서 GitOps 선언은
+검증 전에 main으로 먼저 통합했고 `VAULT-02`는 main 커밋 두 개를 쓴다. 통합 순서 규칙은
+`GIT-WF-01`이 보강했다.
+
+남은 한계는 명시한다. Vault 내부 구성은 Argo가 동기화하지 않아 드리프트를 자동으로 잡지
+못하며 `configure.sh`는 재실행 가능하지만 완전한 멱등성 도구는 아니다. TTL 만료는 revoke로
+대체 검증했고 1시간 경과 관측은 포함하지 않는다. 앱이 시크릿을 받아가는 경로(Agent injector·
+CSI 등)는 정하지 않았으며 `KC-01`이 결정한다. 상세는
+[Vault runbook](runbook/vault-secrets-engines.md)과 [`infra/vault/README.md`](../infra/vault/README.md)가
+소유한다. 선행을 다시 계산해 `KC-01`(`PG-01`·`VAULT-02`·`INGRESS-01` 충족)과
+`BKP-03`(`PG-01`·`VAULT-02`·`S3-01` 충족)을 `READY`로 연다. `POM-01`은 `KC-01`이 남아
+`BLOCKED`를 유지한다.
+
 ## 5. 데이터 보호 gate
 
 이 단계가 끝나기 전에는 복구 불가능한 운영 데이터를 넣거나 공개 경로를 완료 처리하지 않는다. 백업 도구별 소유 범위와 오프사이트 기준은 [ADR-0005](adr/0005-backup-and-offsite-recovery.md)를 따른다.
@@ -370,7 +411,7 @@ mode 0600 임시 파일에만 남겨 사용자가 직접 암호화 장기 보관
 |---|---|---|---|---|---|
 | `BKP-01 READY` | K3s SQLite·server token 전용 backup/restore | `K3S-01`, `S3-01` | `K3S-BOOTSTRAP` | 클러스터 복구 | 격리된 빈 VM에서 API 객체 복원; Velero와 별도임을 검증 |
 | `BKP-02 DONE` | Velero + node-agent/Kopia와 local PV restore PoC | `GITOPS-01`, `STOR-01`, `S3-01` | 없음 | 모든 k3s PVC | 테스트 namespace 삭제 후 리소스·파일 복원, hostPath 제약 판정 |
-| `BKP-03 BLOCKED` | PostgreSQL native backup·Vault Raft snapshot | `PG-01`, `VAULT-02`, `S3-01` | 없음 | 인증·플랫폼 데이터 | 별도 DB/namespace에 point-in-time 또는 snapshot restore |
+| `BKP-03 READY` | PostgreSQL native backup·Vault Raft snapshot | `PG-01`, `VAULT-02`, `S3-01` | 없음 | 인증·플랫폼 데이터 | 별도 DB/namespace에 point-in-time 또는 snapshot restore |
 | `BKP-04 DONE` | SeaweedFS 로컬 S3에서 AWS S3로 오프사이트 사본 생성 | `S3-01` | 없음 | 모든 백업의 물리 장애 대응 | 별도 최소권한 자격증명과 검증한 방식으로 전송, AWS S3에서 샘플 복원, 암호화·버전·보존·실패 경보 검증 |
 | `BKP-05 BLOCKED` | 통합 재해복구 drill·RPO/RTO 기록 | `BKP-01`, `BKP-02`, `BKP-03`, `BKP-04` | `K3S-BOOTSTRAP` | 공급망·공개 전환 gate | Git+S3만으로 핵심 서비스 복구, 누락·시간·수동 절차 기록 |
 | `PVE-BKP-01 DEFERRED` | 두 번째 SSD에 Proxmox VM backup | 두 번째 SSD 장착 | `PVE-LIVE` | 빠른 VM 복구 | 원본 NVMe와 다른 장치에 backup·restore; S3 앱 백업은 유지 |
