@@ -36,26 +36,6 @@ spec:
       fsGroup: 65532
       fsGroupChangePolicy: OnRootMismatch
 
-    deployment:
-      additionalVolumes:
-        - name: crowdsec-01-bouncer-key
-          secret:
-            secretName: crowdsec-01-bouncer
-            defaultMode: 0440
-
-    additionalVolumeMounts:
-      - name: crowdsec-01-bouncer-key
-        mountPath: /run/secrets/crowdsec-01
-        readOnly: true
-
-    experimental:
-      abortOnPluginFailure: false
-      plugins:
-        crowdsec:
-          moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
-          version: v1.7.1
-          hash: 500739fc1600c12a651433b13a81693470cd336dbc7864cb85ee42098c93d884
-
     certificatesResolvers:
       letsencrypt-staging:
         acme:
