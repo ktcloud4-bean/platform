@@ -45,16 +45,21 @@ tofu plan -var-file=<저장소 밖>  # 현재 운영 상태: No changes
 값은 `~/secrets/ktcloud4-bean/proxmox/env`에 두고 mode `0600`으로 유지한다. 저장소 안에는 두지 않는다. `.gitignore`는 커밋만 막을 뿐이고 `git clean -xfd`와 worktree 정리는 저장소 안 파일을 지운다. `infra/proxmox/acme`와 같은 규약이다.
 
 ```sh
-mkdir -p ~/secrets/ktcloud4-bean/proxmox
-cp infra/proxmox/.env.example ~/secrets/ktcloud4-bean/proxmox/env
-chmod 600 ~/secrets/ktcloud4-bean/proxmox/env
-# PROXMOX_VE_API_TOKEN=<user>@<realm>!<token-id>=<uuid> 한 줄만 채운다
+S="${KTC_SECRET_ROOT:-$HOME/secrets/ktcloud4-bean}/proxmox"
+install -d -m 700 "$S"
+umask 077
+cat >"$S/env" <<'EOF'
+PROXMOX_VE_API_TOKEN=
+EOF
+# 형식: <user>@<realm>!<token-id>=<uuid>
+# 전용 주체와 최소 권한 role만 쓴다. Administrator나 root@pam token은 쓰지 않는다.
 ```
 
 파일은 셸로 `source`하지 않는다. 해당 줄만 파싱해 OpenTofu 프로세스 환경으로만 넘긴다.
 
 ```sh
-PROXMOX_VE_API_TOKEN="$(grep -E '^PROXMOX_VE_API_TOKEN=' ~/secrets/ktcloud4-bean/proxmox/env | cut -d= -f2-)" \
+PROXMOX_VE_API_TOKEN="$(grep -E '^PROXMOX_VE_API_TOKEN=' \
+  "${KTC_SECRET_ROOT:-$HOME/secrets/ktcloud4-bean}/proxmox/env" | cut -d= -f2-)" \
   tofu plan
 ```
 

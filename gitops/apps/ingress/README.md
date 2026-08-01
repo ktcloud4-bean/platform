@@ -24,10 +24,9 @@
   propagation check를 끄지 않는다.
 - 저장소의 서명된 Git 운영자 identity와 같은 `imcherry5778@gmail.com`을 두 ACME
   account의 contact로 사용한다.
-- Cloudflare token은 추적되는 [`.env.example`](.env.example) 형식으로 만든 저장소 밖
-  mode `0600` 파일 `~/secrets/ktcloud4-bean/ingress/env`에서
-  `kube-system/ingress-01-cloudflare-dns` Secret으로 주입한다. manifest에는 Secret
-  이름과 key 이름만 둔다.
+- Cloudflare token은 저장소 밖 mode `0600` 파일 `$KTC_SECRET_ROOT/ingress/env`에서
+  `kube-system/ingress-01-cloudflare-dns` Secret으로 주입한다. 형식 계약은 아래
+  「적용 gate」가 소유하며 manifest에는 Secret 이름과 key 이름만 둔다.
 
 `CROWDSEC-FIX-01`은 이 소유 경계 안에서 지원되는 같은 `HelmChartConfig`에 community
 bouncer의 고정 module/version/archive hash와 read-only key mount만 추가한다. 이는 전역
@@ -64,9 +63,14 @@ Secret 주입은 승인 뒤에만
 않는다.
 
 ```bash
-mkdir -p ~/secrets/ktcloud4-bean/ingress
-cp gitops/apps/ingress/.env.example ~/secrets/ktcloud4-bean/ingress/env
-chmod 600 ~/secrets/ktcloud4-bean/ingress/env
+S="${KTC_SECRET_ROOT:-$HOME/secrets/ktcloud4-bean}/ingress"
+install -d -m 700 "$S"
+umask 077
+cat >"$S/env" <<'EOF'
+CLOUDFLARE_API_TOKEN=
+EOF
+# imcherry5778.xyz zone 한정 Zone Read + DNS Write 권한의 k3s Traefik 전용 token.
+# 주석과 CLOUDFLARE_API_TOKEN 한 항목만 허용한다.
 ```
 
 편집 뒤에는 token을 채팅·셸 명령 인자에 넣지 않고 다음처럼 실행한다.

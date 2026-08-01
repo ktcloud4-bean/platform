@@ -13,7 +13,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPONENT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # 비밀은 저장소 밖 mode 0600 파일에 둔다. `git clean -xfd`와 worktree 정리가 저장소 안
 # 파일을 지우고, 실수로 commit할 경로에 아예 존재하지 않게 하기 위해서다.
-DEFAULT_ENV_FILE="$HOME/secrets/ktcloud4-bean/opnsense/env"
+# 위치는 KTC_SECRET_ROOT로 주입한다. 저장소가 특정 운영자의 홈 구조를 가정하지 않도록
+# 기본값은 편의일 뿐이며, --env-file이 있으면 그쪽이 항상 우선한다.
+: "${KTC_SECRET_ROOT:=$HOME/secrets/ktcloud4-bean}"
+DEFAULT_ENV_FILE="$KTC_SECRET_ROOT/opnsense/env"
 DEFAULT_OPN_URL="https://opnsense.imcherry5778.xyz"
 COMMITTED="$COMPONENT_DIR/config.xml"
 

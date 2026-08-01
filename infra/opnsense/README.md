@@ -79,7 +79,6 @@ IPS는 기준선이 아니다. `NIPS-01`이 채택될 때만 정상 트래픽·�
 | 경로 | 역할 |
 |---|---|
 | `config.xml` | 승인된 마스킹 스냅샷 |
-| `.env.example` | OPNsense drift 조회용 입력 계약; 실제 값은 `~/secrets/ktcloud4-bean/opnsense/env` |
 | `scripts/normalize.py` | 시크릿·변동 노이즈 제거 |
 | `scripts/check-drift.sh` | 라이브 다운로드·정규화·diff |
 | `tests/test_normalize.py` | 마스킹 회귀 테스트 |
@@ -100,10 +99,13 @@ export OPN_SECRET='...'
 infra/opnsense/scripts/check-drift.sh
 
 # 방법 2: 저장소 밖 env 파일 (기본 경로)
-mkdir -p ~/secrets/ktcloud4-bean/opnsense
-cp infra/opnsense/.env.example ~/secrets/ktcloud4-bean/opnsense/env
-chmod 600 ~/secrets/ktcloud4-bean/opnsense/env
-# 파일에 OPN_KEY와 OPN_SECRET을 채운 뒤 실행한다. 경로 지정 없이 이 파일을 읽는다.
+install -d -m 700 "${KTC_SECRET_ROOT:-$HOME/secrets/ktcloud4-bean}/opnsense"
+umask 077
+cat >"${KTC_SECRET_ROOT:-$HOME/secrets/ktcloud4-bean}/opnsense/env" <<'EOF'
+OPN_KEY=
+OPN_SECRET=
+EOF
+# 값을 채운 뒤 실행한다. 경로 지정 없이 이 파일을 읽는다.
 infra/opnsense/scripts/check-drift.sh
 
 # 다른 경로를 쓰려면 명시한다. OPN_*가 아닌 값은 읽거나 자식 프로세스로 export하지 않는다.
@@ -113,6 +115,10 @@ infra/opnsense/scripts/check-drift.sh --env-file <저장소 밖 mode 0600 파일
 infra/opnsense/scripts/check-drift.sh --update
 infra/opnsense/scripts/check-drift.sh
 ```
+
+env 파일 기본 경로는 `$KTC_SECRET_ROOT/opnsense/env`다. `KTC_SECRET_ROOT`를 지정하지
+않으면 `~/secrets/ktcloud4-bean`을 쓴다. 필요한 항목은 `OPN_KEY`와 `OPN_SECRET` 둘이며,
+`OPN_URL`과 `OPN_CACERT`는 선택이라 기본 동작으로 충분하면 파일에 두지 않는다.
 
 이미 export된 값이 env 파일보다 우선한다. env 파일은 셸로 `source`하지 않고
 허용된 `OPN_*`만 파싱하며, 소유자는 현재 사용자이고 group/other 권한은 없어야

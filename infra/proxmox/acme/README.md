@@ -17,7 +17,6 @@
 
 ## 2. 파일 구성
 
-- `.env.example`: 설정 입력을 위한 템플릿 (비밀 없는 예시 값만 선언)
 - `scripts/setup-acme.sh`: Staging / Rollback / Production / Verify 실행 제어 스크립트
 - `scripts/test-acme.sh`: 스크립트 구문 검사, shellcheck, 시크릿 누출 방지 및 파서 검증 스크립트
 
@@ -25,10 +24,15 @@
 
 ## 3. 시크릿 입력 및 설정 준비
 
-`~/secrets/ktcloud4-bean/proxmox/acme/env`에 다음 항목을 선언한다 (파일 mode `0600` 필수). 저장소 안에는 두지 않는다. 다른 경로를 쓰려면 `PVE_ACME_ENV_FILE` 환경변수로 지정한다. 스크립트는 symlink를 거부하고 mode `0600`이 아니면 중단한다.
+`$KTC_SECRET_ROOT/proxmox/acme/env`에 다음 항목을 선언한다 (파일 mode `0600` 필수). `KTC_SECRET_ROOT`를 지정하지 않으면 `~/secrets/ktcloud4-bean`을 쓴다. 저장소 안에는 두지 않는다. 특정 파일을 직접 지정하려면 `PVE_ACME_ENV_FILE` 환경변수를 쓴다. 스크립트는 symlink를 거부하고 mode `0600`이 아니면 중단한다.
 
-```env
-CLOUDFLARE_API_TOKEN=your_scoped_cloudflare_api_token
+```sh
+S="${KTC_SECRET_ROOT:-$HOME/secrets/ktcloud4-bean}/proxmox/acme"
+install -d -m 700 "$S"
+umask 077
+cat >"$S/env" <<'EOF'
+CLOUDFLARE_API_TOKEN=
+EOF
 ```
 
 `PROXMOX_ACME_EMAIL`은 이 파일에 두지 않는다. Let's Encrypt가 2025-06-04부로 만료 알림을 보내지 않아 발급·갱신 동작에 영향이 없고 비밀도 아니므로, `scripts/setup-acme.sh`의 `DEFAULT_ACME_EMAIL`이 단일 원본을 소유한다. 저장소의 다른 ACME 설정과 같은 운영자 identity를 쓴다.

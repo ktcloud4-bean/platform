@@ -26,7 +26,10 @@ PROD_DIRECTORY="https://acme-v02.api.letsencrypt.org/directory"
 
 # 비밀은 저장소 밖 mode 0600 파일에 둔다. git clean이나 worktree 정리가 지우지 못하고,
 # 실수로 commit할 경로에 아예 존재하지 않게 하기 위해서다.
-DEFAULT_ENV_FILE="${HOME}/secrets/ktcloud4-bean/proxmox/acme/env"
+# 위치는 KTC_SECRET_ROOT로 주입한다. 저장소가 특정 운영자의 홈 구조를 가정하지 않도록
+# 기본값은 편의일 뿐이며, PVE_ACME_ENV_FILE이 있으면 그쪽이 항상 우선한다.
+: "${KTC_SECRET_ROOT:=${HOME}/secrets/ktcloud4-bean}"
+DEFAULT_ENV_FILE="${KTC_SECRET_ROOT}/proxmox/acme/env"
 
 # ACME 계정 연락처. Let's Encrypt는 2025-06-04부로 만료 알림을 보내지 않으므로 이 값은
 # 발급·갱신 동작에 영향이 없다. 저장소의 다른 ACME 설정과 같은 운영자 identity를 쓴다.

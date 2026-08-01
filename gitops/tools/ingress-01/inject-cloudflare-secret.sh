@@ -25,7 +25,10 @@ fi
 
 # 비밀은 저장소 밖 mode 0600 파일에 둔다. `git clean -xfd`와 worktree 정리가 저장소 안
 # 파일을 지우고, 실수로 commit할 경로에 아예 존재하지 않게 하기 위해서다.
-env_input=${1:-"$HOME/secrets/ktcloud4-bean/ingress/env"}
+# 위치는 KTC_SECRET_ROOT로 주입한다. 저장소가 특정 운영자의 홈 구조를 가정하지 않도록
+# 기본값은 편의일 뿐이며, 위치인자가 있으면 그쪽이 항상 우선한다.
+: "${KTC_SECRET_ROOT:=$HOME/secrets/ktcloud4-bean}"
+env_input=${1:-"$KTC_SECRET_ROOT/ingress/env"}
 if [[ ! -f $env_input || -L $env_input ]]; then
   printf '%s\n' '오류: env 입력은 존재하는 symlink 아닌 일반 파일이어야 합니다.' >&2
   exit 2
