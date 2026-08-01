@@ -148,6 +148,25 @@ transfer를 버린 뒤 총 1,000 transfer를 재사용한 세 round p95는 `72.5
    다시 측정하고, 정적 등록·유일한 Traefik Pod 재기동 전에 다섯 항목과 적용 시점을 다시
    승인받는다.
 
+### 2026-08-01 Tailscale 외생 지연 판정
+
+최종 main 재검증에서 control p95 `104.104/104.370ms`와 WAF p95
+`105.554/105.530ms`가 함께 상승했고 WAF 고유 증분은 약 `1~3ms`였다. rollback 뒤
+CrowdSec이 없는 같은 control도 p95 `105.414/105.755/105.270ms`였으며 client의
+Tailscale subnet route는 direct endpoint 없이 Tokyo DERP를 사용하고 peer ping도
+`99~102ms`였다. 같은 시각 k3s node의 fresh TLS p95는 `15.507ms`였다.
+
+사용자는 이 공통 relay 지연을 CrowdSec 실패에서 제외하고 추가 성능 부하 없이 기존
+WAF 증분·CPU·memory 증거를 수용하도록 명시적으로 결정했다. 이는 이 PoC의 외생 측정
+경로 판정이며, 향후 안정된 client에서의 절대 `100ms` 기준이나 WAF 증분 `20ms` 기준을
+일반적으로 완화하지 않는다.
+
+기존 verifier가 RSS로 기록한 `kubectl top` memory는 실제로 working set이었다. 최종
+실행의 baseline/round-end/idle은 `58/(58,68,69)/68Mi`로 60초 idle 잔류 증분은
+`10Mi`이고 마지막 round 뒤 감소했으며 OOM·restart·비정상 Pod가 없었다. 사용자는 이
+기존 증거로 PoC를 완료하고 enabled 부하를 반복하지 않도록 승인했다. verifier는 향후
+kubelet `rssBytes`와 `workingSetBytes`를 분리해 같은 오표기를 반복하지 않는다.
+
 ## 검토한 대안
 
 - **direct Coraza HTTP-WASM 재시도:** 현재 고정 조합은 middleware 초기화만으로 ingress

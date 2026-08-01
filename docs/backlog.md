@@ -255,7 +255,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `CORAZA-01 DEFERRED` | Traefik HTTP-WASM Coraza + CRS 직접 PoC; 호환 실패로 폐기하고 `CROWDSEC-01`이 대체 | `INGRESS-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)의 재검토 조건이 생기면 새 결정·새 작업으로만 검토 |
 | `CROWDSEC-01 DEFERRED` | CrowdSec AppSec(Coraza + OWASP CRS) route-scoped PoC 최초 시도; CRS ConfigMap 바이트 훼손과 AppProject prune 순서 결함으로 revert | `INGRESS-01`, `WAF-DESIGN-01` | 없음 | `CROWDSEC-FIX-01` | 공개 main enablement와 rollback 이력을 재작성하지 않음; [실패 증거](evidence/crowdsec-fix-01/README.md)를 기준으로 FIX에서만 보정 |
 | `CROWDSEC-PERF-01 DONE` | rollback 상태에서 CrowdSec 성능 실패의 client/DNS/TCP/TLS 측정 경로를 분리하고 warm-up 계약 보정 | `INGRESS-01`, `WAF-DESIGN-01` | 없음 | `CROWDSEC-FIX-01` | read-only 1,000건 cold 대조, concurrency 10 지속 HTTP/2 1,000건×3회, 신규 연결·실패 0, 라이브 Argo/HCC/Traefik 불변, ADR 기준값 미완화 |
-| `CROWDSEC-FIX-01 READY` | byte-preserving CRS snapshot·offline AppSec startup·API round-trip·영구 AppProject로 CrowdSec AppSec PoC 보정 및 live gate 재수행 | `INGRESS-01`, `WAF-DESIGN-01`, `CROWDSEC-PERF-01` | `TRAEFIK-LIVE` | 공개 HTTP·`EDGE-01` | 소스·digest·plugin/rule/startup hash 고정, Kubernetes API 후 49개 byte hash, egress 없는 startup과 Hub 요청 0건, Traefik 3.7.4 격리 호환, 정상 200·공격 403·exact 예외·control, warmed HTTP/2 1,000건×3회 p95·CPU·RSS와 별도 cold phase, AppSec fail policy, 기존 ingress 회귀 없음, finalizer prune·Argo rollback·Git revert |
+| `CROWDSEC-FIX-01 DONE` | byte-preserving CRS snapshot·offline AppSec startup·API round-trip·영구 AppProject로 CrowdSec AppSec route-scoped PoC 보정 | `INGRESS-01`, `WAF-DESIGN-01`, `CROWDSEC-PERF-01` | `TRAEFIK-LIVE` | 공개 HTTP·`EDGE-01` | immutable 공급망·49개 byte hash·3.7.4 격리 호환, route 200/403·exact 예외·control·decision 0, WAF 증분 1~3ms와 Tailscale 외생 지연 분리, working set 잔류 10Mi·verifier RSS 보정, fail-closed·rollback·단일 재기동·기존 ingress 회귀 없음 |
 | `POM-01 DONE` | Pomerium Core·선언형 Route·Dashy Portal | `KC-01`, `INGRESS-01`, `VAULT-02` | 없음(단, 내부 DNS 적용은 실제 `OPNSENSE-LIVE` 승인 필요) | 내부 웹 접근 | groups claim 허용/차단, Portal 표시, Keycloak 장애 시 독립 복구 경로 |
 | `HEADLAMP-02 READY` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
 | `NB-02 DONE` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
@@ -418,6 +418,68 @@ Traefik 정적 등록을 제거했다. root·ingress·keycloak은 rollback SHA�
 enablement는 이 측정 방식으로 WAF/control을 다시 검증하며, Traefik 재기동 전에 다섯
 항목과 현재 적용 시점을 다시 승인받는다. `EDGE-01`은 `CROWDSEC-FIX-01` 외에도
 `POM-01`·`NB-02`·`NET-04`가 남아 `BLOCKED`를 유지한다.
+
+2026-08-01 `CROWDSEC-FIX-01`은 최신 main과 `KC-01 DONE`·`Synced/Healthy`를 적용 직전에
+재확인하고, 사용자가 승인한 다섯 항목과 시점에 따라 signed enablement
+`27db9b352020821b8b5e2cc9a6ab00822d9bcaab`를 적용했다. 저장소 밖 mode `0600` 파일로
+bootstrap·bouncer Secret을 주입한 뒤 원문을 즉시 파기했고 Git의 secret 원문은 0건이다.
+HCC generation `9 → 10`, Traefik Deployment `13 → 14`, Pod UID가 정확히 한 번
+교체됐으며 기존 `3.7.4` image digest·restart `0`을 유지했다. root·ingress·keycloak·
+crowdsec은 같은 SHA에서 `Synced/Healthy`다.
+
+정상 control/WAF `200`, rule `913100` 공격 `403`, exact URI+UA 예외만 `200`, 세 negative
+예외 `403`, middleware 없는 control 공격 `200`, decision `[]`와 Hub update 로그 0건을
+확인했다. persistent HTTP/2 control/WAF 각 1,000건×3회에서 실패·신규 연결은 0이고 WAF
+p95는 `78.090/76.286/77.373ms`, control 대비 증분은 `3.955/3.409/3.447ms`였다.
+Traefik 평균 CPU 증분 `8.833m`, peak `78m`, Node CPU peak `6%`, 당시 RSS로 표기한
+working set baseline/60초 idle `40/53Mi`로 기존 verifier를 통과했지만 실제 RSS는
+측정하지 않았다. AppSec Pod 삭제 중 WAF fail-closed `403`·control `200`,
+자동 복구 후 둘 다 `200`, Traefik UID 불변을 확인했다. 기존 ingress spec·인증서·301·
+source IP·Keycloak issuer와 Node health도 회귀가 없다. 앞선 signed rollback은 영구
+AppProject를 둔 finalizer prune과 HCC/Traefik 회복을 실제 입증했고 merge 후 결함은 새
+FIX ID의 signed Git revert로 처리한다. 이 결과는 이후 최신 main 재검증 전의 성공 후보이며
+아직 `CROWDSEC-FIX-01 DONE`을 확정하지 않는다.
+
+POM-01·NB-02 통합 뒤 최신 main `5029d74e0dcbdb3a322b3cc5046bbc501cf0ac85`에서 전체
+증거를 다시 검증했다. 기능·공급망·격리 startup은 통과했지만 WAF p95
+`105.554/105.530/107.479ms`가 절대 `100ms` 기준을 모두 초과했고, 당시 RSS로 표기한
+round 종료 working set도 `58/68/69Mi`로 연속 증가했다. evidence/`DONE`은 merge하지 않고 signed revert
+`1315f9dc0a68fb85995b2ff8b23e725b9c7d37c5`로 enablement만 제거했다. HCC `10 → 11`,
+Traefik Deployment `14 → 15`, 새 Pod ready·restart `0`과 인증서·301·source IP·Keycloak·
+Pomerium 회복을 확인했다. 기존 p95 필터 오류는 branch에서 보정했고 같은 실행은 working set
+monotonic 검사도 실패했지만 실제 RSS gate는 미측정이다. 따라서 `CROWDSEC-FIX-01`은 `BLOCKED`이며 `EDGE-01`도 이 작업과
+`NET-04`가 남아 `BLOCKED`를 유지한다.
+
+후속 enablement 없는 조사에서 최종 6,000개 원본 요청을 다시 계산했다. 정상 control
+p95 `104.104/104.370ms`와 WAF p95 `105.554/105.530ms`의 차이는 약 `1~3ms`였고,
+round3 control의 60개 spike는 10개 worker에서 같은 index에 동기 발생했다. rollback 상태의
+같은 client에서도 warmed p95 `105.414/105.755/105.270ms`, ping 평균 `103.681ms`가
+재현됐다. 경로는 direct endpoint가 없는 Tailscale subnet router의 Tokyo DERP relay이고
+peer ping도 `99~102ms`여서 절대 p95 실패는 CrowdSec이 없는 공통 경로가 원인이다.
+
+또한 기존 verifier의 `kubectl top` memory가 실제 RSS가 아닌 working set임을 확인했다.
+당시 `58/68/69Mi`는 working set으로 재분류하며 삭제된 enabled Pod의 실제 RSS는 사후
+복원할 수 없다. verifier는 kubelet `rssBytes`와 `workingSetBytes`를 별도 기록하고 route·
+ping도 고정하도록 보정했다. 조사 전후 Argo/HCC/Traefik은 불변이고 enablement·재기동은
+없었다. 같은 client의 read-only control p95가 `100ms` 아래로 회복되고 새 승인으로 enabled
+실제 RSS를 측정하기 전까지 `CROWDSEC-FIX-01 BLOCKED`와 `EDGE-01 BLOCKED`를 유지한다.
+
+사용자는 Tailscale DERP 공통 지연을 CrowdSec 실패에서 제외하고 추가 성능 부하 없이
+기존 WAF 증분·CPU·memory 증거를 수용해 enablement와 Traefik 1회 재기동 뒤 기능·회귀만
+검증하도록 승인했다. signed main enablement
+`af9b5bd15baabd316772150dc12b392e612b95bf`에서 HCC `11 → 12`, Traefik Deployment
+`15 → 16`, Pod UID
+`dc5f3c99-9e72-40bb-8851-bfbaadee2e5c → 745d8a7d-f9e1-4fa1-8f01-d62530990d2b`로
+정확히 한 번 교체됐고 image digest는 불변, restart는 `0`이다.
+
+control·WAF 정상 `200`, rule `913100` 공격 `403`, exact URI+UA 예외 `200`, 세 negative
+예외 `403`, middleware 없는 control 공격 `200`, LAPI decision `0`을 다시 확인했다.
+기존 ingress object·인증서 fingerprint·path/query 보존 `301`·HTTPS `404`·source IP/XFF,
+Keycloak issuer·Pomerium `302`, Node와 전체 Pod health도 정상이다. runtime Secret 원문은
+Git 밖 mode `0600` 입력으로만 주입하고 즉시 파기했다. root·ingress·keycloak·pomerium·
+crowdsec은 `targetRevision: main`, enablement SHA에서 모두 `Synced/Healthy`다. 따라서
+`CROWDSEC-FIX-01`은 `DONE`이다. `EDGE-01`은 다른 선행 `NET-04`가 남아 `BLOCKED`를
+유지한다.
 
 2026-07-31 `VAULT-01`에서 `hashicorp/vault:2.0.3`(Docker Hub 공식 organization, digest
 `sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54`, BUSL-1.1

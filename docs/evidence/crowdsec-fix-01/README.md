@@ -210,11 +210,11 @@ live 기능과 회귀 검증 결과는 다음과 같다.
 | round2-control | 1,000 | 0 | 332.626ms |
 | round3-control | 1,000 | 0 | 335.271ms |
 
-측정 중 peak Traefik CPU는 `200m`, peak RSS는 `57Mi`, peak Node CPU는 `7%`였고 완료된
+측정 중 peak Traefik CPU는 `200m`, peak working set은 `57Mi`, peak Node CPU는 `7%`였고 완료된
 5,000개 요청의 실패는 0건이었다. round 1 WAF 증분은 `-1.521ms`, round 2는
 `3.348ms`지만 ADR-0012의 WAF 절대 p95 `100ms` 기준을 두 번 초과했다. control과 WAF가
 같은 수준이므로 공통 client/DNS/TLS/route 측정 경로의 원인을 별도로 분석해야 하지만,
-승인된 gate를 사후 완화하지 않고 round 3 WAF를 195건에서 중단했다. 60초 idle RSS와
+승인된 gate를 사후 완화하지 않고 round 3 WAF를 195건에서 중단했다. 60초 idle memory와
 AppSec Pod 삭제 장애 시험은 실행하지 않았다.
 
 enablement만 되돌린 signed main commit은
@@ -254,3 +254,280 @@ fail-closed와 Argo/Git rollback을 다시 제시했다. 사용자는 `Y`로 이
 적용 시점을 승인했다. 성공 시 기존 영구 AppProject에 이어 enablement와 live
 evidence/`DONE` 두 신규 main commit을 남기며, 실패 시 evidence/`DONE` 없이 enablement만
 즉시 signed revert한다.
+
+## 네 번째 enablement의 live gate 경과
+
+실제 적용 직전에는 병렬 작업이 먼저 들어간 최신 `origin/main`
+`7ea92d81661b4402be294825b7915b98ae0d687a`를 다시 읽었다. 2026-08-01 17:50 KST 기준
+`platform-root`·`ingress`·`keycloak`은 이 SHA에서 `Synced/Healthy`였고, `KC-01 DONE`을
+유지했다. CrowdSec Application·namespace·Secret은 없었다. HCC generation `9`,
+Traefik Deployment generation `13`, Pod UID
+`30abf3ac-5239-498e-b2e1-e445f17ea9c5`, restart `0`, image digest
+`sha256:fcdef599e6259359833dd2e1d49f9e964f66825d69bd3dd468f51102ce013d03`을 최종
+기준선으로 캡처했다. 인증서 SHA-256, path/query 보존 HTTP `301`, HTTPS `404`, 기존
+Ingress·IngressRoute·Middleware spec도 함께 저장했다.
+
+signed enablement commit은
+`27db9b352020821b8b5e2cc9a6ab00822d9bcaab`이다. push 전에 저장소 밖 임시 파일에
+bootstrap·bouncer 값을 mode `0600`으로 생성해 Secret에 주입했다. 출력은 Secret 이름·
+type·key 이름과 개수만 남겼고 원문 파일과 임시 디렉터리는 즉시 `shred -u`와 `rmdir`로
+제거했다. Git에는 실제 값이 든 env·Secret manifest·credential literal이 없다. live Secret은
+`crowdsec-01-bootstrap` `Opaque` 3 keys와 `kube-system/crowdsec-01-bouncer` `Opaque`
+1 key뿐이다.
+
+Argo hard refresh는 `platform-root`의 `targetRevision: main`을 바꾸지 않고 표준 refresh
+annotation만 사용했다. root가 CrowdSec Application을 만들고 ingress가 HCC를 반영한 뒤
+`platform-root`·`ingress`·`keycloak`·`crowdsec` 모두 enablement SHA에서
+`Synced/Healthy`가 됐다. HCC generation은 `9 → 10`, 기존 UID를 유지한 Traefik
+Deployment generation은 `13 → 14`로 정확히 한 번 증가했다. Traefik Pod도
+`30abf3ac-5239-498e-b2e1-e445f17ea9c5 → 046738f1-1b1a-4709-a0c3-f41d4168420d`로
+한 번만 교체됐고 image digest는 같으며 ready, restart `0`이다. k3s server는 이 세션에서
+정지·재시작하지 않았다.
+
+### route와 기존 ingress 회귀
+
+| 요청 | 기대·결과 |
+|---|---|
+| control `/crowdsec-01/control/normal` | `200` |
+| WAF `/crowdsec-01/waf/normal` | `200` |
+| WAF `/crowdsec-01/waf/attack`, UA `masscan` | rule `913100`, `403` |
+| exact `/crowdsec-01/waf/exception`, UA `masscan` | `913100`만 제거, `200` |
+| 같은 URI, UA `nmap-nse` | `403` |
+| exact URI에 query `variant=1`, UA `masscan` | `403` |
+| `/crowdsec-01/waf/not-exception`, UA `masscan` | `403` |
+| middleware 없는 control 공격, UA `masscan` | backend 도달, `200` |
+
+위조 `X-Forwarded-For: 203.0.113.77`은 backend에서 제거되고 실제 client
+`10.10.60.2`만 `X-Real-Ip`와 `X-Forwarded-For`에 남았다. LAPI decision은 `[]`이고
+AppSec·LAPI·whoami Pod는 모두 Ready, restart `0`이다. 최근 20분의 모든 CrowdSec Pod
+로그에서 Hub download/update와 CrowdSec online API 일치 항목은 각각 `0`이었다.
+
+기준선에 있던 모든 Ingress·IngressRoute·Middleware spec이 그대로 존재했다. 인증서
+fingerprint는
+`60:91:4D:97:DF:E7:E3:49:A6:6E:CC:6E:15:07:D2:3A:0B:A8:AB:22:3C:DF:05:02:44:E9:DF:6B:06:4B:2D:10`,
+HTTP는 원 path/query를 보존한 `301`, HTTPS control은 `404`로 불변이다. Keycloak issuer는
+`https://sso.imcherry5778.xyz/realms/platform`, Node는 `Ready=True`,
+`DiskPressure=False`이고 전체 Pod health 검사도 통과했다.
+
+### warmed HTTP/2 성능
+
+동일 client·backend와 고정 connect IP에서 persistent HTTP/2 worker 10개를 먼저 만들고
+각 worker의 첫 transfer를 제외했다. control/WAF 각 1,000건을 세 round 수행했으며 status,
+remote IP, HTTP/2와 측정 구간 신규 연결 `0`을 요청마다 확인했다.
+
+| phase | count | failures | new connections | p95 | WAF-control |
+|---|---:|---:|---:|---:|---:|
+| round1-control | 1,000 | 0 | 0 | 74.135ms | - |
+| round1-waf | 1,000 | 0 | 0 | 78.090ms | 3.955ms |
+| round2-waf | 1,000 | 0 | 0 | 76.286ms | 3.409ms |
+| round2-control | 1,000 | 0 | 0 | 72.877ms | - |
+| round3-control | 1,000 | 0 | 0 | 73.926ms | - |
+| round3-waf | 1,000 | 0 | 0 | 77.373ms | 3.447ms |
+
+WAF p95는 세 round 모두 절대 `100ms` 이하이고 control 대비 증분 `20ms` 이하이다.
+Traefik 평균 CPU는 control `31.083m`, WAF `39.917m`, 증분 `8.833m`이고 WAF peak는
+`78m`이다. Node CPU peak는 `6%`다. 당시 RSS로 표기한 Traefik working set은 baseline `40Mi`, round 종료
+`46/46/54Mi`, peak `54Mi`, 60초 idle `53Mi`여서 잔류 증분 `13Mi`이고 3회 연속 단조
+증가도 아니다. 실제 RSS는 측정하지 않았다. 측정 전후 Traefik UID·restart가 같으며 정상
+요청 실패는 0건이다.
+
+최종 통합 직전 `BKP-03 DONE` main `67f4ea39186e594606ac8a5b0db5793038e1657c`로
+rebase한 뒤 전체 공급망·packaged chart·Docker·Kubernetes API round-trip·offline startup·
+live 기능과 성능을 다시 수행했다. 두 번째 성능 실행도 실패·신규 연결 0이며 control p95
+`75.341/73.892/73.108ms`, WAF p95 `74.455/76.397/76.068ms`로 통과했다. 평균 CPU
+증분은 `-7.833m`, WAF peak `96m`, Node peak `6%`, working set baseline/60초 idle
+`58/65Mi`였다. 실제 RSS는 측정하지 않았다. 첫 재실행 시 관리 Tailscale 경로가 SSH 시작 전에 timeout됐으나 요청·자원
+측정은 시작되지 않았다. subnet router 연결이 회복된 뒤 새 결과 디렉터리에서 전 구간을
+다시 실행해 PASS만 증거로 사용했다.
+
+### AppSec 장애 정책과 복구
+
+사용자가 별도로 승인한 AppSec Pod 삭제 시험을 수행했다. replacement가 준비되기 전
+WAF 정상 요청은 fail-closed `403`, middleware 없는 control은 `200`이었다. Deployment가
+AppSec를 자동 재생성한 뒤 WAF와 control은 모두 `200`으로 회복했고 최종 AppSec Pod UID는
+`6e42eb95-5b23-4b47-bcc8-c18d84480fee`, ready, restart `0`이다. 이 시험 전후 Traefik Pod
+UID `046738f1-1b1a-4709-a0c3-f41d4168420d`는 변하지 않아 정적 등록 이후 추가 Traefik
+재기동이 없었다. 회복 후 전체 route·decision 0·ingress 회귀 검증을 다시 통과했다.
+
+### rollback과 merge 뒤 복구 절차
+
+이 작업의 실제 rollback 경로는 앞선 enablement 실패에서 두 번 수행했다. signed revert를
+main에 push한 뒤 root finalizer가 Application·namespace를 prune하고, ingress HCC에서
+plugin·secret mount가 제거된 새 Traefik Pod가 Ready가 된 다음에만 bouncer Secret을
+삭제했다. 영구 `AppProject/crowdsec`를 남긴 두 번째 rollback부터 finalizer 강제 제거 없이
+정상 완료됐으며 인증서·HTTPS·301·source IP·Keycloak과 Node 상태가 회복됐다.
+
+현재 enablement SHA에서 gate 실패가 evidence merge 전에 발생하면 깨끗한 최신 main에서
+`git revert -S 27db9b352020821b8b5e2cc9a6ab00822d9bcaab`를 실행해 push하고 같은 순서로
+Argo prune과 ingress 회복을 확인한다. evidence/`DONE` merge 뒤 결함이 발견되면 공개 이력을
+고치지 않는다. 새 FIX ID·branch·worktree를 만들고 `git revert --no-commit`으로 enablement
+역변경을 준비한 뒤, 역사 증거 문서는 보존하고 live Application·HCC plugin/mount 선언만
+제거하며 현재 상태를 backlog에 함께 기록한 signed 단일 FIX commit으로 push한다. 두 경우
+모두 `platform-root` targetRevision을 바꾸지 않고 다음 순서로 완료를 판정한다.
+
+1. root finalizer가 CrowdSec Application·namespace·workload를 모두 prune한다.
+2. ingress가 같은 revert SHA에서 `Synced/Healthy`이고 HCC plugin·mount가 사라진다.
+3. 기존 image의 새 Traefik Pod 1개가 Ready, restart `0`이 된 뒤 bouncer Secret을 삭제한다.
+4. root·ingress·keycloak, 인증서·HTTPS·path/query `301`·source IP와 Node health를 재검증한다.
+5. 원격 main SHA·서명을 확인하고 새 FIX에서 별도 승인받은 통합 구조로 복구 증거를 기록한다.
+
+이 시점의 기능·p95·CPU·당시 working set·장애 검사는 통과했지만 실제 RSS는 측정하지
+않았다. 이후 들어오는 최신 main으로 rebase한 뒤 전체 증거도 다시 검증해야 하므로 이
+결과만으로 `DONE`을 확정하지 않는다.
+
+## POM-01·NB-02 통합 뒤 최종 성능 실패와 rollback
+
+`POM-01`·`NB-02`가 들어간 최신 main
+`5029d74e0dcbdb3a322b3cc5046bbc501cf0ac85`로 evidence 후보를 rebase했다. root·ingress·
+keycloak·crowdsec·pomerium은 모두 `targetRevision: main`, 같은 SHA에서
+`Synced/Healthy`였고 HCC generation `10`, Traefik UID
+`046738f1-1b1a-4709-a0c3-f41d4168420d`, restart `0`은 불변이었다. 이 상태에서 공급망,
+packaged chart, Docker 호환, Kubernetes API round-trip, egress 없는 startup, live 기능과
+server dry-run을 다시 통과했다.
+
+최종 warmed HTTP/2 측정은 요청 실패와 측정 구간 신규 연결이 모두 0이었지만 승인된 성능
+gate를 통과하지 못했다.
+
+| phase | count | failures | new connections | p95 |
+|---|---:|---:|---:|---:|
+| round1-control | 1,000 | 0 | 0 | 104.104ms |
+| round1-waf | 1,000 | 0 | 0 | 105.554ms |
+| round2-waf | 1,000 | 0 | 0 | 105.530ms |
+| round2-control | 1,000 | 0 | 0 | 104.370ms |
+| round3-control | 1,000 | 0 | 0 | 239.366ms |
+| round3-waf | 1,000 | 0 | 0 | 107.479ms |
+
+세 WAF round가 모두 절대 p95 `100ms`를 `5.554/5.530/7.479ms` 초과했다. 당시 RSS로
+표기한 Traefik working set round 종료값도 `58 → 68 → 69Mi`로 3회 연속 증가해 기존
+verifier의 monotonic 검사를 실패했다.
+60초 idle `68Mi`는 baseline `58Mi` 대비 `10Mi` 증가로 잔류 `64Mi` 기준 안이고,
+Traefik 평균 CPU 증분 `-9.243m`, WAF peak `50m`, Node peak `5%`도 기준 안이지만 다른
+실패를 상쇄하지 않는다. 특히 기존 verifier의 절대 p95 필터가 phase column을 지정하지 않고
+전체 line 끝에 `-waf`를 찾는 오류로 p95 초과를 직접 보고하지 못한 점을 발견했다. branch에서
+필터를 `$1 ~ /-waf$/`로 보정했으며, working set monotonic 검사가 같은 실행을 실패
+처리했으므로 합격으로 오판되지는 않았다. 다만 이는 ADR의 실제 RSS gate 증거가 아니다.
+
+승인된 기준을 완화하거나 evidence/`DONE`을 main에 merge하지 않았다. signed revert
+`1315f9dc0a68fb85995b2ff8b23e725b9c7d37c5`로 enablement
+`27db9b352020821b8b5e2cc9a6ab00822d9bcaab`만 되돌렸다. POM-01·NB-02와 다른 최신 main
+변경은 보존했다.
+
+- root finalizer가 CrowdSec Application·namespace·workload·bootstrap Secret을 정상 prune했고
+  영구 `AppProject/crowdsec`는 남았다.
+- ingress가 revert SHA를 읽어 HCC generation `10 → 11`, Traefik Deployment
+  `14 → 15`, Pod UID `dc5f3c99-9e72-40bb-8851-bfbaadee2e5c`로 기존 설정을 복구했다.
+  image digest는 같고 ready, restart `0`이다.
+- plugin args·storage·secret mount 제거 뒤에만 bouncer Secret을 삭제했다. CrowdSec route는
+  `404`이고 Application·namespace·두 Secret은 없다.
+- root·ingress·keycloak·pomerium·headlamp·vault·velero는 revert SHA에서 모두
+  `targetRevision: main`, `Synced/Healthy`다.
+- 인증서 fingerprint, path/query 보존 HTTP `301`, HTTPS `404`, 실제 source IP
+  `10.10.60.2`, Keycloak issuer, Pomerium `302`, Node `Ready=True`·`DiskPressure=False`가
+  정상이다.
+
+`CROWDSEC-FIX-01`은 `DONE`이 아니며 성능 변동과 수정 verifier로 다시 판단하기 전까지
+branch에 `BLOCKED` 증거로 남긴다. `EDGE-01`은 이 작업과 `NET-04`가 미완료이므로
+`BLOCKED`를 유지한다.
+
+## enablement 없는 p95·RSS 원인 조사
+
+사용자는 CrowdSec enablement와 Traefik 재기동을 금지하고 수정 verifier를 이용한 원인
+조사만 승인했다. rollback main
+`1315f9dc0a68fb85995b2ff8b23e725b9c7d37c5`에서 HCC generation `11`, Traefik
+Deployment generation `15`와 plugin·bouncer marker 부재를 먼저 확인했다. 조사 전후
+`platform-root`·`ingress`·`pomerium`은 `targetRevision: main`, 같은 SHA에서
+`Synced/Healthy`였고 live invariant JSON SHA-256도
+`baa86786547b762100301df3219bccf853f293ce2da5931d2980f8b9d5dd0f18`로 같았다.
+
+### p95 원인
+
+최종 실패 실행의 6,000개 원본 요청을 다시 계산했다. 정상 구간의 control 평균/p95는
+`101.960/104.104ms`, `102.262/104.370ms`이고 WAF 평균/p95는
+`103.351/105.554ms`, `103.141/105.530ms`였다. 따라서 WAF 고유 증분은 약 `1~3ms`인
+반면 양쪽에 공통인 client 경로가 이미 `100ms`를 넘었다.
+
+round3 control의 p95 `239.366ms`는 임의의 WAF 처리 spike가 아니었다. 10개 worker 모두
+요청 index `21~23`, `55~57`, `86~88` 부근에서 동시에 두 요청씩 느려져 정확히 60건이
+`120ms`를 넘었다. 같은 실행의 round3 WAF에서는 첫 요청 5건만 `120ms`를 넘었다. 이는
+backend나 WAF보다 모든 persistent connection이 공유한 네트워크 경로의 주기적 stall과
+일치한다.
+
+2026-08-01T21:22:34+09:00에 CrowdSec이 없는 `404` control path를 기존 read-only
+진단으로 다시 측정했다.
+
+| 구간 | 요청 | 실패 | 신규 연결 | p95 |
+|---|---:|---:|---:|---:|
+| rollback warmed round 1 | 1,000 | 0 | 0 | 105.414ms |
+| rollback warmed round 2 | 1,000 | 0 | 0 | 105.755ms |
+| rollback warmed round 3 | 1,000 | 0 | 0 | 105.270ms |
+| k3s node fresh TLS | 100 | 0 | 100 | 15.507ms |
+
+client route는 `10.10.0.0/16 dev tailscale0`이고 ping은 loss `0%`, 평균
+`103.681ms`였다. subnet router `ds224p`에는 direct endpoint가 없고 Tokyo DERP relay가
+선택돼 있으며 Tailscale ping도 `99~102ms`였다. 따라서 이번 절대 p95 실패의 직접 원인은
+CrowdSec이 아니라 현재 Tailscale DERP 경로의 RTT다. 과거 성공 실행도 같은 DERP 연결
+로그가 있어 direct→relay 전환 시점을 입증할 수는 없고, 성공 당시 ping 평균
+`72.472ms`에서 현재 `103.681ms`로 relay 종단 지연이 상승했다는 범위까지만 판정한다.
+
+### RSS 원인
+
+기존 verifier의 `kubectl top pod` memory는 실제 RSS가 아니라 kubelet working set이다.
+[metrics-server 공식 FAQ](https://github.com/kubernetes-sigs/metrics-server/blob/master/FAQ.md#how-memory-usage-is-calculated)도
+memory를 수집 시점의 working set이라고 정의한다. rollback Traefik에서 근접 시점의
+`kubectl top` `25Mi`와 kubelet `workingSetBytes=27,545,600`은 같은 범위였지만,
+`rssBytes=21,159,936`은 약 `20.18Mi`로 별도 값이었다.
+따라서 최종 실행에서 `RSS`라고 기록한 `58 → 68 → 69Mi`는 working set 시계열로
+재분류해야 한다. 삭제된 enablement Pod의 과거 `rssBytes`는 보존되지 않아 실제 RSS의
+단조 증가나 누수는 증명되지 않았다.
+
+rollback Traefik은 read-only 5,100건 전 실제 RSS/working set 약
+`20.18/26.27Mi`, 완료 뒤 `25.16/35.95Mi`였고 이후 세 표본에서
+`25.16/35.95Mi`로 유지됐다. 이 대조는 working set과 RSS가 서로 다르게 움직임을
+확인하지만, bouncer가 없는 Pod이므로 enabled 상태의 RSS 합격 증거로 사용하지 않는다.
+
+verifier는 앞으로 kubelet summary의 실제 `rssBytes`와 `workingSetBytes`를 별도 열에
+기록하고 RSS gate에는 `rssBytes`만 사용한다. client route와 ping도 결과에 고정한다.
+absolute p95 검사도 phase 열 `$1`만 검사하도록 유지한다. 현재 같은 client에서 WAF가
+없어도 absolute `100ms`를 초과하므로 enablement 전 read-only control preflight가
+`100ms` 아래로 회복되지 않으면 재적용하지 않는다. 실제 enabled RSS는 사용자 승인 뒤의
+새 적용에서만 다시 판정할 수 있어 `CROWDSEC-FIX-01 BLOCKED` 상태는 바꾸지 않는다.
+
+## Tailscale 제외 승인과 최종 enablement
+
+사용자는 Tailscale relay 지연을 CrowdSec 실패에서 제외하고, 추가 성능시험 없이
+CrowdSec enablement·Traefik 1회 재기동 뒤 기본 기능과 기존 ingress 회귀만 확인해
+완료하도록 명시적으로 승인했다. 이 결정은 기존 WAF 증분 약 `1~3ms`, CPU·working set과
+두 차례 warmed 통과 실행을 수용한 PoC 한정 판정이다.
+
+적용 직전 main `1315f9dc0a68fb85995b2ff8b23e725b9c7d37c5`에서
+`platform-root`·`ingress`·`keycloak`은 `Synced/Healthy`, HCC generation `11`, Traefik
+Deployment generation `15`, Pod UID
+`dc5f3c99-9e72-40bb-8851-bfbaadee2e5c`, restart `0`이었다. Pomerium도
+`targetRevision: main`, `Synced/Healthy`였고 CrowdSec Application·namespace·Secret은
+없었다.
+
+Git 밖 mode `0600` 임시 입력으로 새 bootstrap·bouncer 값을 생성해 Secret 이름·type만
+출력하고 원문 파일과 임시 디렉터리를 즉시 파기했다. signed enablement
+`af9b5bd15baabd316772150dc12b392e612b95bf`는 공개 main의 기존 revert를 다시 쓰지 않고
+역변경한 새 커밋이다. `platform-root.targetRevision`은 계속 `main`이며 standard hard
+refresh annotation만 사용했다.
+
+Argo root·ingress·keycloak·pomerium·crowdsec은 enablement SHA에서 모두
+`Synced/Healthy`다. HCC `11 → 12`, Traefik Deployment `15 → 16`, Pod UID
+`dc5f3c99-9e72-40bb-8851-bfbaadee2e5c → 745d8a7d-f9e1-4fa1-8f01-d62530990d2b`로
+정확히 한 번 교체됐으며 기존 image digest, ready, restart `0`이다. CrowdSec LAPI·AppSec·
+whoami Pod도 모두 ready, restart `0`이다.
+
+추가 성능 부하는 실행하지 않고 다음 기능·회귀만 검증했다.
+
+- control·WAF 정상 `200`, `masscan` rule `913100` 공격 `403`
+- exact URI+UA 예외 `200`, UA·query·URI 중 하나가 다른 세 요청 `403`
+- middleware 없는 control 공격 `200`, LAPI decision `0`
+- 기존 ingress object spec·인증서 fingerprint·path/query 보존 HTTP `301`·HTTPS `404`
+- forged XFF 제거와 실제 source IP `10.10.60.2`, Keycloak issuer, Pomerium `302`
+- Node `Ready=True`·`DiskPressure=False`, 전체 Pod 정상, Secret type·이름만 확인
+
+공개 main enablement·과거 rollback 이력, immutable 공급망, AppSec fail-closed와 Argo/Git
+rollback 증거를 모두 보존했다. 향후 성능 재검증은 보정된 verifier의 실제 `rssBytes`와
+working set을 분리하지만 이번 완료를 위한 반복 부하는 요구하지 않는다.
+`CROWDSEC-FIX-01`은 `DONE`이며 `EDGE-01`은 `NET-04`가 남아 `BLOCKED`다.

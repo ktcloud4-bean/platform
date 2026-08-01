@@ -129,3 +129,70 @@ packaged Traefik chart와 Docker 격리 기능 검증도 다시 통과했다. �
 transfer를 제외한 뒤 총 1,000건을 재사용한다. status·remote IP·HTTP/2와 측정 구간 신규
 연결 0을 확인하고 이 과정을 control/WAF에 대해 3회 반복한다. 과거 결과는 소급해 합격
 처리하지 않으며 live WAF에서 전 항목을 다시 측정한다.
+
+## 네 번째 enablement 중간 결과
+
+사용자가 immutable 공급망·route와 exact 예외·성능·장애/rollback 다섯 항목과 적용 시점을
+다시 승인한 뒤 signed enablement
+`27db9b352020821b8b5e2cc9a6ab00822d9bcaab`를 main에 통합했다. 적용 직전 KC-01은
+`DONE`이고 root·ingress·keycloak은 최신 main에서 `Synced/Healthy`였다. 저장소 밖 mode
+`0600` 파일로 Secret을 주입하고 원문은 즉시 파기했다.
+
+HCC generation `9 → 10`, Traefik Deployment generation `13 → 14`, Pod UID
+`30abf3ac-5239-498e-b2e1-e445f17ea9c5 → 046738f1-1b1a-4709-a0c3-f41d4168420d`로
+정확히 한 번 교체됐다. Traefik `3.7.4` image digest와 인증서·기존 ingress spec은
+불변이고 restart는 `0`이다. root·ingress·keycloak·crowdsec은 모두 enablement SHA에서
+`Synced/Healthy`다.
+
+- 정상 control/WAF `200`, rule `913100` 공격 `403`, exact URI+UA 예외만 `200`, 세
+  negative 예외 `403`, middleware 없는 control 공격 `200`
+- LAPI decision `[]`, 위조 XFF 제거와 실제 source IP 유지, Hub download/update 로그 0건
+- persistent HTTP/2 10개 연결에서 control/WAF 각 1,000건×3회 실패·신규 연결 0;
+  WAF p95 `78.090/76.286/77.373ms`, control 대비 증분 `3.955/3.409/3.447ms`
+- Traefik 평균 CPU 증분 `8.833m`, WAF peak `78m`, Node CPU peak `6%`, 당시
+  `kubectl top` working set baseline/60초 idle `40/53Mi`이며 restart·비정상 Pod 0
+- AppSec Pod 삭제 중 WAF fail-closed `403`·control `200`, 자동 재생성 뒤 둘 다 `200`,
+  Traefik UID 불변
+- 기존 인증서 fingerprint, path/query 보존 HTTP `301`, HTTPS `404`, Keycloak issuer와
+  Node `Ready=True`·`DiskPressure=False` 불변
+
+과거 실패 enablement의 signed revert에서 영구 AppProject를 남긴 finalizer prune,
+HCC plugin/mount 제거, 기존 Traefik·인증서·source IP 회복을 실제 검증했다. 현재 SHA의
+gate 실패는 evidence merge 전 signed `git revert`; merge 후 결함은 새 FIX ID에서 공개
+이력을 보존한 signed revert 변경으로 처리한다. 정확한 SHA·Pod UID·성능 표·secret 경계와
+순서는 [`CROWDSEC-FIX-01 증거`](../crowdsec-fix-01/README.md)가 소유한다.
+
+## 최신 main 재검증 실패와 rollback
+
+POM-01·NB-02 통합 뒤 최신 main `5029d74e0dcbdb3a322b3cc5046bbc501cf0ac85`에서 전체
+검증을 다시 수행했다. 기능·공급망·격리 startup은 통과했지만 세 WAF p95가
+`105.554/105.530/107.479ms`로 절대 `100ms` gate를 모두 초과했고, 당시 RSS로 잘못
+표기한 `kubectl top` working set도 `58/68/69Mi`로 연속 증가했다. 기존 absolute p95 awk가
+phase column을 지정하지 않은 결함은 branch에서 보정했으며 working set gate가 같은 실행을
+실패로 처리했다.
+
+evidence/`DONE`은 main에 넣지 않고 signed revert
+`1315f9dc0a68fb85995b2ff8b23e725b9c7d37c5`를 적용했다. CrowdSec Application·namespace·
+Secret과 HCC plugin/mount를 제거하고 기존 Traefik image·인증서·301·source IP를 복구했다.
+Pomerium을 포함한 기존 Argo 앱은 모두 revert SHA에서 `Synced/Healthy`다. 이 작업은
+`DONE`이 아니며 상세 실패 수치와 rollback 증거는
+[`CROWDSEC-FIX-01 증거`](../crowdsec-fix-01/README.md)가 소유한다.
+
+후속 enablement 없는 조사에서 CrowdSec이 없는 같은 client의 warmed p95도
+`105.414/105.755/105.270ms`였고, `tailscale0`의 Tokyo DERP relay ping은 `99~102ms`였다.
+따라서 절대 p95 실패는 현재 공통 client 경로 지연이 원인이다. 또한 `kubectl top` memory가
+실제 RSS가 아닌 working set임을 kubelet `rssBytes`와 직접 대조했다. verifier는 두 값을
+분리하도록 보정했으며 enabled 실제 RSS는 재적용 전에는 판정할 수 없다. 상세 수치와 불변
+증거는 [`CROWDSEC-FIX-01 증거`](../crowdsec-fix-01/README.md)의 원인 조사 절을 따른다.
+
+## 최종 enablement
+
+사용자는 Tailscale DERP 공통 지연을 CrowdSec 실패에서 제외하고 추가 성능 부하 없이
+기존 WAF 증분·CPU·memory 증거를 수용했다. signed main
+`af9b5bd15baabd316772150dc12b392e612b95bf`에서 HCC `11 → 12`, Traefik Deployment
+`15 → 16`, Pod UID
+`dc5f3c99-9e72-40bb-8851-bfbaadee2e5c → 745d8a7d-f9e1-4fa1-8f01-d62530990d2b`로
+정확히 한 번 교체했다. route 200/403·exact 예외·control·decision 0과 기존 ingress·
+인증서·301·source IP·Keycloak·Pomerium 회귀 없음을 다시 확인했다. runtime Secret 원문은
+Git 밖에서만 주입하고 즉시 파기했다. 최종 상태와 승인 판정은
+[`CROWDSEC-FIX-01 증거`](../crowdsec-fix-01/README.md)의 마지막 절이 소유한다.

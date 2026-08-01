@@ -68,12 +68,23 @@ metric_snapshot() {
   # shellcheck disable=SC2016
   "${ssh_base[@]}" '
     set -eu
-    pod=$(sudo -n /usr/local/bin/k3s kubectl -n kube-system get pod \
+    k="sudo -n /usr/local/bin/k3s kubectl"
+    pod=$($k -n kube-system get pod \
       -l app.kubernetes.io/name=traefik \
       -o jsonpath="{.items[0].metadata.name}")
-    sudo -n /usr/local/bin/k3s kubectl -n kube-system top pod "$pod" \
-      --containers --no-headers | awk '\''$2 == "traefik" {print $3, $4}'\''
-    sudo -n /usr/local/bin/k3s kubectl top node --no-headers | awk '\''NR == 1 {print $3}'\''
+    node=$($k get node -o jsonpath="{.items[0].metadata.name}")
+    cpu=$($k -n kube-system top pod "$pod" --containers --no-headers | \
+      awk '\''$2 == "traefik" {print $3}'\'')
+    memory=$($k get --raw "/api/v1/nodes/$node/proxy/stats/summary" | \
+      jq -e -r --arg pod "$pod" \
+      ".pods[] | select(.podRef.namespace == \"kube-system\" and .podRef.name == \$pod) |
+       .containers[] | select(.name == \"traefik\") |
+       select((.memory.rssBytes | type) == \"number\" and
+              (.memory.workingSetBytes | type) == \"number\") |
+       [.memory.rssBytes, .memory.workingSetBytes] | @tsv")
+    node_percent=$($k top node --no-headers | awk '\''NR == 1 {print $3}'\'')
+    test -n "$cpu" && test -n "$memory" && test -n "$node_percent"
+    printf "%s\t%s\n%s\n" "$cpu" "$memory" "$node_percent"
   '
 }
 
@@ -97,13 +108,14 @@ memory_mib() {
 
 append_metric() {
   local phase=$1
-  local snapshot cpu_raw rss_raw node_percent
+  local snapshot cpu_raw rss_raw working_set_raw node_percent
   snapshot=$(metric_snapshot)
-  read -r cpu_raw rss_raw < <(sed -n '1p' <<< "$snapshot")
+  read -r cpu_raw rss_raw working_set_raw < <(sed -n '1p' <<< "$snapshot")
   node_percent=$(sed -n '2p' <<< "$snapshot" | tr -d '%')
-  printf '%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$(date -Iseconds)" "$phase" "$(cpu_m "$cpu_raw")" \
-    "$(memory_mib "$rss_raw")" "$node_percent" >> "$result_dir/metrics.tsv"
+    "$(memory_mib "$rss_raw")" "$(memory_mib "$working_set_raw")" \
+    "$node_percent" >> "$result_dir/metrics.tsv"
 }
 
 sampler_pid=''
@@ -202,9 +214,12 @@ resolved=$(getent ahostsv4 "$host" | awk 'NR == 1 {print $1}')
     "$resolved" "$CROWDSEC_01_CONNECT_IP" >&2
   exit 1
 }
+ip route get "$CROWDSEC_01_CONNECT_IP" > "$result_dir/client-route.txt"
+ping -c 10 -W 2 "$CROWDSEC_01_CONNECT_IP" > "$result_dir/client-ping.txt"
 
 printf 'phase\tcount\tfailures\tmeasured_new_connections\tp95_ms\n' > "$result_dir/latency.tsv"
-printf 'timestamp\tphase\ttraefik_cpu_m\ttraefik_rss_mib\tnode_cpu_percent\n' > "$result_dir/metrics.tsv"
+printf 'timestamp\tphase\ttraefik_cpu_m\ttraefik_rss_mib\ttraefik_working_set_mib\tnode_cpu_percent\n' \
+  > "$result_dir/metrics.tsv"
 {
   printf 'CAPTURED_AT=%s\n' "$(date -Iseconds)"
   printf 'BASE_URL=%s\n' "$CROWDSEC_01_BASE_URL"
@@ -213,6 +228,7 @@ printf 'timestamp\tphase\ttraefik_cpu_m\ttraefik_rss_mib\tnode_cpu_percent\n' > 
   printf 'REQUESTS=%s\n' "$REQUESTS"
   printf 'CONCURRENCY=%s\n' "$CONCURRENCY"
   printf 'ROUNDS=%s\n' "$ROUNDS"
+  printf 'MEMORY_SOURCE=%s\n' 'kubelet-stats-summary-rssBytes'
   printf 'CURL_VERSION=%s\n' "$(curl --version | sed -n '1p')"
 } > "$result_dir/metadata.env"
 
@@ -242,7 +258,7 @@ pod_after=$(remote_kubectl -n kube-system get pod -l app.kubernetes.io/name=trae
   -o 'jsonpath={.items[0].metadata.uid}:{.items[0].status.containerStatuses[0].restartCount}')
 [[ $pod_before == "$pod_after" ]] || { printf '%s\n' '실패: benchmark 중 Traefik Pod UID 또는 restartCount가 바뀌었습니다.' >&2; exit 1; }
 
-awk -F '\t' 'NR > 1 && /-waf$/ {if ($5 > 100) exit 1}' "$result_dir/latency.tsv" || {
+awk -F '\t' 'NR > 1 && $1 ~ /-waf$/ {if ($5 > 100) exit 1}' "$result_dir/latency.tsv" || {
   printf '%s\n' '실패: WAF p95 절대값이 100ms를 초과했습니다.' >&2
   exit 1
 }
@@ -258,7 +274,7 @@ done
 control_cpu=$(awk -F '\t' 'NR > 1 && $2 ~ /-control$/ {sum += $3; n++} END {if (n) printf "%.3f", sum/n}' "$result_dir/metrics.tsv")
 waf_cpu=$(awk -F '\t' 'NR > 1 && $2 ~ /-waf$/ {sum += $3; n++} END {if (n) printf "%.3f", sum/n}' "$result_dir/metrics.tsv")
 waf_peak=$(awk -F '\t' 'NR > 1 && $2 ~ /-waf$/ {if ($3 > max) max=$3} END {printf "%.3f", max}' "$result_dir/metrics.tsv")
-node_peak=$(awk -F '\t' 'NR > 1 {if ($5 > max) max=$5} END {printf "%.3f", max}' "$result_dir/metrics.tsv")
+node_peak=$(awk -F '\t' 'NR > 1 {if ($6 > max) max=$6} END {printf "%.3f", max}' "$result_dir/metrics.tsv")
 
 awk -v control="$control_cpu" -v waf="$waf_cpu" 'BEGIN {exit !((waf - control) <= 750)}' || {
   printf '%s\n' '실패: Traefik 평균 CPU 증분이 750m을 초과했습니다.' >&2
