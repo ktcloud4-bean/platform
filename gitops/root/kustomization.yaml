@@ -11,5 +11,6 @@ resources:
   - headlamp-application.yaml
   - keycloak-project.yaml
   - keycloak-application.yaml
+  - crowdsec-project.yaml
   - velero-project.yaml
   - velero-application.yaml

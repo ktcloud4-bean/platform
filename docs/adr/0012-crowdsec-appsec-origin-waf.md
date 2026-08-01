@@ -2,7 +2,8 @@
 
 - 상태: `Accepted`
 - 날짜: 2026-08-01
-- 관련 작업: `WAF-DESIGN-01`, `CORAZA-01`, `CROWDSEC-01`, `EDGE-01`, `AUDIT-01`
+- 관련 작업: `WAF-DESIGN-01`, `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-FIX-01`,
+  `EDGE-01`, `AUDIT-01`
 - 부분 대체: ADR-0007의 탐지 계층·배포 순서는 유지하고 Traefik process 내부의 direct
   Coraza HTTP-WASM connector 선택만 대체한다.
 
@@ -64,6 +65,28 @@ plugin 등록·secret mount만 제거해 Traefik을 기존 image·설정으로 �
 ingress가 시험 전 main revision에서 `Synced/Healthy`, Traefik restart 이후 기존 인증서·
 HTTPS·301·source IP 경계가 회복돼야 완료다. merge 뒤 제거 시험은 `CROWDSEC-01` squash
 commit 하나를 `git revert`해 같은 경계를 재검증한다.
+
+### 2026-08-01 적용 결함 보정
+
+`CROWDSEC-01` 최초 enablement는 YAML block scalar chomp로 CRS 49개의 마지막
+LF가 사라져 AppSec init hash gate를 통과하지 못했고, 즉시 main에서 revert했다.
+이 적용에서 root가 AppProject를 Application보다 먼저 prune해 finalizer가
+`project not found`로 멈추는 rollback 순서 결함도 발견했다.
+
+`CROWDSEC-FIX-01`은 다음 불변 경계로 두 결함을 보정한다.
+
+1. 비밀이 없는 최소 `AppProject/crowdsec`는 별도 기반 커밋으로 먼저 적용하고
+   enablement rollback 뒤에도 남긴다. rollback은 Application finalizer가 namespace와
+   하위 자원을 모두 prune한 뒤 완료돼야 하며 finalizer를 강제 제거하지 않는다.
+2. CRS snapshot은 YAML text scalar로 재직렬화하지 않고 deterministic binary
+   archive와 archive SHA-256, 내부 49개 파일 manifest로 고정한다. 격리
+   Kubernetes API에 저장한 뒤 다시 읽은 archive·파일 hash가 원본과 같아야
+   enablement를 허용한다.
+3. 사용자가 승인한 main 순서는 영구 AppProject 기반, 수정 enablement,
+   live evidence·`DONE` 세 커밋이다. gate 실패 시 수정 enablement 커밋만
+   `git revert`하고 영구 AppProject는 유지한다.
+
+이 보정은 bouncer, route, AppSec policy, 금지 항목과 성능 기준을 바꾸지 않는다.
 
 ## 검토한 대안
 

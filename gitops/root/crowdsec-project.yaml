@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: crowdsec
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  description: CROWDSEC-FIX-01 AppSec와 전용 내부 test route의 영구 최소 경계
+  sourceRepos:
+    - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
+  destinations:
+    - namespace: crowdsec-01
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: apps
+      kind: Deployment
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+    - group: traefik.io
+      kind: IngressRoute
+    - group: traefik.io
+      kind: Middleware
