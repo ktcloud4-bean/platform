@@ -1,0 +1,14 @@
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  name: bkp-02-validation-20260801
+  namespace: velero
+  labels:
+    app.kubernetes.io/part-of: bkp-02-validation
+spec:
+  includedNamespaces:
+    - bkp-02-restore-test
+  storageLocation: default
+  snapshotVolumes: false
+  defaultVolumesToFsBackup: false
+  ttl: 1h0m0s

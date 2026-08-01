@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bkp-02-restore-test
+  labels:
+    app.kubernetes.io/part-of: bkp-02-validation
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bkp-02-data
+  namespace: bkp-02-restore-test
+  labels:
+    app.kubernetes.io/part-of: bkp-02-validation
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 64Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bkp-02-holder
+  namespace: bkp-02-restore-test
+  labels:
+    app.kubernetes.io/part-of: bkp-02-validation
+  annotations:
+    backup.velero.io/backup-volumes: data
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    - name: holder
+      image: docker.io/library/busybox@sha256:7a3ebe5bfd1a4a19797d20b0c0bb39d44393e9a03fd852c0865b0f540d868df0
+      imagePullPolicy: IfNotPresent
+      command:
+        - sh
+        - -c
+        - trap 'exit 0' TERM INT; sleep 86400 & wait
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: bkp-02-data
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bkp-02-excluded
+  namespace: bkp-02-restore-test
+  labels:
+    app.kubernetes.io/part-of: bkp-02-validation
+    velero.io/exclude-from-backup: "true"
+data:
+  negative-test: must-not-be-restored

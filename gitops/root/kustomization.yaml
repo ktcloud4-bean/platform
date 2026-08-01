@@ -9,3 +9,5 @@ resources:
   - vault-application.yaml
   - headlamp-project.yaml
   - headlamp-application.yaml
+  - velero-project.yaml
+  - velero-application.yaml

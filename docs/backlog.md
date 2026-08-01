@@ -339,11 +339,30 @@ mode 0600 임시 파일에만 남겨 사용자가 직접 암호화 장기 보관
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `BKP-01 READY` | K3s SQLite·server token 전용 backup/restore | `K3S-01`, `S3-01` | `K3S-BOOTSTRAP` | 클러스터 복구 | 격리된 빈 VM에서 API 객체 복원; Velero와 별도임을 검증 |
-| `BKP-02 READY` | Velero + node-agent/Kopia와 local PV restore PoC | `GITOPS-01`, `STOR-01`, `S3-01` | 없음 | 모든 k3s PVC | 테스트 namespace 삭제 후 리소스·파일 복원, hostPath 제약 판정 |
+| `BKP-02 DONE` | Velero + node-agent/Kopia와 local PV restore PoC | `GITOPS-01`, `STOR-01`, `S3-01` | 없음 | 모든 k3s PVC | 테스트 namespace 삭제 후 리소스·파일 복원, hostPath 제약 판정 |
 | `BKP-03 BLOCKED` | PostgreSQL native backup·Vault Raft snapshot | `PG-01`, `VAULT-02`, `S3-01` | 없음 | 인증·플랫폼 데이터 | 별도 DB/namespace에 point-in-time 또는 snapshot restore |
 | `BKP-04 DONE` | SeaweedFS 로컬 S3에서 AWS S3로 오프사이트 사본 생성 | `S3-01` | 없음 | 모든 백업의 물리 장애 대응 | 별도 최소권한 자격증명과 검증한 방식으로 전송, AWS S3에서 샘플 복원, 암호화·버전·보존·실패 경보 검증 |
 | `BKP-05 BLOCKED` | 통합 재해복구 drill·RPO/RTO 기록 | `BKP-01`, `BKP-02`, `BKP-03`, `BKP-04` | `K3S-BOOTSTRAP` | 공급망·공개 전환 gate | Git+S3만으로 핵심 서비스 복구, 누락·시간·수동 절차 기록 |
 | `PVE-BKP-01 DEFERRED` | 두 번째 SSD에 Proxmox VM backup | 두 번째 SSD 장착 | `PVE-LIVE` | 빠른 VM 복구 | 원본 NVMe와 다른 장치에 backup·restore; S3 앱 백업은 유지 |
+
+2026-08-01 `BKP-02`에서 Velero 1.18.2와 AWS plugin 1.14.2를 고정 digest로,
+node-agent와 내장 Kopia를 GitOps로 배포했다. CSI snapshot은 활성화하지 않았고 local-path
+PVC에 명시한 filesystem backup만 사용했다. 전용 namespace `bkp-02-restore-test`와 PVC
+`bkp-02-data`를 실제 삭제한 뒤 Backup `Completed`, Kopia PVB 8,388,633 bytes 처리,
+Restore `Completed`, Kopia PVR 8,388,633 bytes 처리를 확인했다. marker SHA-256
+`b32ae306b19b145a7729f851bb5829daa4a1a94b9ef3ee293a0235c7d13d22a4`와 8MiB payload
+SHA-256 `d71a0b1d98dde113cc0e796d658154edc545c3df7670f2e74afd1f7c9db9c82f`는 원본·복원
+Pod·host local-path에서 일치했고 제외 label의 ConfigMap은 복원되지 않았다.
+
+검증 namespace·PVC·원본/복원 PV와 local directory, Backup/Restore/PVB/PVR 및 전용 Kopia
+repository object는 native API와 S3 API에서 모두 부재를 확인했다. 빈 전용 bucket과
+`Read/List/Write`만 가진 identity, Velero 운영 구성은 유지한다. 기존 Traefik/Vault
+PVC/PV는 불변이고 Node `Ready=True`·`DiskPressure=False`, 전체 Argo Application은
+`Synced/Healthy`다. credential 입력은 Git 밖 mode `0600`이며 Git과 일반 로그에 값을
+남기지 않았다. 상세 증거와 rollback은
+[Velero local PV backup·restore runbook](runbook/velero-local-pv-backup-restore.md)이
+소유한다. 직접 후속 `BKP-05`는 `BKP-01`·`BKP-03`이 남아 `BLOCKED`를 유지하므로 새로
+`READY`로 여는 작업은 없다.
 
 2026-07-31 `BKP-04`에서 로컬 SeaweedFS S3의 AWS S3 오프사이트 경로를 만들고 검증했다.
 착지점은 `infra/aws/tofu` 별도 state root가 소유하며 12개 리소스를 0 change·0 destroy로

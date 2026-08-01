@@ -1,0 +1,163 @@
+image:
+  repository: docker.io/velero/velero
+  tag: v1.18.2
+  digest: sha256:a77d493b80f622e0bed1b9a19fea40a48d427de24e82be3f64824528b1ab7ecb
+  pullPolicy: IfNotPresent
+
+initContainers:
+  - name: velero-plugin-for-aws
+    image: docker.io/velero/velero-plugin-for-aws@sha256:abe29a7b360231e359f7aaee79668141bd619ab6989c7cc78d041110987f6ca2
+    imagePullPolicy: IfNotPresent
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+extraVolumes:
+  - name: udmrepo
+    emptyDir: {}
+
+extraVolumeMounts:
+  - name: udmrepo
+    mountPath: /udmrepo
+
+upgradeCRDs: false
+cleanUpCRDs: false
+
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: bkp-02-velero
+      caCert: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZrVENDQTNtZ0F3SUJBZ0lVSzkrNFMxenlYMlR2ckdxOEZKbnZRdzFJb3Vjd0RRWUpLb1pJaHZjTkFRRUwKQlFBd0pURWpNQ0VHQTFVRUF3d2FiMkpxWldOMExUQXhMbWx0WTJobGNuSjVOVGMzT0M1NGVYb3dIaGNOTWpZdwpOek14TURRek5qQXdXaGNOTWpjd056TXhNRFF6TmpBd1dqQWxNU013SVFZRFZRUUREQnB2WW1wbFkzUXRNREV1CmFXMWphR1Z5Y25rMU56YzRMbmg1ZWpDQ0FpSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnSVBBRENDQWdvQ2dnSUIKQUxLVXVEdzZobGJoazBVSW1nQmkveFJGWHlKRnQwQkVIVDQvb0lWSkgzVG9hd25oNDJHajJjUXhYTTBaMHEzSAowak9Ndjd3N24zWGtZc2RpM0cxbjBVSmlTajVBazB6VXJPdU56QUl0UzhoLzMrbnVTbldkVllKQzNJTGlhSFRVCkRCZXFTV0lYWnk5QjUxMHRqUmY5enJOTFVHYWx0c1UxcENseVR3dlJJWHpLZHV1SXlOTnZ3MFIzSktTWnRoUloKTjNmU3RmaWJuVnNtSUtBMUQzZHRBKzBsS0hHUHIxc29XL2wzTTViaTF1WVZpWUdiZjg1eXhCMDBVL2wzUGxldAo4SlNKR1haYUppcjMvSHBUd3NIUG5TZ0dBSXJoa0xHQ0hxYXRkOE5qTGZ1bkFsbWtaRC82bTRxL3hBU2xqbHhBCjQvcGQxUm9hKzNaMWhObk1zRDJXb1A3YUtUSm5BeXdHZm9SWVpMaXNWYUxtWU1OYjQ1SVdYTGdSTnN6dlpESUwKbmQ5UlhnR1lWZGgxRndxWGV0eTdLbEZTZU5tOFpLWXJhM2hTMlBoSjVHMVpLbmk5cHN4LzJtcTFkRlYvT2pYVQp0V0hXOEJRcU45SWdXNmdWMVkrejBnbS82Ly9JWm9PZ1AvYUxNL0VKbkxGWnkvRjlPeHc2eHFia3BkZ1lLR2dUCkh3eWpOVlhoT1JRZTBHWFY1SEg5MFYvMnI4ZFFCaHNsdTNzSWo1NmsxNVJQYVBpQTV4N3o1WnJIK29rbTRZV3oKQVdtR3VZd094QjZPOW92eDQxbmNPc1IycDFxTTFpdjR1TThBMEo3TnZxZ0wxeWpWQkI0R2hod3VIbXhaN1dYTQpYcHRlMGRYb0RvdmFacGpVMXNEeG4wVkZHaW8xOUNjWnpaV2t3T3VhVkFUVEFnTUJBQUdqZ2Jnd2diVXdIUVlEClZSME9CQllFRklIWXRQUlplTktYb1FIaU84UzVUbFM4UzVRN01COEdBMVVkSXdRWU1CYUFGSUhZdFBSWmVOS1gKb1FIaU84UzVUbFM4UzVRN01Bd0dBMVVkRXdFQi93UUNNQUF3RGdZRFZSMFBBUUgvQkFRREFnV2dNQk1HQTFVZApKUVFNTUFvR0NDc0dBUVVGQndNQk1FQUdBMVVkRVFRNU1EZUNHbTlpYW1WamRDMHdNUzVwYldOb1pYSnllVFUzCk56Z3VlSGw2Z2hOek15NXBiV05vWlhKeWVUVTNOemd1ZUhsNmh3UUtDaklVTUEwR0NTcUdTSWIzRFFFQkN3VUEKQTRJQ0FRQ2dGVU5GQ1VMWUI5QitESGJGdTZqaVpvWGx2ZWJJM1poaGdjL3RCOEFmbkdZdkYrVGx6WDQ4cDlPRQpqMDNmck5uWmhHcGsyQ2NlTDB1V1JWV3ptTXc2MDJIVmZLK2JTc3BlTGpKOENCVTlJbG9jR2hLODg0dkM2MmRBCmpsM21QNlBNbDdOZDZ3VzcyNENvLzNNRk4yVUJENi9zeDdiZ1RIRmdidVRnTmxlbzBjRHhpWkV0cWlmVHV5MWoKRkFDdmtvNkxNQm5OTHFOcWFkVUtOZGZVbk9jS1Q1b0ZhVXozdVdVZXVhcWxzWTVkU0Uza29OVUp3YThzVzNRWApEcndUbis3SmNFQlkzdjFZSzA2NW9Db2UrSUw3MnY1SmtwTzE0NzAwMG00b1VJUVN4alQ4YU1ORU5lRWlrbDVrCnk4SHVVTkxibEdiWXlrVVlhTDBVTWRTT0tESVhWbnFJamhielpFaXdlOGwvdXpyM2hGNXRPV2xIcTR4VDdEaGwKcXFtcEhvUzJZL3Z2MXg5L1NiVjY4dm9uYVVSVFVxVzArMVV6dkNlYmJRTndmd3A0NG8yUmNjZVJrcllGcnpSdgo5MjRWSDBvWmRHNDFjd2V0RzA1VS9qeHBmMUZDbTVMVHBBUVlXV0xncXMwZFUrTktPMTJ0MXROelhjUEVhV05qCm1TS3E2TllKWE9xM0dyT3Z0ZE5WelpQbzlYRUlwbmEvSjdZNjYyL0JYaWZYZkpMU0tlMnRzbHRuMndLVXVaZSsKdyt2VkVYMDYvcWFPUlpxVjY5V1Vsb242UHpGK0NPN0pLNjJhWmNYZDgwZnA4NjZQd01mK3pZdGNObnBhYnNkQQpXSlI1bnFWNThJS0hmN2phcmpPTDVwTnZDbWV4YUVBaVpnc0w3ZUJnTzF3MTRZZFloZz09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+      prefix: cluster-k3s-01
+      default: true
+      validationFrequency: 1m
+      accessMode: ReadWrite
+      credential:
+        name: bkp-02-s3-credentials
+        key: cloud
+      config:
+        region: us-east-1
+        s3ForcePathStyle: "true"
+        s3Url: https://s3.imcherry5778.xyz:8333
+  uploaderType: kopia
+  defaultBackupStorageLocation: default
+  defaultVolumesToFsBackup: false
+  defaultSnapshotMoveData: false
+  storeValidationFrequency: 1m
+  defaultRepoMaintainFrequency: 24h
+  extraEnvVars:
+    - name: HOME
+      value: /scratch
+  repositoryMaintenanceJob:
+    repositoryConfigData:
+      name: velero-repo-maintenance
+      global:
+        keepLatestMaintenanceJobs: 1
+        podResources:
+          cpuRequest: 100m
+          cpuLimit: 500m
+          memoryRequest: 128Mi
+          memoryLimit: 512Mi
+
+credentials:
+  useSecret: true
+  existingSecret: bkp-02-s3-credentials
+
+backupsEnabled: true
+snapshotsEnabled: false
+deployNodeAgent: true
+
+nodeAgent:
+  disableHostPath: false
+  podVolumePath: /var/lib/kubelet/pods
+  useScratchEmptyDir: true
+  extraArgs:
+    - --node-agent-configmap=velero-bkp-02-node-agent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  podSecurityContext:
+    runAsUser: 0
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    privileged: true
+    allowPrivilegeEscalation: true
+
+configMaps:
+  bkp-02-node-agent:
+    data:
+      node-agent-config.json: |
+        {
+          "loadConcurrency": {
+            "globalConfig": 1,
+            "prepareQueueLength": 1
+          },
+          "podResources": {
+            "cpuRequest": "100m",
+            "cpuLimit": "500m",
+            "memoryRequest": "128Mi",
+            "memoryLimit": "512Mi"
+          },
+          "privilegedFsBackup": true
+        }
+
+rbac:
+  create: true
+  clusterAdministrator: true
+  clusterAdministratorName: cluster-admin
+
+schedules: {}
+
+extraObjects:
+  - apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: velero
+      annotations:
+        argocd.argoproj.io/sync-wave: "-2"
+      labels:
+        app.kubernetes.io/part-of: platform-gitops
+        pod-security.kubernetes.io/enforce: privileged
+        pod-security.kubernetes.io/audit: privileged
+        pod-security.kubernetes.io/warn: privileged

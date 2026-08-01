@@ -1,0 +1,9 @@
+apiVersion: velero.io/v1
+kind: DeleteBackupRequest
+metadata:
+  name: bkp-02-validation-20260801-delete
+  namespace: velero
+  labels:
+    app.kubernetes.io/part-of: bkp-02-validation
+spec:
+  backupName: bkp-02-validation-20260801
