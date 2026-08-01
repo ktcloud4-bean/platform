@@ -1,0 +1,2 @@
+# Hub snapshot bytes must stay identical to crs-snapshot.SHA256, including upstream whitespace.
+files/crs/** -whitespace

@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crowdsec-01-appsec-configs
+  labels:
+    app.kubernetes.io/part-of: crowdsec-01
+data:
+{{- $root := . }}
+{{- range $path, $_ := .Files.Glob "files/appsec/configs/*" }}
+  {{ base $path }}: |-
+{{ $root.Files.Get $path | indent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crowdsec-01-appsec-rules
+  labels:
+    app.kubernetes.io/part-of: crowdsec-01
+data:
+{{- range $path, $_ := .Files.Glob "files/appsec/rules/*" }}
+  {{ base $path }}: |-
+{{ $root.Files.Get $path | indent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crowdsec-01-crs-snapshot
+  labels:
+    app.kubernetes.io/part-of: crowdsec-01
+data:
+  SHA256SUMS: |-
+{{ $root.Files.Get "crs-snapshot.SHA256" | indent 4 }}
+{{- range $path, $_ := .Files.Glob "files/crs/*" }}
+  {{ base $path }}: |-
+{{ $root.Files.Get $path | indent 4 }}
+{{- end }}

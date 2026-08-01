@@ -1,0 +1,145 @@
+container_runtime: containerd
+
+image:
+  repository: docker.io/crowdsecurity/crowdsec
+  tag: v1.7.8@sha256:2f527c9bb8b367120eb08b82890aa912ce96bfa1ada93dda0721700e4b4e0dde
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+config:
+  profiles.yaml: |
+    name: crowdsec-01-no-remediation
+    filters:
+      - "false"
+    decisions: []
+    on_success: continue
+  console.yaml: |
+    share_manual_decisions: false
+    share_custom: false
+    share_tainted: false
+    share_context: false
+
+secrets:
+  externalSecret:
+    name: crowdsec-01-bootstrap
+    csLapiSecretKey: CS_LAPI_SECRET
+    registrationTokenKey: REGISTRATION_TOKEN
+
+tls:
+  enabled: false
+
+lapi:
+  enabled: true
+  replicas: 1
+  ingress:
+    enabled: false
+  env:
+    - name: DISABLE_ONLINE_API
+      value: "true"
+    - name: NO_HUB_UPGRADE
+      value: "true"
+  envFrom:
+    - secretRef:
+        name: crowdsec-01-bootstrap
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  securityContext:
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  persistentVolume:
+    data:
+      enabled: true
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: local-path
+      size: 1Gi
+    config:
+      enabled: false
+  storeCAPICredentialsInSecret: false
+  storeLAPICscliCredentialsInSecret: false
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+    podMonitor:
+      enabled: false
+
+agent:
+  enabled: false
+
+appsec:
+  enabled: true
+  replicas: 1
+  acquisitions: []
+  configs: {}
+  rules: {}
+  env:
+    - name: NO_HUB_UPGRADE
+      value: "true"
+    - name: COLLECTIONS
+      value: ""
+    - name: APPSEC_CONFIGS
+      value: ""
+    - name: APPSEC_RULES
+      value: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  securityContext:
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  extraVolumes:
+    - name: crowdsec-01-appsec-configs
+      configMap:
+        name: crowdsec-01-appsec-configs
+    - name: crowdsec-01-appsec-rules
+      configMap:
+        name: crowdsec-01-appsec-rules
+    - name: crowdsec-01-crs-snapshot
+      configMap:
+        name: crowdsec-01-crs-snapshot
+    - name: crowdsec-01-appsec-data
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: crowdsec-01-appsec-configs
+      mountPath: /etc/crowdsec/appsec-configs/crowdsec-01-crs-inband.yaml
+      subPath: crowdsec-01-crs-inband.yaml
+      readOnly: true
+    - name: crowdsec-01-appsec-rules
+      mountPath: /etc/crowdsec/appsec-rules/crowdsec-01-exact-913100-exception.yaml
+      subPath: crowdsec-01-exact-913100-exception.yaml
+      readOnly: true
+    - name: crowdsec-01-appsec-rules
+      mountPath: /etc/crowdsec/appsec-rules/crowdsec-01-crs.yaml
+      subPath: crowdsec-01-crs.yaml
+      readOnly: true
+    - name: crowdsec-01-appsec-data
+      # docker_start writes GeoIP links here; the init container verifies and copies the immutable snapshot.
+      mountPath: /var/lib/crowdsec/data
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+    podMonitor:
+      enabled: false

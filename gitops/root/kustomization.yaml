@@ -11,3 +11,5 @@ resources:
   - headlamp-application.yaml
   - velero-project.yaml
   - velero-application.yaml
+  - crowdsec-project.yaml
+  - crowdsec-application.yaml
