@@ -29,16 +29,6 @@
   `kube-system/ingress-01-cloudflare-dns` Secret으로 주입한다. manifest에는 Secret
   이름과 key 이름만 둔다.
 
-`CROWDSEC-FIX-01`은 이 소유 경계 안에서 지원되는 같은 `HelmChartConfig`에 community
-bouncer의 고정 module/version/archive hash와 read-only key mount만 추가한다. 이는 전역
-정적 등록이라 유일한 Traefik Pod를 한 번 교체하지만, middleware attach는
-`crowdsec-01` 내부 test route 하나로 제한한다. 기존 entrypoint, ACME, Service,
-forwarded header와 인증서 값은 바꾸지 않는다. ADR-0012의 별도 승인과 KC-01 시점 조율 전
-적용하지 않으며, 실패 시 enablement commit을 revert해 plugin registration과 이 secret
-mount만 제거하고 같은 packaged image와 이 문서의 production 기준선을 회복한다. 비밀이
-없는 `AppProject/crowdsec` 기반은 rollback 뒤에도 남겨 child Application finalizer가
-namespace를 정상 prune할 수 있게 한다.
-
 정확한 hostname은 [`docs/ip-plan.md`](../../../docs/ip-plan.md)의 canonical
 `k3s-01.imcherry5778.xyz` 하나다. production 인증서가 있어도 public A/AAAA와 NAT는
 없으며, 외부 공개는 `EDGE-01` 전까지 열지 않는다.
