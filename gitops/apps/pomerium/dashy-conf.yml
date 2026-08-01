@@ -28,12 +28,3 @@ sections:
         displayData:
           showForGroups:
             - /platform-users
-      - title: Headlamp
-        description: 사용자 OIDC token과 Kubernetes RBAC 기반 클러스터 콘솔
-        icon: fas fa-compass
-        url: https://headlamp.imcherry5778.xyz
-        target: sametab
-        displayData:
-          showForGroups:
-            - /platform-users
-            - /platform-privileged

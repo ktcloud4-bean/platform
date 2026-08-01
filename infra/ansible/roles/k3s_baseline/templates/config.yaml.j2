@@ -2,14 +2,6 @@
 # node IP, advertise address, Pod/Service CIDR는 여기서 고정하지 않는다.
 write-kubeconfig-mode: "0600"
 selinux: true
-{% if k3s_kube_apiserver_args | length > 0 %}
-kube-apiserver-arg:
-  # prefix 값의 끝 `:`까지 YAML scalar로 보존한다. k3s는 구조형 값을 CLI
-  # 인자로 해석할 수 없으므로 모든 apiserver 인자를 단일 인용 문자열로 렌더링한다.
-{% for argument in k3s_kube_apiserver_args %}
-  - '{{ argument | replace("'", "''") }}'
-{% endfor %}
-{% endif %}
 {% if k3s_disabled_components | length > 0 %}
 disable:
 {% for component in k3s_disabled_components %}

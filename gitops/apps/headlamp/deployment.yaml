@@ -48,11 +48,6 @@ spec:
             - -in-cluster-context-name=main
             - -plugins-dir=/headlamp/plugins
             - -session-ttl=600
-            - -oidc-client-id=headlamp
-            - -oidc-idp-issuer-url=https://sso.imcherry5778.xyz/realms/platform
-            - -oidc-callback-url=https://headlamp.imcherry5778.xyz/oidc-callback
-            - -oidc-scopes=profile,email
-            - -oidc-use-pkce=true
           env:
             - name: HEADLAMP_STATIC_PLUGINS_DIR
               value: ""
@@ -95,10 +90,6 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
-        # Headlamp v0.44.0는 -unsafe-use-service-account-token 없이 request별
-        # OIDC ID token을 API proxy에 사용한다. 이 짧은 projected token은
-        # in-cluster endpoint/CA discovery만 위해 남기며 runtime SA에는 RBAC를
-        # 연결하지 않는다.
         - name: kube-api-access
           projected:
             defaultMode: 0440
