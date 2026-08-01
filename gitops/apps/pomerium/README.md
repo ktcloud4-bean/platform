@@ -13,6 +13,7 @@ Client
   -> Pomerium Core :8080 (insecure_server, Pod network 안에서만 사용)
        ├─ /pom01-platform-user-check -> 선언형 direct response
        └─ /                           -> Service/dashy:8080
+       └─ headlamp.imcherry5778.xyz -> Service/headlamp:80
 ```
 
 기존 packaged Traefik이 유일한 ingress controller다. 이 앱은 동적 `Ingress` 객체만
@@ -42,15 +43,17 @@ OIDC claim을 직접 확인하는 `claim/groups`를 쓴다.
 |---|---|---|
 | `/pom01-platform-user-check` | `/platform-users` | 같은 그룹에만 타일 표시 |
 | `/` Dashy Portal | `/platform-users` 또는 `/platform-privileged` | 로그인한 그룹별 타일 선별 |
+| `https://headlamp.imcherry5778.xyz` | `/platform-users` 또는 `/platform-privileged` | 두 group에 Headlamp 타일 표시 |
 
 로그인 성공, email 또는 `authenticated_user`만으로 허용하는 fallback은 없다.
 `/platform-privileged`만 가진 사용자는 Portal에는 들어가지만 검증 Route는 403이고 해당 타일도
 보이지 않는다. Dashy `showForGroups`는 탐색 편의일 뿐 보안 통제가 아니므로 각 후속 타일 URL은
 별도 Pomerium Route policy를 가져야 한다.
 
-`HEADLAMP-02` 등 후속 작업은 Route마다 허용 group을 명시한다. Pomerium은 웹 진입만 판정하며
-upstream의 실제 권한을 대신하지 않는다. 특히 Headlamp에서는 사용자별 Keycloak OIDC token과
-Kubernetes RBAC가 API 권한을 계속 소유하고 공유 `cluster-admin` ServiceAccount를 만들지 않는다.
+`HEADLAMP-02` Route는 두 group 모두 웹 진입을 허용하지만, Pomerium은 웹 진입만 판정하며
+upstream의 실제 권한을 대신하지 않는다. Headlamp는 사용자별 Keycloak OIDC ID token과
+Kubernetes RBAC가 API 권한을 계속 소유하고 Pomerium의 token/header를 Kubernetes API token으로
+전달하지 않는다. 공유 `cluster-admin` ServiceAccount는 만들지 않는다.
 
 ## Keycloak clients와 시크릿
 
