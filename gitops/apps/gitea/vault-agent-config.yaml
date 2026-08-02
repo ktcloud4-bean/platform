@@ -1,0 +1,145 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitea-vault-agent
+  namespace: gitea
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/component: secret-consumer
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  runtime.hcl: |
+    exit_after_auth = true
+    pid_file = "/tmp/vault-agent.pid"
+
+    vault {
+      address = "https://vault.vault.svc.cluster.local:8200"
+      ca_cert = "/vault/tls/vault.crt"
+      retry {
+        num_retries = 12
+      }
+    }
+
+    auto_auth {
+      method "kubernetes" {
+        mount_path = "auth/kubernetes"
+        config = {
+          role       = "gitea"
+          token_path = "/var/run/secrets/vault/token"
+        }
+      }
+    }
+
+    template {
+      destination          = "/gitea/runtime/app.ini"
+      perms                = "0440"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/gitea/runtime" -}}
+    APP_NAME = ktcloud4-bean Gitea
+    RUN_USER = git
+    RUN_MODE = prod
+    WORK_PATH = /var/lib/gitea
+
+    [database]
+    DB_TYPE = postgres
+    HOST = postgres-01.imcherry5778.xyz:5432
+    NAME = gitea
+    USER = gitea_user
+    PASSWD = {{ .Data.data.db_password }}
+    SSL_MODE = verify-full
+    LOG_SQL = false
+    MAX_OPEN_CONNS = 10
+    MAX_IDLE_CONNS = 2
+
+    [repository]
+    ROOT = /var/lib/gitea/git/repositories
+    FORCE_PRIVATE = true
+    DEFAULT_PRIVATE = private
+    DISABLE_HTTP_GIT = true
+
+    [server]
+    PROTOCOL = http
+    HTTP_ADDR = 0.0.0.0
+    HTTP_PORT = 3000
+    DOMAIN = git.imcherry5778.xyz
+    ROOT_URL = https://git.imcherry5778.xyz/
+    LOCAL_ROOT_URL = http://127.0.0.1:3000/
+    PUBLIC_URL_DETECTION = never
+    OFFLINE_MODE = true
+    START_SSH_SERVER = true
+    SSH_DOMAIN = git.imcherry5778.xyz
+    SSH_PORT = 30022
+    SSH_LISTEN_PORT = 2222
+    SSH_EXPOSE_ANONYMOUS = false
+    LFS_START_SERVER = false
+
+    [security]
+    INSTALL_LOCK = true
+    SECRET_KEY = {{ .Data.data.secret_key }}
+    INTERNAL_TOKEN = {{ .Data.data.internal_token }}
+    PASSWORD_HASH_ALGO = argon2
+    DISABLE_GIT_HOOKS = true
+    DISABLE_QUERY_AUTH_TOKEN = true
+
+    [service]
+    DISABLE_REGISTRATION = true
+    REQUIRE_SIGNIN_VIEW = true
+    ENABLE_BASIC_AUTHENTICATION = true
+    ENABLE_REVERSE_PROXY_AUTHENTICATION = false
+
+    [oauth2]
+    JWT_SECRET = {{ .Data.data.jwt_secret }}
+
+    [oauth2_client]
+    ENABLE_AUTO_REGISTRATION = true
+    USERNAME = preferred_username
+    OPENID_CONNECT_SCOPES = openid profile email
+    ACCOUNT_LINKING = disabled
+
+    [session]
+    PROVIDER = db
+    COOKIE_SECURE = true
+    SAME_SITE = lax
+
+    [webhook]
+    ALLOWED_HOST_LIST = *.svc.cluster.local
+    DELIVER_TIMEOUT = 5
+    SKIP_TLS_VERIFY = false
+
+    [actions]
+    ENABLED = false
+
+    [packages]
+    ENABLED = false
+
+    [mailer]
+    ENABLED = false
+
+    [log]
+    MODE = console
+    LEVEL = Info
+    ROOT_PATH = /var/lib/gitea/log
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/gitea/bootstrap/local-admin-password"
+      perms                = "0440"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/gitea/runtime" -}}{{ .Data.data.local_admin_password }}{{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/gitea/bootstrap/oidc-client-secret"
+      perms                = "0440"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/gitea/runtime" -}}{{ .Data.data.oidc_client_secret }}{{- end -}}
+    EOT
+    }

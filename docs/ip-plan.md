@@ -183,7 +183,7 @@ traffic selector는 `10.10.50.0/24 ↔ 10.20.0.0/16`이며, 이 selector 밖 출
 | `argo.imcherry5778.xyz` | service alias | Argo CD | Pomerium | 미등록 |
 | `headlamp.imcherry5778.xyz` | service alias | Headlamp | Pomerium | `TARGET`; HEADLAMP-02 `OPNSENSE-LIVE` 승인 뒤 Unbound alias → `k3s-01` (`10.10.20.10`), 내부 AAAA·공개 A/AAAA 0건 |
 | `vault.imcherry5778.xyz` | service alias | Vault | 내부 관리 경로만 | 미등록 |
-| `git.imcherry5778.xyz` | service alias | Gitea | Pomerium | 미등록 |
+| `git.imcherry5778.xyz` | service alias | Gitea | UI는 Pomerium, Git data는 사설 SSH | Unbound alias → `k3s-01` (`10.10.20.10`); SCM-01 등록, 내부 AAAA 0건 |
 | `jenkins.imcherry5778.xyz` | service alias | Jenkins | Pomerium | 미등록 |
 | `sonar.imcherry5778.xyz` | service alias | SonarQube | Pomerium | 미등록 |
 | `harbor.imcherry5778.xyz` | service alias | Harbor | UI는 Pomerium, registry API는 별도 인증 | 미등록 |

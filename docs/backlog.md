@@ -808,12 +808,12 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `CAP-02 DONE` | 핵심 서비스 후 남은 CPU·RAM·disk 재예산 | `BKP-05`, `HEADLAMP-02` | 없음 | 아래 전체 | Proxmox·VM·Pod 실측과 stop/go 기준 |
-| `SCM-01 READY` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
+| `SCM-01 DONE` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
 | `REG-01 READY` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
 | `CI-01 BLOCKED` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
 | `QUALITY-01 READY` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO |
 | `AWX-01 READY` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
-| `UPDATE-01 BLOCKED` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
+| `UPDATE-01 READY` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
 | `SCAN-01 BLOCKED` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
 | `SIGN-01 BLOCKED` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
 | `POL-01 DONE` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
@@ -829,6 +829,34 @@ Node는 173m·4,426 MiB, PVC 요청은 5.125 GiB다. 모든 stop 기준에 여�
 `SCM-01`·`REG-01`·`QUALITY-01`·`AWX-01` 진입은 `GO`로 판정한다. 추가 Pod에서 먼저
 접근할 가능성이 큰 경계는 `k3s-01` RAM이며 12 GiB 경고까지 7.58 GiB가 남았다.
 CAP-02의 모든 직접 후속은 다른 선행도 `DONE`이므로 네 작업만 `READY`로 연다.
+
+2026-08-02 `SCM-01`에서 Gitea `v1.27.1` 공식 rootless image index digest와 Vault Agent를
+고정해 전용 AppProject·child Application·namespace에 배포했다. 관계형 데이터는
+`postgres-01`의 전용 `gitea` DB와 최소권한 `gitea_user`가 소유하고
+`sslmode=verify-full`로 연결한다. Kubernetes Secret 없이 projected
+`audience=vault` ServiceAccount token과 memory `emptyDir`을 쓰는 명시적 Vault Agent init만
+사용하며, 승인된 외부 mode `0600` 입력에서 잘못된 JWT secret 한 필드만 교체했다. UI는
+Pomerium `claim/groups=/platform-users` Route와 Gitea Keycloak required claim을 모두 통과해야
+하고, HTTP Git은 끈 채 Git data를 내부 DNS `git.imcherry5778.xyz`의 SSH NodePort 30022로
+분리했다. Pomerium에서 Gitea server TCP 3000으로 향하는 egress만 NetworkPolicy로 추가했으며
+공개 DNS·NAT·방화벽·Traefik 설정은 바꾸지 않았다.
+
+실제 `scm-recovery/platform-smoke` repo에 SSH push한 commit
+`fb854e4b004540ae3352c7d9331243a29b33883d`를 앱 수준 DB dump와 repository data로 별도
+`gitea_scm01_restore` DB·`scm01-restore` PVC·Ingress 없는 Pod에 복원해 같은 SHA를 조회했고
+임시 key·DB·PVC·Pod를 제거했다. 같은 실행에서 `imcherry` OIDC Dashboard 성공과
+`imcherry-admin` Pomerium 403을 대조했으며, Gitea admin-only 목록의 `scm-recovery`는 Keycloak
+platform realm 비활성 중 로컬 Dashboard session 로그인에 성공했다. repo 범위 hook은 올바른
+HMAC 전달 204와 별도 wrong-secret hook의 receiver 403을 확인한 뒤 두 hook·receiver를 제거했다.
+최종 배포 직후 Node는 `136m`·`5962Mi`, metrics Pod 25개 합계는 `92m`·`2943Mi`, k3s guest
+`available`은 `17,801MiB`, PVC 요청 합계는 4개 `15.125GiB`였다. RAM 12/8GiB와 PVC
+96/120GiB 경고/정지 기준에 들어가지 않아 다음 배포는 **GO**다. 검증 설정 SHA
+`cad5f1c0fe332bf16488e796f2318837e341a33b`와 root pointer
+`72b35d4ae49914ae3a68fa9cd8b81df518ae768d`에서 세 Application이 `Synced/Healthy`였고,
+시작 main `35614f401bcb4bcc2847fa1b5623e7335047a7e3`로 rollback해 root·Pomerium의
+`Synced/Healthy`와 Gitea workload/PVC orphan 보전을 확인했다. 최종 child 선언은 `main`이다.
+직접 후속은 `SCM-01`·`VAULT-02`가 모두 끝난 `UPDATE-01`만 `READY`로 열고,
+`CI-01`은 `REG-01`이 남아 `BLOCKED`를 유지한다.
 
 2026-08-02 `POL-01`에서 Kyverno `v1.18.2` admission·reports controller와 Pod-level
 `runAsNonRoot` 누락 Audit 규칙 한 건을 배포했고, 기존 워크로드 위반이 PolicyReport의 `fail`로

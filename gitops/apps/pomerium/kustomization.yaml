@@ -32,4 +32,5 @@ resources:
   - deployment.yaml
   - dashy-service.yaml
   - dashy-deployment.yaml
+  - gitea-egress.yaml
   - ingress.yaml

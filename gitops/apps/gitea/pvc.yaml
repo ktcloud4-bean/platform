@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitea-data
+  namespace: gitea
+  annotations:
+    # local-path는 WaitForFirstConsumer이므로 소비 Deployment와 같은 wave에서 바인딩한다.
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: local-path

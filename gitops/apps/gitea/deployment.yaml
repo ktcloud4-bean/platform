@@ -1,0 +1,236 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitea
+  namespace: gitea
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitea
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      annotations:
+        scm.imcherry5778.xyz/runtime-config-sha256: 9c6ba3007157ea28066c040768d608d30e53ad1e4ac20fb81dbdc4fce49063d6
+      labels:
+        app.kubernetes.io/name: gitea
+        app.kubernetes.io/component: server
+        app.kubernetes.io/part-of: platform-gitops
+    spec:
+      serviceAccountName: gitea
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              mkdir -p /gitea/runtime/trust
+              cp /vault/tls/postgres-01.crt /gitea/runtime/trust/postgres-01.crt
+              chmod 0444 /gitea/runtime/trust/postgres-01.crt
+              exec vault agent -config=/vault/config/runtime.hcl
+          securityContext:
+            runAsUser: 100
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config
+              readOnly: true
+            - name: trust-bundles
+              mountPath: /vault/tls
+              readOnly: true
+            - name: gitea-runtime
+              mountPath: /gitea/runtime
+            - name: gitea-bootstrap-secrets
+              mountPath: /gitea/bootstrap
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+        - name: gitea-bootstrap
+          image: docker.gitea.com/gitea:1.27.1-rootless@sha256:36cce26be71609091e1236d5b5de2c66a81fb8a7d45756a5fd3b7a28c11733b7
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/bootstrap/bootstrap.sh"]
+          env:
+            - name: PGSSLROOTCERT
+              value: /etc/gitea/trust/postgres-01.crt
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: gitea-data
+              mountPath: /var/lib/gitea
+            - name: gitea-runtime
+              mountPath: /etc/gitea
+              readOnly: true
+            - name: gitea-bootstrap-secrets
+              mountPath: /gitea/bootstrap
+            - name: bootstrap-script
+              mountPath: /bootstrap
+              readOnly: true
+            - name: gitea-tmp
+              mountPath: /tmp
+        - name: bootstrap-secret-cleanup
+          image: docker.gitea.com/gitea:1.27.1-rootless@sha256:36cce26be71609091e1236d5b5de2c66a81fb8a7d45756a5fd3b7a28c11733b7
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - rm -f /gitea/bootstrap/local-admin-password /gitea/bootstrap/oidc-client-secret; test ! -e /gitea/bootstrap/local-admin-password; test ! -e /gitea/bootstrap/oidc-client-secret
+          securityContext:
+            runAsUser: 100
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: gitea-bootstrap-secrets
+              mountPath: /gitea/bootstrap
+      containers:
+        - name: gitea
+          image: docker.gitea.com/gitea:1.27.1-rootless@sha256:36cce26be71609091e1236d5b5de2c66a81fb8a7d45756a5fd3b7a28c11733b7
+          imagePullPolicy: IfNotPresent
+          # rootless image setup의 in-place env rewrite를 우회하고 Vault가 완성한 config를 그대로 읽는다.
+          command: ["/usr/bin/dumb-init", "--", "/usr/local/bin/gitea"]
+          args: ["web", "--config", "/etc/gitea/app.ini"]
+          env:
+            - name: PGSSLROOTCERT
+              value: /etc/gitea/trust/postgres-01.crt
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+            - name: ssh
+              containerPort: 2222
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+              scheme: HTTP
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+              scheme: HTTP
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+              scheme: HTTP
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: gitea-data
+              mountPath: /var/lib/gitea
+            - name: gitea-runtime
+              mountPath: /etc/gitea
+              readOnly: true
+            - name: gitea-tmp
+              mountPath: /tmp
+      volumes:
+        - name: gitea-data
+          persistentVolumeClaim:
+            claimName: gitea-data
+        - name: vault-agent-config
+          configMap:
+            name: gitea-vault-agent
+            items:
+              - key: runtime.hcl
+                path: runtime.hcl
+        - name: bootstrap-script
+          configMap:
+            name: gitea-bootstrap
+            defaultMode: 0550
+        - name: trust-bundles
+          configMap:
+            name: gitea-trust-bundles
+        - name: gitea-runtime
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Mi
+        - name: gitea-bootstrap-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: gitea-tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600
+                  audience: vault

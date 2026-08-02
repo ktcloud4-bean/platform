@@ -1,18 +1,18 @@
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
-  name: pomerium
+  name: gitea
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
   labels:
     app.kubernetes.io/part-of: platform-gitops
 spec:
-  description: POM-01 Pomerium Core, 선언형 Route와 Dashy Portal 최소 배포 경계
+  description: SCM-01 Gitea와 전용 PVC·ClusterIP HTTP·NodePort SSH 경계
   sourceRepos:
     - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
   destinations:
-    - namespace: pomerium
+    - namespace: gitea
       server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: ""
@@ -21,12 +21,10 @@ spec:
     - group: ""
       kind: ConfigMap
     - group: ""
+      kind: PersistentVolumeClaim
+    - group: ""
       kind: Service
     - group: ""
       kind: ServiceAccount
     - group: apps
       kind: Deployment
-    - group: networking.k8s.io
-      kind: Ingress
-    - group: networking.k8s.io
-      kind: NetworkPolicy

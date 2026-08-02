@@ -71,3 +71,14 @@ routes:
           or:
             - claim/groups: /platform-users
             - claim/groups: /platform-privileged
+
+  # SCM-01: 브라우저 UI만 Pomerium이 보호한다. Git clone/push는 HTTP Git을
+  # 비활성화한 Gitea의 별도 SSH NodePort 경로가 소유한다.
+  - name: gitea
+    description: SCM-01 Gitea browser UI
+    from: https://git.imcherry5778.xyz
+    to: http://gitea-http.gitea.svc.cluster.local:3000
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users

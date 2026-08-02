@@ -2445,7 +2445,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785634460.77" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785642787.85" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2669,6 +2669,13 @@
           <hostname>headlamp</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>Headlamp Keycloak OIDC Kubernetes RBAC alias (HEADLAMP-02)</description>
+        </alias>
+        <alias uuid="e705d92c-a37b-4fb4-aa87-4bdb0f5fa484">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>git</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>Gitea UI alias (SCM-01)</description>
         </alias>
       </aliases>
     </unboundplus>

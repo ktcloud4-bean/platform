@@ -45,8 +45,19 @@ spec:
                 name: pomerium
                 port:
                   name: http
+    - host: git.imcherry5778.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pomerium
+                port:
+                  name: http
   tls:
     - hosts:
         - access.imcherry5778.xyz
         - k3s-01.imcherry5778.xyz
         - headlamp.imcherry5778.xyz
+        - git.imcherry5778.xyz

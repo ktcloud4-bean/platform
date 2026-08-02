@@ -135,7 +135,9 @@
   no_log: true
   become: true
   become_user: postgres
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - pg_keycloak_password | length > 0
 
 - name: Create verify_user service role with minimal privileges
   community.postgresql.postgresql_user:
@@ -146,7 +148,22 @@
   no_log: true
   become: true
   become_user: postgres
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - pg_verify_password | length > 0
+
+- name: Create gitea_user service role with minimal privileges
+  community.postgresql.postgresql_user:
+    name: gitea_user
+    password: "{{ pg_gitea_password }}"
+    role_attr_flags: "NOSUPERUSER,NOCREATEDB,NOCREATEROLE,NOREPLICATION"
+    state: present
+  no_log: true
+  become: true
+  become_user: postgres
+  when:
+    - not ansible_check_mode
+    - pg_gitea_password | length > 0
 
 - name: Create keycloak database owned by keycloak_user
   community.postgresql.postgresql_db:
@@ -166,6 +183,17 @@
   become_user: postgres
   when: not ansible_check_mode
 
+- name: Create gitea database owned by gitea_user
+  community.postgresql.postgresql_db:
+    name: gitea
+    owner: gitea_user
+    state: present
+  become: true
+  become_user: postgres
+  when:
+    - not ansible_check_mode
+    - pg_gitea_password | length > 0
+
 - name: Revoke CONNECT from PUBLIC on keycloak database
   community.postgresql.postgresql_query:
     db: postgres
@@ -183,6 +211,17 @@
   become_user: postgres
   changed_when: false
   when: not ansible_check_mode
+
+- name: Revoke CONNECT from PUBLIC on gitea database
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: "REVOKE CONNECT ON DATABASE gitea FROM PUBLIC;"
+  become: true
+  become_user: postgres
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - pg_gitea_password | length > 0
 
 - name: Grant CONNECT on keycloak database to keycloak_user
   community.postgresql.postgresql_query:
@@ -202,6 +241,17 @@
   changed_when: false
   when: not ansible_check_mode
 
+- name: Grant CONNECT on gitea database to gitea_user
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: "GRANT CONNECT ON DATABASE gitea TO gitea_user;"
+  become: true
+  become_user: postgres
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - pg_gitea_password | length > 0
+
 - name: Revoke ALL on schema public from PUBLIC in keycloak database
   community.postgresql.postgresql_query:
     db: keycloak
@@ -219,6 +269,17 @@
   become_user: postgres
   changed_when: false
   when: not ansible_check_mode
+
+- name: Revoke ALL on schema public from PUBLIC in gitea database
+  community.postgresql.postgresql_query:
+    db: gitea
+    query: "REVOKE ALL ON SCHEMA public FROM PUBLIC;"
+  become: true
+  become_user: postgres
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - pg_gitea_password | length > 0
 
 - name: Revoke ALL on schema public from PUBLIC in postgres database
   community.postgresql.postgresql_query:

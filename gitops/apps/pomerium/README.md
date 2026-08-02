@@ -44,6 +44,7 @@ OIDC claim을 직접 확인하는 `claim/groups`를 쓴다.
 | `/pom01-platform-user-check` | `/platform-users` | 같은 그룹에만 타일 표시 |
 | `/` Dashy Portal | `/platform-users` 또는 `/platform-privileged` | 로그인한 그룹별 타일 선별 |
 | `https://headlamp.imcherry5778.xyz` | `/platform-users` 또는 `/platform-privileged` | 두 group에 Headlamp 타일 표시 |
+| `https://git.imcherry5778.xyz` | `/platform-users` | 같은 그룹에만 Gitea 타일 표시 |
 
 로그인 성공, email 또는 `authenticated_user`만으로 허용하는 fallback은 없다.
 `/platform-privileged`만 가진 사용자는 Portal에는 들어가지만 검증 Route는 403이고 해당 타일도
@@ -56,6 +57,10 @@ Kubernetes RBAC가 API 권한을 계속 소유하고 Pomerium의 token/header를
 전달하지 않는다. 이 Route만 `allow_websockets: true`로 Kubernetes exec upgrade를 전달하고,
 실제 exec 허용 여부는 계속 Kubernetes RBAC가 판정한다. 공유 `cluster-admin` ServiceAccount는
 만들지 않는다.
+
+`SCM-01` Gitea UI Route의 upstream은 `gitea` namespace의 server Pod TCP 3000만 허용하는
+전용 egress NetworkPolicy를 함께 둔다. POL-01의 Pomerium 기본 거부를 우회하는 광역 namespace나
+port 허용은 추가하지 않는다.
 
 ## Keycloak clients와 시크릿
 

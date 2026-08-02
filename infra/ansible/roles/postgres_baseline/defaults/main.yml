@@ -14,3 +14,4 @@ postgres_platform_subnet: "10.10.20.0/24"
 # Secret passwords should be provided via vault / extra-vars in runtime
 pg_keycloak_password: ""
 pg_verify_password: ""
+pg_gitea_password: ""
