@@ -477,6 +477,25 @@ writable volume 2개가 생겼으므로 S3 backend 경계가 유지됐다. 모�
 다음 배포는 **GO**다. 다만 guest available 12,391 MiB는 12 GiB 경고선보다 103 MiB만 높아
 다음 `K3S-HEAVY` 또는 공급망 workload는 배포 직전 같은 지표를 다시 읽는다.
 
+### `SCAN-01` 배포·scan 실행 실측 (2026-08-02)
+
+최종 라이브 검증의 배포 직전, 배포 직후, pass agent 실행 중을 같은 `free -m`의
+`available` 값으로 측정했다. metrics-server가 짧게 실행된 agent의 container 표본을 내기 전에
+Pod가 종료돼 Trivy container 단독값은 분리하지 못했으며, 아래 runtime 차이는 jnlp·Buildah·
+Trivy·ORAS 네 container와 build 작업을 합친 보수적 상한이다.
+
+| 지표 | 실측 | 경고·정지 기준 | 판정 |
+|---|---:|---:|---|
+| `k3s-01` 배포 직전 available | 11,781 MiB | 12 GiB 미만 경고, 8 GiB 미만 정지 | 경고 구간 |
+| 선언 배포 직후 available / swap | 11,585 / 0 MiB | 동일, swap 사용 시 재검토 | **GO** |
+| pass agent 실행 중 available | 11,283 MiB | 8 GiB 미만 정지 | **GO** |
+| runtime available 감소 | 배포 직후 대비 302 MiB | 8 GiB 정지선까지 여유 확인 | 정상 |
+| PVC 요청 합계 / Trivy cache | 66.125 / 1 GiB | 96 GiB 경고, 120 GiB 정지 | 정상 |
+
+scanner 추가 뒤에도 available은 정지선보다 3,091 MiB 높고 swap은 0이며 PVC 요청은
+기존 65.125 GiB에서 정확히 1 GiB만 늘었다. `SCAN-01` stop/go는 **GO**다. 다만 이미
+12 GiB 경고 구간이므로 후속 `SIGN-01`은 적용 직전 같은 RAM을 먼저 읽는다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.

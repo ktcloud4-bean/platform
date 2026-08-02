@@ -11,7 +11,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: platform-gitops
 spec:
-  description: CI-01 Jenkins controller와 비특권 동적 build agent 경계
+  description: CI-01 Jenkins controller와 SCAN-01 비특권 동적 build/scan agent 경계
   sourceRepos:
     - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
   destinations:
@@ -31,6 +31,12 @@ spec:
       kind: ServiceAccount
     - group: apps
       kind: Deployment
+    - group: batch
+      kind: CronJob
+    - group: batch
+      kind: Job
+    - group: networking.k8s.io
+      kind: NetworkPolicy
     - group: rbac.authorization.k8s.io
       kind: Role
     - group: rbac.authorization.k8s.io

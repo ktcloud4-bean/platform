@@ -1,7 +1,7 @@
 # Jenkins CI GitOps 기준선
 
-이 디렉터리는 `CI-01`의 Jenkins controller 배포, 동적 Kubernetes build agent 격리,
-pipeline 기준선과 시크릿 경계를 소유한다. Docker-in-Docker, privileged container,
+이 디렉터리는 `CI-01`의 Jenkins controller 배포·동적 Kubernetes build agent 격리와
+`SCAN-01`의 Trivy image/config gate·SBOM 저장을 소유한다. Docker-in-Docker, privileged container,
 Docker socket 마운트, hostPath, Kubernetes Secret과 UI 수동 설정은 사용하지 않는다.
 이미지 version·digest·license 근거는 [`release-metadata.env`](release-metadata.env),
 플러그인 고정 집합은 [`plugins.txt`](plugins.txt)가 소유한다.
@@ -15,13 +15,79 @@ browser ── Traefik ── Pomerium claim/groups=/platform-users
 controller ── Kubernetes API (namespace jenkins의 Pod만)
            └─ 동적 agent Pod ── jnlp  ── Gitea SSH clone
                               └─ buildah ── docker.io base pull
-                                          └─ Harbor /v2/ push
+                              └─ trivy ── read-only DB/checks PVC
+                              └─ oras  ── Harbor image digest에 CycloneDX 첨부
+
+Trivy DB bootstrap Job/CronJob ── public HTTPS ── 공식 DB/checks OCI repository
+                             └─ 1 GiB cache PVC
 ```
 
 controller는 `numExecutors: 0`이라 build를 직접 실행하지 않는다. 모든 build는
 `ci01-buildah` label의 동적 Pod에서 돌고 `podRetention: never`로 build 종료와 함께
 사라진다. agent Pod는 ServiceAccount token을 마운트하지 않으므로 Kubernetes API도
 Vault도 직접 호출하지 못한다.
+
+## SCAN-01 결정과 근거
+
+### Trivy와 ORAS는 같은 동적 agent의 별도 container
+
+Trivy `0.72.0`과 ORAS `1.3.3`은 각각 공식 image index digest로 고정한다. 2026-03 Trivy
+공급망 사고에서 mutable tag가 실제 공격 경로였으므로 version tag만 쓰지 않는다. 근거는
+[upstream advisory](https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23)와
+[`release-metadata.env`](release-metadata.env)가 소유한다.
+
+scanner를 별도 상시 Deployment로 두지 않고 기존 `ci01-buildah` agent Pod에 `trivy`와
+`oras` container를 추가한다. image tar·SBOM은 같은 build workspace로 전달하되 Buildah
+storage는 공유하지 않는다. Trivy는 `RuntimeDefault`, capability `drop: [ALL]`, read-only
+root filesystem이고 DB PVC도 read-only로 마운트한다. ORAS도 같은 경계이며 Harbor
+credential은 gate 통과 뒤 image push와 SBOM 첨부 때만 받는다. 상시 Pod와 새 Service
+없이 build가 끝나면 두 container도 함께 사라지는 선택이다.
+
+별도 pipeline stage에서 새 Pod를 만들면 controller RBAC에 Job 생성 권한과 별도 workspace
+전달 경로가 필요하다. 같은 agent container는 기존 namespace-scoped scheduler와 workspace를
+그대로 쓰므로 권한과 실패 지점이 더 작다.
+
+### 취약 DB는 build와 분리한 6시간 cache refresh
+
+최초 `trivy-db-bootstrap` Job이 `WaitForFirstConsumer` PVC를 bind하고 DB/checks를 준비한 뒤,
+`trivy-db-update` CronJob이 공식 `mirror.gcr.io/aquasec/trivy-db:2`와
+`trivy-checks:2`를 6시간마다 갱신한다. updater Pod에만 CoreDNS와 RFC1918을 제외한 public
+TCP 443 egress를 허용한다. build는 PVC를 read-only로 읽고
+`--skip-db-update --skip-check-update`를 사용하며, 마지막 성공 marker가 24시간을 넘으면
+외부 fallback 없이 실패한다.
+
+| 대안 | 선택하지 않은 이유 |
+|---|---|
+| 매 build 공식 DB 다운로드 | 외부 registry 장애·rate limit가 모든 build의 실패 원인이 된다 |
+| Harbor DB mirror | 별도 project·동기화 robot·보존 정책을 먼저 운영해야 해 단일 Jenkins scanner보다 상태가 커진다 |
+| Jenkins archive/cache만 사용 | build lifecycle과 DB freshness가 결합되고 독립 갱신 실패를 판정하기 어렵다 |
+
+1 GiB PVC를 고른 이유는 DB와 checks bundle만 저장하고 image layer·SBOM은 저장하지 않기
+때문이다. 선언 PVC 합계는 65.125 GiB에서 66.125 GiB가 되어 96 GiB 경고선 아래다.
+merge 전 root rollback에서는 `Prune=false`·`IgnoreExtraneous`로 cache PVC를 보존하고 최종
+main이 다시 채택한다. 작업을 중단해 삭제해야 한다면 PVC 삭제 승인을 별도로 받는다.
+
+### gate와 예외 기준
+
+| 대상 | 실패 조건 | 후속 순서 |
+|---|---|---|
+| source config/IaC | Trivy config의 `HIGH` 또는 `CRITICAL` misconfiguration | image build 전에 실패 |
+| local image tar | fix가 존재하는 `HIGH` 또는 `CRITICAL` vulnerability | Harbor credential과 push 전에 실패 |
+| fix가 없는 finding | 보고에는 남기되 이번 gate에서는 실패시키지 않음 | fix가 나오면 자동으로 gate 대상이 됨 |
+
+예외가 필요하면 source repo의 `.trivyignore.yaml`만 사용한다. 각 항목은 `id`, 좁은
+`paths` 또는 `purls`, 사유 `statement`, 날짜 `expired_at: YYYY-MM-DD`를 모두 가져야 하며
+pipeline preflight가 하나라도 빠진 항목을 거부한다. Trivy는 날짜가 지난 항목을 더 이상
+필터링하지 않으므로 다음 build에서 finding이 다시 gate에 들어온다. 전역 ID만 적거나 만료일
+없는 예외는 허용하지 않는다.
+
+### SBOM은 Harbor OCI accessory 하나만 사용
+
+gate를 통과한 local image tar에서 Trivy CycloneDX JSON을 만들고, image를 Harbor에 push해
+받은 immutable manifest digest에 ORAS Referrers API로
+`application/vnd.cyclonedx+json` artifact를 첨부한다. Jenkins archive에는 같은 SBOM을
+복제하지 않는다. `SIGN-01`은 이 subject digest와 accessory를 그대로 받아 CycloneDX
+predicate의 서명·attestation 대상으로 쓸 수 있다.
 
 ## 스스로 결정한 값과 근거
 
@@ -71,7 +137,7 @@ Kubernetes user namespace(`hostUsers: false`)가 이 랩에서 검증되면 그�
 
 선언 시점의 PVC 요청 합계는 45.125 GiB이고 `capacity-plan.md`의 경고는 96 GiB,
 정지는 120 GiB다. 20 GiB를 더하면 65.125 GiB로 경고선 아래에 남고 후속
-`SCAN-01`·`SIGN-01`·`E2E-01`에 30 GiB 이상 여유를 남긴다. 이 PVC는 job 설정, build
+`SCAN-01`의 1 GiB Trivy cache를 더해도 `SIGN-01`·`E2E-01`에 29 GiB 이상 여유를 남긴다. 이 PVC는 job 설정, build
 기록과 고정 플러그인만 보관한다. build workspace는 agent Pod의 `emptyDir`이고
 image layer는 Harbor가 소유하므로 이 PVC로 들어오지 않는다. build 기록은
 `buildDiscarders`와 job의 `logRotator(20)`으로 상한을 둔다.
@@ -122,8 +188,9 @@ Secret, ServiceAccount, cluster 범위 자원은 없다.
   `known_hosts` 파일에 의존하지 않는다.
 - **Harbor**: `REG-01`이 만든 경계 그대로 `/v2/`는 Pomerium을 우회해 Harbor가 직접
   인증한다([`../harbor/README.md`](../harbor/README.md)). push는 `ci01-evidence` 하나에만
-  pull/push 권한이 있는 project-scoped robot만 쓴다. Harbor local admin, 다른 project
-  권한과 system robot은 사용하지 않는다.
+  pull/push 권한이 있는 project-scoped robot만 쓴다. SCAN-01도 gate 통과 후 같은 robot으로
+  image와 그 digest의 SBOM accessory만 쓴다. Harbor local admin, 다른 project 권한과 system
+  robot은 사용하지 않는다.
 - **Pomerium**: browser UI만 정확한 `claim/groups=/platform-users` Route 뒤에 둔다.
   로그인 성공·email fallback은 없다. agent의 inbound JNLP는 이 Route를 쓰지 않고 cluster
   내부 `Service/jenkins-agent:50000`만 쓴다.
@@ -167,8 +234,8 @@ infra/opnsense/scripts/check-drift.sh --update
 |---|---|---|
 | `-3` | Namespace | 전용 namespace 생성 |
 | `-2` | ServiceAccount·Role/RoleBinding·trust/Vault/JCasC/plugin/agent ConfigMap | 비밀 없는 identity와 선언 준비 |
-| `-1` | ClusterIP Service 2개 | UI upstream과 agent JNLP 경계 분리 |
-| `0` | PVC·Deployment | Vault init 종료, 고정 플러그인 설치, JCasC 적용 후 controller Ready |
+| `-1` | ClusterIP Service 2개·Trivy cache PVC/ConfigMap/NetworkPolicy·bootstrap Job | UI·agent 경계 준비, cache PVC bind와 최초 DB 갱신 완료 |
+| `0` | PVC·Deployment·Trivy DB CronJob | Vault init 종료, 고정 플러그인/JCasC 적용, 독립 DB 갱신 가능 |
 
 정상 `platform-root`와 child Application은 `targetRevision: main`이다. merge 전에는
 `AGENTS.md`의 `ARGO-ROOT` 잠금 아래 최신 `origin/main`에 rebase한 설정 commit과, child만
@@ -200,6 +267,23 @@ gitops/tools/ci-01/check-capacity.sh
 Vault Agent 패턴 자체, Pomerium claim 동작, Harbor robot 권한 모델과 Gitea SSH 경로는
 `VAULT-02`·`POM-01`·`REG-01`·`SCM-01`이 이미 판정한 경계라 다시 시험하지 않는다.
 
+## SCAN-01 완료 증거
+
+live 적용 직후 먼저 RAM/PVC stop 기준을 보고, pipeline은 정확히 두 번만 실행한다.
+
+```bash
+gitops/tools/scan-01/check-capacity.sh
+gitops/tools/scan-01/verify-live.sh
+```
+
+1. `pass` build 한 번에서 config gate와 fix가 있는 `HIGH,CRITICAL` image gate 통과를 확인하고,
+   같은 image digest의 CycloneDX OCI accessory 한 건을 Harbor API로 판정한다.
+2. `fail` build 한 번은 고정 Alpine 3.18.0 입력의 fix가 있는 finding에서 `FAILURE`가 되고,
+   해당 build tag와 release handoff marker가 모두 없어야 한다.
+3. agent 비특권 spec, credential 마스킹, Gitea/Harbor 인증 경계는 CI-01 완료 증거를 재실행하지
+   않는다. 검증기는 build 완료 감지와 local port 선점, 선언형 bootstrap Job 완료를 결정론적으로
+   처리한다.
+
 ### 2026-08-02 라이브 검증 (build 6)
 
 - **비밀 마스킹**: pipeline이 robot secret을 stdout으로 흘렸고 콘솔에는 `printf %s ****`만
@@ -225,6 +309,30 @@ Vault Agent 패턴 자체, Pomerium claim 동작, Harbor robot 권한 모델과 
 - **Argo**: 검증 설정 SHA `f58b0b30a7c2bbcf7ac3412ad83dbe340ffc6107`와 root pointer
   `4e47edb00e5d160b7afaaebe62344046c2a90112`에서 root·Jenkins·Pomerium이 `Synced/Healthy`였다.
   시작 main은 `58459932387eb9b72470f55904b1aeeded19015b`이고 최종 child 선언은 `main`이다.
+
+### SCAN-01 2026-08-02 라이브 검증 (build 2·3)
+
+- **취약점 기준**: build `2`에서 source config와 package가 없는 고정 hello-world base를
+  `HIGH,CRITICAL`·fixable-only 기준으로 통과시켰다. Harbor image digest는
+  `sha256:50ac62320ee4ebce0da8cb6c05bac072da3c07cb31559487a1f3fb1028a63fe3`이다.
+- **SBOM 저장**: 같은 image digest에 CycloneDX JSON OCI accessory
+  `sha256:ced6c83cd50d2324bef40f8a4b625fc266bed96c128cf5e01b2bc22c9a0eeb5e`가 정확히 한 건
+  연결되고 artifact type이 `application/vnd.cyclonedx+json`임을 Harbor API로 확인했다.
+- **실패 pipeline**: build `3`은 고정 Alpine 3.18.0 base의 fix 가능한 `HIGH,CRITICAL`에서
+  `FAILURE`가 됐고, 해당 tag와 push stage·release handoff marker는 모두 없었다.
+- **capacity**: 배포 직전/직후 `k3s-01` available은 `11,781/11,585MiB`, swap은 0이었다.
+  pass agent 실행 중 available은 `11,283MiB`로 배포 직후보다 302 MiB 낮았다. PVC 요청 합계는
+  `66.125GiB`이며 Trivy cache 1 GiB를 포함한다. 8 GiB 정지선 위라 **GO**지만 12 GiB 경고
+  구간이므로 다음 workload 전 재측정한다.
+- **실패와 보정**: build `1`은 image gate 전 local docker archive에 존재하지 않는 registry
+  auth file을 강제해 실패했다. archive 단계에서 `REGISTRY_AUTH_FILE`만 해제하도록 고치고 같은
+  Buildah image로 오류와 성공을 재현했다. build `2` 뒤에는 Harbor Accessories 목록이 OCI
+  artifact type 대신 `subject.accessory`만 주는 응답을 확인해, 연결 digest의 artifact 상세를
+  판정하도록 검증기를 고쳤다. 추가 실행은 승인받은 build `2`·`3`뿐이다.
+- **Argo와 rollback**: 완료 판정 시 root `ac14432edbf21c546351b04e8307cce057475665`와
+  Jenkins 설정 `b1c332df4f52e0f18eda2615a80708b3a3f09b85`가 `Synced/Healthy`였다. 시작 main
+  `a3870b2858db269ee28ad3e1c5502ae4820a8979`로 rollback한 뒤 root·Jenkins를 mutable `main`의
+  `Synced/Healthy`로 복구했고 최종 child 선언도 `main`이다.
 
 ## rollback
 

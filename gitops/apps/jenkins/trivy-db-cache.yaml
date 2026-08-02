@@ -1,0 +1,284 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: trivy-db-updater
+  namespace: jenkins
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: trivy
+    app.kubernetes.io/component: db-updater
+    app.kubernetes.io/part-of: platform-gitops
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: trivy-cache
+  namespace: jenkins
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    # merge 전 root rollback에서 cache PVC를 삭제하지 않고 최종 main이 다시 채택한다.
+    # 작업 중단 시 이 orphan PVC 삭제는 별도 승인을 받는다.
+    argocd.argoproj.io/sync-options: Prune=false
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+  labels:
+    app.kubernetes.io/name: trivy
+    app.kubernetes.io/component: db-cache
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trivy-db-bootstrap
+  namespace: jenkins
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: trivy
+    app.kubernetes.io/component: db-updater
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  # 취약 DB와 함께 misconfiguration checks bundle도 미리 받기 위한 최소 입력이다.
+  Containerfile: |
+    FROM scratch
+    USER 65532:65532
+  update.sh: |
+    set -eu
+    lock=/var/cache/trivy/.scan01-update
+    if ! mkdir "${lock}"; then
+      echo "SCAN-01 DB updater가 이미 실행 중이다" >&2
+      exit 1
+    fi
+    trap 'rmdir "${lock}"' EXIT HUP INT TERM
+
+    trivy image \
+      --cache-dir /var/cache/trivy \
+      --db-repository mirror.gcr.io/aquasec/trivy-db:2 \
+      --download-db-only \
+      --no-progress \
+      --skip-version-check
+
+    trivy config \
+      --cache-dir /var/cache/trivy \
+      --checks-bundle-repository mirror.gcr.io/aquasec/trivy-checks:2 \
+      --exit-code 0 \
+      --severity HIGH,CRITICAL \
+      --skip-version-check \
+      /bootstrap
+
+    date +%s >/var/cache/trivy/.scan01-ready.next
+    mv -f /var/cache/trivy/.scan01-ready.next /var/cache/trivy/scan01-ready
+    echo "scan01-db-update=pass"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: trivy-db-bootstrap
+  namespace: jenkins
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: Replace=true
+  labels:
+    app.kubernetes.io/name: trivy
+    app.kubernetes.io/component: db-updater
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  activeDeadlineSeconds: 600
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trivy
+        app.kubernetes.io/component: db-updater
+        app.kubernetes.io/part-of: platform-gitops
+    spec:
+      serviceAccountName: trivy-db-updater
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: trivy
+          image: docker.io/aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/bootstrap/update.sh"]
+          env:
+            - name: HOME
+              value: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: trivy-cache
+              mountPath: /var/cache/trivy
+            - name: bootstrap
+              mountPath: /bootstrap
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: trivy-cache
+          persistentVolumeClaim:
+            claimName: trivy-cache
+        - name: bootstrap
+          configMap:
+            name: trivy-db-bootstrap
+            defaultMode: 0555
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trivy-db-update
+  namespace: jenkins
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: trivy
+    app.kubernetes.io/component: db-updater
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  schedule: "17 */6 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 1800
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trivy
+        app.kubernetes.io/component: db-updater
+        app.kubernetes.io/part-of: platform-gitops
+    spec:
+      activeDeadlineSeconds: 600
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: trivy
+            app.kubernetes.io/component: db-updater
+            app.kubernetes.io/part-of: platform-gitops
+        spec:
+          serviceAccountName: trivy-db-updater
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: trivy
+              image: docker.io/aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "/bootstrap/update.sh"]
+              env:
+                - name: HOME
+                  value: /tmp
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+              volumeMounts:
+                - name: trivy-cache
+                  mountPath: /var/cache/trivy
+                - name: bootstrap
+                  mountPath: /bootstrap
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: trivy-cache
+              persistentVolumeClaim:
+                claimName: trivy-cache
+            - name: bootstrap
+              configMap:
+                name: trivy-db-bootstrap
+                defaultMode: 0555
+            - name: tmp
+              emptyDir:
+                sizeLimit: 512Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: trivy-db-updater-egress
+  namespace: jenkins
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: trivy
+    app.kubernetes.io/component: db-updater
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: trivy
+      app.kubernetes.io/component: db-updater
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+      ports:
+        - protocol: TCP
+          port: 443

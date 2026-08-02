@@ -1,15 +1,23 @@
-// CI-01 완료 증거 pipeline. 한 번의 실행이 세 항목을 함께 만든다.
-//   1) credential 원문 마스킹  2) 비특권 agent Pod  3) 지정 project push 성공 / 미지정 거부
-// agent Pod template과 credential은 controller의 JCasC가 소유한다.
+// CI-01 pipeline을 SCAN-01 gate로 확장한다.
+// pass: config/image gate -> CycloneDX OCI artifact -> image push -> release handoff
+// fail: 고정 취약 base가 image gate를 넘지 못하고 Harbor credential/push 전에 종료
 node('ci01-buildah') {
     def registry = 'harbor.imcherry5778.xyz'
     def allowed = "${registry}/ci01-evidence/ci01-app"
-    def denied = "${registry}/ci01-denied/ci01-app"
-    def tag = "b${env.BUILD_NUMBER}"
+    def scanCase = params.SCAN01_CASE ?: 'pass'
+    def baseImages = [
+        pass: 'docker.io/library/hello-world:latest@sha256:c3cbe1cc1aa588a64951ac6286e0df7b27fe2e6324b1001c619bb358770c0178',
+        fail: 'docker.io/library/alpine:3.18.0@sha256:02bb6f428431fbc2809c5d1b41eab5a68350194fb508869a33cb1af4444c9b11'
+    ]
+    if (!baseImages.containsKey(scanCase)) {
+        error("허용하지 않은 SCAN01_CASE=${scanCase}")
+    }
+
+    def tag = "scan-b${env.BUILD_NUMBER}"
+    def localImage = "localhost/scan01-ci:${tag}"
+    def archive = "${env.WORKSPACE}/scan01-image.tar"
 
     stage('checkout') {
-        // `scm` 전역 변수는 workflow-multibranch 플러그인 소유다. 최소 플러그인
-        // 집합을 지키려고 같은 repo와 credential을 명시적으로 checkout한다.
         checkout([
             $class: 'GitSCM',
             branches: [[name: '*/main']],
@@ -18,53 +26,198 @@ node('ci01-buildah') {
                 credentialsId: 'gitea-ci01'
             ]]
         ])
-        sh 'echo "ci01-agent-pod=$(hostname)"'
+        sh 'echo "scan01-agent-pod=$(hostname) case=${SCAN01_CASE}"'
     }
 
-    stage('build and push') {
-        container('buildah') {
-            withCredentials([usernamePassword(credentialsId: 'harbor-robot-ci01',
-                                              usernameVariable: 'CI01_ROBOT_USER',
-                                              passwordVariable: 'CI01_ROBOT_SECRET')]) {
-                withEnv(["CI01_REGISTRY=${registry}",
-                         "CI01_ALLOWED=${allowed}",
-                         "CI01_DENIED=${denied}",
-                         "CI01_TAG=${tag}"]) {
-                    sh '''
+    stage('config gate') {
+        container('trivy') {
+            sh '''
 set -eu
 
-# 증거 1: credential 원문을 일부러 stdout으로 흘린다. Jenkins credentials binding이
-# 콘솔에 기록되기 전에 마스킹해야 하며, 검증기는 원문 0건을 요구한다.
-echo "ci01-mask-probe user=${CI01_ROBOT_USER} secret=${CI01_ROBOT_SECRET}"
-
-# 증거 2: 이 셸은 root도 privileged도 아니고 Docker socket도 없다.
-echo "ci01-build-uid=$(id -u) gid=$(id -g)"
-echo "ci01-docker-socket=$([ -S /var/run/docker.sock ] && echo present || echo absent)"
-
-printf '%s' "${CI01_ROBOT_SECRET}" | buildah login --username "${CI01_ROBOT_USER}" \\
-    --password-stdin "${CI01_REGISTRY}"
-
-buildah bud --isolation chroot --layers=false \\
-    -t "${CI01_ALLOWED}:${CI01_TAG}" -f Containerfile .
-
-# 증거 3 양성: robot이 지정된 project에 push한다.
-buildah push --digestfile ci01-digest.txt "${CI01_ALLOWED}:${CI01_TAG}"
-echo "ci01-pushed-image=${CI01_ALLOWED}:${CI01_TAG}"
-echo "ci01-pushed-digest=$(cat ci01-digest.txt)"
-
-# 증거 3 음성: 같은 robot이 미지정 project로 push하면 거부돼야 한다.
-if buildah push "${CI01_ALLOWED}:${CI01_TAG}" "docker://${CI01_DENIED}:${CI01_TAG}" \\
-    >ci01-denied.log 2>&1; then
-    echo "ci01-denied-push=UNEXPECTED-SUCCESS"
+ready=/var/cache/trivy/scan01-ready
+if [ -d /var/cache/trivy/.scan01-update ]; then
+    echo "Trivy DB updater가 실행 중이므로 고정 snapshot을 판정할 수 없다" >&2
     exit 1
 fi
-echo "ci01-denied-push=rejected"
-sed -n '$p' ci01-denied.log
+if [ ! -s "${ready}" ]; then
+    echo "Trivy DB cache가 준비되지 않았다" >&2
+    exit 1
+fi
+now=$(date +%s)
+updated=$(cat "${ready}")
+case ${updated} in
+    ''|*[!0-9]*) echo "Trivy DB cache marker 형식이 잘못됐다" >&2; exit 1 ;;
+esac
+age=$((now - updated))
+if [ "${age}" -lt 0 ] || [ "${age}" -gt 86400 ]; then
+    echo "Trivy DB cache가 24시간 freshness gate를 넘었다: age=${age}s" >&2
+    exit 1
+fi
+echo "scan01-db-cache-age-seconds=${age}"
 
-buildah logout "${CI01_REGISTRY}" >/dev/null
+ignore_option=
+if [ -f .trivyignore.yaml ]; then
+    if ! awk '
+      function finish() {
+        if (entry && (!statement || !expiry || !scope)) invalid = 1
+      }
+      /^[[:space:]]*-[[:space:]]+id:[[:space:]]*[^[:space:]]/ {
+        finish(); entry = 1; statement = expiry = scope = 0; next
+      }
+      entry && /^[[:space:]]+statement:[[:space:]]*[^[:space:]]/ { statement = 1 }
+      entry && /^[[:space:]]+expired_at:[[:space:]]*[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][[:space:]]*$/ { expiry = 1 }
+      entry && /^[[:space:]]+(paths|purls):[[:space:]]*$/ { scope = 1 }
+      END { finish(); exit invalid }
+    ' .trivyignore.yaml; then
+        echo ".trivyignore.yaml의 모든 예외에는 statement, expired_at, paths/purls가 필요하다" >&2
+        exit 1
+    fi
+    ignore_option='--ignorefile .trivyignore.yaml'
+fi
+# ignore_option은 고정 파일명 하나 또는 빈 문자열뿐이다.
+# shellcheck disable=SC2086
+if trivy config \
+    --cache-dir /var/cache/trivy \
+    --checks-bundle-repository mirror.gcr.io/aquasec/trivy-checks:2 \
+    --skip-check-update \
+    --skip-version-check \
+    --severity HIGH,CRITICAL \
+    --exit-code 1 \
+    ${ignore_option} .; then
+    echo "scan01-config-gate=pass severity=HIGH,CRITICAL"
+else
+    echo "scan01-config-gate=fail severity=HIGH,CRITICAL" >&2
+    exit 1
+fi
+'''
+        }
+    }
+
+    stage('build local image') {
+        container('buildah') {
+            withEnv([
+                "SCAN01_BASE_IMAGE=${baseImages[scanCase]}",
+                "SCAN01_LOCAL_IMAGE=${localImage}",
+                "SCAN01_ARCHIVE=${archive}"
+            ]) {
+                sh '''
+set -eu
+buildah bud --isolation chroot --layers=false \
+    --build-arg "SCAN01_BASE_IMAGE=${SCAN01_BASE_IMAGE}" \
+    -t "${SCAN01_LOCAL_IMAGE}" -f Containerfile .
+# 로컬 archive에는 registry 인증이 없으므로 Pod 전역 auth 경로를 적용하지 않는다.
+unset REGISTRY_AUTH_FILE
+buildah push --format docker "${SCAN01_LOCAL_IMAGE}" \
+    "docker-archive:${SCAN01_ARCHIVE}:${SCAN01_LOCAL_IMAGE}"
+echo "scan01-local-image=${SCAN01_LOCAL_IMAGE}"
+'''
+            }
+        }
+    }
+
+    stage('image gate and SBOM') {
+        container('trivy') {
+            withEnv(["SCAN01_ARCHIVE=${archive}"]) {
+                sh '''
+set -eu
+ignore_option=
+if [ -f .trivyignore.yaml ]; then
+    ignore_option='--ignorefile .trivyignore.yaml'
+fi
+
+echo "scan01-stage=image-gate-start"
+set +e
+# ignore_option은 고정 파일명 하나 또는 빈 문자열뿐이다.
+# shellcheck disable=SC2086
+trivy image \
+    --cache-dir /var/cache/trivy \
+    --cache-backend memory \
+    --input "${SCAN01_ARCHIVE}" \
+    --scanners vuln \
+    --severity HIGH,CRITICAL \
+    --ignore-unfixed \
+    --exit-code 1 \
+    --skip-db-update \
+    --skip-java-db-update \
+    --skip-check-update \
+    --skip-version-check \
+    --no-progress \
+    ${ignore_option}
+gate_status=$?
+set -e
+if [ "${gate_status}" -ne 0 ]; then
+    echo "scan01-vulnerability-gate=fail severity=HIGH,CRITICAL fixable-only=true" >&2
+    exit "${gate_status}"
+fi
+echo "scan01-vulnerability-gate=pass severity=HIGH,CRITICAL fixable-only=true"
+
+trivy image \
+    --cache-dir /var/cache/trivy \
+    --cache-backend memory \
+    --input "${SCAN01_ARCHIVE}" \
+    --scanners vuln \
+    --format cyclonedx \
+    --output scan01-sbom.cdx.json \
+    --skip-db-update \
+    --skip-java-db-update \
+    --skip-check-update \
+    --skip-version-check \
+    --no-progress
+grep -Eq '"bomFormat"[[:space:]]*:[[:space:]]*"CycloneDX"' scan01-sbom.cdx.json
+echo "scan01-sbom-format=cyclonedx-json"
+echo "scan01-sbom-sha256=$(sha256sum scan01-sbom.cdx.json | awk '{print $1}')"
+'''
+            }
+        }
+    }
+
+    stage('push image and attach SBOM') {
+        withCredentials([usernamePassword(credentialsId: 'harbor-robot-ci01',
+                                          usernameVariable: 'CI01_ROBOT_USER',
+                                          passwordVariable: 'CI01_ROBOT_SECRET')]) {
+            withEnv([
+                "CI01_REGISTRY=${registry}",
+                "CI01_ALLOWED=${allowed}",
+                "CI01_TAG=${tag}",
+                "SCAN01_LOCAL_IMAGE=${localImage}"
+            ]) {
+                container('buildah') {
+                    sh '''
+set -eu
+echo "scan01-stage=push-start"
+trap 'buildah logout "${CI01_REGISTRY}" >/dev/null 2>&1 || true' EXIT HUP INT TERM
+printf '%s' "${CI01_ROBOT_SECRET}" | buildah login \
+    --username "${CI01_ROBOT_USER}" --password-stdin "${CI01_REGISTRY}"
+buildah push --digestfile scan01-image.digest \
+    "${SCAN01_LOCAL_IMAGE}" "${CI01_ALLOWED}:${CI01_TAG}"
+echo "scan01-pushed-image=${CI01_ALLOWED}:${CI01_TAG}"
+echo "scan01-pushed-digest=$(cat scan01-image.digest)"
+'''
+                }
+                container('oras') {
+                    sh '''
+set -eu
+image_digest=$(cat scan01-image.digest)
+trap 'oras logout "${CI01_REGISTRY}" >/dev/null 2>&1 || true' EXIT HUP INT TERM
+printf '%s' "${CI01_ROBOT_SECRET}" | oras login "${CI01_REGISTRY}" \
+    --username "${CI01_ROBOT_USER}" --password-stdin
+sbom_digest=$(oras attach \
+    --distribution-spec v1.1-referrers-api \
+    --artifact-type application/vnd.cyclonedx+json \
+    --annotation org.opencontainers.artifact.description='SCAN-01 CycloneDX SBOM' \
+    --format go-template --template '{{.digest}}' \
+    "${CI01_ALLOWED}@${image_digest}" \
+    scan01-sbom.cdx.json:application/vnd.cyclonedx+json)
+echo "scan01-sbom-artifact-digest=${sbom_digest}"
+echo "scan01-sbom-subject-digest=${image_digest}"
 '''
                 }
             }
         }
+    }
+
+    stage('release handoff') {
+        echo "scan01-release-handoff=ready case=${scanCase}"
+        // 실제 배포와 서명은 SIGN-01/E2E-01이 소유한다. 이 job에는 deploy stage가 없다.
     }
 }

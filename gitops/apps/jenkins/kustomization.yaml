@@ -31,6 +31,7 @@ resources:
   - trust-bundle.yaml
   - vault-agent-config.yaml
   - agent-buildah-config.yaml
+  - trivy-db-cache.yaml
   - pvc.yaml
   - service.yaml
   - deployment.yaml

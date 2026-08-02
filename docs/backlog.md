@@ -814,8 +814,8 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `QUALITY-01 DONE` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO·배포 직후 capacity stop/go |
 | `AWX-01 DONE` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
 | `UPDATE-01 DONE` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
-| `SCAN-01 READY` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
-| `SIGN-01 BLOCKED` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
+| `SCAN-01 DONE` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
+| `SIGN-01 READY` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
 | `POL-01 DONE` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
 | `E2E-01 BLOCKED` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
 | `POL-02 BLOCKED` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
@@ -1038,6 +1038,31 @@ checkout으로 바꿨고, JCasC의 `DefaultCrumbIssuer.excludeClientIPFromCrumb`
 시작 main은 `58459932387eb9b72470f55904b1aeeded19015b`이며 최종 child 선언은 `main`이다.
 직접 후속 중 `SCAN-01`은 선행 `CI-01`·`REG-01`이 모두 충족돼 `READY`로 열고, `E2E-01`은
 `SIGN-01`이 남아 `BLOCKED`를 유지한다.
+
+2026-08-02 `SCAN-01`에서 Trivy `0.72.0`과 ORAS `1.3.3` image를 digest로 고정해 기존
+Jenkins 동적 agent에 별도 container로 추가했다. 선언형 bootstrap Job과 6시간 CronJob만
+공식 DB/checks OCI repository에 나가며 1 GiB PVC를 갱신한다. build는 read-only cache와
+24시간 freshness marker만 사용한다. source config는 `HIGH,CRITICAL`, image는 fix 가능한
+`HIGH,CRITICAL`에서 실패하고, 예외에는 경로/PURL·사유·만료일을 모두 강제한다. 통과 image의
+CycloneDX JSON은 Jenkins archive 대신 immutable Harbor image digest의 OCI accessory로 저장해
+`SIGN-01`이 같은 subject를 이어받는다.
+
+완료 증거는 pipeline build `2`·`3`으로 얻었다. build `2`의 취약점 기준 통과와 image digest
+`sha256:50ac62320ee4ebce0da8cb6c05bac072da3c07cb31559487a1f3fb1028a63fe3`, 연결된 CycloneDX
+artifact digest `sha256:ced6c83cd50d2324bef40f8a4b625fc266bed96c128cf5e01b2bc22c9a0eeb5e` 및
+`application/vnd.cyclonedx+json` type을 Harbor API로 확인했다. build `3`은 고정 Alpine
+3.18.0의 fix 가능한 `HIGH,CRITICAL`에서 `FAILURE`가 됐고 tag·push·release handoff는 모두
+없었다. 최초 build `1`은 image gate 전에 잘못 적용된 local archive auth 경로로 실패해 원인을
+같은 Buildah image로 재현·수정한 뒤, 승인받은 두 build만 추가했다.
+
+배포 직전/직후 `k3s-01` available은 `11,781/11,585MiB`, pass agent 실행 중은
+`11,283MiB`, swap은 0이었다. PVC 요청 합계는 `66.125GiB`로 Trivy cache 1 GiB만 늘어
+stop/go는 **GO**지만 12 GiB 경고 구간이다. 검증 시 root
+`ac14432edbf21c546351b04e8307cce057475665`와 Jenkins 설정
+`b1c332df4f52e0f18eda2615a80708b3a3f09b85`는 `Synced/Healthy`였다. 시작 main
+`a3870b2858db269ee28ad3e1c5502ae4820a8979`로 rollback한 뒤 root·Jenkins를 mutable `main`의
+`Synced/Healthy`로 복구했고 최종 child 선언은 `main`이다. 직접 후속 `SIGN-01`은
+`REG-01`·`SCAN-01`·`VAULT-02`가 모두 `DONE`이므로 `READY`로 연다.
 
 ## 7. 최소권한과 공개 경로
 
