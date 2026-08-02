@@ -413,7 +413,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1785684940.13" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1785711551.49" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -1759,6 +1759,62 @@
             <shaper1 />
             <shaper2 />
             <description>NET-04: DATA 실제 host에서 public IPv4 Web TCP 80/443 egress 허용</description>
+          </rule>
+          <rule uuid="b94e05a5-37d5-4049-9d72-c813f419bbed">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1119</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt3</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.30.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.40.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>443</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>EDGE-01 Warpgate to NetBird control</description>
           </rule>
         </rules>
         <snatrules />

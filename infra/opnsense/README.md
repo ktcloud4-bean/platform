@@ -30,7 +30,7 @@ check-drift.sh --update로 스냅샷 승인
 | WAN | ISP DHCP, private·bogon 차단 |
 | LAN/HOME | 물리 재배치 완료; 주소는 IP 계획 참조 |
 | VLAN | LAN=`vlan01`, VLAN 20~50 논리 인터페이스·gateway 저장; 부모 `igc2`는 무주소 tagged-only trunk |
-| 방화벽 | VLAN 20~50 최종 IPv4 최소 경계: 배포 host별 gateway DNS·NTP, exact cross-VLAN 서비스, 비공개·특수용 IPv4 선차단·기록, public TCP 80/443, 나머지 implicit deny |
+| 방화벽 | VLAN 20~50 최종 IPv4 최소 경계: 배포 host별 gateway DNS·NTP, exact cross-VLAN 서비스, EDGE-01 Warpgate→NetBird control, 비공개·특수용 IPv4 선차단·기록, public TCP 80/443, 나머지 implicit deny |
 | Web GUI | HTTPS, LAN listen, Local+TOTP |
 | SSH | LAN listen, 공개키 관리 |
 | DNS | Unbound recursion, DNSSEC, exact split override; 공인 zone 전체 forwarding 비활성 |
@@ -46,7 +46,8 @@ check-drift.sh --update로 스냅샷 승인
 
 - VLAN network 전체가 아니라 현재 배포된 source host만 자기 gateway DNS·NTP를 쓴다.
 - `k3s-01`의 PostgreSQL 5432·S3 8333, Warpgate의 Keycloak 443·관리 대상 SSH 22,
-  NetBird의 Keycloak/control 443만 exact cross-VLAN PASS로 둔다.
+  NetBird의 Keycloak/control 443과 EDGE-01 Warpgate direct peer의 NetBird control 443만
+  exact cross-VLAN PASS로 둔다.
 - 비공개·특수용 IPv4를 public Web보다 먼저 차단·기록하고, 각 배포 host의 public TCP
   80/443만 허용한다. 나머지는 PF implicit deny다.
 - DATA→AWS VPC 전체 프로토콜 임시 허용은 제거했다. 기존 IPsec과 selector는 유지하며
@@ -57,6 +58,8 @@ check-drift.sh --update로 스냅샷 승인
 최종 통신표, rule·alias UUID와 sequence, 만료 객체, hardened 결과, rollback은
 [`docs/runbook/opnsense-vlan-firewall-hardening.md`](../../docs/runbook/opnsense-vlan-firewall-hardening.md)가
 소유한다. `NET-03` 절차는 bootstrap 당시의 역사 증거로만 보존한다.
+EDGE-01이 추가한 Warpgate direct peer control rule과 rollback은
+[`docs/runbook/netbird-public-edge.md`](../../docs/runbook/netbird-public-edge.md)가 소유한다.
 
 ## IDS 경계
 

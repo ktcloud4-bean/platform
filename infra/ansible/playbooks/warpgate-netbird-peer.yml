@@ -1,0 +1,6 @@
+---
+- name: Apply EDGE-01 Warpgate NetBird direct peer
+  hosts: warpgate_nodes
+  become: true
+  roles:
+    - warpgate_netbird_peer

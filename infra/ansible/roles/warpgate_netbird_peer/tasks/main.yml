@@ -1,0 +1,156 @@
+---
+- name: EDGE-01 대상 OS·아키텍처 확인
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == "Rocky"
+      - ansible_facts.distribution_major_version == "9"
+      - ansible_facts.architecture == "x86_64"
+      - ansible_facts.selinux.status | default('disabled') == 'enabled'
+      - ansible_facts.selinux.mode | default('disabled') == 'enforcing'
+    fail_msg: "EDGE-01 Warpgate NetBird peer는 SELinux Enforcing Rocky Linux 9 x86_64만 지원한다."
+
+- name: EDGE-01 기존 NetBird client 설정 확인
+  ansible.builtin.stat:
+    path: "{{ warpgate_netbird_config_path }}"
+  register: warpgate_netbird_config
+
+- name: EDGE-01 최초 등록 setup key 입력 확인
+  ansible.builtin.assert:
+    that:
+      - warpgate_netbird_setup_key_file | length > 0
+    fail_msg: "최초 등록에는 저장소 밖 one-off setup key 파일 경로가 필요하다."
+  when:
+    - not ansible_check_mode
+    - not warpgate_netbird_config.stat.exists
+  no_log: true
+
+- name: EDGE-01 최초 등록 setup key metadata 확인
+  ansible.builtin.stat:
+    path: "{{ warpgate_netbird_setup_key_file }}"
+    follow: false
+  register: warpgate_netbird_setup_key
+  delegate_to: localhost
+  become: false
+  when:
+    - not ansible_check_mode
+    - warpgate_netbird_setup_key_file | length > 0
+  no_log: true
+
+- name: EDGE-01 최초 등록 setup key 최소 권한 확인
+  ansible.builtin.assert:
+    that:
+      - warpgate_netbird_setup_key.stat.exists
+      - warpgate_netbird_setup_key.stat.isreg | default(false)
+      - not (warpgate_netbird_setup_key.stat.islnk | default(false))
+      - warpgate_netbird_setup_key.stat.mode == "0600"
+    fail_msg: "최초 등록에는 저장소 밖 mode 0600 one-off setup key 파일이 필요하다."
+  delegate_to: localhost
+  become: false
+  when:
+    - not ansible_check_mode
+    - warpgate_netbird_setup_key_file | length > 0
+  no_log: true
+
+- name: EDGE-01 NetBird RPM 다운로드 (고정 버전·SHA-256)
+  ansible.builtin.get_url:
+    url: "{{ warpgate_netbird_rpm_url }}"
+    dest: "{{ warpgate_netbird_rpm_path }}"
+    checksum: "sha256:{{ warpgate_netbird_rpm_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: EDGE-01 NetBird RPM 설치
+  ansible.builtin.dnf:
+    name: "{{ warpgate_netbird_rpm_path }}"
+    state: present
+    disable_gpg_check: true
+
+- name: EDGE-01 설치 버전 확인
+  ansible.builtin.command:
+    argv:
+      - rpm
+      - -q
+      - --qf
+      - "%{VERSION}"
+      - netbird
+  register: warpgate_netbird_installed_version
+  changed_when: false
+  failed_when: warpgate_netbird_installed_version.stdout != warpgate_netbird_version
+
+- name: EDGE-01 NetBird daemon 활성화
+  ansible.builtin.systemd:
+    name: netbird.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: EDGE-01 NetBird daemon socket 대기
+  ansible.builtin.wait_for:
+    path: /var/run/netbird.sock
+    state: present
+    timeout: 20
+  when: not ansible_check_mode
+
+- name: EDGE-01 이전 실행의 원격 setup key 잔여 제거
+  ansible.builtin.file:
+    path: "{{ warpgate_netbird_setup_key_remote_path }}"
+    state: absent
+  when: not ansible_check_mode
+
+- name: EDGE-01 Warpgate direct peer 선언
+  when: not ansible_check_mode
+  block:
+    - name: EDGE-01 one-off setup key 임시 배치
+      ansible.builtin.copy:
+        src: "{{ warpgate_netbird_setup_key_file }}"
+        dest: "{{ warpgate_netbird_setup_key_remote_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: warpgate_netbird_setup_key_file | length > 0
+      no_log: true
+
+    - name: EDGE-01 direct peer 등록과 기능 축소
+      ansible.builtin.command:
+        argv: >-
+          {{
+            [
+              '/usr/bin/netbird', 'up',
+              '--management-url', warpgate_netbird_management_url,
+              '--admin-url', warpgate_netbird_admin_url,
+              '--hostname', warpgate_netbird_peer_name,
+              '--interface-name', warpgate_netbird_interface_name,
+              '--no-browser',
+              '--disable-dns',
+              '--disable-client-routes',
+              '--disable-server-routes',
+              '--disable-ipv6'
+            ]
+            + (
+              ['--setup-key-file', warpgate_netbird_setup_key_remote_path]
+              if warpgate_netbird_setup_key_file | length > 0
+              else []
+            )
+          }}
+      changed_when: not warpgate_netbird_config.stat.exists
+      no_log: true
+  always:
+    - name: EDGE-01 원격 setup key 원문 제거
+      ansible.builtin.file:
+        path: "{{ warpgate_netbird_setup_key_remote_path }}"
+        state: absent
+
+- name: EDGE-01 NetBird 설정 최소 권한 확인
+  ansible.builtin.file:
+    path: "{{ warpgate_netbird_config_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: not ansible_check_mode
+
+- name: EDGE-01 NetBird daemon 최종 활성 상태 확인
+  ansible.builtin.systemd:
+    name: netbird.service
+    enabled: true
+    state: started

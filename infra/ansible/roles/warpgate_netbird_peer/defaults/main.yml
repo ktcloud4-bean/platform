@@ -1,0 +1,16 @@
+---
+# EDGE-01: Warpgate를 NetBird overlay의 직접 종단으로 등록한다.
+# 서버와 같은 버전을 쓰고 GitHub Release asset digest로 RPM을 고정한다.
+warpgate_netbird_version: "0.73.0"
+warpgate_netbird_rpm_sha256: "0bb5936c1a621f9b0ccd7be7ee99c140853f341bf418480ad6cadf266f4927de"
+warpgate_netbird_rpm_url: >-
+  https://github.com/netbirdio/netbird/releases/download/v{{ warpgate_netbird_version }}/netbird_{{ warpgate_netbird_version }}_linux_amd64.rpm
+warpgate_netbird_rpm_path: "/var/cache/netbird-{{ warpgate_netbird_version }}-linux-amd64.rpm"
+
+warpgate_netbird_management_url: "https://netbird.imcherry5778.xyz"
+warpgate_netbird_admin_url: "https://netbird.imcherry5778.xyz"
+warpgate_netbird_peer_name: "warpgate-edge"
+warpgate_netbird_interface_name: "wt0"
+warpgate_netbird_setup_key_file: ""
+warpgate_netbird_config_path: "/var/lib/netbird/default.json"
+warpgate_netbird_setup_key_remote_path: "/run/edge-01-netbird-setup-key"

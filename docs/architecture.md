@@ -114,22 +114,34 @@ NetBox는 채택하지 않았다. 물리 장비 증가, 포트·케이블 관리
 ## HTTP 요청 경로
 
 ```text
-보호된 웹 애플리케이션
-Client → [Cloudflare WAF] → OPNsense PF/NAT (Suricata IDS 관찰) → Traefik
-       → route-scoped bouncer → CrowdSec AppSec(Coraza + CRS) 판정 → Pomerium → Service
-
-Keycloak 인증 endpoint
-Client → Cloudflare WAF → OPNsense PF/NAT (Suricata IDS 관찰) → Traefik → Keycloak
-
-NetBird control·relay
+현재 외부 공개: NetBird control·relay
 Client → OPNsense의 명시적 공개 port → netbird-01
                     └→ Suricata IDS 관찰
+
+NetBird 연결 뒤 내부 웹 애플리케이션
+Client → NetBird overlay → Traefik → Pomerium → Service
+                            └→ 선택한 route만 CrowdSec AppSec(Coraza + CRS) 판정
+
+Cloudflare와 분리된 복구 경로
+등록된 recovery client → NetBird direct peer 정책 → warpgate-01:8888
+
+조건부 공개 HTTP (`EDGE-02 DEFERRED`)
+Client → Cloudflare WAF → Cloudflare source만 허용한 OPNsense PF/NAT
+       → Traefik → Pomerium 또는 Keycloak
 
 클러스터 내부
 Service → Kubernetes Service DNS → Service
 ```
 
-대괄호의 Cloudflare는 외부 요청일 때만 지난다. Keycloak은 Pomerium의 IdP이므로 Pomerium 뒤에 두지 않는다. Harbor registry API, SeaweedFS S3 API와 비 HTTP 프로토콜도 Pomerium Portal 경로와 분리한다.
+`EDGE-01`의 공개 진입은 DNS-only `netbird` 한 이름과 TCP 80/443·UDP 3478뿐이다.
+`access`·`sso`를 포함한 웹 이름은 내부 DNS에서만 쓰며, 외부 peer는 통제된 일회용 setup
+key 또는 내부망 등록으로 NetBird에 먼저 가입한다. Warpgate는 subnet route가 아니라
+NetBird direct peer로 등록하고, recovery client group에서 Warpgate TCP 8888로 향하는
+단방향 정책만 둔다. 기본 All↔All 정책은 비활성화하므로 이 복구 경로가 다른 내부 서비스
+접근권한으로 확대되지 않는다. Cloudflare proxy·WAF와 origin 제한은 외부 OIDC 셀프서비스나
+clientless Portal 요구가 생길 때 `EDGE-02`에서 함께 연다.
+Keycloak은 Pomerium의 IdP이므로 Pomerium 뒤에 두지 않는다. Harbor registry API,
+SeaweedFS S3 API와 비 HTTP 프로토콜도 Pomerium Portal 경로와 분리한다.
 
 역할은 겹치지 않는다.
 
@@ -137,7 +149,7 @@ Service → Kubernetes Service DNS → Service
 |---|---|
 | OPNsense | L3/L4 방화벽·NAT; HTTP reverse proxy가 아님 |
 | Suricata | north-south·라우팅된 VLAN 간 흐름의 네트워크 위협 탐지; 신원 정책이나 WAF가 아님 |
-| Cloudflare | 공개 HTTP의 엣지 WAF·프록시 |
+| Cloudflare | `EDGE-02`가 채택될 때만 공개 HTTP의 엣지 WAF·프록시; DNS-01과 NetBird DNS-only record는 별도 |
 | Traefik | k3s 진입·TLS·호스트/경로 라우팅 |
 | CrowdSec AppSec | 별도 process에서 Coraza·OWASP CRS로 선택한 route의 HTTP 공격 검사 |
 | Pomerium | Keycloak 신원으로 Route 접근 결정·업스트림 프록시 |

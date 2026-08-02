@@ -1170,9 +1170,29 @@ SHA에서 Dashy Keycloak 도달 양성, `token verification failed` 신규 0건,
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `NET-04 DONE` | 실제 통신표로 VLAN 규칙 최소화·hardened 검증 ([runbook](runbook/opnsense-vlan-firewall-hardening.md)) | `NB-02`, `WG-02`, `POM-01`, `BKP-05`, `E2E-01` | `OPNSENSE-LIVE` | 외부 공개·운영 통신 | 임시 rule 제거, `vlan-verify hardened`, drift 없음 |
-| `EDGE-01 READY` | Cloudflare WAF·origin 제한·공개 DNS/NAT | `CROWDSEC-FIX-01`, `POM-01`, `NB-02`, `NIDS-01`, `NET-04` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 사용자 | 허용 hostname만 공개, origin 직접 우회 차단, IDS 경보·복구 경로 독립 |
+| `EDGE-01 DONE` | NetBird 단독 공개 DNS·NAT allowlist, 이전 프로젝트 공개 DNS 잔여 정리, Warpgate direct recovery peer와 최소 NetBird policy ([runbook](runbook/netbird-public-edge.md)) | `CROWDSEC-FIX-01`, `POM-01`, `NB-02`, `NIDS-01`, `NET-04` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 사용자 | 공개 권위 DNS는 DNS-only `netbird` A 1건·그 밖의 record 0건, WAN NAT는 NetBird TCP 80/443·UDP 3478만 존재, IDS 관측과 Warpgate TCP 8888 direct-peer 복구 경로가 Cloudflare proxy와 독립 |
+| `EDGE-02 DEFERRED` | Cloudflare proxied HTTP WAF·origin 제한·`sso`/Portal 공개 DNS·NAT | `EDGE-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | clientless Portal·외부 OIDC 셀프서비스 | 허용 hostname만 proxied 공개, origin 직접 우회 차단, IDS 경보·NetBird/Warpgate 복구 경로 독립 |
 | `NIPS-01 DEFERRED` | 검증된 Suricata rule만 선택적 IPS로 승격 | `NIDS-01`, `NET-04` | `OPNSENSE-LIVE` | 전체 프로젝트 통신 | 정상 트래픽·오탐·부모 인터페이스·offloading·처리량·장애·즉시 rollback 검증; 공개의 필수 gate 아님 |
 | `KMS-01 DEFERRED` | Vault Shamir→AWS KMS auto-unseal migration | `BKP-05` | `VAULT-INIT` | Vault 부팅·복구 | 사전 snapshot, KMS 장애 시험, seal rollback drill; VPN은 선행 아님 |
+
+`EDGE-02`는 NetBird에 먼저 가입하지 않은 외부 기기의 Keycloak 대화형 로그인 또는
+NetBird 없이 쓰는 clientless Pomerium Portal이 실제 요구될 때만 재검토한다. 같은 WAN
+IPv4의 TCP 443은 현재 NetBird가 소유하므로, 별도 공인 IPv4나 Cloudflare origin port
+override처럼 L4 소유권 충돌을 해소하는 설계가 먼저 확정돼야 한다. AWS Site-to-Site VPN,
+AWS SAML과 공인 AWS API로 나가는 오프사이트 백업은 이 공개 HTTP 경로의 재검토 조건이 아니다.
+
+2026-08-03 `EDGE-01`에서 공개 권위 DNS를 DNS-only `netbird` A 한 건으로 정리하고 현재
+OPNsense WAN IPv4로 교정했다. 두 authoritative NS에서 그 밖의 A·AAAA·CNAME 0건과 일본
+외부 HTTPS HTTP 200을 확인했다. OPNsense 저장 설정과 PF runtime의 inbound NAT는 기존
+NetBird TCP 80·443, UDP 3478 세 건뿐이었다. 같은 외부 TCP 443 흐름은 DMZ Suricata
+`eve.json`에 관측됐다. Warpgate에는 `v0.73.0` direct peer를 선언하고 Default All↔All을
+비활성화한 뒤 recovery client group에서 Warpgate TCP 8888로 향하는 단방향 policy만
+적용했다. 격리 ephemeral peer의 내부 Warpgate HTTPS 요청은 `wt-edge01` overlay로 한 번에
+통과했고 public Warpgate DNS·NAT와 Cloudflare proxy를 사용하지 않았다. one-off key와
+ephemeral peer·container·state·image는 제거했고 persistent peer만 connected 상태로
+남겼다. OPNsense drift는 EDGE-01 exact rule 한 건으로 스냅샷을 갱신한 뒤 0이었다. 따라서
+`EDGE-01`을 완료하고 선행이 모두 충족된 직접 후속 `AUDIT-01`만 `READY`로 연다.
+조건부 `EDGE-02`와 `NIPS-01`은 `DEFERRED`를 유지한다.
 
 ## 8. 조건부 NetBox lane
 
@@ -1194,7 +1214,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `AUDIT-01 BLOCKED` | Suricata·CrowdSec AppSec(Coraza/CRS)·Falco·Kubernetes·Vault·Keycloak·Pomerium·접근 서비스 이벤트 분류 | `EDGE-01`, `POL-02`, `FALCO-01` | 없음 | Loki·Wazuh | 보안/운영 경계, 시각·사용자·요청 ID, 마스킹, 보존 기준 |
+| `AUDIT-01 READY` | Suricata·CrowdSec AppSec(Coraza/CRS)·Falco·Kubernetes·Vault·Keycloak·Pomerium·접근 서비스 이벤트 분류 | `EDGE-01`, `POL-02`, `FALCO-01` | 없음 | Loki·Wazuh | 보안/운영 경계, 시각·사용자·요청 ID, 마스킹, 보존 기준 |
 | `LOKI-01 BLOCKED` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
 | `OBS-01 BLOCKED` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·OPNsense·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
 | `WAZUH-01 BLOCKED` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
