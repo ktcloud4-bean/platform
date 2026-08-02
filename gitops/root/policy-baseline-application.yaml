@@ -13,7 +13,7 @@ spec:
   project: policy-baseline
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: 0c9da0b09801eaa251d059a37c5d5cefac2c715e
+    targetRevision: 50d147ca35303e4b25bd9eb75693a31c5aff03d4
     path: policies
   destination:
     server: https://kubernetes.default.svc
