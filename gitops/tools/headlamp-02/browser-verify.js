@@ -333,7 +333,7 @@ async function verifyPrivilegedExec(page, podName) {
     };
   }), { name: podName });
   if (!result.opened || !result.successfulStatus || result.timeout || result.error) {
-    fail('privileged Headlamp proxy exec did not complete successfully');
+    fail(`privileged Headlamp proxy exec did not complete successfully: opened=${result.opened},status=${result.successfulStatus},timeout=${result.timeout},error=${Boolean(result.error)}`);
   }
   console.log('ALLOW_PRIVILEGED_EXEC=websocket-success');
 }
@@ -408,10 +408,14 @@ async function verifyCommonReadAndCriticalDeny(page, args) {
 }
 
 async function verifyDaily(page, dashyPod) {
-  const exec = await proxyRequest(page,
+  const execCreate = await proxyRequest(page,
     `/api/v1/namespaces/pomerium/pods/${dashyPod}/exec?container=dashy&command=node&command=-e&command=process.exit%280%29&stdout=true&stderr=true`,
     { method: 'POST' });
-  expectStatus('DENY_DAILY_EXEC', exec.status, 403);
+  expectStatus('DENY_DAILY_EXEC_CREATE', execCreate.status, 403);
+  const execGet = await proxyRequest(page,
+    `/api/v1/namespaces/pomerium/pods/${dashyPod}/exec?container=dashy&command=node&command=-e&command=process.exit%280%29&stdout=true&stderr=true`,
+    { method: 'GET' });
+  expectStatus('DENY_DAILY_EXEC_GET', execGet.status, 403);
 }
 
 async function verifyNoGroupPomeriumDeny(page) {
@@ -592,5 +596,7 @@ module.exports = {
   fixedIpv4Lookup,
   headlampCookieScopeUrl,
   headlampToken,
+  remoteKubernetesStatus,
+  requestWrongAudienceToken,
   reserveTotpWindow,
 };

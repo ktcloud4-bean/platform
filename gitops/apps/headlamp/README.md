@@ -45,7 +45,7 @@ Headlamp가 in-cluster endpoint와 CA를 초기화하는 데만 필요하고, wo
 | Keycloak group | Kubernetes group | 허용 | 거부 |
 |---|---|---|---|
 | `/platform-users` | `oidc:/platform-users` | namespace·node·Pod·Service·Event·workload·Job `get/list/watch`, `pods/log get` | exec, 모든 create/update/patch/delete, Secret·RBAC·TokenRequest·CSR·webhook·CRD·node write |
-| `/platform-privileged` | `oidc:/platform-privileged` | 위 조회·로그 + `pods/exec create`; `headlamp-rbac-test` namespace의 ConfigMap `get/create/update/patch/delete` | 그 밖의 namespace 변경과 모든 특권 API |
+| `/platform-privileged` | `oidc:/platform-privileged` | 위 조회·로그 + Headlamp WebSocket/kubectl 호환 `pods/exec get/create`; `headlamp-rbac-test` namespace의 ConfigMap `get/create/update/patch/delete` | 그 밖의 namespace 변경과 모든 특권 API |
 
 `headlamp-rbac-test`는 권한 검증 전용 namespace다. 운영 resource, 특히 Argo가 소유한
 resource는 위 API 권한이 있어도 Git 변경으로만 관리한다.

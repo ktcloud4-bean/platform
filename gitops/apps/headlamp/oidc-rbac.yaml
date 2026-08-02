@@ -83,7 +83,9 @@ rules:
     verbs: ["get"]
   - apiGroups: [""]
     resources: ["pods/exec"]
-    verbs: ["create"]
+    # Headlamp의 브라우저 WebSocket handshake는 GET, kubectl 계열 exec는
+    # CONNECT 요청을 create로 인가하므로 승인된 exec 경계에는 두 동사가 필요하다.
+    verbs: ["get", "create"]
   - apiGroups: ["apps"]
     resources:
       - daemonsets

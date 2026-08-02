@@ -225,12 +225,19 @@ remote_kubectl -n headlamp get deployment headlamp -o json | jq -e '
 for denied in \
   'get pods --all-namespaces' \
   'get pods/log --all-namespaces' \
-  'create pods/exec --all-namespaces' \
   'create deployments.apps --all-namespaces'; do
   read -r verb resource scope <<<"${denied}"
   actual=$(remote_kubectl auth can-i "${verb}" "${resource}" "${scope}" --as=system:serviceaccount:headlamp:headlamp)
   [[ "${actual}" == no ]] || {
     echo "Headlamp runtime ServiceAccount 예상 밖 권한: ${denied}=${actual}" >&2
+    exit 1
+  }
+done
+for verb in get create; do
+  actual=$(remote_kubectl auth can-i "${verb}" pods --subresource=exec --all-namespaces \
+    --as=system:serviceaccount:headlamp:headlamp)
+  [[ "${actual}" == no ]] || {
+    echo "Headlamp runtime ServiceAccount 예상 밖 권한: ${verb} pods/exec=${actual}" >&2
     exit 1
   }
 done
