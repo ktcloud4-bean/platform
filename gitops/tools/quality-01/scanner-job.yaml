@@ -1,0 +1,162 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: quality01-scanner
+  namespace: sonarqube
+  labels:
+    app.kubernetes.io/name: sonarqube
+    app.kubernetes.io/component: verification
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sonarqube
+        app.kubernetes.io/component: verification
+    spec:
+      restartPolicy: Never
+      serviceAccountName: sonarqube-verifier
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/verifier.hcl
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config
+              readOnly: true
+            - name: vault-trust
+              mountPath: /vault/tls
+              readOnly: true
+            - name: vault-secrets
+              mountPath: /vault/secrets
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+      containers:
+        - name: scanner
+          image: docker.io/sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1@sha256:23ca0f137965d9dff2198074043fd48d386280bc5d0ccac8c8349cea4cf096a9
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              set -a
+              source /vault/secrets/scanner.env
+              set +a
+              rm -f /vault/secrets/scanner.env
+
+              mkdir -p /tmp/quality01/pass/src /tmp/quality01/pass/coverage /tmp/quality01/fail/src
+              cp /samples/pass/math.js /tmp/quality01/pass/src/math.js
+              cp /samples/pass/lcov.info /tmp/quality01/pass/coverage/lcov.info
+              cp /samples/fail/math.js /tmp/quality01/fail/src/math.js
+
+              SONAR_TOKEN="${QUALITY01_PASS_TOKEN}" sonar-scanner \
+                -Dsonar.host.url=http://sonarqube.sonarqube.svc.cluster.local:9000 \
+                -Dsonar.projectBaseDir=/tmp/quality01/pass \
+                -Dsonar.projectKey=quality01-pass \
+                -Dsonar.projectName=QUALITY-01-pass \
+                -Dsonar.sources=src \
+                -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                -Dsonar.scm.disabled=true
+
+              SONAR_TOKEN="${QUALITY01_FAIL_TOKEN}" sonar-scanner \
+                -Dsonar.host.url=http://sonarqube.sonarqube.svc.cluster.local:9000 \
+                -Dsonar.projectBaseDir=/tmp/quality01/fail \
+                -Dsonar.projectKey=quality01-fail \
+                -Dsonar.projectName=QUALITY-01-fail \
+                -Dsonar.sources=src \
+                -Dsonar.scm.disabled=true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /vault/secrets
+            - name: pass-sample
+              mountPath: /samples/pass
+              readOnly: true
+            - name: fail-sample
+              mountPath: /samples/fail
+              readOnly: true
+            - name: scanner-tmp
+              mountPath: /tmp
+            - name: scanner-home
+              mountPath: /opt/sonar-scanner/.sonar
+      volumes:
+        - name: vault-agent-config
+          configMap:
+            name: sonarqube-vault-agent
+            items:
+              - key: verifier.hcl
+                path: verifier.hcl
+        - name: vault-trust
+          configMap:
+            name: sonarqube-trust-bundles
+            items:
+              - key: vault.crt
+                path: vault.crt
+        - name: vault-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: pass-sample
+          configMap:
+            name: quality01-pass-sample
+        - name: fail-sample
+          configMap:
+            name: quality01-fail-sample
+        - name: scanner-tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: scanner-home
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600
+                  audience: vault

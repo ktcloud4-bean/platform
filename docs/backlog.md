@@ -811,7 +811,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `SCM-01 DONE` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
 | `REG-01 READY` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
 | `CI-01 BLOCKED` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
-| `QUALITY-01 READY` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO |
+| `QUALITY-01 DONE` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO·배포 직후 capacity stop/go |
 | `AWX-01 DONE` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
 | `UPDATE-01 DONE` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
 | `SCAN-01 BLOCKED` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
@@ -911,8 +911,39 @@ sign-in으로 `302` 응답했다. 검증 SHA의 `platform-root`와 두 child는 
 Git에 선언한 Secret은 0건이며 admission webhook이 자체 관리하는 TLS CA·leaf Secret 두 개만
 라이브에 존재한다. 시작 main `930fc672e81e1b376402d8ca2edbb84c21b30db3`로 순서 있게 rollback해
 정책·NetworkPolicy·controller·CRD·동적 webhook을 제거하고 root를 `main`의 `Synced/Healthy`로
-복구했다. `E2E-01`은 `CI-01`·`QUALITY-01`·`SIGN-01`이 남고 `FALCO-01`은 `E2E-01`이 남으므로
+복구했다. `E2E-01`은 `CI-01`·`SIGN-01`이 남고 `FALCO-01`은 `E2E-01`이 남으므로
 둘 다 `BLOCKED`를 유지하며 새로 여는 직접 후속은 없다.
+
+2026-08-02 `QUALITY-01`에서 SonarQube Community Build `26.7.0.124771-community`를
+digest로 고정해 전용 AppProject·child Application·namespace에 배포했다. 관계형 원본은
+`postgres-01`의 전용 `sonarqube` DB와 최소권한 `sonarqube_user`가 소유하며 JDBC는
+`sslmode=verify-full`이다. DB 암호와 scanner project token은 Kubernetes Secret 없이
+전용 ServiceAccount의 명시적 Vault Agent init이 KV v2에서 memory `emptyDir`로만
+렌더링한다. 내장 Elasticsearch 요구값 `vm.max_map_count=524288`은 privileged init 대신
+`k3s_baseline` role의 노드 sysctl로 선언했고 k3s·Traefik은 재기동하지 않았다.
+
+작은 JavaScript 두 project의 최신 분석은 `2026-08-02T08:50:21Z`와
+`2026-08-02T08:50:35Z`에 기록됐고 같은 `coverage < 80%` gate에서 `OK`와 `ERROR`로
+대조됐다. DB dump를 별도 DB·Pod·PVC에 복원해 같은 project·분석 시각을 조회한 뒤
+복원 DB·role·Pod·PVC·Vault 임시 자원과 dump를 제거했다. 같은 시점 실제 browser에서
+`imcherry`의 Pomerium 허용·Keycloak SAML session 성공과 허용 group이 없는
+`imcherry-admin`의 Pomerium `403`을 대조했고, 내부 SSH port-forward의 local admin
+복구 login도 성공했다.
+
+배포 전 `k3s-01` guest available은 19.58 GiB였다. 배포 직후에는 12,895 MiB,
+SonarQube Pod 2,669.42 MiB, guest swap 0, PVC 요청 합계 45.125 GiB였고 Proxmox
+available 28,947 MiB·swap 0, thin data/metadata 4.77%/0.39%로 모든 정지 기준 밖이어서
+**GO**다. 승인된 `OPNSENSE-LIVE` 변경으로
+`sonar.imcherry5778.xyz → k3s-01 (10.10.20.10)` Unbound alias를 추가하고 sanitized
+snapshot을 같은 커밋에 갱신했다. UI는 Pomerium의 정확한 `claim/groups`와 제품 내장
+Keycloak SAML을 연속 통과하며, scanner API는 외부 bypass 없이 ClusterIP와
+project-scoped token으로 분리했다. 검증 설정 SHA
+`2a25b12c05c0a29989df6336f80e49ca0b779536`와 root pointer
+`319c6aae82677f66860877bdc41e5e0b4bc935cc`에서 root·Pomerium·SonarQube가
+`Synced/Healthy`였다. 시작 main
+`430ee4af8435f3df8329deeea030ca80e6e4a012`로 복귀하고 최종 child 선언은 `main`이다.
+직접 후속 `E2E-01`은 `CI-01`과 `SIGN-01`이 남아 `BLOCKED`를 유지하며 새로 여는
+직접 후속은 없다.
 
 ## 7. 최소권한과 공개 경로
 

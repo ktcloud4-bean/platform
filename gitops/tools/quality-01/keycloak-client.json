@@ -1,0 +1,79 @@
+{
+  "clientId": "sonarqube",
+  "name": "SonarQube Community Build",
+  "description": "QUALITY-01 Keycloak SAML service provider",
+  "enabled": true,
+  "protocol": "saml",
+  "publicClient": false,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "fullScopeAllowed": false,
+  "baseUrl": "https://sonar.imcherry5778.xyz",
+  "redirectUris": [
+    "https://sonar.imcherry5778.xyz/oauth2/callback/saml"
+  ],
+  "attributes": {
+    "saml.assertion.signature": "true",
+    "saml.server.signature": "true",
+    "saml.server.signature.keyinfo.ext": "false",
+    "saml.signature.algorithm": "RSA_SHA256",
+    "saml.client.signature": "false",
+    "saml.encrypt": "false",
+    "saml.force.post.binding": "true",
+    "saml_assertion_consumer_url_post": "https://sonar.imcherry5778.xyz/oauth2/callback/saml",
+    "saml.assertion.audience.restriction": "true",
+    "saml.authnstatement": "true",
+    "saml.onetimeuse.condition": "true",
+    "saml_name_id_format": "username",
+    "saml.force.name.id.format": "true"
+  },
+  "protocolMappers": [
+    {
+      "name": "login",
+      "protocol": "saml",
+      "protocolMapper": "saml-user-property-mapper",
+      "consentRequired": false,
+      "config": {
+        "user.attribute": "username",
+        "attribute.name": "login",
+        "attribute.nameformat": "Basic"
+      }
+    },
+    {
+      "name": "name",
+      "protocol": "saml",
+      "protocolMapper": "saml-user-property-mapper",
+      "consentRequired": false,
+      "config": {
+        "user.attribute": "username",
+        "attribute.name": "name",
+        "attribute.nameformat": "Basic"
+      }
+    },
+    {
+      "name": "email",
+      "protocol": "saml",
+      "protocolMapper": "saml-user-property-mapper",
+      "consentRequired": false,
+      "config": {
+        "user.attribute": "email",
+        "attribute.name": "email",
+        "attribute.nameformat": "Basic"
+      }
+    },
+    {
+      "name": "groups",
+      "protocol": "saml",
+      "protocolMapper": "saml-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "attribute.name": "groups",
+        "attribute.nameformat": "Basic",
+        "single": "true",
+        "full.path": "false"
+      }
+    }
+  ]
+}

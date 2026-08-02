@@ -65,6 +65,16 @@ spec:
                 name: pomerium
                 port:
                   name: http
+    - host: sonar.imcherry5778.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pomerium
+                port:
+                  name: http
   tls:
     - hosts:
         - access.imcherry5778.xyz
@@ -72,3 +82,4 @@ spec:
         - headlamp.imcherry5778.xyz
         - git.imcherry5778.xyz
         - awx.imcherry5778.xyz
+        - sonar.imcherry5778.xyz

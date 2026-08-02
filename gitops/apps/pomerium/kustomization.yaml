@@ -34,4 +34,5 @@ resources:
   - dashy-deployment.yaml
   - gitea-egress.yaml
   - awx-egress.yaml
+  - sonarqube-egress.yaml
   - ingress.yaml

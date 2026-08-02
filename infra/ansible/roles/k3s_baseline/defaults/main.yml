@@ -19,6 +19,11 @@ k3s_config_path: /etc/rancher/k3s/config.yaml
 k3s_kubeconfig_path: /etc/rancher/k3s/k3s.yaml
 k3s_server_token_path: /var/lib/rancher/k3s/server/token
 
+# QUALITY-01: SonarQube 내장 Elasticsearch의 공식 Linux host 요구값이다.
+# Pod 안 privileged init으로 변경하지 않고 노드 기준선이 영속 소유한다.
+k3s_sonarqube_sysctl_path: /etc/sysctl.d/99-sonarqube.conf
+k3s_sonarqube_vm_max_map_count: 524288
+
 # k3s가 매 시작 때 되쓰는 packaged local-storage AddOn과 동일 리소스를 경쟁하지
 # 않도록 packaged AddOn은 끄고, 같은 provisioner 버전의 STOR-01 manifest를
 # Ansible이 소유한다.

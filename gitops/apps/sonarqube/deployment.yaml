@@ -1,0 +1,205 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sonarqube
+  namespace: sonarqube
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: sonarqube
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sonarqube
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sonarqube
+        app.kubernetes.io/component: server
+        app.kubernetes.io/part-of: platform-gitops
+    spec:
+      serviceAccountName: sonarqube
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 0
+        fsGroup: 0
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/runtime.hcl
+          securityContext:
+            # 최종 container와 같은 UID가 렌더링해 source 직후 파일 삭제까지 소유한다.
+            runAsUser: 1000
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config
+              readOnly: true
+            - name: vault-trust
+              mountPath: /vault/tls
+              readOnly: true
+            - name: vault-secrets
+              mountPath: /vault/secrets
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+      containers:
+        - name: sonarqube
+          image: docker.io/library/sonarqube:26.7.0.124771-community@sha256:160bd2f6a3485bd09b655ef22dd63c02bd1fa7ba82aa5d9973fd010b8bcca0b3
+          imagePullPolicy: IfNotPresent
+          command:
+            - /opt/quality-01/server-entrypoint.sh
+          env:
+            - name: SONAR_JDBC_URL
+              value: jdbc:postgresql://postgres-01.imcherry5778.xyz:5432/sonarqube?sslmode=verify-full&sslrootcert=/opt/sonarqube/trust/postgres-01.crt
+            - name: SONAR_JDBC_USERNAME
+              value: sonarqube_user
+            - name: SONAR_SEARCH_JAVAOPTS
+              value: -Xms1g -Xmx1g
+            - name: SONAR_WEB_JAVAOPTS
+              value: -Xms512m -Xmx512m
+            - name: SONAR_CE_JAVAOPTS
+              value: -Xms512m -Xmx512m
+            - name: SONAR_LOG_LEVEL
+              value: INFO
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+          startupProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - 'curl -fsS http://127.0.0.1:9000/api/system/status | grep -q ''"status":"UP"'''
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 120
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - 'curl -fsS http://127.0.0.1:9000/api/system/status | grep -q ''"status":"UP"'''
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - 'curl -fsS http://127.0.0.1:9000/api/system/status | grep -q ''"status":"UP"'''
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 500m
+              memory: 3Gi
+            limits:
+              cpu: "4"
+              memory: 4Gi
+          volumeMounts:
+            - name: scripts
+              mountPath: /opt/quality-01
+              readOnly: true
+            - name: trust-bundles
+              mountPath: /opt/sonarqube/trust
+              readOnly: true
+            - name: vault-secrets
+              mountPath: /vault/secrets
+            - name: sonarqube-data
+              mountPath: /opt/sonarqube/data
+            - name: sonarqube-extensions
+              mountPath: /opt/sonarqube/extensions
+            - name: sonarqube-logs
+              mountPath: /opt/sonarqube/logs
+            - name: sonarqube-temp
+              mountPath: /opt/sonarqube/temp
+            - name: sonarqube-process-tmp
+              mountPath: /tmp
+      volumes:
+        - name: scripts
+          configMap:
+            name: sonarqube-scripts
+            defaultMode: 0550
+        - name: trust-bundles
+          configMap:
+            name: sonarqube-trust-bundles
+        - name: vault-agent-config
+          configMap:
+            name: sonarqube-vault-agent
+            items:
+              - key: runtime.hcl
+                path: runtime.hcl
+        - name: vault-trust
+          configMap:
+            name: sonarqube-trust-bundles
+            items:
+              - key: vault.crt
+                path: vault.crt
+        - name: vault-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: sonarqube-data
+          persistentVolumeClaim:
+            claimName: sonarqube-data
+        - name: sonarqube-extensions
+          emptyDir:
+            sizeLimit: 2Gi
+        - name: sonarqube-logs
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: sonarqube-temp
+          emptyDir:
+            sizeLimit: 2Gi
+        - name: sonarqube-process-tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600
+                  audience: vault

@@ -96,3 +96,14 @@ routes:
           or:
             - claim/groups: /platform-users
             - claim/groups: /platform-privileged
+
+  # QUALITY-01: 브라우저 UI만 Pomerium과 Keycloak OIDC를 먼저 통과한다.
+  # scanner/Web API는 이 Route를 쓰지 않고 cluster-internal Service와 Sonar token을 쓴다.
+  - name: sonarqube
+    description: QUALITY-01 SonarQube Community Build browser UI
+    from: https://sonar.imcherry5778.xyz
+    to: http://sonarqube.sonarqube.svc.cluster.local:9000
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users

@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quality01-pass-sample
+  namespace: sonarqube
+  labels:
+    app.kubernetes.io/name: sonarqube
+    app.kubernetes.io/component: verification
+data:
+  math.js: |
+    export function add(left, right) {
+      const result = left + right;
+      return result;
+    }
+  lcov.info: |
+    TN:QUALITY-01
+    SF:src/math.js
+    DA:1,1
+    DA:2,1
+    DA:3,1
+    LF:3
+    LH:3
+    end_of_record
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quality01-fail-sample
+  namespace: sonarqube
+  labels:
+    app.kubernetes.io/name: sonarqube
+    app.kubernetes.io/component: verification
+data:
+  math.js: |
+    export function subtract(left, right) {
+      const result = left - right;
+      return result;
+    }

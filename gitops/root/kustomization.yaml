@@ -19,6 +19,8 @@ resources:
   - awx-application.yaml
   - renovate-project.yaml
   - renovate-application.yaml
+  - sonarqube-project.yaml
+  - sonarqube-application.yaml
   - crowdsec-project.yaml
   - crowdsec-application.yaml
   - velero-project.yaml

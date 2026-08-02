@@ -2445,7 +2445,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785643842.56" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785661596.40" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2682,7 +2682,7 @@
           <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
           <hostname>sonar</hostname>
           <domain>imcherry5778.xyz</domain>
-          <description>SonarQube Pomerium browser UI alias (QUALITY-01)</description>
+          <description>SonarQube Pomerium browser UI only; scanner uses ClusterIP (QUALITY-01)</description>
         </alias>
         <alias uuid="a0007e20-8467-439b-87f9-3877a2b4a9df">
           <enabled>1</enabled>
