@@ -1,0 +1,70 @@
+// CI-01 완료 증거 pipeline. 한 번의 실행이 세 항목을 함께 만든다.
+//   1) credential 원문 마스킹  2) 비특권 agent Pod  3) 지정 project push 성공 / 미지정 거부
+// agent Pod template과 credential은 controller의 JCasC가 소유한다.
+node('ci01-buildah') {
+    def registry = 'harbor.imcherry5778.xyz'
+    def allowed = "${registry}/ci01-evidence/ci01-app"
+    def denied = "${registry}/ci01-denied/ci01-app"
+    def tag = "b${env.BUILD_NUMBER}"
+
+    stage('checkout') {
+        // `scm` 전역 변수는 workflow-multibranch 플러그인 소유다. 최소 플러그인
+        // 집합을 지키려고 같은 repo와 credential을 명시적으로 checkout한다.
+        checkout([
+            $class: 'GitSCM',
+            branches: [[name: '*/main']],
+            userRemoteConfigs: [[
+                url: 'ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/scm-recovery/ci01-build-smoke.git',
+                credentialsId: 'gitea-ci01'
+            ]]
+        ])
+        sh 'echo "ci01-agent-pod=$(hostname)"'
+    }
+
+    stage('build and push') {
+        container('buildah') {
+            withCredentials([usernamePassword(credentialsId: 'harbor-robot-ci01',
+                                              usernameVariable: 'CI01_ROBOT_USER',
+                                              passwordVariable: 'CI01_ROBOT_SECRET')]) {
+                withEnv(["CI01_REGISTRY=${registry}",
+                         "CI01_ALLOWED=${allowed}",
+                         "CI01_DENIED=${denied}",
+                         "CI01_TAG=${tag}"]) {
+                    sh '''
+set -eu
+
+# 증거 1: credential 원문을 일부러 stdout으로 흘린다. Jenkins credentials binding이
+# 콘솔에 기록되기 전에 마스킹해야 하며, 검증기는 원문 0건을 요구한다.
+echo "ci01-mask-probe user=${CI01_ROBOT_USER} secret=${CI01_ROBOT_SECRET}"
+
+# 증거 2: 이 셸은 root도 privileged도 아니고 Docker socket도 없다.
+echo "ci01-build-uid=$(id -u) gid=$(id -g)"
+echo "ci01-docker-socket=$([ -S /var/run/docker.sock ] && echo present || echo absent)"
+
+printf '%s' "${CI01_ROBOT_SECRET}" | buildah login --username "${CI01_ROBOT_USER}" \\
+    --password-stdin "${CI01_REGISTRY}"
+
+buildah bud --isolation chroot --layers=false \\
+    -t "${CI01_ALLOWED}:${CI01_TAG}" -f Containerfile .
+
+# 증거 3 양성: robot이 지정된 project에 push한다.
+buildah push --digestfile ci01-digest.txt "${CI01_ALLOWED}:${CI01_TAG}"
+echo "ci01-pushed-image=${CI01_ALLOWED}:${CI01_TAG}"
+echo "ci01-pushed-digest=$(cat ci01-digest.txt)"
+
+# 증거 3 음성: 같은 robot이 미지정 project로 push하면 거부돼야 한다.
+if buildah push "${CI01_ALLOWED}:${CI01_TAG}" "docker://${CI01_DENIED}:${CI01_TAG}" \\
+    >ci01-denied.log 2>&1; then
+    echo "ci01-denied-push=UNEXPECTED-SUCCESS"
+    exit 1
+fi
+echo "ci01-denied-push=rejected"
+sed -n '$p' ci01-denied.log
+
+buildah logout "${CI01_REGISTRY}" >/dev/null
+'''
+                }
+            }
+        }
+    }
+}

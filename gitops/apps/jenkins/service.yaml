@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins
+  namespace: jenkins
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: controller
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # 동적 agent의 inbound JNLP 전용 경계. Pomerium과 Traefik은 이 Service를 쓰지 않는다.
+  name: jenkins-agent
+  namespace: jenkins
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: agent-listener
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: controller
+  ports:
+    - name: agent
+      port: 50000
+      targetPort: agent
+      protocol: TCP

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-home
+  namespace: jenkins
+  annotations:
+    # local-path는 WaitForFirstConsumer이므로 소비 Deployment와 같은 wave에서 바인딩한다.
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      # 근거는 README의 "JENKINS_HOME 용량" 절이 소유한다.
+      storage: 20Gi

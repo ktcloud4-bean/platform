@@ -1,0 +1,6 @@
+# CI-01 smoke 이미지. base는 digest로 고정한다.
+# 비특권 agent는 단일 UID 매핑으로만 동작하므로 root를 요구하는 RUN을 두지 않는다.
+FROM docker.io/library/alpine:3.22@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412
+COPY app.sh /usr/local/bin/app.sh
+USER 65532:65532
+ENTRYPOINT ["/bin/sh", "/usr/local/bin/app.sh"]

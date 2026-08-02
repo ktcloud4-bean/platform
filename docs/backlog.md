@@ -810,11 +810,11 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `CAP-02 DONE` | 핵심 서비스 후 남은 CPU·RAM·disk 재예산 | `BKP-05`, `HEADLAMP-02` | 없음 | 아래 전체 | Proxmox·VM·Pod 실측과 stop/go 기준 |
 | `SCM-01 DONE` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
 | `REG-01 DONE` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
-| `CI-01 READY` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
+| `CI-01 DONE` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
 | `QUALITY-01 DONE` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO·배포 직후 capacity stop/go |
 | `AWX-01 DONE` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
 | `UPDATE-01 DONE` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
-| `SCAN-01 BLOCKED` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
+| `SCAN-01 READY` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
 | `SIGN-01 BLOCKED` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
 | `POL-01 DONE` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
 | `E2E-01 BLOCKED` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
@@ -975,6 +975,69 @@ bucket inventory로 격리 `harbor-restore`를 올려 같은 digest를 pull한 �
 root `Synced/Healthy`와 Harbor Application·namespace 부재를 확인했고 최종 child 선언은
 `main`이다. 직접 후속 `CI-01`은 `SCM-01`·`REG-01`·`VAULT-02`가 모두 끝나 `READY`로 연다.
 `SCAN-01`은 `CI-01`, `SIGN-01`은 `SCAN-01`이 남아 `BLOCKED`를 유지한다.
+
+2026-08-02 `CI-01`에서 Jenkins `2.568.1-lts-jdk21`을 digest로 고정해 전용 AppProject·child
+Application·namespace에 배포했다. 플러그인은 최상위 11개와 전이 의존성을 합친 58개 전부를
+`stable` update center의 core 2.568.1 기준선에서 정확한 버전으로 고정하고 init container의
+`jenkins-plugin-cli --latest=false`가 그 목록만 설치한다. controller 설정, Kubernetes cloud,
+agent Pod template, credential과 pipeline job은 모두 JCasC와 Job DSL이 소유하며 UI 수동
+설정은 없다. controller는 `numExecutors: 0`이라 build를 직접 실행하지 않고 `podRetention:
+never`인 동적 agent Pod만 쓴다.
+
+빌드 도구는 Kaniko가 2025-06-03 upstream archive로 유지보수를 멈춰 rootless Buildah `1.43.1`을
+택했다. 비특권 Pod에는 `newuidmap` 권한이 없어 단일 UID 매핑으로 떨어지므로 vfs storage와
+`ignore_chown_errors`, `--isolation chroot`, `SYS_CHROOT` 하나만 조합했다. 라이브에서 같은
+UID·capability의 두 container를 붙여 `RuntimeDefault` seccomp가 `CAP_SYS_ADMIN` 없는
+`unshare(CLONE_NEWUSER)`를 거부하고 `Unconfined`는 통과함을 확인했다. 남은 대안이
+`CAP_SYS_ADMIN` 부여뿐이라 더 작은 완화인 seccomp를 `buildah` container 하나에만 적용했고
+`jnlp`는 `RuntimeDefault`를 유지한다. 근거와 재검토 조건은
+[`gitops/apps/jenkins/README.md`](../gitops/apps/jenkins/README.md)가 소유한다.
+
+비밀은 Kubernetes Secret 없이 Pod-local Vault Agent init이 `kv/jenkins/runtime`의 다섯 값을
+memory `emptyDir`에 mode `0400`으로 렌더링하고 JCasC가 `SECRETS` 디렉터리로 읽는다(ADR-0013).
+사람 입력은 `$KTC_SECRET_ROOT/jenkins/env` mode `0600`의 `JENKINS_ADMIN_PASSWORD` 하나뿐이고
+저장소 안 `.env`는 없다. Gitea는 `SCM-01` 경계를 되돌리지 않고 repo 하나에만 붙은 read-only
+deploy key로 `gitea-ssh:2222`만 쓰며 host key는 Gitea가 이미 소유한 공개키를 JCasC
+`manuallyProvidedKeyVerificationStrategy`로 고정했다. Harbor push는 `ci01-evidence` 전용
+project-scoped robot만 쓰고 `REG-01`이 만든 `/v2/` 직접 인증 경로를 그대로 쓴다. controller의
+Kubernetes API token은 kubelet 자동 마운트가 아니라 별도 projected volume이며 RBAC는 자기
+namespace의 Pod·pods/exec·pods/log·events뿐이다.
+
+`ci01-image-build` build `6` 한 번의 실행에서 완료 증거 세 가지를 함께 얻었다. pipeline이
+robot secret을 일부러 stdout으로 흘렸고 콘솔에는 `****`만 남았으며, 콘솔·controller·agent 두
+container 로그를 포함한 6개 파일 전체에서 robot secret·local admin 암호·deploy key 본문의 평문은
+0건이었다. 실행 중 agent Pod `ci01-buildah-g772m`을 한 번 조회해 `runAsNonRoot=true`,
+`runAsUser=1000`, 두 container 모두 `allowPrivilegeEscalation=false`·`privileged=false`·
+`capabilities.drop=[ALL]`이고 volume은 configMap 1개와 emptyDir 2개뿐이며 hostPath·Docker
+socket·ServiceAccount token이 없음을 확인했다. build 셸의 실제 uid도 `1000`이었다. Gitea SSH
+clone 뒤 rootless buildah가 만든 이미지를 `ci01-evidence`에 push해 Harbor artifact digest
+`sha256:85c4777e135cc1015e12c4bdda37771d752f8b31df4dad276da3dfe0b7e67dc0`가 pipeline 출력과
+일치했고, 같은 robot의 `ci01-denied` push는 `authentication required`로 거부돼 그 project의
+repository는 0건이었다.
+
+배포 직후 capacity는 `k3s-01` available `11,603MiB`·swap 0·root `13%`, PVC 요청 합계
+`65.125GiB`(JENKINS_HOME 20 GiB 포함), Proxmox available `28,845MiB`·swap 0, thin
+data/metadata `5.10%/0.40%`, DiskPressure `False`로 모든 정지 기준 밖이어서 **GO**다. 다만
+`k3s-01` RAM은 12 GiB 경고선 아래로 들어왔으므로 `SCAN-01` 이후 배포는 이 값을 먼저 본다.
+승인된 `OPNSENSE-LIVE` 변경으로 `jenkins.imcherry5778.xyz → k3s-01 (10.10.20.10)` Unbound
+alias(uuid `30919061-974b-4287-b7ba-1545017a72fa`) 한 건을 추가하고 sanitized snapshot을 같은
+커밋에 갱신했다. UI는 Pomerium `claim/groups=/platform-users` Route 뒤에서 sign-in `302`를
+반환하고 Jenkins local realm이 다시 판정하며, agent의 inbound JNLP는 cluster 내부
+`Service/jenkins-agent:50000`만 쓴다. 공개 DNS·NAT·방화벽 규칙은 바꾸지 않았다.
+
+검증 도중 두 번의 실패를 이 브랜치 안에서 원인 특정 후 고쳤다. `checkout scm`은 `scm` 전역
+변수를 제공하는 `workflow-multibranch`를 요구해 최소 플러그인 집합을 지키려 명시적 GitSCM
+checkout으로 바꿨고, JCasC의 `DefaultCrumbIssuer.excludeClientIPFromCrumb`은 2.568.1에 없는
+속성이라 제거했다. 검증기 자체 결함도 두 건 고쳤다. `jq`의 `//`가 `false`도 대체 대상으로
+보아 `.building // true`가 build 완료를 영원히 감지하지 못했고, 종료된 log follower에 대한
+`kill` 실패가 `set -e`로 판정 직전에 중단시켰다. 같은 local port를 잡은 다른 실행의 tunnel을
+조용히 재사용하지 않도록 port 선점 가드도 넣었다.
+
+검증 설정 SHA `f58b0b30a7c2bbcf7ac3412ad83dbe340ffc6107`와 root pointer
+`4e47edb00e5d160b7afaaebe62344046c2a90112`에서 root·Jenkins·Pomerium이 `Synced/Healthy`였다.
+시작 main은 `58459932387eb9b72470f55904b1aeeded19015b`이며 최종 child 선언은 `main`이다.
+직접 후속 중 `SCAN-01`은 선행 `CI-01`·`REG-01`이 모두 충족돼 `READY`로 열고, `E2E-01`은
+`SIGN-01`이 남아 `BLOCKED`를 유지한다.
 
 ## 7. 최소권한과 공개 경로
 

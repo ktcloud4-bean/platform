@@ -1,0 +1,202 @@
+# CI-01 Jenkins Configuration as Code. UI 수동 설정은 정상 상태가 아니다.
+# ${key}는 SECRETS 디렉터리(/vault/secrets)의 파일 이름이며 값은 Vault Agent init이
+# 메모리 emptyDir에 렌더링한다. 이 파일에는 어떤 비밀 원문도 없다.
+jenkins:
+  systemMessage: "CI-01 Jenkins controller. 선언은 GitOps와 JCasC가 소유한다."
+  # 모든 build는 동적 Kubernetes agent에서만 돈다. controller executor는 0이다.
+  numExecutors: 0
+  mode: EXCLUSIVE
+  quietPeriod: 0
+  slaveAgentPort: 50000
+  disableRememberMe: true
+  securityRealm:
+    local:
+      allowsSignup: false
+      enableCaptcha: false
+      users:
+        - id: "admin"
+          name: "CI-01 local recovery admin"
+          password: "${jenkins_admin_password}"
+  # 사용자는 위 admin 하나뿐이고 익명 읽기는 없다. 별도 matrix-auth 플러그인을
+  # 추가하지 않고 core 전략으로 같은 경계를 만든다.
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  crumbIssuer: "standard"
+  clouds:
+    - kubernetes:
+        name: "k3s-01"
+        namespace: "jenkins"
+        # in-cluster ServiceAccount로만 접속한다. kubeconfig credential은 없다.
+        jenkinsUrl: "http://jenkins.jenkins.svc.cluster.local:8080"
+        jenkinsTunnel: "jenkins-agent.jenkins.svc.cluster.local:50000"
+        directConnection: false
+        webSocket: false
+        containerCapStr: "2"
+        maxRequestsPerHostStr: "32"
+        connectTimeout: 60
+        readTimeout: 60
+        retentionTimeout: 5
+        usageRestricted: false
+        templates:
+          - name: "ci01-buildah"
+            label: "ci01-buildah"
+            namespace: "jenkins"
+            serviceAccount: "jenkins-agent"
+            nodeUsageMode: EXCLUSIVE
+            idleMinutes: 0
+            activeDeadlineSeconds: 1800
+            slaveConnectTimeout: 600
+            podRetention: "never"
+            containers:
+              - name: "jnlp"
+                image: "docker.io/jenkins/inbound-agent:3384.v60d89463d9e0-1-alpine-jdk21@sha256:359f763a8f3f337690593d6f20e476d77d07d2a7adf9acf5ebcc57f994e0e19f"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                ttyEnabled: false
+                resourceRequestCpu: "100m"
+                resourceRequestMemory: "256Mi"
+                resourceLimitCpu: "1"
+                resourceLimitMemory: "1Gi"
+              - name: "buildah"
+                image: "quay.io/buildah/stable:v1.43.1@sha256:ca4edbaabf71ca330ec9b2714bf8e06c726a6e85ae215cfb1474d2e2c832aacb"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                command: "sleep"
+                args: "infinity"
+                ttyEnabled: false
+                resourceRequestCpu: "200m"
+                resourceRequestMemory: "512Mi"
+                resourceLimitCpu: "2"
+                resourceLimitMemory: "2Gi"
+                envVars:
+                  - envVar:
+                      key: "HOME"
+                      value: "/home/build"
+                  - envVar:
+                      key: "BUILDAH_ISOLATION"
+                      value: "chroot"
+                  - envVar:
+                      key: "CONTAINERS_STORAGE_CONF"
+                      value: "/etc/ci-01/storage.conf"
+                  - envVar:
+                      key: "REGISTRY_AUTH_FILE"
+                      value: "/home/build/auth.json"
+            # ContainerTemplate이 표현하지 못하는 보안 경계는 raw Pod spec으로 덮는다.
+            # root·privileged·Docker socket·hostPath는 어느 계층에도 없다.
+            yamlMergeStrategy: "merge"
+            yaml: |
+              apiVersion: v1
+              kind: Pod
+              spec:
+                automountServiceAccountToken: false
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                  runAsGroup: 1000
+                  fsGroup: 1000
+                  fsGroupChangePolicy: OnRootMismatch
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: jnlp
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: false
+                      seccompProfile:
+                        type: RuntimeDefault
+                      capabilities:
+                        drop: ["ALL"]
+                  - name: buildah
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: false
+                      # rootless builder는 자기 user namespace를 만들어야 하는데
+                      # RuntimeDefault profile은 CAP_SYS_ADMIN 없는 unshare(CLONE_NEWUSER)를
+                      # 거부한다. 대안인 CAP_SYS_ADMIN 부여가 더 큰 권한이라 이 container
+                      # 하나만 완화한다. 근거와 재검토 조건은 README가 소유한다.
+                      seccompProfile:
+                        type: Unconfined
+                      capabilities:
+                        drop: ["ALL"]
+                        # copier subprocess가 build context를 chroot로 가둔다.
+                        # CAP_SYS_ADMIN은 없다.
+                        add: ["SYS_CHROOT"]
+                    volumeMounts:
+                      - name: buildah-home
+                        mountPath: /home/build
+                      - name: buildah-config
+                        mountPath: /etc/ci-01
+                        readOnly: true
+                volumes:
+                  - name: buildah-home
+                    emptyDir:
+                      sizeLimit: 6Gi
+                  - name: buildah-config
+                    configMap:
+                      name: jenkins-agent-buildah
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "gitea-ci01"
+              description: "CI-01 Gitea read-only deploy key"
+              username: "git"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${gitea_ssh_private_key}"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "harbor-robot-ci01"
+              description: "CI-01 Harbor project-scoped robot"
+              username: "${harbor_robot_name}"
+              password: "${harbor_robot_secret}"
+
+security:
+  # Gitea SSH host key는 known_hosts 파일이 아니라 선언한 값으로 고정한다.
+  gitHostKeyVerificationConfiguration:
+    sshHostKeyVerificationStrategy:
+      manuallyProvidedKeyVerificationStrategy:
+        approvedHostKeys: "${gitea_known_hosts}"
+
+unclassified:
+  location:
+    url: "https://jenkins.imcherry5778.xyz/"
+    adminAddress: "ci-01@imcherry5778.xyz"
+  buildDiscarders:
+    configuredBuildDiscarders:
+      - "jobBuildDiscarder"
+
+jobs:
+  - script: |
+      pipelineJob('ci01-image-build') {
+        description('CI-01 완료 증거: Gitea clone -> rootless buildah build -> Harbor push')
+        logRotator {
+          numToKeep(20)
+          artifactNumToKeep(0)
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/scm-recovery/ci01-build-smoke.git')
+                  credentials('gitea-ci01')
+                }
+                branch('*/main')
+              }
+            }
+            scriptPath('Jenkinsfile')
+            lightweight(false)
+          }
+        }
+      }

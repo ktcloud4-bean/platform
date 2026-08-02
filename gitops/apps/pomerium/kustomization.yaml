@@ -35,4 +35,5 @@ resources:
   - gitea-egress.yaml
   - awx-egress.yaml
   - sonarqube-egress.yaml
+  - jenkins-egress.yaml
   - ingress.yaml

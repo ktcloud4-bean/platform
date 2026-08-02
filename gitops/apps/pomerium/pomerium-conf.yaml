@@ -119,3 +119,15 @@ routes:
       - allow:
           or:
             - claim/groups: /platform-users
+
+  # CI-01: browser UI만 Pomerium이 판정한다. Jenkins 자체 local realm이 뒤에서
+  # 다시 판정하며, 동적 agent의 inbound JNLP는 이 Route를 쓰지 않고 cluster
+  # 내부 Service/jenkins-agent:50000만 쓴다.
+  - name: jenkins
+    description: CI-01 Jenkins controller browser UI
+    from: https://jenkins.imcherry5778.xyz
+    to: http://jenkins.jenkins.svc.cluster.local:8080
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users

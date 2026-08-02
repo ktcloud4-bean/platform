@@ -2445,7 +2445,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785662158.96" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785670201.97" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2697,6 +2697,13 @@
           <hostname>harbor</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>Harbor UI and direct registry API alias (REG-01)</description>
+        </alias>
+        <alias uuid="30919061-974b-4287-b7ba-1545017a72fa">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>jenkins</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>Jenkins controller UI alias (CI-01)</description>
         </alias>
       </aliases>
     </unboundplus>

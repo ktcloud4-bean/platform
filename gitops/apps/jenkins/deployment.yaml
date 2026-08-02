@@ -1,0 +1,243 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jenkins
+  namespace: jenkins
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jenkins
+      app.kubernetes.io/component: controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jenkins
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/part-of: platform-gitops
+    spec:
+      serviceAccountName: jenkins
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/runtime.hcl
+          securityContext:
+            # 최종 container와 같은 UID로 렌더링해 파일 소유를 일치시킨다.
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config
+              readOnly: true
+            - name: vault-trust
+              mountPath: /vault/tls
+              readOnly: true
+            - name: vault-secrets
+              mountPath: /vault/secrets
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+        - name: plugins
+          # 상시 container와 같은 image로 고정 버전 플러그인 집합만 설치한다.
+          # 버전은 plugins.txt가 전이 의존성까지 전부 고정한다.
+          image: docker.io/jenkins/jenkins:2.568.1-lts-jdk21@sha256:f4f65e6cd1405cd889b7f5ac33f9d5cdc2a099de6b87fe8a3933b9c5d53d1d02
+          imagePullPolicy: IfNotPresent
+          command:
+            - jenkins-plugin-cli
+            - --jenkins-version=2.568.1
+            - --plugin-file=/opt/ci-01/plugins.txt
+            - --plugin-download-directory=/var/jenkins_home/plugins
+            - --latest=false
+          env:
+            - name: HOME
+              value: /var/jenkins_home
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: jenkins-home
+              mountPath: /var/jenkins_home
+            - name: plugin-list
+              mountPath: /opt/ci-01
+              readOnly: true
+            - name: jenkins-tmp
+              mountPath: /tmp
+      containers:
+        - name: jenkins
+          image: docker.io/jenkins/jenkins:2.568.1-lts-jdk21@sha256:f4f65e6cd1405cd889b7f5ac33f9d5cdc2a099de6b87fe8a3933b9c5d53d1d02
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: JENKINS_SLAVE_AGENT_PORT
+              value: "50000"
+            - name: CASC_JENKINS_CONFIG
+              value: /var/jenkins_config/jenkins.yaml
+            # JCasC directory secret source. 파일 이름이 곧 ${key}다.
+            - name: SECRETS
+              value: /vault/secrets
+            - name: JAVA_OPTS
+              value: >-
+                -Djava.awt.headless=true
+                -Djenkins.install.runSetupWizard=false
+                -Dhudson.model.LoadStatistics.clock=2000
+                -Xms512m
+                -Xmx1536m
+            - name: JENKINS_OPTS
+              value: --httpPort=8080
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: agent
+              containerPort: 50000
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /login
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 300m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: jenkins-home
+              mountPath: /var/jenkins_home
+            - name: casc
+              mountPath: /var/jenkins_config
+              readOnly: true
+            - name: vault-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+            - name: jenkins-tmp
+              mountPath: /tmp
+            # kubelet 자동 마운트 대신 명시적 projected token만 준다.
+            # audience는 API server 기본값이라 audience=vault인 Vault role은 거부한다.
+            - name: kube-api-access
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+      volumes:
+        - name: jenkins-home
+          persistentVolumeClaim:
+            claimName: jenkins-home
+        - name: casc
+          configMap:
+            name: jenkins-casc
+        - name: plugin-list
+          configMap:
+            name: jenkins-plugin-list
+        - name: vault-agent-config
+          configMap:
+            name: jenkins-vault-agent
+            items:
+              - key: runtime.hcl
+                path: runtime.hcl
+        - name: vault-trust
+          configMap:
+            name: jenkins-trust-bundle
+            items:
+              - key: vault.crt
+                path: vault.crt
+        - name: vault-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: jenkins-tmp
+          emptyDir:
+            sizeLimit: 2Gi
+        - name: vault-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600
+                  audience: vault
+        - name: kube-api-access
+          projected:
+            defaultMode: 0444
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3607
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        fieldPath: metadata.namespace

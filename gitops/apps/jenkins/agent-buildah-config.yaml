@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # 이름은 JCasC의 agent Pod raw yaml이 직접 참조하므로 hash suffix를 붙이지 않는다.
+  name: jenkins-agent-buildah
+  namespace: jenkins
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: jenkins
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  # 비특권 agent에는 user namespace를 넓힐 newuidmap/newgidmap 권한이 없다.
+  # 그래서 rootless buildah는 단일 UID 매핑으로 동작하고, base layer의
+  # 다른 UID/GID chown은 overlay가 아니라 vfs에서 무시한다.
+  storage.conf: |
+    [storage]
+    driver = "vfs"
+    runroot = "/home/build/.local/share/containers/runroot"
+    graphroot = "/home/build/.local/share/containers/storage"
+
+    [storage.options]
+    pull_options = {enable_partial_images = "false", use_hard_links = "false"}
+
+    [storage.options.vfs]
+    ignore_chown_errors = "true"
