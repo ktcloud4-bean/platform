@@ -4,6 +4,10 @@
 - 적용일: 2026-08-01
 - 선례: `NET-03A`의 출발지 한 대·목적지 한 대·포트 한 개 원칙
 
+> 현재 상태(2026-08-03): 아래 임시 rule UUID는 `NET-04`에서 제거하고 동일한 exact
+> host·TCP 443 의미의 최종 rule로 교체했다. 현재 UUID와 rollback은
+> [`opnsense-vlan-firewall-hardening.md`](opnsense-vlan-firewall-hardening.md)가 소유한다.
+
 ## 판정
 
 `netbird-01`은 Keycloak issuer discovery, JWKS, userinfo와 Keycloak Admin API를

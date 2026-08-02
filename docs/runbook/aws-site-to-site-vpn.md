@@ -5,6 +5,11 @@
 - 소유 결정: [ADR-0011](../adr/0011-aws-site-to-site-vpn-boundary.md)
 - AWS 자원 선언: [`infra/aws/tofu-network`](../../infra/aws/tofu-network/README.md)
 
+> 현재 상태(2026-08-03): 이 문서의 DATA→VPC 전체 프로토콜 임시 rule과
+> `AWSNET01_VPC_V4` alias는 실제 서비스 소비자가 없어 `NET-04`에서 제거했다. IPsec
+> connection과 selector는 유지하며 새 DATA→VPC 연결은 기본 차단한다. 현재 경계는
+> [`opnsense-vlan-firewall-hardening.md`](opnsense-vlan-firewall-hardening.md)가 소유한다.
+
 주소와 대역은 [`ip-plan.md`](../ip-plan.md)가 소유한다. AWS가 할당하는 터널 endpoint와
 검증 인스턴스 주소는 매번 달라지므로 이 문서에 고정값으로 적지 않고 `tofu output`에서 읽는다.
 
@@ -125,8 +130,8 @@ ICMP만이 아니라 payload로 판정했다. SA 카운터가 in/out 양쪽에�
   동안 단절될 수 있다. 이 경로는 필수 서비스 경로가 아니다.
 - WAN이 ISP DHCP 임대 주소다. 주소가 바뀌면 터널이 끊기고, Customer Gateway 교체와
   OPNsense remote 주소 수정을 함께 해야 복구된다.
-- DATA VLAN 허용 규칙은 프로토콜·포트를 좁히지 않은 임시 규칙이다. 실제 서비스가 정해지면
-  `NET-04`가 통신표로 다시 판정한다.
+- DATA VLAN의 전체 프로토콜 임시 허용은 `NET-04`에서 제거됐다. 현재 서비스 소비자가
+  생기면 exact source·destination·protocol·port로 새 통신표 근거를 먼저 만든다.
 - 이 검증은 경로가 동작함을 보인 것이지 그 위에 올릴 서비스를 검증한 것이 아니다.
 
 ## 실패 시 원상복구

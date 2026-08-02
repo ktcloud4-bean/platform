@@ -31,6 +31,7 @@ UI 위치나 명령을 추측해 미리 작성하지 않는다. 첫 PoC는 백�
 - [`opnsense-oob-console-recovery.md`](opnsense-oob-console-recovery.md) — 2026-07-30 검증된 OOB 콘솔 복구 경로와 lockout 복구 drill
 - [`opnsense-proxmox-tagged-trunk.md`](opnsense-proxmox-tagged-trunk.md) — 2026-07-31 `NET-02R`에서 영속 할당·재부팅·tagged-only 경로를 재검증한 trunk 절차
 - [`opnsense-vlan-bootstrap-firewall.md`](opnsense-vlan-bootstrap-firewall.md) — 2026-07-31 `NET-03`에서 적용·재부팅·실제 VLAN source로 검증한 IPv4 bootstrap 방화벽 절차
+- [`opnsense-vlan-firewall-hardening.md`](opnsense-vlan-firewall-hardening.md) — 2026-08-03 `NET-04`에서 실제 통신표로 최소화하고 source별 hardened 검증을 마친 최종 VLAN 방화벽 절차
 - [`proxmox-opentofu-vm-creation.md`](proxmox-opentofu-vm-creation.md) — 2026-07-31 `VM-01`에서 적용·게스트 검증·재부팅·무변경 재계획까지 확인한 서비스 VM 생성 절차
 - [`opnsense-suricata-ids.md`](opnsense-suricata-ids.md) — 2026-07-31 `NIDS-01`에서 적용·재부팅·DMZ 런타임 및 경보 검증 완료한 Suricata alert-only IDS 절차
 - [`k3s-single-node-baseline.md`](k3s-single-node-baseline.md) — 2026-07-31 `K3S-01`에서 단일 Node·SQLite·기본 구성요소·PVC·재부팅·NET-03을 검증한 k3s 기준선

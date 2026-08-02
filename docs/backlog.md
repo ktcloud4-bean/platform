@@ -1105,12 +1105,24 @@ rollback해 E2E Application·namespace·AppProject를 제거하고 root·Jenkins
 `Synced/Healthy`로 복구했으며 Gitea seed도 시작 main으로 되돌렸다. 최종 child 선언은
 `main`이고, 모든 선행이 충족된 직접 후속 `POL-02`·`FALCO-01`·`NET-04`를 `READY`로 연다.
 
+2026-08-03 `NET-04`에서 VLAN 20~50의 임시 bootstrap 경계를 현재 배포 host와 실제 서비스
+통신표로 최소화했다. 신규 최종 rule 20개를 disabled로 stage·의미값 대조한 뒤 활성화했고,
+기존 경계가 함께 동작함을 확인한 다음 `NET-03` 16개, PostgreSQL·Warpgate·NetBird exact
+임시 rule 3개, DATA→AWS VPC 전체 프로토콜 임시 rule 1개와 만료 alias 3개를 제거했다.
+기존 S3 exact rule은 보존했다. 저장 의미값과 PF runtime은 최종 rule `20/20`, 만료 rule
+`0/20`으로 일치했다. 실제 source별 `vlan-verify hardened`는 k3s `13/13`, Warpgate
+`21/21`, NetBird `10/10`, PostgreSQL `9/9`, object `9/9`가 모두 PASS했고 각 plan의 BLOCK은
+900초 안의 동일 destination·protocol·port MGMT ALLOW control을 사용했다. 임시 verifier를
+제거하고 의도한 rule·alias diff만 승인한 직후 일반 drift 없음도 확인했다. OPNsense는
+재부팅하지 않았다. 따라서 `NET-04`를 `DONE`으로 닫고 모든 선행이 끝난 직접 후속
+`EDGE-01`만 `READY`로 연다. 조건부 `NIPS-01`은 `DEFERRED`를 유지한다.
+
 ## 7. 최소권한과 공개 경로
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `NET-04 READY` | 실제 통신표로 VLAN 규칙 최소화·hardened 검증 | `NB-02`, `WG-02`, `POM-01`, `BKP-05`, `E2E-01` | `OPNSENSE-LIVE` | 외부 공개·운영 통신 | 임시 rule 제거, `vlan-verify hardened`, drift 없음 |
-| `EDGE-01 BLOCKED` | Cloudflare WAF·origin 제한·공개 DNS/NAT | `CROWDSEC-FIX-01`, `POM-01`, `NB-02`, `NIDS-01`, `NET-04` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 사용자 | 허용 hostname만 공개, origin 직접 우회 차단, IDS 경보·복구 경로 독립 |
+| `NET-04 DONE` | 실제 통신표로 VLAN 규칙 최소화·hardened 검증 ([runbook](runbook/opnsense-vlan-firewall-hardening.md)) | `NB-02`, `WG-02`, `POM-01`, `BKP-05`, `E2E-01` | `OPNSENSE-LIVE` | 외부 공개·운영 통신 | 임시 rule 제거, `vlan-verify hardened`, drift 없음 |
+| `EDGE-01 READY` | Cloudflare WAF·origin 제한·공개 DNS/NAT | `CROWDSEC-FIX-01`, `POM-01`, `NB-02`, `NIDS-01`, `NET-04` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 사용자 | 허용 hostname만 공개, origin 직접 우회 차단, IDS 경보·복구 경로 독립 |
 | `NIPS-01 DEFERRED` | 검증된 Suricata rule만 선택적 IPS로 승격 | `NIDS-01`, `NET-04` | `OPNSENSE-LIVE` | 전체 프로젝트 통신 | 정상 트래픽·오탐·부모 인터페이스·offloading·처리량·장애·즉시 rollback 검증; 공개의 필수 gate 아님 |
 | `KMS-01 DEFERRED` | Vault Shamir→AWS KMS auto-unseal migration | `BKP-05` | `VAULT-INIT` | Vault 부팅·복구 | 사전 snapshot, KMS 장애 시험, seal rollback drill; VPN은 선행 아님 |
 

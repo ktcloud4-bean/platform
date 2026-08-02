@@ -32,7 +32,10 @@
 
 2026-07-31 `NET-02R` 검증에서 OPNsense 저장 설정과 재부팅 후 런타임 모두 LAN=`vlan01`, VLAN 20~50 논리 인터페이스·gateway, 부모 `igc2` 무주소 상태로 일치했다. Proxmox 관리는 `vmbr0.10`으로 유지됐고, 격리 namespace에서 untagged VLAN 10은 ARP 응답이 없으며 tagged VLAN 10~50은 모두 gateway ARP 응답이 있었다.
 
-같은 날 `NET-03`에서 VLAN 20~50의 임시 IPv4 bootstrap 방화벽 경계를 적용하고 재부팅 후에도 저장 설정과 PF 런타임이 유지됨을 확인했다. 실제 주소와 검증 범위는 아래 표와 [NET-03 runbook](runbook/opnsense-vlan-bootstrap-firewall.md)을 따른다.
+2026-08-03 `NET-04`에서 VLAN 20~50의 임시 bootstrap 경계를 현재 배포 host와 실제
+서비스 통신표에 맞춘 최종 IPv4 규칙으로 교체했다. 저장 의미값, PF runtime, 실제 source별
+`vlan-verify hardened`, 최종 drift 없음은
+[NET-04 runbook](runbook/opnsense-vlan-firewall-hardening.md)을 따른다.
 
 | 주소 | 대상 | 상태 |
 |---|---|---|
@@ -106,21 +109,24 @@ Proxmox NIC ── VLAN-aware bridge
 - 관리 VLAN 전환은 OOB 콘솔 복구 경로를 검증한 뒤에만 한다.
 - Proxmox bridge는 VLAN을 전달하고, VLAN 간 라우팅은 OPNsense만 담당한다.
 
-## 현재 NET-03 IPv4 bootstrap 경계
+## 현재 NET-04 IPv4 최소 경계
 
-VLAN 20~50에는 다음 순서의 임시 정책이 `LIVE`다. 이 정책은 서비스 포트를 미리 열지 않고 구축에 필요한 이름 해석·시간 동기화와 공개 Web 용도의 RFC1918 외 egress만 제공한다.
+VLAN 20~50의 source는 VLAN 전체가 아니라 위 고정 배정 표의 현재 배포 VM `/32`로
+한정한다. 각 source는 자기 gateway의 DNS TCP/UDP 53과 NTP UDP 123을 쓰며, 비공개·
+특수용 IPv4를 먼저 차단한 뒤 public IPv4 TCP 80/443만 쓴다. 실제 cross-VLAN 예외는
+다음 다섯 경로뿐이다.
 
-| 순서 | 출발 | 도착 | 정책 |
-|---|---|---|---|
-| 1 | 각 project VLAN | 해당 VLAN OPNsense gateway | DNS TCP/UDP 53 허용 |
-| 2 | 각 project VLAN | 해당 VLAN OPNsense gateway | NTP UDP 123 허용 |
-| 3 | 각 project VLAN | RFC1918 목적지 | 차단·기록 |
-| 4 | 각 project VLAN | 그 밖의 목적지 | TCP 80/443 허용 |
-| 5 | 각 project VLAN | 위에 없는 목적지·포트 | PF implicit deny |
+- `k3s-01` → `postgres-01` TCP 5432
+- `k3s-01` → `object-01` TCP 8333
+- `warpgate-01` → `k3s-01` TCP 443
+- `warpgate-01` → 현재 여섯 관리 host TCP 22
+- `netbird-01` → `k3s-01` TCP 443
 
-RFC1918 차단 alias는 `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`을 포함하고 공개 Web port alias는 80과 443만 포함한다. 따라서 뒤의 Web 허용이 OPNsense·Proxmox 관리면, HOME이나 다른 project VLAN의 TCP 80/443을 우회하지 못한다. 기존 LAN/HOME 규칙은 재배열하지 않았고, MGMT에서 시작한 project VLAN 관리 연결의 stateful 응답은 유지된다.
-
-project VLAN에는 routed IPv6 prefix·RA·IPv6 gateway가 없어 IPv6 broad allow를 만들지 않았다. DHCP도 활성화하지 않았고 automatic outbound NAT를 유지했다. 이 경계는 모든 신규 서비스를 위한 최종 allowlist가 아니며, `NET-04`에서 실제 서비스 통신표와 `vlan-verify hardened` 결과로 최소화한다.
+정확한 rule·alias 의미값과 순서, 소유 작업, 근거, rollback은
+[NET-04 runbook](runbook/opnsense-vlan-firewall-hardening.md)이 소유한다. 같은 DATA VLAN의
+host 간 통신은 OPNsense를 지나지 않으므로 OPNsense 차단 근거로 쓰지 않는다. project
+VLAN에는 routed IPv6 prefix·RA·gateway가 없고 IPv6 broad allow를 만들지 않았다. 기존
+LAN/HOME 규칙, DHCP와 automatic outbound NAT도 바꾸지 않았다.
 
 ## AWS 사설 착지점
 
@@ -138,16 +144,16 @@ traffic selector는 `10.10.50.0/24 ↔ 10.20.0.0/16`이며, 이 selector 밖 출
 계층에서 이미 통신할 수 없다. AWS 쪽 터널 endpoint 주소는 재생성 때마다 바뀌므로 이
 문서에 고정값으로 적지 않고 OpenTofu output에서 읽는다.
 
-방화벽에서는 DATA VLAN의 `NET03_PRIVATE_V4` 차단 규칙보다 앞선 순서(seq 1315)에
-`AWSNET01_VPC_V4` alias 목적지 허용 규칙을 두었다. 이 규칙은 프로토콜·포트를 좁히지 않은
-임시 규칙이며 `NET-04`가 실제 통신표로 다시 판정한다.
+`AWS-NET-01`이 만들었던 DATA→VPC 전체 프로토콜 임시 rule과 `AWSNET01_VPC_V4` alias는
+현재 서비스 소비자가 없어 2026-08-03 `NET-04`에서 제거했다. IPsec connection과
+traffic selector는 유지하지만 새 DATA→VPC 연결은 기본 차단한다.
 
 역방향(AWS에서 온프레미스로 신규 연결)은 허용하지 않는다. OPNsense는 IPsec 터널에
 `pass out on enc0 ... keep state`만 두므로 온프레미스가 개시한 흐름과 그 응답만 지난다.
 
 오프사이트 백업 전송은 이 VPN을 쓰지 않고 계속 공인 AWS API endpoint로 나간다.
 
-## 목표 방화벽 정책
+## 방화벽 정책
 
 기본값은 VLAN 간 차단이다. 아래 허용은 서비스가 실제로 요구하는 목적지와 포트로 구현한다.
 
@@ -163,7 +169,10 @@ traffic selector는 `10.10.50.0/24 ↔ 10.20.0.0/16`이며, 이 selector 밖 출
 | 외부 | 내부 | 공개하기로 한 Traefik·NetBird endpoint만 허용 |
 | 각 VLAN | OPNsense | DNS·NTP·DHCP 등 기반 포트만 허용; 관리 UI는 차단 |
 
-초기 구축 중 임시 규칙이 필요하면 설명·만료 조건·삭제 작업 ID를 함께 기록한다. 최종 공개 전에 `vlan-verify` hardened profile과 실제 서비스 통신으로 검증한다.
+2026-08-03 `NET-04`가 공개 진입을 제외한 현재 배포 서비스 경계를 구현하고 실제 source별
+`vlan-verify hardened`로 검증했다. 초기 구축 중 임시 규칙이 필요하면 설명·만료 조건·
+삭제 작업 ID를 함께 기록하고, 서비스 추가 때는 NET-04 통신표와 exact host·port 경계를
+함께 갱신한다. 외부 공개 정책은 `EDGE-01`이 소유한다.
 
 ## DNS와 도메인
 

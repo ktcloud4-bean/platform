@@ -4,6 +4,10 @@
 - 적용일: 2026-08-01
 - 범위: `k3s-01`에서 NAT된 Vault Pod TCP source와 `postgres-01`의 PostgreSQL TLS 포트 사이의 단일 IPv4 경로
 
+> 현재 상태(2026-08-03): 아래 `NET-03A` 임시 rule은 `NET-04`에서 제거하고 동일한
+> exact host·TCP 5432 의미의 최종 rule로 교체했다. 현재 UUID와 rollback은
+> [`opnsense-vlan-firewall-hardening.md`](opnsense-vlan-firewall-hardening.md)가 소유한다.
+
 ## 판정
 
 Vault Pod에서 `10.10.50.10:5432`으로 보낸 SYN의 실제 source는 Pod IP가 아니라

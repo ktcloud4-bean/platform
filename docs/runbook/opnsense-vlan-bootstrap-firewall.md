@@ -4,6 +4,11 @@
 - 작업: `NET-03`
 - 상태: 적용·재부팅·실제 VLAN source 검증 완료
 
+> 현재 상태(2026-08-03): 이 문서의 rule 16개와 alias 2개는 `NET-04`에서 제거하고
+> 실제 배포 host·서비스 기준의 최종 경계로 교체했다. 라이브 통신표와 rollback은
+> [`opnsense-vlan-firewall-hardening.md`](opnsense-vlan-firewall-hardening.md)가 소유하며,
+> 이 문서는 bootstrap 당시의 역사 증거로만 보존한다.
+
 ## 목적과 경계
 
 이 절차는 `docs/ip-plan.md`의 VLAN 20~50에 임시 IPv4 bootstrap 경계를 만든다. 각 VLAN은 자기 OPNsense gateway의 DNS·NTP와 공개 Web 용도의 RFC1918 외 TCP 80/443만 새로 시작할 수 있다. RFC1918 내부 목적지는 Web 허용보다 먼저 차단·기록하고, 나머지는 PF implicit deny에 맡긴다.

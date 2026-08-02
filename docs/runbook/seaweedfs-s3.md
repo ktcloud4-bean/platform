@@ -5,6 +5,10 @@
 대상: `object-01.imcherry5778.xyz` (VMID 151, DATA VLAN)
 서비스 endpoint: `https://s3.imcherry5778.xyz:8333`
 
+2026-08-03 `NET-04`에서 아래 exact S3 rule UUID와 sequence `1015`를 의미값 변경 없이
+보존했다. 주변 VLAN 경계와 hardened 결과는
+[`opnsense-vlan-firewall-hardening.md`](opnsense-vlan-firewall-hardening.md)가 소유한다.
+
 이 문서는 기존 `minio-01` VM을 새 VM·새 disk·disk 확장 없이 SeaweedFS 로컬 S3로
 제자리 전환한 실제 절차와 증거를 소유한다. 주소는 [ip-plan.md](../ip-plan.md), 용량
 정지 기준은 [capacity-plan.md](../capacity-plan.md), 선택 근거는

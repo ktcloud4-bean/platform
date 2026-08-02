@@ -9,6 +9,10 @@
 이 작업은 특권 세션 중계 기준선만 만든다. Keycloak SSO 연동과 역할·세션 정책은
 `WG-02`, VLAN 경계 최소화는 `NET-04`, 공개 진입 경로는 `EDGE-01` 범위다.
 
+2026-08-03 `NET-04`는 Warpgate source 한 대에서 현재 관리 대상 여섯 host의 TCP 22만
+허용했다. 대상 alias·hardened 결과·rollback은
+[`opnsense-vlan-firewall-hardening.md`](opnsense-vlan-firewall-hardening.md)가 소유한다.
+
 ## 1. 전제조건과 접근 권한
 
 | 항목 | 요구 |

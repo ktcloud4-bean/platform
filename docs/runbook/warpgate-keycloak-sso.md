@@ -11,6 +11,11 @@
 - 공개 A/AAAA·NAT는 만들지 않는다. 서비스 이름은 Unbound에서만 Warpgate VM을 가리킨다.
 - 최종 운영 대상의 cross-VLAN 통신 최소화는 `NET-04`가 소유한다.
 
+2026-08-03 `NET-04`에서 아래 OIDC 임시 rule을 제거하고 같은 exact host·TCP 443 최종
+rule로 교체했으며, 현재 관리 대상 여섯 host의 SSH TCP 22 중계만 추가했다. 현재 통신표와
+UUID·rollback은 [`opnsense-vlan-firewall-hardening.md`](opnsense-vlan-firewall-hardening.md)가
+소유한다.
+
 선행 기준선과 복구 계정은
 [`warpgate-privileged-access.md`](warpgate-privileged-access.md), Keycloak 장애 복구는
 [`keycloak.md`](keycloak.md), 신원 경계는

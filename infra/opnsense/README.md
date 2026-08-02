@@ -23,14 +23,14 @@ check-drift.sh --update로 스냅샷 승인
 
 ## 현재 스냅샷
 
-2026-07-31 스냅샷과 라이브 저장 설정을 다시 대조해 다음을 확인했다. 변경 전에는 라이브 드리프트와 목표 적합성을 각각 확인한다.
+2026-08-03 스냅샷과 라이브 저장 설정을 다시 대조해 다음을 확인했다. 변경 전에는 라이브 드리프트와 목표 적합성을 각각 확인한다.
 
 | 영역 | 기록된 상태 |
 |---|---|
 | WAN | ISP DHCP, private·bogon 차단 |
 | LAN/HOME | 물리 재배치 완료; 주소는 IP 계획 참조 |
 | VLAN | LAN=`vlan01`, VLAN 20~50 논리 인터페이스·gateway 저장; 부모 `igc2`는 무주소 tagged-only trunk |
-| 방화벽 | VLAN 20~50 임시 IPv4 bootstrap: gateway DNS·NTP 허용, RFC1918 선차단·기록, RFC1918 외 TCP 80/443 허용, 나머지 implicit deny |
+| 방화벽 | VLAN 20~50 최종 IPv4 최소 경계: 배포 host별 gateway DNS·NTP, exact cross-VLAN 서비스, 비공개·특수용 IPv4 선차단·기록, public TCP 80/443, 나머지 implicit deny |
 | Web GUI | HTTPS, LAN listen, Local+TOTP |
 | SSH | LAN listen, 공개키 관리 |
 | DNS | Unbound recursion, DNSSEC, exact split override; 공인 zone 전체 forwarding 비활성 |
@@ -40,25 +40,23 @@ check-drift.sh --update로 스냅샷 승인
 | IPsec | `AWS-NET-01` swanctl Connections 1개(IKEv2, policy-based, static). PSK는 스냅샷에서 제거된다 |
 | IDS | Suricata DMZ (`vlan04`) 및 PLATFORM (`vlan02`) PCAP alert-only 활성화 (`NIDS-01`); `opnsense.test.rules`, `emerging-scan.rules` 및 custom rules 적용 |
 
-2026-07-31 `NET-02R`에서 저장 설정과 재부팅 후 런타임을 대조해 VLAN 10~50 gateway·직접 연결 route, 부모 `igc2` 무주소, tagged 성공·untagged 차단, SSH·strict TLS·DNS·PF·Dnsmasq를 확인했다. 이어 `NET-03`에서 VLAN 20~50 bootstrap 방화벽을 적용하고 실제 VLAN client와 OPNsense 재부팅 후까지 검증했다. 일반 drift 검사가 성공하는 것은 라이브 저장 설정과 마스킹 스냅샷이 같다는 뜻일 뿐이므로, 목표 적합성과 런타임 검증은 계속 별도로 수행한다.
+2026-07-31 `NET-02R`에서 저장 설정과 재부팅 후 런타임을 대조해 VLAN 10~50 gateway·직접 연결 route, 부모 `igc2` 무주소, tagged 성공·untagged 차단, SSH·strict TLS·DNS·PF·Dnsmasq를 확인했다. `NET-03`의 bootstrap 경계는 2026-08-03 `NET-04`가 아래 최종 경계로 교체했다. 일반 drift 검사가 성공하는 것은 라이브 저장 설정과 마스킹 스냅샷이 같다는 뜻일 뿐이므로, 목표 적합성과 런타임 검증은 계속 별도로 수행한다.
 
-현재 bootstrap 방화벽 규칙은 최종 VLAN 정책이 아니다. 목표 행렬과 전환 gate는 `docs/ip-plan.md`와 `docs/backlog.md`가 소유한다.
+## NET-04 VLAN 최소 경계
 
-## NET-03 VLAN bootstrap 경계
+- VLAN network 전체가 아니라 현재 배포된 source host만 자기 gateway DNS·NTP를 쓴다.
+- `k3s-01`의 PostgreSQL 5432·S3 8333, Warpgate의 Keycloak 443·관리 대상 SSH 22,
+  NetBird의 Keycloak/control 443만 exact cross-VLAN PASS로 둔다.
+- 비공개·특수용 IPv4를 public Web보다 먼저 차단·기록하고, 각 배포 host의 public TCP
+  80/443만 허용한다. 나머지는 PF implicit deny다.
+- DATA→AWS VPC 전체 프로토콜 임시 허용은 제거했다. 기존 IPsec과 selector는 유지하며
+  현재 offsite 흐름은 public AWS API TCP 443을 쓴다.
+- 기존 LAN/HOME, automatic NAT, interface·gateway, Suricata, 공개 경계와 IPv6는
+  변경하지 않았다.
 
-현재 VLAN 20~50에는 interface별로 네 개씩, 총 16개의 IPv4 규칙이 저장돼 있다. 각 interface의 순서는 다음과 같다.
-
-1. 해당 VLAN network에서 해당 gateway로 DNS TCP/UDP 53 허용
-2. 해당 VLAN network에서 해당 gateway로 NTP UDP 123 허용
-3. `NET03_PRIVATE_V4` 목적지 차단·기록
-4. 그 밖의 목적지로 `NET03_BOOTSTRAP_WEB_PORTS` TCP 허용
-5. 나머지는 PF implicit deny
-
-`NET03_PRIVATE_V4`는 RFC1918 세 대역, `NET03_BOOTSTRAP_WEB_PORTS`는 80과 443만 가진다. 모든 설명에는 `NET-03` 임시 정책이며 `NET-04`에서 실제 통신표로 교체한다는 조건이 있다. project VLAN에 routed IPv6가 없어 이 규칙은 IPv4 전용이고, IPv6 broad allow는 없다. 기존 LAN/HOME 규칙, automatic outbound NAT, DHCP와 관리 서비스 listen 주소는 변경하지 않았다.
-
-저장 rule 16개는 DNS의 두 protocol과 Web alias의 두 port가 확장되어 PF 런타임 rule 24개가 된다. 2026-07-31 검증에서 VLAN 20~50 각각의 DNS·NTP·TCP DNS·공개 80/443·strict TLS·HTTP가 허용됐고, OPNsense/Proxmox 관리면·HOME·대표 다른 project VLAN은 최신 MGMT ALLOW control과 함께 차단됐다. MGMT에서 각 project client로 시작한 TCP payload와 stateful 응답도 일치했다. 이 검증은 적용 직후와 OPNsense 재부팅 후 모두 반복했고 임시 Proxmox namespace·veth·listener를 제거한 뒤 drift 없음까지 확인했다.
-
-적용·검증·중단·rollback 절차는 [`docs/runbook/opnsense-vlan-bootstrap-firewall.md`](../../docs/runbook/opnsense-vlan-bootstrap-firewall.md)가 소유한다.
+최종 통신표, rule·alias UUID와 sequence, 만료 객체, hardened 결과, rollback은
+[`docs/runbook/opnsense-vlan-firewall-hardening.md`](../../docs/runbook/opnsense-vlan-firewall-hardening.md)가
+소유한다. `NET-03` 절차는 bootstrap 당시의 역사 증거로만 보존한다.
 
 ## IDS 경계
 
