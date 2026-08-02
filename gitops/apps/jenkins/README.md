@@ -18,7 +18,8 @@ controller ── Kubernetes API (namespace jenkins의 Pod만)
                               └─ buildah ── docker.io base pull
                               └─ trivy ── read-only DB/checks PVC
                               └─ oras  ── Harbor image digest에 CycloneDX 첨부
-                              └─ cosign ── 고정 image/SBOM digest 서명·공개키 검증
+                              └─ cosign ── 현재 image/SBOM digest 서명·공개키 검증
+                              └─ sonar ── SonarQube ClusterIP quality gate
 
 Trivy DB bootstrap Job/CronJob ── public HTTPS ── 공식 DB/checks OCI repository
                              └─ 1 GiB cache PVC
@@ -136,28 +137,36 @@ non-root UID 1000, read-only root filesystem, `drop: [ALL]`이며 HOME과 `/tmp`
 
 ### 서명·검증과 downstream handoff
 
-SIGN-01 pipeline은 새 image를 build하지 않는다. `SIGN01_CASE=pass|reject`일 때 SCAN-01이 넘긴
-아래 두 immutable subject만 사용하고 기존 config/image gate·push stage를 건너뛴다.
+`E2E-01`부터 `SIGN01_CASE=pass|reject`도 현재 build의 동적 digest를 쓴다. 과거 SIGN-01 완료
+때 사용한 고정 image/SBOM digest는 아래 완료 스냅샷에만 남고 실행 제어값이 아니다.
 
-- image manifest: `ci01-evidence/ci01-app@sha256:50ac62320ee4ebce0da8cb6c05bac072da3c07cb31559487a1f3fb1028a63fe3`
-- CycloneDX accessory: 같은 repository의 `sha256:ced6c83cd50d2324bef40f8a4b625fc266bed96c128cf5e01b2bc22c9a0eeb5e`
+모든 case는 Gitea checkout과 기존 `quality01-pass` project의 SonarQube quality gate를 먼저
+통과한다. `sonar.qualitygate.wait=true`가 실패하면 config/image scan, Harbor credential,
+push와 서명에 진입하지 않는다. scanner는 기존 동적 agent의 별도 container이며 ClusterIP와
+project-scoped token만 사용한다.
 
-둘 다 `COSIGN_EXPERIMENTAL=1`을 명시한 OCI 1.1 referrer signature로 붙이고 digest
-reference에서 active 공개키로 다시 읽어 검증한다. Cosign 3.1.2가 sign의 OCI 1.1 mode를
-아직 명시적 gate 뒤에 두며 verify는 같은 환경에서 referrer를 자동 탐색한다. 공개
-Fulcio·Rekor·timestamp service는 사용하지 않으므로 sign은
+동적 agent가 시작된 직후 같은 `trivy-cache` PVC의 준비 마커가 아직 보이지 않는 짧은
+가시성 경쟁이 관측됐으므로 config gate는 updater lock을 먼저 배제한 뒤 최대 60초 동안
+비어 있지 않은 기존 마커만 기다린다. 제한 시간이 끝나면 DB를 임의로 갱신하거나 재시도하지
+않고 실패한다.
+
+`off`는 기존 SCAN-01 build/scan/push/SBOM handoff까지만 수행한다. `pass`는 그 실행이 Harbor에
+올린 image manifest와 CycloneDX accessory digest를 workspace 파일에서 읽어 current key로
+각각 서명·검증한다. 같은 build에서 scan 뒤 image config label만 바꾼 별도 digest도 같은
+repository에 올리지만 서명하지 않고 E2E admission negative input으로만 넘긴다. `reject`는
+현재 build digest를 active key로 서명한 뒤 고정된 다른 공개키로 거부해 `FAILURE`로 끝내며
+release handoff는 없다.
+
+signature는 모두 digest-only reference와 `COSIGN_EXPERIMENTAL=1` OCI 1.1 referrer mode를
+사용한다. 공개 Fulcio·Rekor·timestamp service는 쓰지 않으므로 sign은
 `--tlog-upload=false --use-signing-config=false`, verify는 고정 공개키와
-`--insecure-ignore-tlog=true`를 함께 쓴다. 여기서 tlog 무시는 keyless 신뢰로 후퇴하는 것이
-아니라 이 랩의 Vault 소유 공개키만 trust root로 삼는다는 뜻이다.
+`--insecure-ignore-tlog=true`를 함께 쓴다. registry/auth 같은 다른 실패를 signature 부재로
+해석해 재서명하지 않는다.
 
-`pass` build는 active 공개키로 기존 signature를 먼저 판정한다. 이미 유효하면 재사용하고,
-signature가 없거나 previous key만 있으면 current signature를 한 번만 추가한 뒤 image와
-accessory 검증이 모두 성공해야 release handoff를 낸다. registry/auth 같은 다른 실패를
-signature 부재로 해석해 재서명하지 않는다.
-`reject` build는 서명하지 않고 같은 image signature를 고정된 다른 공개키로 검증하며,
-signature mismatch가 확인되면 의도한 `FAILURE`로 끝나 release handoff를 내지 않는다.
-Kyverno `verifyImages` enforce 선언은 E2E-01/POL-02가 소유한다. 두 작업은 이 절의 digest-only
-reference, OCI 1.1 referrer mode, current/previous 공개키 교대 규칙을 입력으로 사용한다.
+pipeline에는 GitHub 쓰기 credential과 deploy stage가 없다. `e2e01-release-handoff`의 signed
+digest를 작업자가 검증 commit 선언에 넣고 Argo가 그 immutable SHA를 읽는다. namespaced
+Kyverno `verifyImages`와 current/previous trust 전달은 [`../e2e-01/README.md`](../e2e-01/README.md)가
+소유하고 전역 Enforce·예외는 POL-02가 소유한다.
 
 ### SIGN-01 완료 증거 (2026-08-02)
 
@@ -269,11 +278,16 @@ memory `emptyDir`에 mode `0400`
 | `cosign_private_key` / `cosign_password` | encrypted signing key와 Cosign key password |
 | `cosign_public_key` | active signature 검증과 downstream handoff |
 | `cosign_reject_public_key` | 다른 key 거부 시험 전용 공개키 |
+| `e2e01_sonar_token` | `kv/e2e-01/jenkins`의 QUALITY-01 pass project token 파생값 |
 
 상시 Jenkins container에는 Vault용 token이 없다. kubernetes plugin이 쓰는 API token은
 kubelet 자동 마운트가 아니라 별도 projected volume이며 기본 audience라 `audience=vault`인
 Vault role이 거부한다. 그 RBAC는 `jenkins` namespace의 Pod·pods/exec·pods/log·events뿐이고
 Secret, ServiceAccount, cluster 범위 자원은 없다.
+
+E2E-01은 기존 `jenkins` Vault role에 `e2e-01-jenkins` policy만 추가한다. 이 policy는 원본
+`kv/sonarqube/verification` 전체가 아니라 `kv/e2e-01/jenkins`의 pass token 한 필드만 읽는다.
+파생값 갱신과 rollback은 `gitops/tools/e2e-01/provision.sh`가 소유한다.
 
 ## 기존 경계를 되돌리지 않는 접근 경로
 

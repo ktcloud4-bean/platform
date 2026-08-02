@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: e2e-01
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: Prune=false
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  description: E2E-01 namespace-scoped signed artifact admission 증거
+  sourceRepos:
+    - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
+  destinations:
+    - namespace: e2e-01
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Pod
+    - group: ""
+      kind: ServiceAccount
+    - group: batch
+      kind: Job
+    - group: kyverno.io
+      kind: Policy
+    - group: rbac.authorization.k8s.io
+      kind: Role
+    - group: rbac.authorization.k8s.io
+      kind: RoleBinding

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2029
 # SIGN-01 완료 증거를 pipeline 정확히 두 번으로 판정한다.
-#   pass: SCAN-01 image/SBOM digest 서명과 active 공개키 검증
-#   reject: 같은 image signature를 고정된 다른 공개키가 거부하고 handoff 없음
+#   pass: 현재 build의 SCAN-01 image/SBOM digest 서명과 active 공개키 검증
+#   reject: 별도 현재 build image signature를 고정된 다른 공개키가 거부하고 handoff 없음
 set -Eeuo pipefail
 
 readonly secret_root=${KTC_SECRET_ROOT:-$HOME/secrets/ktcloud4-bean}
@@ -12,10 +12,6 @@ readonly kubectl_command=${KUBECTL:-sudo /usr/local/bin/k3s kubectl}
 readonly known_hosts=${K3S_SSH_KNOWN_HOSTS:-$HOME/.ssh/known_hosts}
 readonly jenkins_port=${SIGN01_JENKINS_PORT:-33223}
 readonly job_name=ci01-image-build
-readonly image_digest=sha256:50ac62320ee4ebce0da8cb6c05bac072da3c07cb31559487a1f3fb1028a63fe3
-readonly sbom_digest=sha256:ced6c83cd50d2324bef40f8a4b625fc266bed96c128cf5e01b2bc22c9a0eeb5e
-readonly image_ref=harbor.imcherry5778.xyz/ci01-evidence/ci01-app@${image_digest}
-readonly sbom_ref=harbor.imcherry5778.xyz/ci01-evidence/ci01-app@${sbom_digest}
 readonly resume_pass_build=${SIGN01_RESUME_PASS_BUILD:-}
 readonly resume_reject_build=${SIGN01_RESUME_REJECT_BUILD:-}
 
@@ -184,6 +180,20 @@ pass_build=${build_number}
   tail -n 80 "${temp_dir}/pass-console.txt" >&2
   exit 1
 }
+image_ref=$(awk -F= '/^sign01-image-subject=harbor\.imcherry5778\.xyz\/ci01-evidence\/ci01-app@sha256:/ {print $2}' \
+  "${temp_dir}/pass-console.txt" | tail -1)
+sbom_ref=$(awk -F= '/^sign01-sbom-subject=harbor\.imcherry5778\.xyz\/ci01-evidence\/ci01-app@sha256:/ {print $2}' \
+  "${temp_dir}/pass-console.txt" | tail -1)
+[[ ${image_ref} =~ ^harbor\.imcherry5778\.xyz/ci01-evidence/ci01-app@sha256:[0-9a-f]{64}$ ]] || {
+  echo "pass build의 동적 image subject가 없다" >&2
+  exit 1
+}
+[[ ${sbom_ref} =~ ^harbor\.imcherry5778\.xyz/ci01-evidence/ci01-app@sha256:[0-9a-f]{64}$ ]] || {
+  echo "pass build의 동적 SBOM subject가 없다" >&2
+  exit 1
+}
+image_digest=${image_ref##*@}
+sbom_digest=${sbom_ref##*@}
 for marker in \
   "sign01-image-verification=pass subject=${image_ref}" \
   "sign01-sbom-verification=pass subject=${sbom_ref}" \
@@ -211,10 +221,6 @@ sbom_signature_state=$(awk -v subject="${sbom_ref}" '
 key_id=$(awk -F= '/^sign01-key-id=sha256:[0-9a-f]{64}$/ {print $2}' \
   "${temp_dir}/pass-console.txt" | tail -1)
 [[ ${key_id} =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "SIGN-01 key id가 없다" >&2; exit 1; }
-if grep -Fq 'scan01-stage=' "${temp_dir}/pass-console.txt"; then
-  echo "SIGN-01 pass build가 인계받은 SCAN-01 gate를 재실행했다" >&2
-  exit 1
-fi
 wait_for_no_agent
 
 if [[ -n ${resume_reject_build} ]]; then
@@ -234,8 +240,11 @@ reject_build=${build_number}
   tail -n 80 "${temp_dir}/reject-console.txt" >&2
   exit 1
 }
-if grep -Fq "sign01-verification=reject subject=${image_ref} reason=untrusted-key" \
-  "${temp_dir}/reject-console.txt"; then
+reject_ref=$(sed -n 's|^sign01-verification=reject subject=\(harbor\.imcherry5778\.xyz/ci01-evidence/ci01-app@sha256:[0-9a-f]\{64\}\) reason=untrusted-key$|\1|p' \
+  "${temp_dir}/reject-console.txt" | tail -1)
+if [[ ${reject_ref} =~ ^harbor\.imcherry5778\.xyz/ci01-evidence/ci01-app@sha256:[0-9a-f]{64}$ ]] &&
+   grep -Fq "sign01-verification=reject subject=${reject_ref} reason=untrusted-key" \
+     "${temp_dir}/reject-console.txt"; then
   rejection_evidence=marker
 elif grep -Fq 'no matching attestations: failed to verify signature: could not verify envelope: accepted signatures do not match threshold, Found: 0, Expected 1' \
   "${temp_dir}/reject-console.txt"; then
@@ -245,8 +254,7 @@ else
   tail -n 80 "${temp_dir}/reject-console.txt" >&2
   exit 1
 fi
-for forbidden in 'sign01-image-signature=attached' 'sign01-sbom-signature=attached' \
-  'sign01-release-handoff=ready' 'scan01-stage='; do
+for forbidden in 'sign01-release-handoff=ready' 'e2e01-release-handoff=ready'; do
   if grep -Fq "${forbidden}" "${temp_dir}/reject-console.txt"; then
     echo "reject build가 금지된 단계에 진입했다: ${forbidden}" >&2
     exit 1

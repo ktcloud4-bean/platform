@@ -132,3 +132,14 @@ data:
     {{- end -}}
     EOT
     }
+
+    template {
+      destination          = "/vault/secrets/e2e01_sonar_token"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/e2e-01/jenkins" -}}
+    {{ .Data.data.sonar_token }}
+    {{- end -}}
+    EOT
+    }

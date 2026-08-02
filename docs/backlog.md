@@ -817,9 +817,9 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `SCAN-01 DONE` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
 | `SIGN-01 DONE` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
 | `POL-01 DONE` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
-| `E2E-01 READY` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
-| `POL-02 BLOCKED` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
-| `FALCO-01 BLOCKED` | Falco runtime rule·출력 기준선 | `E2E-01`, `POL-01` | 없음 | Wazuh·Shuffle | 전용 테스트 이벤트 탐지, noise 기준, 대응 runbook 초안 |
+| `E2E-01 DONE` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
+| `POL-02 READY` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
+| `FALCO-01 READY` | Falco runtime rule·출력 기준선 | `E2E-01`, `POL-01` | 없음 | Wazuh·Shuffle | 전용 테스트 이벤트 탐지, noise 기준, 대응 runbook 초안 |
 
 2026-08-02 `CAP-02`에서 핵심 서비스와 백업 배포가 끝난 현재값을 읽기 전용으로 재측정했다.
 Proxmox는 available RAM 41.30 GiB·swap 0, thin data/metadata 3.00%/0.33%, `/` 5%,
@@ -1085,11 +1085,31 @@ handoff는 없었다.
 `Synced/Healthy`로 복구했고 최종 child 선언은 `main`이다. 직접 후속 `E2E-01`만 모든
 선행이 충족돼 `READY`로 열었고 `POL-02`·`FALCO-01`은 `E2E-01`이 남아 `BLOCKED`를 유지한다.
 
+2026-08-02 `E2E-01`에서 `gitops/apps/e2e-01/`의 전용 namespace·Vault one-shot bootstrap·
+공개키 이름 한정 RBAC·namespaced Kyverno `verifyImages` Enforce와 root child를 추가하고,
+기존 Jenkins 선언·Gitea seed·`gitops/tools/e2e-01/` 검증기를 동적 digest handoff에 맞췄다.
+새 상시 Deployment·Service·PVC 없이 시작 직전 `k3s-01` available RAM `11,611MiB`·swap 0으로
+12 GiB 경고 구간이지만 8 GiB 정지선 위의 **GO**를 판정했다. pipeline build `9` 한 번이
+Gitea checkout과 Sonar quality gate, Trivy gate, Harbor push, CycloneDX accessory, Cosign
+서명·검증을 통과해 signed digest
+`sha256:63adb1c8496736c1e9af53e7a4154a8044b184f5b0de41104b9cb483957a0996`와 같은 repository의
+미서명 digest `sha256:48b802b4862f301af740acc6d0589ca1677289637a7ffd95bc46ea202495244e`를 넘겼다.
+검증 설정 SHA `05d5f397a3f64fe38b44c0036fe8823e01948944`와 root pointer
+`737d7c71f8a4315447a361779b838e0619703bc8`에서 Argo CD가 signed digest Pod
+`e2e-01-release`를 `Running/Ready`로 만들었고, 같은 경로의 미서명 digest는
+`e2e-01-verify-release-image` admission에서 거부돼 Pod가 0건이었다. cleanup 설정
+`e98d00f3c0a5636effdf0a8c201306c97d199ae9`와 pointer
+`843a613b73eeb9c05fb8f720ea342835c81f97bf`에서 증거 Pod 부재와 root·Jenkins·E2E child의
+`Synced/Healthy`를 확인한 뒤 시작 main `1ed4b9e09717e7d5ee9f5a69315b86c6ab8e4c8f`로
+rollback해 E2E Application·namespace·AppProject를 제거하고 root·Jenkins를
+`Synced/Healthy`로 복구했으며 Gitea seed도 시작 main으로 되돌렸다. 최종 child 선언은
+`main`이고, 모든 선행이 충족된 직접 후속 `POL-02`·`FALCO-01`·`NET-04`를 `READY`로 연다.
+
 ## 7. 최소권한과 공개 경로
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `NET-04 BLOCKED` | 실제 통신표로 VLAN 규칙 최소화·hardened 검증 | `NB-02`, `WG-02`, `POM-01`, `BKP-05`, `E2E-01` | `OPNSENSE-LIVE` | 외부 공개·운영 통신 | 임시 rule 제거, `vlan-verify hardened`, drift 없음 |
+| `NET-04 READY` | 실제 통신표로 VLAN 규칙 최소화·hardened 검증 | `NB-02`, `WG-02`, `POM-01`, `BKP-05`, `E2E-01` | `OPNSENSE-LIVE` | 외부 공개·운영 통신 | 임시 rule 제거, `vlan-verify hardened`, drift 없음 |
 | `EDGE-01 BLOCKED` | Cloudflare WAF·origin 제한·공개 DNS/NAT | `CROWDSEC-FIX-01`, `POM-01`, `NB-02`, `NIDS-01`, `NET-04` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 사용자 | 허용 hostname만 공개, origin 직접 우회 차단, IDS 경보·복구 경로 독립 |
 | `NIPS-01 DEFERRED` | 검증된 Suricata rule만 선택적 IPS로 승격 | `NIDS-01`, `NET-04` | `OPNSENSE-LIVE` | 전체 프로젝트 통신 | 정상 트래픽·오탐·부모 인터페이스·offloading·처리량·장애·즉시 rollback 검증; 공개의 필수 gate 아님 |
 | `KMS-01 DEFERRED` | Vault Shamir→AWS KMS auto-unseal migration | `BKP-05` | `VAULT-INIT` | Vault 부팅·복구 | 사전 snapshot, KMS 장애 시험, seal rollback drill; VPN은 선행 아님 |

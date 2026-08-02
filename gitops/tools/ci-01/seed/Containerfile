@@ -1,8 +1,8 @@
-# CI-01/SCAN-01 smoke 이미지. 정상 입력은 package DB가 없는 고정 hello-world image이고,
+# CI-01/SCAN-01/E2E-01 smoke 이미지. 정상 입력은 package DB가 없는 고정 pause image이고,
 # 실패 완료 증거만 Jenkinsfile에 digest로 고정한 과거 Alpine base를 주입한다.
 # 비특권 agent는 단일 UID 매핑으로만 동작하므로 root를 요구하는 RUN을 두지 않는다.
-ARG SCAN01_BASE_IMAGE=docker.io/library/hello-world:latest@sha256:c3cbe1cc1aa588a64951ac6286e0df7b27fe2e6324b1001c619bb358770c0178
+ARG SCAN01_BASE_IMAGE=registry.k8s.io/pause:3.10@sha256:ee6521f290b2168b6e0935a181d4cff9be1ac3f505666ef0e3c98fae8199917a
 FROM ${SCAN01_BASE_IMAGE}
 COPY app.sh /app.sh
 USER 65532:65532
-CMD ["/hello"]
+CMD ["/pause"]

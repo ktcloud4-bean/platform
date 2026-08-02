@@ -33,3 +33,5 @@ resources:
   - kyverno-application.yaml
   - policy-baseline-project.yaml
   - policy-baseline-application.yaml
+  - e2e-01-project.yaml
+  - e2e-01-application.yaml

@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: e2e-01-trust-bundle
+  namespace: e2e-01
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: e2e-01
+    app.kubernetes.io/component: trust
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  # VAULT-01의 공개 leaf. SHA-256(DER): ded0362dd9be9f840ca23feb4a618bab9e763c161bca5cbc581882319cb869c1
+  vault.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIGCzCCA/OgAwIBAgIUVVvFVIfjjiIt+DEuPBGV57XbPfMwDQYJKoZIhvcNAQEL
+    BQAwKDEmMCQGA1UEAwwddmF1bHQudmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwwHhcN
+    MjYwNzMxMDcxMzQ5WhcNMjcwNzMxMDcxMzQ5WjAoMSYwJAYDVQQDDB12YXVsdC52
+    YXVsdC5zdmMuY2x1c3Rlci5sb2NhbDCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCC
+    AgoCggIBAKWLdYOCC01Ilz5Jfg75/1bK30SLWGCyA5Xs523V0Y9xwQvQS1LWQU3Z
+    s/kHccjjhtFpeTExC4NSAKaiQBV+woigcH+nPMMr3RFQQB8qZKdx3OEw0Q98sgM/
+    RQqSlqpktKizpZLkYApKmtYmqJoG0yyj/5OX7X4s3RD1jKGgHEmcQWLz7ESVbCKf
+    k9HgvfB2YWIlF8aDFQU55DCCSPYZ1nrDXlvLC5EbU1wy9ly5xRG5L6ARcL+CKeAe
+    ybHA3PZ+xdwUOVqDPVeBbwx2P5YIC9/sNwRBkGH5bYgHImmA+ph1Wsh1DoupEGqF
+    9hPssELsEcoLUtcr0n0SXBZHfwRmCsYqhDhO+pl+qE6As30eSHDYQ3d9rxgaTqJ9
+    t2yxFR4dsg+tOMoycqRsamM2EzS4EPYZqnEz4EebKcqQ4mhRtyNLCy/SKFLLSMTz
+    8iNemRaQaUFFQAljygFOA7zeGx5QjVlJW9RBUztzvjGqwAPnZfhxktfdDgag0Tcp
+    qrMXFqeTArRy+Z7yudW1bC9EPsVJn/K9yOZXa8HljL/vtEVw1GnkockiIPjmPKok
+    5T9rGWlGp8VqNQ+1J3OcCTVhgsNx1/i9waew7s+tpCXrsSAM+6Y+/CWUJQAC3Vl6
+    TFRLuRZ35L0QDYNwNuQY7mam08fLVqeQ7QLc4paLmzxlHuGqJ+5PAgMBAAGjggEr
+    MIIBJzAdBgNVHQ4EFgQUuCw2kRJsw91q/YIrJgdvkztVRoowHwYDVR0jBBgwFoAU
+    uCw2kRJsw91q/YIrJgdvkztVRoowDwYDVR0TAQH/BAUwAwEB/zCB0wYDVR0RBIHL
+    MIHIgh12YXVsdC52YXVsdC5zdmMuY2x1c3Rlci5sb2NhbIIPdmF1bHQudmF1bHQu
+    c3ZjggV2YXVsdIIudmF1bHQtMC52YXVsdC1pbnRlcm5hbC52YXVsdC5zdmMuY2x1
+    c3Rlci5sb2NhbIIOdmF1bHQtaW50ZXJuYWyCJnZhdWx0LWludGVybmFsLnZhdWx0
+    LnN2Yy5jbHVzdGVyLmxvY2FsghZ2YXVsdC5pbWNoZXJyeTU3NzgueHl6gglsb2Nh
+    bGhvc3SHBH8AAAEwDQYJKoZIhvcNAQELBQADggIBAIBP5luICkidV4QDtEZGxO3+
+    OYVQXGjRxEOfQcAdfhSEMfFFZbG/vFxh9u6JAaojw1zQQ0mVGdcFq3rsCB1bzowH
+    l5fvHhxeb2jp2krgSwojlW6Ozs+VGNvH93qZ4lxm/jBwdMp1i09PTAp3T+P1UxGh
+    UxYiapJ8ifskWhfFG602pCObDMgGa30LaTY2u/6LBZTb9q7FdSVsEtf9Mf/mEOXV
+    HOh5kdxp4Rf2scwy3ZniVJpihEgisX5XuKMnoYvcN0NJlvZ/yz2uSYS1ptAvk6Sw
+    BvJFTdW7eBWw6yhcNs9F/Ry589RODwAZxGbEyfvgXtRXCqAFwy9JykBm3493ngCW
+    0ELb5jWvRO4mg38XhIqZ/vlHih3ZC3gERmEG41Xrg6hfPbXW6Ufl4wMO182t7hJR
+    VCK5ze1W8jD9IKOmugNV2kZGaGG6bqtgrQCAkepg6FLXu/148CCH0GW1zvzs6y/y
+    8fnhkZWY4DBNj41dmDaPqzzvnligQACM3oArHMM1BylVHYVZeGn7Yo5dCLPw/0BQ
+    Px2HD0zARXk226DgphTaurmbGk857USCIwcF3AKNPzWAC4Yef8dgXMftvu56wfqu
+    rH1EMPnHIv5sZRF+YKmTlIDy6xTvGMsDCMXfy8QkFlWasfXaT3Tbn6IfpqRS2iLj
+    kNq5MR6wc8ukRsdGvEfG
+    -----END CERTIFICATE-----

@@ -1,15 +1,12 @@
-// CI-01 pipeline을 SCAN-01 gate와 SIGN-01 고정 digest handoff로 확장한다.
-// pass: config/image gate -> CycloneDX OCI artifact -> image push -> release handoff
-// fail: 고정 취약 base가 image gate를 넘지 못하고 Harbor credential/push 전에 종료
+// E2E-01은 Gitea checkout 뒤 Sonar gate를 먼저 통과한 현재 build만
+// Trivy -> Harbor -> CycloneDX -> Cosign 동적 digest handoff로 연결한다.
 node('ci01-buildah') {
     def registry = 'harbor.imcherry5778.xyz'
     def allowed = "${registry}/ci01-evidence/ci01-app"
     def scanCase = params.SCAN01_CASE ?: 'pass'
     def signCase = params.SIGN01_CASE ?: 'off'
-    def signImageDigest = 'sha256:50ac62320ee4ebce0da8cb6c05bac072da3c07cb31559487a1f3fb1028a63fe3'
-    def signSbomDigest = 'sha256:ced6c83cd50d2324bef40f8a4b625fc266bed96c128cf5e01b2bc22c9a0eeb5e'
     def baseImages = [
-        pass: 'docker.io/library/hello-world:latest@sha256:c3cbe1cc1aa588a64951ac6286e0df7b27fe2e6324b1001c619bb358770c0178',
+        pass: 'registry.k8s.io/pause:3.10@sha256:ee6521f290b2168b6e0935a181d4cff9be1ac3f505666ef0e3c98fae8199917a',
         fail: 'docker.io/library/alpine:3.18.0@sha256:02bb6f428431fbc2809c5d1b41eab5a68350194fb508869a33cb1af4444c9b11'
     ]
     if (!baseImages.containsKey(scanCase)) {
@@ -23,150 +20,6 @@ node('ci01-buildah') {
     def localImage = "localhost/scan01-ci:${tag}"
     def archive = "${env.WORKSPACE}/scan01-image.tar"
 
-    if (signCase != 'off') {
-        def imageRef = "${allowed}@${signImageDigest}"
-        def sbomRef = "${allowed}@${signSbomDigest}"
-
-        stage('SIGN-01 fixed digest handoff') {
-            echo "sign01-case=${signCase}"
-            echo "sign01-image-subject=${imageRef}"
-            echo "sign01-sbom-subject=${sbomRef}"
-        }
-
-        if (signCase == 'pass') {
-            stage('SIGN-01 sign and verify') {
-                withCredentials([
-                    usernamePassword(credentialsId: 'harbor-robot-ci01',
-                                     usernameVariable: 'CI01_ROBOT_USER',
-                                     passwordVariable: 'CI01_ROBOT_SECRET'),
-                    string(credentialsId: 'cosign-private-key-sign01', variable: 'SIGN01_PRIVATE_KEY'),
-                    string(credentialsId: 'cosign-password-sign01', variable: 'COSIGN_PASSWORD'),
-                    string(credentialsId: 'cosign-public-key-sign01', variable: 'SIGN01_PUBLIC_KEY')
-                ]) {
-                    withEnv([
-                        "CI01_REGISTRY=${registry}",
-                        "SIGN01_IMAGE_REF=${imageRef}",
-                        "SIGN01_SBOM_REF=${sbomRef}"
-                    ]) {
-                        container('cosign') {
-                            sh '''
-set -eu
-private_key=/home/cosign/sign01.key
-public_key=/home/cosign/sign01.pub
-cleanup() {
-    set +e
-    rm -f -- "${private_key}" "${public_key}" \
-        /home/cosign/image-preverify.log /home/cosign/sbom-preverify.log \
-        /home/cosign/image-verify.json /home/cosign/sbom-verify.json
-}
-trap cleanup EXIT HUP INT TERM
-set +x
-printf '%s' "${SIGN01_PRIVATE_KEY}" >"${private_key}"
-printf '%s' "${SIGN01_PUBLIC_KEY}" >"${public_key}"
-chmod 0400 "${private_key}" "${public_key}"
-printf '%s' "${CI01_ROBOT_SECRET}" | cosign login \
-    --username "${CI01_ROBOT_USER}" --password-stdin "${CI01_REGISTRY}" >/dev/null
-set -x
-
-ensure_signature() {
-    label=$1
-    subject=$2
-    preverify_log=/home/cosign/${label}-preverify.log
-    verify_json=/home/cosign/${label}-verify.json
-
-    set +e
-    cosign verify --key "${public_key}" --insecure-ignore-tlog=true \
-        "${subject}" >"${preverify_log}" 2>&1
-    existing_status=$?
-    set -e
-    if [ "${existing_status}" -eq 0 ]; then
-        signature_state=existing
-    elif grep -Eiq 'no signatures found|no matching signatures|invalid signature|signature verification failed' \
-        "${preverify_log}"; then
-        cosign sign --yes --key "${private_key}" \
-            --tlog-upload=false --use-signing-config=false \
-            --registry-referrers-mode=oci-1-1 "${subject}"
-        signature_state=attached
-    else
-        echo "${label} signature 존재 판정이 registry/key mismatch 밖에서 실패했다" >&2
-        sed -n '1,20p' "${preverify_log}" >&2
-        exit 1
-    fi
-
-    cosign verify --key "${public_key}" --insecure-ignore-tlog=true \
-        "${subject}" >"${verify_json}"
-    echo "sign01-${label}-signature=${signature_state} subject=${subject}"
-    echo "sign01-${label}-verification=pass subject=${subject}"
-}
-
-ensure_signature image "${SIGN01_IMAGE_REF}"
-ensure_signature sbom "${SIGN01_SBOM_REF}"
-echo "sign01-key-id=sha256:$(awk 'NR > 1 {printf "\n"} {printf "%s", $0}' "${public_key}" | sha256sum | awk '{print $1}')"
-'''
-                        }
-                    }
-                }
-            }
-
-            stage('release handoff') {
-                echo 'sign01-release-handoff=ready case=pass'
-            }
-            return
-        }
-
-        stage('SIGN-01 reject untrusted key') {
-            withCredentials([
-                usernamePassword(credentialsId: 'harbor-robot-ci01',
-                                 usernameVariable: 'CI01_ROBOT_USER',
-                                 passwordVariable: 'CI01_ROBOT_SECRET'),
-                string(credentialsId: 'cosign-reject-public-key-sign01', variable: 'SIGN01_REJECT_PUBLIC_KEY')
-            ]) {
-                withEnv([
-                    "CI01_REGISTRY=${registry}",
-                    "SIGN01_IMAGE_REF=${imageRef}"
-                ]) {
-                    container('cosign') {
-                        sh '''
-set -eu
-reject_key=/home/cosign/sign01-reject.pub
-reject_log=/home/cosign/sign01-reject.log
-cleanup() {
-    set +e
-    rm -f -- "${reject_key}" "${reject_log}"
-}
-trap cleanup EXIT HUP INT TERM
-set +x
-printf '%s' "${SIGN01_REJECT_PUBLIC_KEY}" >"${reject_key}"
-chmod 0400 "${reject_key}"
-printf '%s' "${CI01_ROBOT_SECRET}" | cosign login \
-    --username "${CI01_ROBOT_USER}" --password-stdin "${CI01_REGISTRY}" >/dev/null
-set -x
-
-set +e
-cosign verify --key "${reject_key}" --insecure-ignore-tlog=true \
-    "${SIGN01_IMAGE_REF}" \
-    >"${reject_log}" 2>&1
-verify_status=$?
-set -e
-if [ "${verify_status}" -eq 0 ]; then
-    echo '다른 공개키가 SIGN-01 image signature를 허용했다' >&2
-    exit 1
-fi
-if ! grep -Eiq 'no matching signatures|no matching attestations|invalid signature|signature verification failed|accepted signatures do not match threshold' "${reject_log}"; then
-    echo '다른 공개키가 아닌 경계에서 검증이 실패했다' >&2
-    sed -n '1,20p' "${reject_log}" >&2
-    exit 1
-fi
-echo "sign01-verification=reject subject=${SIGN01_IMAGE_REF} reason=untrusted-key"
-exit 42
-'''
-                    }
-                }
-            }
-        }
-        return
-    }
-
     stage('checkout') {
         checkout([
             $class: 'GitSCM',
@@ -179,6 +32,26 @@ exit 42
         sh 'echo "scan01-agent-pod=$(hostname) case=${SCAN01_CASE}"'
     }
 
+    stage('SonarQube quality gate') {
+        withCredentials([string(credentialsId: 'sonar-token-e2e01', variable: 'SONAR_TOKEN')]) {
+            container('sonar') {
+                sh '''
+set -eu
+sonar-scanner \
+    -Dsonar.host.url=http://sonarqube.sonarqube.svc.cluster.local:9000 \
+    -Dsonar.projectKey=quality01-pass \
+    -Dsonar.projectName=QUALITY-01-pass \
+    -Dsonar.sources=math.js \
+    -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+    -Dsonar.scm.disabled=true \
+    -Dsonar.qualitygate.wait=true \
+    -Dsonar.qualitygate.timeout=300
+echo 'e2e01-sonar-quality-gate=pass project=quality01-pass'
+'''
+            }
+        }
+    }
+
     stage('config gate') {
         container('trivy') {
             sh '''
@@ -189,10 +62,16 @@ if [ -d /var/cache/trivy/.scan01-update ]; then
     echo "Trivy DB updater가 실행 중이므로 고정 snapshot을 판정할 수 없다" >&2
     exit 1
 fi
+waited=0
+while [ ! -s "${ready}" ] && [ "${waited}" -lt 60 ]; do
+    sleep 2
+    waited=$((waited + 2))
+done
 if [ ! -s "${ready}" ]; then
-    echo "Trivy DB cache가 준비되지 않았다" >&2
+    echo "Trivy DB cache가 ${waited}s 안에 준비되지 않았다" >&2
     exit 1
 fi
+echo "scan01-db-cache-ready-wait-seconds=${waited}"
 now=$(date +%s)
 updated=$(cat "${ready}")
 case ${updated} in
@@ -329,19 +208,38 @@ echo "scan01-sbom-sha256=$(sha256sum scan01-sbom.cdx.json | awk '{print $1}')"
                 "CI01_REGISTRY=${registry}",
                 "CI01_ALLOWED=${allowed}",
                 "CI01_TAG=${tag}",
+                "CI01_UNSIGNED_TAG=e2e-unsigned-b${env.BUILD_NUMBER}",
+                "SIGN01_CASE=${signCase}",
                 "SCAN01_LOCAL_IMAGE=${localImage}"
             ]) {
                 container('buildah') {
                     sh '''
 set -eu
 echo "scan01-stage=push-start"
-trap 'buildah logout "${CI01_REGISTRY}" >/dev/null 2>&1 || true' EXIT HUP INT TERM
+unsigned_container=
+cleanup() {
+    set +e
+    [ -z "${unsigned_container}" ] || buildah rm "${unsigned_container}" >/dev/null 2>&1
+    buildah logout "${CI01_REGISTRY}" >/dev/null 2>&1
+}
+trap cleanup EXIT HUP INT TERM
 printf '%s' "${CI01_ROBOT_SECRET}" | buildah login \
     --username "${CI01_ROBOT_USER}" --password-stdin "${CI01_REGISTRY}"
 buildah push --digestfile scan01-image.digest \
     "${SCAN01_LOCAL_IMAGE}" "${CI01_ALLOWED}:${CI01_TAG}"
 echo "scan01-pushed-image=${CI01_ALLOWED}:${CI01_TAG}"
 echo "scan01-pushed-digest=$(cat scan01-image.digest)"
+if [ "${SIGN01_CASE}" = pass ]; then
+    unsigned_container=$(buildah from "${SCAN01_LOCAL_IMAGE}")
+    unsigned_image=${SCAN01_LOCAL_IMAGE}-unsigned
+    buildah config --label "e2e01.unsigned-build=${BUILD_NUMBER}" "${unsigned_container}"
+    buildah commit --rm "${unsigned_container}" "${unsigned_image}"
+    unsigned_container=
+    buildah push --digestfile e2e01-unsigned.digest \
+        "${unsigned_image}" "${CI01_ALLOWED}:${CI01_UNSIGNED_TAG}"
+    echo "e2e01-unsigned-image=${CI01_ALLOWED}:${CI01_UNSIGNED_TAG}"
+    echo "e2e01-unsigned-digest=$(cat e2e01-unsigned.digest)"
+fi
 '''
                 }
                 container('oras') {
@@ -358,6 +256,7 @@ sbom_digest=$(oras attach \
     --format go-template --template '{{.digest}}' \
     "${CI01_ALLOWED}@${image_digest}" \
     scan01-sbom.cdx.json:application/vnd.cyclonedx+json)
+printf '%s\n' "${sbom_digest}" >scan01-sbom.digest
 echo "scan01-sbom-artifact-digest=${sbom_digest}"
 echo "scan01-sbom-subject-digest=${image_digest}"
 '''
@@ -366,8 +265,146 @@ echo "scan01-sbom-subject-digest=${image_digest}"
         }
     }
 
+    if (signCase == 'pass') {
+        stage('SIGN-01 dynamic digest sign and verify') {
+            withCredentials([
+                usernamePassword(credentialsId: 'harbor-robot-ci01',
+                                 usernameVariable: 'CI01_ROBOT_USER',
+                                 passwordVariable: 'CI01_ROBOT_SECRET'),
+                string(credentialsId: 'cosign-private-key-sign01', variable: 'SIGN01_PRIVATE_KEY'),
+                string(credentialsId: 'cosign-password-sign01', variable: 'COSIGN_PASSWORD'),
+                string(credentialsId: 'cosign-public-key-sign01', variable: 'SIGN01_PUBLIC_KEY')
+            ]) {
+                withEnv(["CI01_REGISTRY=${registry}", "CI01_ALLOWED=${allowed}"]) {
+                    container('cosign') {
+                        sh '''
+set -eu
+private_key=/home/cosign/sign01.key
+public_key=/home/cosign/sign01.pub
+cleanup() {
+    set +e
+    rm -f -- "${private_key}" "${public_key}" \
+        /home/cosign/image-preverify.log /home/cosign/sbom-preverify.log \
+        /home/cosign/image-verify.json /home/cosign/sbom-verify.json
+}
+trap cleanup EXIT HUP INT TERM
+set +x
+printf '%s' "${SIGN01_PRIVATE_KEY}" >"${private_key}"
+printf '%s' "${SIGN01_PUBLIC_KEY}" >"${public_key}"
+chmod 0400 "${private_key}" "${public_key}"
+printf '%s' "${CI01_ROBOT_SECRET}" | cosign login \
+    --username "${CI01_ROBOT_USER}" --password-stdin "${CI01_REGISTRY}" >/dev/null
+set -x
+
+image_ref=${CI01_ALLOWED}@$(cat scan01-image.digest)
+sbom_ref=${CI01_ALLOWED}@$(cat scan01-sbom.digest)
+echo "sign01-image-subject=${image_ref}"
+echo "sign01-sbom-subject=${sbom_ref}"
+
+ensure_signature() {
+    label=$1
+    subject=$2
+    preverify_log=/home/cosign/${label}-preverify.log
+    verify_json=/home/cosign/${label}-verify.json
+
+    set +e
+    cosign verify --key "${public_key}" --insecure-ignore-tlog=true \
+        "${subject}" >"${preverify_log}" 2>&1
+    existing_status=$?
+    set -e
+    if [ "${existing_status}" -eq 0 ]; then
+        signature_state=existing
+    elif grep -Eiq 'no signatures found|no matching signatures|invalid signature|signature verification failed' \
+        "${preverify_log}"; then
+        cosign sign --yes --key "${private_key}" \
+            --tlog-upload=false --use-signing-config=false \
+            --registry-referrers-mode=oci-1-1 "${subject}"
+        signature_state=attached
+    else
+        echo "${label} signature 존재 판정이 registry/key mismatch 밖에서 실패했다" >&2
+        sed -n '1,20p' "${preverify_log}" >&2
+        exit 1
+    fi
+
+    cosign verify --key "${public_key}" --insecure-ignore-tlog=true \
+        "${subject}" >"${verify_json}"
+    echo "sign01-${label}-signature=${signature_state} subject=${subject}"
+    echo "sign01-${label}-verification=pass subject=${subject}"
+}
+
+ensure_signature image "${image_ref}"
+ensure_signature sbom "${sbom_ref}"
+echo "sign01-key-id=sha256:$(awk 'NR > 1 {printf "\n"} {printf "%s", $0}' "${public_key}" | sha256sum | awk '{print $1}')"
+'''
+                    }
+                }
+            }
+        }
+    } else if (signCase == 'reject') {
+        stage('SIGN-01 reject current digest with untrusted key') {
+            withCredentials([
+                usernamePassword(credentialsId: 'harbor-robot-ci01',
+                                 usernameVariable: 'CI01_ROBOT_USER',
+                                 passwordVariable: 'CI01_ROBOT_SECRET'),
+                string(credentialsId: 'cosign-private-key-sign01', variable: 'SIGN01_PRIVATE_KEY'),
+                string(credentialsId: 'cosign-password-sign01', variable: 'COSIGN_PASSWORD'),
+                string(credentialsId: 'cosign-reject-public-key-sign01', variable: 'SIGN01_REJECT_PUBLIC_KEY')
+            ]) {
+                withEnv(["CI01_REGISTRY=${registry}", "CI01_ALLOWED=${allowed}"]) {
+                    container('cosign') {
+                        sh '''
+set -eu
+private_key=/home/cosign/sign01.key
+reject_key=/home/cosign/sign01-reject.pub
+reject_log=/home/cosign/sign01-reject.log
+cleanup() {
+    set +e
+    rm -f -- "${private_key}" "${reject_key}" "${reject_log}"
+}
+trap cleanup EXIT HUP INT TERM
+set +x
+printf '%s' "${SIGN01_PRIVATE_KEY}" >"${private_key}"
+printf '%s' "${SIGN01_REJECT_PUBLIC_KEY}" >"${reject_key}"
+chmod 0400 "${private_key}" "${reject_key}"
+printf '%s' "${CI01_ROBOT_SECRET}" | cosign login \
+    --username "${CI01_ROBOT_USER}" --password-stdin "${CI01_REGISTRY}" >/dev/null
+set -x
+image_ref=${CI01_ALLOWED}@$(cat scan01-image.digest)
+cosign sign --yes --key "${private_key}" --tlog-upload=false --use-signing-config=false \
+    --registry-referrers-mode=oci-1-1 "${image_ref}"
+set +e
+cosign verify --key "${reject_key}" --insecure-ignore-tlog=true \
+    "${image_ref}" >"${reject_log}" 2>&1
+verify_status=$?
+set -e
+if [ "${verify_status}" -eq 0 ]; then
+    echo '다른 공개키가 SIGN-01 image signature를 허용했다' >&2
+    exit 1
+fi
+if ! grep -Eiq 'no matching signatures|no matching attestations|invalid signature|signature verification failed|accepted signatures do not match threshold' "${reject_log}"; then
+    echo '다른 공개키가 아닌 경계에서 검증이 실패했다' >&2
+    sed -n '1,20p' "${reject_log}" >&2
+    exit 1
+fi
+echo "sign01-verification=reject subject=${image_ref} reason=untrusted-key"
+exit 42
+'''
+                    }
+                }
+            }
+        }
+    }
+
     stage('release handoff') {
-        echo "scan01-release-handoff=ready case=${scanCase}"
-        // 실제 배포와 서명은 SIGN-01/E2E-01이 소유한다. 이 job에는 deploy stage가 없다.
+        if (signCase == 'pass') {
+            def imageDigest = readFile('scan01-image.digest').trim()
+            def sbomDigest = readFile('scan01-sbom.digest').trim()
+            def unsignedDigest = readFile('e2e01-unsigned.digest').trim()
+            echo "sign01-release-handoff=ready case=pass image-digest=${imageDigest} sbom-digest=${sbomDigest}"
+            echo "e2e01-release-handoff=ready signed-digest=${imageDigest} unsigned-digest=${unsignedDigest}"
+        } else {
+            echo "scan01-release-handoff=ready case=${scanCase}"
+        }
+        // GitHub write credential은 없다. E2E-01 작업자가 digest를 검증 commit 선언에 넣는다.
     }
 }

@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: e2e-01-vault-agent
+  namespace: e2e-01
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: e2e-01
+    app.kubernetes.io/component: secret-bootstrap
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  bootstrap.hcl: |
+    exit_after_auth = true
+    pid_file = "/tmp/vault-agent.pid"
+    vault {
+      address = "https://vault.vault.svc.cluster.local:8200"
+      ca_cert = "/vault/tls/vault.crt"
+      retry { num_retries = 12 }
+    }
+    auto_auth {
+      method "kubernetes" {
+        mount_path = "auth/kubernetes"
+        config = {
+          role       = "e2e-01-verifier"
+          token_path = "/var/run/secrets/vault/token"
+        }
+      }
+    }
+    template {
+      destination = "/vault/secrets/cosign-current.pub"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/e2e-01/runtime" -}}{{ .Data.data.cosign_public_key }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/vault/secrets/cosign-previous.pub"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/e2e-01/runtime" -}}{{ .Data.data.cosign_previous_public_key }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/vault/secrets/harbor-robot-name"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/e2e-01/runtime" -}}{{ .Data.data.harbor_robot_name }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/vault/secrets/harbor-robot-secret"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/e2e-01/runtime" -}}{{ .Data.data.harbor_robot_secret }}{{- end -}}
+    EOT
+    }

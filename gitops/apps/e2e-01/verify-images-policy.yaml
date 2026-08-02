@@ -1,0 +1,51 @@
+apiVersion: kyverno.io/v1
+kind: Policy
+metadata:
+  name: e2e-01-verify-release-image
+  namespace: e2e-01
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/title: E2E-01 signed release image
+    policies.kyverno.io/category: Software Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+  labels:
+    app.kubernetes.io/name: e2e-01
+    app.kubernetes.io/component: admission
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  validationFailureAction: Enforce
+  failurePolicy: Fail
+  webhookTimeoutSeconds: 30
+  admission: true
+  background: false
+  emitWarning: false
+  rules:
+    - name: verify-current-or-previous-cosign-key
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      verifyImages:
+        - type: Cosign
+          imageReferences:
+            - harbor.imcherry5778.xyz/ci01-evidence/ci01-app*
+          imageRegistryCredentials:
+            secrets:
+              - e2e-01/e2e-01-registry
+          mutateDigest: false
+          verifyDigest: true
+          required: true
+          attestors:
+            - count: 1
+              entries:
+                - keys:
+                    publicKeys: k8s://e2e-01/e2e-01-cosign-current
+                    rekor:
+                      ignoreTlog: true
+                - keys:
+                    publicKeys: k8s://e2e-01/e2e-01-cosign-previous
+                    rekor:
+                      ignoreTlog: true

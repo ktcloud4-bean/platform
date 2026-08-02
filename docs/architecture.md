@@ -67,7 +67,9 @@ OpenTofu는 공인 인증서가 라이브에서 검증된 뒤 TLS 검증 우회�
 - 기본 Traefik을 유일한 Kubernetes ingress controller로 사용한다.
 - 기본 `local-path` StorageClass로 동적 프로비저닝한다.
 - Longhorn과 Ceph는 한 물리 노드에서 복제 효과가 없으므로 사용하지 않는다.
-- Kubernetes NetworkPolicy와 Kyverno는 워크로드가 안정된 뒤 Audit부터 적용한다.
+- Kubernetes NetworkPolicy와 Kyverno는 워크로드가 안정된 뒤 Audit부터 적용한다. 공급망
+  admission은 E2E 검증 namespace 하나에서만 먼저 Enforce하고, 전역 승격은 예외·rollback을
+  별도 검증한 뒤 수행한다.
 
 `local-path`의 PVC 요청 용량은 기본적으로 디렉터리의 하드 쿼터가 아니다. 예를 들어 `20Gi`를 요청해도 provisioner는 그 이상 쓰는 것을 막지 않으며, 노드 파일시스템을 가득 채울 수 있다. 따라서 다음 통제를 함께 둔다.
 

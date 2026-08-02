@@ -13,7 +13,8 @@ usage() {
 
 --check   안전한 메타데이터만 읽고 아무것도 바꾸지 않는다.
 --apply   absent 상태에서 CI-01 객체를 만든다. 기존 객체가 선언과 다르면 중단한다.
---seed    기존 repo의 seed 3개를 저장소 선언과 같게 맞춘다. 다른 객체는 건드리지 않는다.
+--seed    기존 repo의 seed 5개를 저장소 선언과 같게 맞춘다. 다른 객체는 건드리지 않는다.
+--seed-rollback <revision> 지정 revision이 소유한 기존 seed 3개로 되돌리고 E2E-01 추가 seed 2개를 제거한다.
 --destroy CI-01이 만든 객체만 제거한다. 다른 repo/project/Vault 경로는 건드리지 않는다.
 --signing-key-check             현재 SIGN-01 key를 복호화하지 않고 공개키 일치까지 판정한다.
 --signing-key-create            signing key가 없을 때 generation 1과 거부 시험 공개키를 만든다.
@@ -24,7 +25,8 @@ EOF
 }
 
 mode=${1:-}
-if [[ ${mode} != --check && ${mode} != --apply && ${mode} != --seed && ${mode} != --destroy && \
+if [[ ${mode} != --check && ${mode} != --apply && ${mode} != --seed && \
+      ${mode} != --seed-rollback && ${mode} != --destroy && \
       ${mode} != --signing-key-check && ${mode} != --signing-key-create && \
       ${mode} != --signing-key-rotate && ${mode} != --signing-key-recover && \
       ${mode} != --signing-key-destroy ]]; then
@@ -54,8 +56,25 @@ readonly agent_ssh_port=2222
 repo_root=$(git rev-parse --show-toplevel)
 readonly repo_root
 readonly seed_dir=${repo_root}/gitops/tools/ci-01/seed
+readonly seed_files=(Jenkinsfile Containerfile app.sh math.js coverage/lcov.info)
+readonly seed_rollback_files=(Jenkinsfile Containerfile app.sh)
+readonly seed_e2e_only_files=(math.js coverage/lcov.info)
 readonly policy_file=${repo_root}/infra/vault/scripts/policies/jenkins.hcl
 readonly release_metadata=${repo_root}/gitops/apps/jenkins/release-metadata.env
+
+seed_rollback_revision=
+if [[ ${mode} == --seed-rollback ]]; then
+  seed_rollback_revision=${2:-}
+  [[ -n ${seed_rollback_revision} ]] || {
+    echo "--seed-rollback에는 Git revision이 필요하다" >&2
+    exit 2
+  }
+  git cat-file -e "${seed_rollback_revision}^{commit}" 2>/dev/null || {
+    echo "seed rollback revision을 읽을 수 없다: ${seed_rollback_revision}" >&2
+    exit 1
+  }
+  readonly seed_rollback_revision
+fi
 
 check_private_file() {
   local path=$1
@@ -316,7 +335,7 @@ for private_input in "${jenkins_env}" "${gitea_env}" "${harbor_env}" "${vault_ro
   check_private_file "${private_input}"
 done
 [[ -s ${policy_file} ]] || { echo "Vault policy 선언이 없다: ${policy_file}" >&2; exit 1; }
-for seed in Jenkinsfile Containerfile app.sh; do
+for seed in "${seed_files[@]}"; do
   [[ -s ${seed_dir}/${seed} ]] || { echo "seed 파일이 없다: ${seed_dir}/${seed}" >&2; exit 1; }
 done
 
@@ -512,16 +531,38 @@ if [[ ${mode} == --check ]]; then
   exit 0
 fi
 
-# ---------------------------------------------------------------- seed 동기화
-if [[ ${mode} == --seed ]]; then
+# ---------------------------------------------------------------- seed 동기화·rollback
+if [[ ${mode} == --seed || ${mode} == --seed-rollback ]]; then
   [[ ${repo_state} == present ]] || { echo "seed 대상 repo가 없다" >&2; exit 1; }
+  desired_seed_files=("${seed_files[@]}")
+  if [[ ${mode} == --seed-rollback ]]; then
+    desired_seed_files=("${seed_rollback_files[@]}")
+  fi
   changed=0
-  for seed in Jenkinsfile Containerfile app.sh; do
+  for seed in "${desired_seed_files[@]}"; do
     status=$(http_status "${gitea_curl}" GET \
       "${gitea_api}/repos/${repo_owner}/${repo_name}/contents/${seed}?ref=main")
-    [[ ${status} == 200 ]] || { echo "seed ${seed} 조회 HTTP ${status}" >&2; exit 1; }
+    [[ ${status} == 200 || ${status} == 404 ]] || {
+      echo "seed ${seed} 조회 HTTP ${status}" >&2
+      exit 1
+    }
+    desired_file=${seed_dir}/${seed}
+    if [[ ${mode} == --seed-rollback ]]; then
+      desired_file=${temp_dir}/rollback-seed
+      git show "${seed_rollback_revision}:gitops/tools/ci-01/seed/${seed}" >"${desired_file}"
+    fi
+    desired=$(base64 -w0 <"${desired_file}")
+    if [[ ${status} == 404 ]]; then
+      jq -n --arg content "${desired}" --arg message "CI-01 seed add ${seed}" \
+        '{content: $content, message: $message, branch: "main"}' >"${temp_dir}/seed.json"
+      status=$(http_status "${gitea_curl}" POST \
+        "${gitea_api}/repos/${repo_owner}/${repo_name}/contents/${seed}" "${temp_dir}/seed.json")
+      [[ ${status} == 201 ]] || { echo "seed ${seed} 생성 HTTP ${status}" >&2; exit 1; }
+      changed=$((changed + 1))
+      echo "CI-01 seed: ${seed}=created"
+      continue
+    fi
     current=$(jq -r '.content' "${temp_dir}/response.json" | tr -d '\n')
-    desired=$(base64 -w0 <"${seed_dir}/${seed}")
     if [[ ${current} == "${desired}" ]]; then
       echo "CI-01 seed: ${seed}=match"
       continue
@@ -535,6 +576,29 @@ if [[ ${mode} == --seed ]]; then
     changed=$((changed + 1))
     echo "CI-01 seed: ${seed}=updated"
   done
+
+  if [[ ${mode} == --seed-rollback ]]; then
+    for seed in "${seed_e2e_only_files[@]}"; do
+      status=$(http_status "${gitea_curl}" GET \
+        "${gitea_api}/repos/${repo_owner}/${repo_name}/contents/${seed}?ref=main")
+      [[ ${status} == 200 || ${status} == 404 ]] || {
+        echo "E2E-01 seed ${seed} rollback 조회 HTTP ${status}" >&2
+        exit 1
+      }
+      if [[ ${status} == 404 ]]; then
+        echo "CI-01 seed rollback: ${seed}=absent"
+        continue
+      fi
+      jq -n --arg sha "$(jq -r '.sha' "${temp_dir}/response.json")" \
+        --arg message "E2E-01 seed rollback ${seed}" \
+        '{sha: $sha, message: $message, branch: "main"}' >"${temp_dir}/seed.json"
+      status=$(http_status "${gitea_curl}" DELETE \
+        "${gitea_api}/repos/${repo_owner}/${repo_name}/contents/${seed}" "${temp_dir}/seed.json")
+      [[ ${status} == 200 ]] || { echo "E2E-01 seed ${seed} rollback 삭제 HTTP ${status}" >&2; exit 1; }
+      changed=$((changed + 1))
+      echo "CI-01 seed rollback: ${seed}=removed"
+    done
+  fi
   echo "CI-01 seed 동기화 완료: changed=${changed}"
   transaction_complete=true
   exit 0
@@ -595,14 +659,14 @@ status=$(http_status "${gitea_curl}" POST "${gitea_api}/user/repos" "${temp_dir}
 created_repo=true
 echo "CI-01 apply: gitea repo=created"
 
-for seed in Jenkinsfile Containerfile app.sh; do
+for seed in "${seed_files[@]}"; do
   jq -n --arg content "$(base64 -w0 <"${seed_dir}/${seed}")" --arg message "CI-01 seed ${seed}" \
     '{content: $content, message: $message, branch: "main"}' >"${temp_dir}/seed.json"
   status=$(http_status "${gitea_curl}" POST \
     "${gitea_api}/repos/${repo_owner}/${repo_name}/contents/${seed}" "${temp_dir}/seed.json")
   [[ ${status} == 201 ]] || { echo "seed ${seed} 생성 HTTP ${status}" >&2; exit 1; }
 done
-echo "CI-01 apply: gitea seed=3 files"
+echo "CI-01 apply: gitea seed=${#seed_files[@]} files"
 
 # 2. read-only deploy key
 ssh-keygen -q -t ed25519 -N '' -C "${deploy_key_title}" -f "${temp_dir}/id_ed25519"

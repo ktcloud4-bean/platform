@@ -133,6 +133,21 @@ jenkins:
                   - envVar:
                       key: "COSIGN_EXPERIMENTAL"
                       value: "1"
+              - name: "sonar"
+                image: "docker.io/sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1@sha256:23ca0f137965d9dff2198074043fd48d386280bc5d0ccac8c8349cea4cf096a9"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                command: "sleep"
+                args: "infinity"
+                ttyEnabled: false
+                resourceRequestCpu: "100m"
+                resourceRequestMemory: "512Mi"
+                resourceLimitCpu: "1"
+                resourceLimitMemory: "2Gi"
+                envVars:
+                  - envVar:
+                      key: "HOME"
+                      value: "/opt/sonar-scanner/.sonar"
             # ContainerTemplate이 표현하지 못하는 보안 경계는 raw Pod spec으로 덮는다.
             # root·privileged·Docker socket·hostPath는 어느 계층에도 없다.
             yamlMergeStrategy: "merge"
@@ -236,6 +251,22 @@ jenkins:
                         mountPath: /home/cosign
                       - name: cosign-tmp
                         mountPath: /tmp
+                  - name: sonar
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: true
+                      seccompProfile:
+                        type: RuntimeDefault
+                      capabilities:
+                        drop: ["ALL"]
+                    volumeMounts:
+                      - name: sonar-home
+                        mountPath: /opt/sonar-scanner/.sonar
+                      - name: sonar-tmp
+                        mountPath: /tmp
                 volumes:
                   - name: buildah-home
                     emptyDir:
@@ -268,6 +299,12 @@ jenkins:
                     emptyDir:
                       medium: Memory
                       sizeLimit: 16Mi
+                  - name: sonar-home
+                    emptyDir:
+                      sizeLimit: 1Gi
+                  - name: sonar-tmp
+                    emptyDir:
+                      sizeLimit: 1Gi
 
 credentials:
   system:
@@ -307,6 +344,11 @@ credentials:
               id: "cosign-reject-public-key-sign01"
               description: "SIGN-01 fixed untrusted public key for the negative test"
               secret: "${cosign_reject_public_key}"
+          - string:
+              scope: GLOBAL
+              id: "sonar-token-e2e01"
+              description: "E2E-01 SonarQube project-scoped analysis token"
+              secret: "${e2e01_sonar_token}"
 
 security:
   # Gitea SSH host key는 known_hosts 파일이 아니라 선언한 값으로 고정한다.
@@ -326,14 +368,14 @@ unclassified:
 jobs:
   - script: |
       pipelineJob('ci01-image-build') {
-        description('CI-01/SCAN-01/SIGN-01: build/scan handoff 또는 고정 digest Cosign 서명·검증')
+        description('E2E-01: Gitea checkout부터 Sonar/Trivy/Harbor/Cosign 동적 digest handoff까지')
         logRotator {
           numToKeep(20)
           artifactNumToKeep(0)
         }
         parameters {
           choiceParam('SCAN01_CASE', ['pass', 'fail'], 'SCAN-01 gate 검증 입력. 기본 pass이며 fail은 push 전에 종료한다.')
-          choiceParam('SIGN01_CASE', ['off', 'pass', 'reject'], 'SIGN-01은 SCAN-01 고정 digest만 사용한다. 기본 off는 기존 build/scan 경로다.')
+          choiceParam('SIGN01_CASE', ['off', 'pass', 'reject'], 'pass는 현재 build digest를 서명하고 reject는 현재 digest를 다른 공개키로 거부한다.')
         }
         definition {
           cpsScm {

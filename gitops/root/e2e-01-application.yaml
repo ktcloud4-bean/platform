@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: e2e-01
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  project: e2e-01
+  source:
+    repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
+    targetRevision: main
+    path: gitops/apps/e2e-01
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: e2e-01
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ApplyOutOfSyncOnly=true
+      - PruneLast=true
+      - PrunePropagationPolicy=foreground
