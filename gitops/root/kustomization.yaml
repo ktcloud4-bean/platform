@@ -17,6 +17,8 @@ resources:
   - gitea-application.yaml
   - awx-project.yaml
   - awx-application.yaml
+  - renovate-project.yaml
+  - renovate-application.yaml
   - crowdsec-project.yaml
   - crowdsec-application.yaml
   - velero-project.yaml

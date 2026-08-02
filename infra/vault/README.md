@@ -34,6 +34,11 @@ Vault API의 상태이므로 Argo의 대상이 아니다. 그렇다고 이 값�
 | `pki/` | 내부 workload TLS/mTLS. root CA는 `ktcloud4-bean Internal CA` |
 | audit device `stdout/` | 감사 이벤트를 Pod 로그로 |
 
+`UPDATE-01`의 `renovate` policy와 Kubernetes auth role은 `renovate` namespace의 동명
+ServiceAccount만 `audience=vault`로 허용하고 `kv/renovate/runtime` 한 경로만 읽힌다. PAT와
+SSH private key는 `gitops/tools/update-01/provision.sh`가 임시 파일에서 KV로 직접 옮기며,
+상시 container에는 Vault ServiceAccount token을 주지 않는다.
+
 policy는 앱 하나당 하나씩 두고 자기 경로만 연다. 명시하지 않은 경로는 Vault 기본 deny다.
 
 ## audit device 선택

@@ -71,6 +71,13 @@ vault write auth/kubernetes/role/awx \
   token_policies="awx" \
   token_no_default_policy=true \
   token_ttl=15m token_max_ttl=1h
+vault write auth/kubernetes/role/renovate \
+  bound_service_account_names="renovate" \
+  bound_service_account_namespaces="renovate" \
+  audience="vault" \
+  token_policies="renovate" \
+  token_no_default_policy=true \
+  token_ttl=10m token_max_ttl=15m
 EOF
 
 echo "== 5. 내부 PKI =="

@@ -813,7 +813,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `CI-01 BLOCKED` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
 | `QUALITY-01 READY` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO |
 | `AWX-01 DONE` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
-| `UPDATE-01 READY` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
+| `UPDATE-01 DONE` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
 | `SCAN-01 BLOCKED` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
 | `SIGN-01 BLOCKED` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
 | `POL-01 DONE` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
@@ -875,6 +875,31 @@ available은 `15,598MiB`, swap 0으로 12/8GiB 경고·정지 기준 밖이어�
 시작 main `ee5c0280df4e9f29dc5f3dbdd1db9891ab8f2322`로 rollback해 root의
 `Synced/Healthy`와 AWX 리소스 정리를 확인했다. 최종 child 선언은 `main`이다. 현재 백로그에서
 `AWX-01`을 선행으로 갖는 작업은 없어 새로 `READY`로 여는 직접 후속은 없다.
+
+2026-08-02 `UPDATE-01`에서 Renovate `44.6.0` 공식 image를 digest로 고정하고 전용
+AppProject·child Application·namespace·ServiceAccount와 매주 단발 `CronJob`으로 배포했다.
+Gitea HTTP Git은 계속 끈 채 API는 내부 `gitea-http:3000`, Git data는 `gitUrl=ssh`와 정확한
+`insteadOf` 치환으로 `gitea-ssh:2222`를 사용한다. Renovate가 process environment의 unsafe
+Git config를 child process에 전달하지 않는 44.6.0 동작에 맞춰 전역 `customEnvVariables`만
+사용한다. `renovate` non-admin bot은 `scm-recovery/platform-smoke` 한 곳의 write collaborator며
+PAT scope는 `write:repository`·`read:user`·`write:issue`·`read:organization`으로 제한했다.
+PAT·SSH private key·pinned host key는 `kv/renovate/runtime`에서 전용 Kubernetes auth role과
+Vault Agent init이 memory `emptyDir`로 렌더링하고, 상시 container에는 ServiceAccount token을
+마운트하지 않는다. 자동 merge와 platform automerge는 top-level·npm rule에서 모두 false다.
+
+같은 bot PAT로 대상 repo branch write `201`과 admin API `403`을 대조했다. smoke repo에
+`update01-lodash-smoke` npm alias의 낡은 `lodash 4.17.20` 한 건을 임시 commit하고 Job을 한 번
+실행해 Renovate PR `#2` 정확히 한 건이 `open`, `merged=false`로 남은 것을 확인했다. 배포 직후
+Node는 `214m`·`7817Mi`, metrics Pod 29개 합계는 `64m`·`4724Mi`, Renovate Pod 표본은
+`264m`·`9Mi`, k3s guest available은 `15,961MiB`, root 사용은 `9%`, PVC 요청 합계는 4개
+`15,488MiB`였다. RAM 12/8GiB, root 여유 25/20%, PVC 96/120GiB 경고·정지 기준 밖이어서
+**GO**다. 검증 설정 SHA `5c33ff5903098b26474f29793070bd1b9807f57c`와 root pointer
+`4a325059acaab91df2e3dbed682646175b293438`에서 root·Renovate가 `Synced/Healthy`였다.
+PR·Renovate/permission branch·seed·Job·로컬 key 사본을 정리하고 시작 main
+`1d9825af9997238904026b346ec4a975cb6482aa`로 rollback해 root `Synced/Healthy`와 child·namespace·
+AppProject 부재를 확인했다. 운영 bot/PAT/key와 Vault role·policy·KV는 정기 실행을 위해 유지하며
+최종 child 선언은 `main`이다. `UPDATE-01`을 직접 선행으로 갖는 작업은 없어 새로 `READY`로 여는
+직접 후속은 없다.
 
 2026-08-02 `POL-01`에서 Kyverno `v1.18.2` admission·reports controller와 Pod-level
 `runAsNonRoot` 누락 Audit 규칙 한 건을 배포했고, 기존 워크로드 위반이 PolicyReport의 `fail`로

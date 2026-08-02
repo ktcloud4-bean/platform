@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renovate-config
+  namespace: renovate
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: renovate
+    app.kubernetes.io/component: configuration
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  config.js: |
+    const fs = require('node:fs');
+
+    const runtimeValue = (name) =>
+      fs.readFileSync(`/renovate/runtime/${name}`, 'utf8').trim();
+
+    module.exports = {
+      platform: 'gitea',
+      endpoint: 'http://gitea-http.gitea.svc.cluster.local:3000/api/v1/',
+      token: runtimeValue('gitea-token'),
+      gitUrl: 'ssh',
+      gitAuthor: 'Renovate Bot <renovate-bot@imcherry5778.xyz>',
+      repositories: ['scm-recovery/platform-smoke'],
+      autodiscover: false,
+      onboarding: false,
+      requireConfig: 'ignored',
+      enabledManagers: ['npm'],
+      dependencyDashboard: false,
+      baseBranchPatterns: ['main'],
+      prCreation: 'immediate',
+      branchPrefix: 'renovate/',
+      branchConcurrentLimit: 1,
+      prConcurrentLimit: 1,
+      prHourlyLimit: 0,
+      automerge: false,
+      platformAutomerge: false,
+      allowScripts: false,
+      baseDir: '/tmp/renovate/repos',
+      cacheDir: '/tmp/renovate/cache',
+      customEnvVariables: {
+        GIT_SSH_COMMAND: 'ssh -F /renovate/config/ssh_config',
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0:
+          'url.ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/.insteadOf',
+        GIT_CONFIG_VALUE_0: 'ssh://git@git.imcherry5778.xyz:30022/',
+      },
+      packageRules: [
+        {
+          matchManagers: ['npm'],
+          automerge: false,
+          platformAutomerge: false,
+        },
+        {
+          matchDepNames: ['update01-lodash-smoke'],
+          recreateWhen: 'always',
+        },
+      ],
+    };
+  ssh_config: |
+    Host gitea-ssh.gitea.svc.cluster.local
+      User git
+      Port 2222
+      IdentityFile /renovate/runtime/id_ed25519
+      IdentitiesOnly yes
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      StrictHostKeyChecking yes
+      UserKnownHostsFile /renovate/runtime/known_hosts
+      HostKeyAlias gitea-internal-update-01
