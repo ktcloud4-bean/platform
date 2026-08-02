@@ -63,6 +63,9 @@ routes:
     description: HEADLAMP-02 Keycloak OIDC Kubernetes RBAC console
     from: https://headlamp.imcherry5778.xyz
     to: http://headlamp.headlamp.svc.cluster.local:80
+    # Headlamp terminal은 Kubernetes exec의 WebSocket upgrade를 사용한다.
+    # 다른 Route에는 upgrade를 열지 않고 이 웹 Route에만 한정한다.
+    allow_websockets: true
     policy:
       - allow:
           or:

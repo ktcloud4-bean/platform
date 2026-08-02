@@ -29,6 +29,10 @@ Browser -> Traefik -> Pomerium Route -> Headlamp OIDC -> Keycloak
 | Kubernetes RBAC | 실제 리소스·log·exec·변경 allow/deny | Argo 소유 resource 직접 운영 변경 |
 | break-glass kubeconfig | IdP/Pomerium/Headlamp 장애 중 API 상태 조회·복구 | 브라우저 OIDC 대체 일상 경로 |
 
+Headlamp 전용 Pomerium Route는 브라우저 terminal의 WebSocket upgrade만 전달한다.
+Pomerium의 `allow_websockets`는 Route 입장 뒤 transport를 허용할 뿐이며, `pods/exec`
+인가를 대신하지 않는다.
+
 ## 승인된 identity → RBAC
 
 검증기는 raw JWT 대신 아래 safe claim 판정만 출력한다. TTL은 `iat`, `exp`, 현재시각으로

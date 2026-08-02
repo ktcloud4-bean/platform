@@ -13,7 +13,7 @@ spec:
   project: headlamp
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: headlamp-02-fix-05-settings-7ccf4bb1292ceba6bf145e0bbc12b067b61ed77c
+    targetRevision: main
     path: gitops/apps/headlamp
   destination:
     server: https://kubernetes.default.svc

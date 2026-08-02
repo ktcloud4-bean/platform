@@ -53,7 +53,9 @@ OIDC claim을 직접 확인하는 `claim/groups`를 쓴다.
 `HEADLAMP-02` Route는 두 group 모두 웹 진입을 허용하지만, Pomerium은 웹 진입만 판정하며
 upstream의 실제 권한을 대신하지 않는다. Headlamp는 사용자별 Keycloak OIDC ID token과
 Kubernetes RBAC가 API 권한을 계속 소유하고 Pomerium의 token/header를 Kubernetes API token으로
-전달하지 않는다. 공유 `cluster-admin` ServiceAccount는 만들지 않는다.
+전달하지 않는다. 이 Route만 `allow_websockets: true`로 Kubernetes exec upgrade를 전달하고,
+실제 exec 허용 여부는 계속 Kubernetes RBAC가 판정한다. 공유 `cluster-admin` ServiceAccount는
+만들지 않는다.
 
 ## Keycloak clients와 시크릿
 
