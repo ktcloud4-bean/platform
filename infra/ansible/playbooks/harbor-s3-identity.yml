@@ -1,0 +1,7 @@
+---
+# REG-01 identity 두 개만 병합한다. 다른 consumer identity는 live 선언 그대로 보존한다.
+- name: Harbor SeaweedFS S3 identity 선언
+  hosts: object_nodes
+  become: true
+  roles:
+    - harbor_s3_identity

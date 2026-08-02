@@ -1,0 +1,175 @@
+expose:
+  type: clusterIP
+  tls:
+    enabled: false
+  clusterIP:
+    name: harbor
+    ports:
+      httpPort: 80
+      httpsPort: 443
+
+externalURL: https://harbor.imcherry5778.xyz
+
+vaultAgent:
+  enabled: true
+  serviceAccountName: harbor
+  image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+
+registryApiIngress:
+  enabled: true
+
+persistence:
+  # registry layer는 SeaweedFS S3, job log는 DB, Redis는 휘발성이다.
+  # 따라서 Harbor가 local-path PVC를 요청하지 않는다.
+  enabled: false
+  imageChartStorage:
+    disableredirect: true
+    type: s3
+    s3:
+      region: us-east-1
+      bucket: harbor-registry
+      regionendpoint: https://s3.imcherry5778.xyz:8333
+      secure: true
+      skipverify: false
+      v4auth: true
+      chunksize: "5242880"
+
+database:
+  type: external
+  external:
+    host: postgres-01.imcherry5778.xyz
+    port: "5432"
+    username: harbor_user
+    password: vault-agent-runtime-only
+    coreDatabase: harbor
+    sslmode: verify-full
+  maxIdleConns: 10
+  maxOpenConns: 50
+
+redis:
+  type: internal
+  internal:
+    image:
+      repository: docker.io/goharbor/redis-photon
+      tag: v2.15.1@sha256:5669d4828805d9ed0bbfc18c101c6ec82d26a13cb9242b48f6348a3e3b2e4cca
+    automountServiceAccountToken: false
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {cpu: 250m, memory: 128Mi}
+
+internalTLS:
+  enabled: false
+
+trivy:
+  # SCAN-01이 scanner와 gate의 소유자다.
+  enabled: false
+
+metrics:
+  enabled: false
+
+nginx:
+  image:
+    repository: docker.io/goharbor/nginx-photon
+    tag: v2.15.1@sha256:1f9d06d040f2478f6cf7f6da0091877bf987a641810f4bfaadb2a87d73dbf4fb
+  automountServiceAccountToken: false
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {cpu: 250m, memory: 128Mi}
+
+portal:
+  image:
+    repository: docker.io/goharbor/harbor-portal
+    tag: v2.15.1@sha256:ac55161c57a8351807adf8f8def264bdd52667c371d0436beefebdac4341c9e2
+  automountServiceAccountToken: false
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {cpu: 250m, memory: 128Mi}
+
+core:
+  image:
+    repository: docker.io/goharbor/harbor-core
+    tag: v2.15.1@sha256:887a85b8ea98b76bfc9f715f1a0785bb99f9a1034241513902dd6e95be922a83
+  serviceAccountName: harbor
+  automountServiceAccountToken: false
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  extraEnvVars:
+    - {name: HARBOR_SECRET_SOURCE, value: vault-agent-init}
+  initContainers:
+    - name: vault-agent
+      image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+      imagePullPolicy: IfNotPresent
+      args: [agent, -config=/vault/config/core.hcl]
+      securityContext: &vaultAgentSecurity
+        runAsUser: 100
+        runAsGroup: 10000
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities: {drop: [ALL]}
+      resources: &vaultAgentResources
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {cpu: 200m, memory: 128Mi}
+      volumeMounts: &vaultAgentMounts
+        - {name: vault-agent-config, mountPath: /vault/config, readOnly: true}
+        - {name: vault-trust, mountPath: /vault/tls, readOnly: true}
+        - {name: harbor-secrets, mountPath: /vault/secrets}
+        - {name: vault-agent-tmp, mountPath: /tmp}
+        - {name: vault-token, mountPath: /var/run/secrets/vault, readOnly: true}
+
+jobservice:
+  image:
+    repository: docker.io/goharbor/harbor-jobservice
+    tag: v2.15.1@sha256:0de4fd2ce3a02d3e6591b439e4674ea085885ddf43652b44004cc67eb19dba12
+  serviceAccountName: harbor
+  automountServiceAccountToken: false
+  jobLoggers: [database]
+  resources:
+    requests: {cpu: 25m, memory: 96Mi}
+    limits: {cpu: 500m, memory: 384Mi}
+  extraEnvVars:
+    - {name: HARBOR_SECRET_SOURCE, value: vault-agent-init}
+  initContainers:
+    - name: vault-agent
+      image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+      imagePullPolicy: IfNotPresent
+      args: [agent, -config=/vault/config/jobservice.hcl]
+      securityContext: *vaultAgentSecurity
+      resources: *vaultAgentResources
+      volumeMounts: *vaultAgentMounts
+
+registry:
+  serviceAccountName: harbor
+  automountServiceAccountToken: false
+  registry:
+    image:
+      repository: docker.io/goharbor/registry-photon
+      tag: v2.15.1@sha256:ebf0325c2661729dbb317cbf839608eb8b15cfa158911a94976f2c21563c466e
+    resources:
+      requests: {cpu: 25m, memory: 64Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+    extraEnvVars:
+      - {name: HARBOR_SECRET_SOURCE, value: vault-agent-init}
+  controller:
+    image:
+      repository: docker.io/goharbor/harbor-registryctl
+      tag: v2.15.1@sha256:554147a956989175f63f8d41573d716c6ddf6052acd1749c88c0f99ce6ee2bff
+    resources:
+      requests: {cpu: 10m, memory: 64Mi}
+      limits: {cpu: 250m, memory: 256Mi}
+    extraEnvVars:
+      - {name: HARBOR_SECRET_SOURCE, value: vault-agent-init}
+  initContainers:
+    - name: vault-agent
+      image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+      imagePullPolicy: IfNotPresent
+      args: [agent, -config=/vault/config/registry.hcl]
+      securityContext: *vaultAgentSecurity
+      resources: *vaultAgentResources
+      volumeMounts: *vaultAgentMounts
+
+proxy:
+  components: []
+
+updateStrategy:
+  type: RollingUpdate

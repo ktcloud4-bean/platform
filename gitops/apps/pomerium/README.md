@@ -15,6 +15,7 @@ Client
        └─ /                           -> Service/dashy:8080
        └─ headlamp.imcherry5778.xyz -> Service/headlamp:80
        └─ sonar.imcherry5778.xyz    -> Service/sonarqube:9000
+       └─ harbor.imcherry5778.xyz / -> Service/harbor:80
 ```
 
 기존 packaged Traefik이 유일한 ingress controller다. 이 앱은 동적 `Ingress` 객체만
@@ -47,6 +48,7 @@ OIDC claim을 직접 확인하는 `claim/groups`를 쓴다.
 | `https://headlamp.imcherry5778.xyz` | `/platform-users` 또는 `/platform-privileged` | 두 group에 Headlamp 타일 표시 |
 | `https://git.imcherry5778.xyz` | `/platform-users` | 같은 그룹에만 Gitea 타일 표시 |
 | `https://sonar.imcherry5778.xyz` | `/platform-users` | 같은 group에만 SonarQube 타일 표시 |
+| `https://harbor.imcherry5778.xyz` UI | `/platform-users` 또는 `/platform-privileged` | 두 group에 Harbor 타일 표시 |
 
 로그인 성공, email 또는 `authenticated_user`만으로 허용하는 fallback은 없다.
 `/platform-privileged`만 가진 사용자는 Portal에는 들어가지만 검증 Route는 403이고 해당 타일도
@@ -70,6 +72,11 @@ port 허용은 추가하지 않는다.
 upstream은 `sonarqube` namespace의 server Pod TCP 9000만 허용하는 전용 egress
 NetworkPolicy로 제한한다.
 세부 경계는 [`gitops/apps/sonarqube/README.md`](../sonarqube/README.md)가 소유한다.
+
+`REG-01`의 Harbor route는 browser UI `/`만 보호한다. 더 구체적인 `/v2/`와 `/service/`
+Ingress는 Harbor 자체 OCI 인증을 위해 Pomerium을 우회하며, 상세 경계는
+[`gitops/apps/harbor/README.md`](../harbor/README.md)가 소유한다.
+POL-01의 Pomerium default-deny 아래에서는 Harbor nginx Pod TCP 8080 한 egress만 허용한다.
 
 ## Keycloak clients와 시크릿
 

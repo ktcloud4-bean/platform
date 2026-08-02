@@ -97,6 +97,18 @@ routes:
             - claim/groups: /platform-users
             - claim/groups: /platform-privileged
 
+  # REG-01: browser UI만 Pomerium이 판정한다. Docker/OCI client의 /v2/와
+  # /service/ token service는 별도 Traefik Ingress가 Harbor로 직접 전달한다.
+  - name: harbor-ui
+    description: REG-01 Harbor browser UI
+    from: https://harbor.imcherry5778.xyz
+    to: http://harbor.harbor.svc.cluster.local:80
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users
+            - claim/groups: /platform-privileged
+
   # QUALITY-01: 브라우저 UI만 Pomerium과 Keycloak OIDC를 먼저 통과한다.
   # scanner/Web API는 이 Route를 쓰지 않고 cluster-internal Service와 Sonar token을 쓴다.
   - name: sonarqube

@@ -454,6 +454,29 @@ stop/go 판정은 **GO**다. `SCM-01`·`REG-01`·`QUALITY-01`·`AWX-01`은 현�
 3,310 MiB가 남았다. AWX 완료 증거의 job은 cluster 내부 verifier만 사용했으므로 이 측정은
 실제 운영 VM의 cross-VLAN SSH 허용이나 부하를 증명하지 않는다.
 
+### `REG-01` 배포 직후 실측 (2026-08-02)
+
+Harbor 완료 증거와 격리 복원 자원을 제거한 뒤 측정했다. registry layer는 k3s PVC가 아니라
+`object-01`의 SeaweedFS S3에 남는다.
+
+| 지표 | 실측 | 경고·정지 기준 | 판정 |
+|---|---|---|---|
+| `k3s-01` guest `/` | 사용 12% · `/var/lib/rancher/k3s` 19,750 MiB | 여유 25% 미만 경고, 20% 미만 정지 | 정상 |
+| `k3s-01` guest available | 12,391 MiB | 12 GiB 미만 경고, 8 GiB 미만 정지 | 정상 |
+| PVC 요청 합계 / Harbor PVC | 45.125 GiB / 0개 | 96 GiB 경고, 120 GiB 정지 | 정상 |
+| k3s DiskPressure | `False` | `True`면 신규 쓰기 중단 | 정상 |
+| Proxmox available / swap | 28,854 / 0 MiB | available 12 GiB 미만, swap 사용 | 정상 |
+| Proxmox load15 / `/` | 0.76 / 5% | 20·70% 경고, 30 지속·80% 정지 | 정상 |
+| thin data / metadata | 4.97% / 0.40% | 60% / 50% 경고, 70% / 70% 정지 | 정상 |
+| `object-01` guest root | 총 213,524,656,128 · 사용 3,248,504,832 · 여유 210,276,151,296 bytes · 2% | 여유 25% 미만 경고, 20% 미만 정지 | 정상 |
+| SeaweedFS 영속 경로 | 72,027,946 bytes | 버킷 데이터 170 GiB 구획 안에서 관측 | 정상 |
+| SeaweedFS volume slot | max 15 · 할당 12 · free 3; Harbor ID `19`, `20` | 기존 volume 삭제·max 하향 금지, guest 여유 기준 | 정상 |
+
+Harbor가 layer를 쓴 뒤에도 Harbor PVC는 0개이고 SeaweedFS `harbor-registry` collection에
+writable volume 2개가 생겼으므로 S3 backend 경계가 유지됐다. 모든 stop 기준 밖이어서
+다음 배포는 **GO**다. 다만 guest available 12,391 MiB는 12 GiB 경고선보다 103 MiB만 높아
+다음 `K3S-HEAVY` 또는 공급망 workload는 배포 직전 같은 지표를 다시 읽는다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.

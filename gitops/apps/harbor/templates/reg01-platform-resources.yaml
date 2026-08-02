@@ -1,0 +1,103 @@
+{{- if .Values.vaultAgent.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Release.Namespace | quote }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  labels:
+    app.kubernetes.io/name: harbor
+    app.kubernetes.io/part-of: platform-gitops
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.vaultAgent.serviceAccountName | quote }}
+  namespace: {{ .Release.Namespace | quote }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+{{ include "harbor.labels" . | indent 4 }}
+    app.kubernetes.io/component: secret-consumer
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: harbor-vault-agent
+  namespace: {{ .Release.Namespace | quote }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+{{ include "harbor.labels" . | indent 4 }}
+    app.kubernetes.io/component: secret-consumer
+data:
+  core.hcl: |
+{{ .Files.Get "files/vault-agent-core.hcl" | indent 4 }}
+  jobservice.hcl: |
+{{ .Files.Get "files/vault-agent-jobservice.hcl" | indent 4 }}
+  registry.hcl: |
+{{ .Files.Get "files/vault-agent-registry.hcl" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: harbor-trust-bundles
+  namespace: {{ .Release.Namespace | quote }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+{{ include "harbor.labels" . | indent 4 }}
+    app.kubernetes.io/component: trust
+data:
+  # VAULT-01 공개 leaf. SHA-256(DER): ded0362dd9be9f840ca23feb4a618bab9e763c161bca5cbc581882319cb869c1
+  vault.crt: |
+{{ .Files.Get "files/vault.crt" | indent 4 }}
+  # PG-01과 S3-01의 공개 leaf만 묶는다. private key는 포함하지 않는다.
+  # PostgreSQL SHA-256(DER): c3f83a6c7d8b94281efc80d56702f59defdb06b804dccb5f5705cf243164565c
+  # SeaweedFS S3 SHA-256(DER): 727e2e1aa9962835c05b88f36af12da34ce69ef5acea4e2b2acbc9c736509a4c
+  ca.crt: |
+{{ .Files.Get "files/postgres-01.crt" | indent 4 }}
+{{ .Files.Get "files/s3.crt" | indent 4 }}
+---
+# /v2/와 Harbor token service만 Pomerium을 우회한다. 나머지 host 경로는
+# pomerium namespace의 더 넓은 / route가 claim/groups를 판정한다.
+{{- if .Values.registryApiIngress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harbor-registry-api
+  namespace: {{ .Release.Namespace | quote }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt-production
+  labels:
+{{ include "harbor.labels" . | indent 4 }}
+    app.kubernetes.io/component: registry-api-ingress
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: harbor.imcherry5778.xyz
+      http:
+        paths:
+          - path: /v2/
+            pathType: Prefix
+            backend:
+              service:
+                name: harbor
+                port:
+                  name: http
+          - path: /service/
+            pathType: Prefix
+            backend:
+              service:
+                name: harbor
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - harbor.imcherry5778.xyz
+{{- end }}
+{{- end }}

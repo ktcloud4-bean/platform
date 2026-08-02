@@ -1,0 +1,69 @@
+---
+- name: REG-01 S3 identity 입력 확인
+  ansible.builtin.assert:
+    that:
+      - harbor_s3_phase in ['bootstrap', 'final']
+      - harbor_s3_bucket == 'harbor-registry'
+      - harbor_s3_access_key | length >= 16
+      - harbor_s3_secret_key | length >= 32
+      - harbor_s3_bootstrap_access_key | length >= 16
+      - harbor_s3_bootstrap_secret_key | length >= 32
+    fail_msg: REG-01 bucket과 저장소 밖 runtime/bootstrap credential이 필요하다.
+  no_log: true
+
+- name: REG-01 요청 모드 고정
+  ansible.builtin.set_fact:
+    harbor_s3_execution_mode: "{{ 'check' if ansible_check_mode else 'apply' }}"
+  changed_when: false
+
+- name: REG-01 identity 병합기를 일시 실행
+  block:
+    - name: REG-01 S3 identity 병합기 staging
+      ansible.builtin.copy:
+        src: merge_identity.py
+        dest: /var/tmp/reg-01-merge-s3-identity
+        owner: root
+        group: root
+        mode: "0700"
+      check_mode: false
+      changed_when: false
+
+    - name: REG-01 identity를 기존 consumer와 병합
+      ansible.builtin.command:
+        argv:
+          - /var/tmp/reg-01-merge-s3-identity
+          - --mode
+          - "{{ harbor_s3_execution_mode }}"
+          - --phase
+          - "{{ harbor_s3_phase }}"
+        stdin: >-
+          {{ {
+            'bucket': harbor_s3_bucket,
+            'runtime': {
+              'accessKey': harbor_s3_access_key,
+              'secretKey': harbor_s3_secret_key
+            },
+            'bootstrap': {
+              'accessKey': harbor_s3_bootstrap_access_key,
+              'secretKey': harbor_s3_bootstrap_secret_key
+            }
+          } | to_json }}
+      register: harbor_s3_merge
+      changed_when: "'changed=true' in harbor_s3_merge.stdout"
+      notify: REG-01 SeaweedFS S3 gateway 재시작
+      check_mode: false
+      no_log: true
+  always:
+    - name: REG-01 S3 identity 병합기 제거
+      ansible.builtin.file:
+        path: /var/tmp/reg-01-merge-s3-identity
+        state: absent
+      check_mode: false
+      changed_when: false
+
+- name: REG-01 identity config SELinux label 복원
+  ansible.builtin.command:
+    argv: [restorecon, -v, /etc/seaweedfs/s3.json]
+  register: harbor_s3_restorecon
+  changed_when: "'Relabeled' in harbor_s3_restorecon.stdout"
+  when: not ansible_check_mode

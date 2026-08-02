@@ -1,0 +1,13 @@
+---
+- name: REG-01 SeaweedFS S3 gateway 재시작
+  ansible.builtin.systemd:
+    name: seaweedfs-s3.service
+    state: restarted
+  listen: REG-01 SeaweedFS S3 gateway 재시작
+
+- name: REG-01 SeaweedFS S3 TLS listen 대기
+  ansible.builtin.wait_for:
+    host: 10.10.50.20
+    port: 8333
+    timeout: 30
+  listen: REG-01 SeaweedFS S3 gateway 재시작

@@ -130,6 +130,19 @@ spec:
       ports:
         - port: 4466
           protocol: TCP
+    # REG-01 browser route. Service/harbor:80은 nginx Pod의 8080으로 전달된다.
+    # OCI /v2/와 /service/는 Traefik에서 Harbor로 직접 가므로 이 경로를 쓰지 않는다.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: harbor
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: harbor
+              app.kubernetes.io/component: nginx
+      ports:
+        - port: 8080
+          protocol: TCP
     # Pomerium의 OIDC provider와 authenticate URL은 기존 Traefik HTTPS
     # hostname 경로를 사용한다. 외부 443은 kube-proxy DNAT 뒤 Traefik의
     # websecure target port 8443으로 NetworkPolicy가 평가된다.

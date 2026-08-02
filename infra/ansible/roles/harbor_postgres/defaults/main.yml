@@ -1,0 +1,4 @@
+---
+pg_harbor_password: ""
+pg_harbor_database: harbor
+pg_harbor_role: harbor_user

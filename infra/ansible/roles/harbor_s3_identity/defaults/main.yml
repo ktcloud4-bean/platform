@@ -1,0 +1,7 @@
+---
+harbor_s3_phase: final
+harbor_s3_bucket: harbor-registry
+harbor_s3_access_key: ""
+harbor_s3_secret_key: ""
+harbor_s3_bootstrap_access_key: ""
+harbor_s3_bootstrap_secret_key: ""

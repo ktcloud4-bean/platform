@@ -809,8 +809,8 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 |---|---|---|---|---|---|
 | `CAP-02 DONE` | 핵심 서비스 후 남은 CPU·RAM·disk 재예산 | `BKP-05`, `HEADLAMP-02` | 없음 | 아래 전체 | Proxmox·VM·Pod 실측과 stop/go 기준 |
 | `SCM-01 DONE` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
-| `REG-01 READY` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
-| `CI-01 BLOCKED` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
+| `REG-01 DONE` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
+| `CI-01 READY` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
 | `QUALITY-01 DONE` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO·배포 직후 capacity stop/go |
 | `AWX-01 DONE` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
 | `UPDATE-01 DONE` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
@@ -944,6 +944,37 @@ project-scoped token으로 분리했다. 검증 설정 SHA
 `430ee4af8435f3df8329deeea030ca80e6e4a012`로 복귀하고 최종 child 선언은 `main`이다.
 직접 후속 `E2E-01`은 `CI-01`과 `SIGN-01`이 남아 `BLOCKED`를 유지하며 새로 여는
 직접 후속은 없다.
+
+2026-08-02 `REG-01`에서 Harbor `2.15.1`·chart `1.19.1`과 모든 image digest를 고정해
+전용 AppProject·child Application·namespace에 배포했다. registry layer·manifest는
+`object-01`의 SeaweedFS S3 `harbor-registry` bucket과 bucket-scoped
+`reg-01-harbor` identity만 사용하고, 관계형 상태는 `postgres-01`의 전용 `harbor` DB와
+최소권한 `harbor_user`가 `sslmode=verify-full`로 소유한다. core·jobservice·registry는
+Kubernetes Secret 없이 각 Pod의 명시적 Vault Agent init이 KV v2 값을 memory `emptyDir`에
+렌더링한다. Redis는 in-cluster 단일 replica이며 내장 Trivy는 껐다.
+
+UI는 Pomerium의 정확한 `claim/groups` 뒤에 두고 `/v2/`와 `/service/`는 Pomerium을 우회해
+Harbor local·robot 인증이 직접 판정하도록 분리했다. 승인된 `OPNSENSE-LIVE` 변경으로
+`harbor.imcherry5778.xyz → k3s-01 (10.10.20.10)` Unbound alias를 추가하고 sanitized
+snapshot을 같은 변경에 갱신했다. SeaweedFS의 기존 volume slot 10개가 모두 배정된 실제
+실패를 확인한 뒤 별도 승인으로 max를 15로 올렸으며 volume → filer → S3만 재시작하고
+기존 ID `1`, `10`~`18`과 master를 유지했다.
+
+최종 완료 증거 실행에서 project-scoped robot이 `reg01-evidence`에 BusyBox manifest를
+push하고 다른 Podman client가 같은 digest
+`sha256:7a3ebe5bfd1a4a19797d20b0c0bb39d44393e9a03fd852c0865b0f540d868df0`를 pull했다.
+같은 robot의 지정 project push/pull 성공과 `reg01-denied` push 거부를 대조했고, retention
+execution `10`은 `remove` tag를 실제 삭제하면서 `keep`을 보존했다. 같은 시점 DB dump와 S3
+bucket inventory로 격리 `harbor-restore`를 올려 같은 digest를 pull한 뒤 namespace·DB·dump·
+임시 Vault binding과 검증 project·robot·policy를 제거했다. Harbor PVC는 0, 전체 PVC 요청은
+45.125 GiB, DiskPressure는 `False`여서 capacity stop/go는 **GO**다.
+
+검증 설정 SHA `5f45a066285b525ed8d4689b1049788f67125584`와 root pointer
+`7df845023a6152dbc6ec9a18836e82f1ed505f68`에서 root·Harbor·Pomerium·policy-baseline이
+`Synced/Healthy`였다. 시작 main `f031b24c9e3b7215656cf36ecea809c42d9cf5a4`로 rollback해
+root `Synced/Healthy`와 Harbor Application·namespace 부재를 확인했고 최종 child 선언은
+`main`이다. 직접 후속 `CI-01`은 `SCM-01`·`REG-01`·`VAULT-02`가 모두 끝나 `READY`로 연다.
+`SCAN-01`은 `CI-01`, `SIGN-01`은 `SCAN-01`이 남아 `BLOCKED`를 유지한다.
 
 ## 7. 최소권한과 공개 경로
 

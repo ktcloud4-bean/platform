@@ -186,7 +186,7 @@ traffic selector는 `10.10.50.0/24 ↔ 10.20.0.0/16`이며, 이 selector 밖 출
 | `git.imcherry5778.xyz` | service alias | Gitea | UI는 Pomerium, Git data는 사설 SSH | Unbound alias → `k3s-01` (`10.10.20.10`); SCM-01 등록, 내부 AAAA 0건 |
 | `jenkins.imcherry5778.xyz` | service alias | Jenkins | Pomerium | 미등록 |
 | `sonar.imcherry5778.xyz` | service alias | SonarQube | Pomerium | Unbound alias → `k3s-01` (`10.10.20.10`); QUALITY-01 등록, 내부 AAAA 0건 |
-| `harbor.imcherry5778.xyz` | service alias | Harbor | UI는 Pomerium, registry API는 별도 인증 | 미등록 |
+| `harbor.imcherry5778.xyz` | service alias | Harbor | UI는 Pomerium, registry API는 별도 인증 | Unbound alias → `k3s-01` (`10.10.20.10`); REG-01 등록 |
 | `awx.imcherry5778.xyz` | service alias | AWX | Pomerium | Unbound alias → `k3s-01` (`10.10.20.10`); AWX-01 등록 |
 | `grafana.imcherry5778.xyz` | service alias | Grafana | Pomerium | 미등록 |
 | `netbird.imcherry5778.xyz` | service alias | NetBird control plane | 외부 | 미등록 |

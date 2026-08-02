@@ -1,0 +1,7 @@
+---
+# REG-01 전용 DB와 login role만 선언한다. PG-01 기준선과 기존 DB는 건드리지 않는다.
+- name: Harbor PostgreSQL 최소권한 DB 선언
+  hosts: postgres_nodes
+  become: true
+  roles:
+    - harbor_postgres

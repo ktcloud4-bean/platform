@@ -78,6 +78,13 @@ vault write auth/kubernetes/role/renovate \
   token_policies="renovate" \
   token_no_default_policy=true \
   token_ttl=10m token_max_ttl=15m
+vault write auth/kubernetes/role/harbor \
+  bound_service_account_names="harbor" \
+  bound_service_account_namespaces="harbor" \
+  audience="vault" \
+  token_policies="harbor" \
+  token_no_default_policy=true \
+  token_ttl=15m token_max_ttl=1h
 EOF
 
 echo "== 5. 내부 PKI =="

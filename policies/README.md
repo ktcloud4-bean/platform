@@ -7,3 +7,6 @@
 `POL-02` 전에는 모든 Kyverno validate 정책의 `validationFailureAction`을 `Audit`으로 유지한다.
 NetworkPolicy는 k3s 내장 kube-router가 실제 강제하므로 새 namespace에 기계적으로 복제하지
 않고, 통신표와 대표 경로가 확인된 namespace만 별도 검증 뒤 추가한다.
+
+`REG-01`은 기존 `pomerium` egress allowlist에 Harbor nginx Pod TCP 8080 한 경로만
+추가한다. Harbor namespace의 새 default-deny를 함께 만들지는 않는다.

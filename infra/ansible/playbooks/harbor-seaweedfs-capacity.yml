@@ -1,0 +1,93 @@
+---
+# REG-01: 전체 S3 identity 선언을 다시 소비하지 않고 승인된 volume slot만 좁게 늘린다.
+- name: Harbor SeaweedFS volume slot 선언
+  hosts: object_nodes
+  become: true
+  vars:
+    harbor_seaweedfs_volume_max_count: 15
+    harbor_seaweedfs_previous_volume_max_count: 10
+    harbor_seaweedfs_volume_unit: /etc/systemd/system/seaweedfs-volume.service
+
+  tasks:
+    - name: SeaweedFS volume unit 현재 상태 읽기
+      ansible.builtin.slurp:
+        path: "{{ harbor_seaweedfs_volume_unit }}"
+      register: harbor_seaweedfs_volume_unit_live
+
+    - name: 기존 값 또는 승인된 목표만 허용
+      ansible.builtin.assert:
+        that:
+          - >-
+            (harbor_seaweedfs_volume_unit_live.content | b64decode |
+             regex_findall('(?m)^  -max=([0-9]+) ')) | length == 1
+          - >-
+            (harbor_seaweedfs_volume_unit_live.content | b64decode |
+             regex_search('(?m)^  -max=([0-9]+) ', '\\1') | first | int)
+            in [harbor_seaweedfs_previous_volume_max_count,
+                harbor_seaweedfs_volume_max_count]
+        fail_msg: SeaweedFS volume unit의 -max 선언이 예상한 10 또는 15가 아니다. 변경하지 않는다.
+
+    - name: 승인된 Harbor volume slot 적용
+      ansible.builtin.lineinfile:
+        path: "{{ harbor_seaweedfs_volume_unit }}"
+        regexp: '^  -max=[0-9]+ '
+        line: '  -max={{ harbor_seaweedfs_volume_max_count }} \'
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Harbor SeaweedFS 의존 서비스 재시작
+
+    - name: 승인된 변경 handler 실행
+      ansible.builtin.meta: flush_handlers
+
+    - name: SeaweedFS 의존 서비스 active 확인
+      ansible.builtin.command:
+        argv: [systemctl, is-active, "{{ item }}"]
+      loop:
+        - seaweedfs-volume.service
+        - seaweedfs-filer.service
+        - seaweedfs-s3.service
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: SeaweedFS master volume 상태 조회
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9333/vol/status
+        return_content: true
+      register: harbor_seaweedfs_volume_status
+      when: not ansible_check_mode
+
+    - name: 적용된 volume max 확인
+      ansible.builtin.assert:
+        that:
+          - harbor_seaweedfs_volume_status.json.Volumes.Max == harbor_seaweedfs_volume_max_count
+        fail_msg: SeaweedFS master가 승인된 volume max를 보고하지 않는다.
+      when: not ansible_check_mode
+
+  handlers:
+    - name: systemd daemon-reload
+      ansible.builtin.systemd:
+        daemon_reload: true
+      listen: Harbor SeaweedFS 의존 서비스 재시작
+      when: not ansible_check_mode
+
+    - name: SeaweedFS volume server 재시작
+      ansible.builtin.systemd:
+        name: seaweedfs-volume.service
+        state: restarted
+      listen: Harbor SeaweedFS 의존 서비스 재시작
+      when: not ansible_check_mode
+
+    - name: SeaweedFS filer 재시작
+      ansible.builtin.systemd:
+        name: seaweedfs-filer.service
+        state: restarted
+      listen: Harbor SeaweedFS 의존 서비스 재시작
+      when: not ansible_check_mode
+
+    - name: SeaweedFS S3 gateway 재시작
+      ansible.builtin.systemd:
+        name: seaweedfs-s3.service
+        state: restarted
+      listen: Harbor SeaweedFS 의존 서비스 재시작
+      when: not ansible_check_mode

@@ -212,6 +212,10 @@ BKP-03 volume slot을 위해 승인된 `seaweedfs_volume_max_count: 10` 변경�
 따라 volume → filer → S3를 연쇄 재시작한다. master와 기존 volume은 유지하며 이미 volume이
 할당된 뒤에는 max를 낮추거나 volume을 삭제하지 않는다.
 
+REG-01은 `30GB` volume 5개까지 Harbor collection에 열어 두도록 별도 승인 뒤 max를 `15`로
+올린다. `playbooks/harbor-seaweedfs-capacity.yml`은 전체 identity 선언을 요구하지 않고 정확히
+이 값만 바꾸며 volume → filer → S3만 한 차례 재시작한다.
+
 ## NTP source
 
 `NET-03`은 각 project VLAN에서 **해당 VLAN gateway의 UDP 123만** 허용한다. Rocky 기본 설정의 공개 pool은 차단되므로 그대로 두면 게스트가 영원히 동기화되지 않는다.

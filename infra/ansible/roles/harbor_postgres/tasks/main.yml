@@ -1,0 +1,67 @@
+---
+- name: Harbor DB 입력 확인
+  ansible.builtin.assert:
+    that:
+      - pg_harbor_password | length >= 24
+      - pg_harbor_database == 'harbor'
+      - pg_harbor_role == 'harbor_user'
+    fail_msg: REG-01 저장소 밖 DB 비밀번호와 고정 DB/role 이름이 필요하다.
+  no_log: true
+
+- name: Harbor login role 최소권한 선언
+  community.postgresql.postgresql_user:
+    name: "{{ pg_harbor_role }}"
+    password: "{{ pg_harbor_password }}"
+    role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE,NOREPLICATION,NOBYPASSRLS
+    state: present
+  become_user: postgres
+  no_log: true
+
+- name: Harbor 전용 database 선언
+  community.postgresql.postgresql_db:
+    name: "{{ pg_harbor_database }}"
+    owner: "{{ pg_harbor_role }}"
+    state: present
+  become_user: postgres
+
+- name: Harbor DB live 존재 여부 조회
+  community.postgresql.postgresql_query:
+    login_db: postgres
+    query: "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'harbor') AS present;"
+  register: harbor_database_live
+  become_user: postgres
+  check_mode: false
+  changed_when: false
+
+- name: PUBLIC의 Harbor DB CONNECT 회수
+  community.postgresql.postgresql_privs:
+    login_db: postgres
+    type: database
+    objs: "{{ pg_harbor_database }}"
+    roles: PUBLIC
+    privs: CONNECT
+    state: absent
+  become_user: postgres
+  when: not ansible_check_mode or harbor_database_live.query_result[0].present
+
+- name: Harbor role에 자기 DB CONNECT만 허용
+  community.postgresql.postgresql_privs:
+    login_db: postgres
+    type: database
+    objs: "{{ pg_harbor_database }}"
+    roles: "{{ pg_harbor_role }}"
+    privs: CONNECT
+    state: present
+  become_user: postgres
+  when: not ansible_check_mode or harbor_database_live.query_result[0].present
+
+- name: Harbor DB public schema의 PUBLIC 권한 회수
+  community.postgresql.postgresql_privs:
+    login_db: "{{ pg_harbor_database }}"
+    type: schema
+    objs: public
+    roles: PUBLIC
+    privs: ALL
+    state: absent
+  become_user: postgres
+  when: not ansible_check_mode or harbor_database_live.query_result[0].present

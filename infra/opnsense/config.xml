@@ -2445,7 +2445,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785661596.40" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785662158.96" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2690,6 +2690,13 @@
           <hostname>awx</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>AWX GitOps automation alias (AWX-01)</description>
+        </alias>
+        <alias uuid="313933f8-5905-4e13-bd0d-57e94a84289f">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>harbor</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>Harbor UI and direct registry API alias (REG-01)</description>
         </alias>
       </aliases>
     </unboundplus>
