@@ -9,7 +9,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: platform-gitops
 spec:
-  description: POL-01 Kyverno admission과 Audit report controller 배포 경계
+  description: POL-01/POL-02 Kyverno admission과 policy report controller 배포 경계
   sourceRepos:
     - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
   destinations:

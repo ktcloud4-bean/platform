@@ -818,7 +818,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `SIGN-01 DONE` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
 | `POL-01 DONE` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
 | `E2E-01 DONE` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
-| `POL-02 READY` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
+| `POL-02 DONE` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
 | `FALCO-01 DONE` | Falco runtime rule·출력 기준선 | `E2E-01`, `POL-01` | 없음 | Wazuh·Shuffle | 전용 테스트 이벤트 탐지, noise 기준, 대응 runbook 초안 |
 
 2026-08-02 `CAP-02`에서 핵심 서비스와 백업 배포가 끝난 현재값을 읽기 전용으로 재측정했다.
@@ -1136,6 +1136,20 @@ modern eBPF 기준선을 배포했다. Kubernetes API RBAC·ServiceAccount token
 `Synced/Healthy`임을 확인했으며 최종 child 선언은 `main`이다. 직접 후속 `AUDIT-01`은
 `EDGE-01`·`POL-02`, `WAZUH-01`은 `AUDIT-01`·`OBS-01`, `SOAR-01`은 `OBS-01`·`WAZUH-01`이
 남아 모두 `BLOCKED`를 유지하므로 새로 `READY`로 여는 작업은 없다.
+
+2026-08-03 `POL-02`에서 POL-01의 Pod-level `runAsNonRoot` ClusterPolicy 한 건만
+`Enforce`로 승격하고, 적용 전 PolicyReport의 기존 위반 네 workload를 kind·이름·rule까지
+고정한 PolicyException으로 한정했다. 임시 예외는 `2026-08-02T15:27:28Z` 만료 전 정확한
+이름만 허용하고 범위 밖 이름과 만료 뒤 같은 입력을 admission에서 거부했다. E2E-01 build 9의
+기존 signed digest `sha256:63adb1c8496736c1e9af53e7a4154a8044b184f5b0de41104b9cb483957a0996`는
+설정 SHA `106444b8ce399a4e119f6865f20f739718719eee`와 root pointer
+`aa688fd80e39d1549ea3c80a4455b813292753c3`에서 `Running/Ready`였다. Cosign v3 bundle은
+E2E namespace만 고르는 `ImageValidatingPolicy`의 current/previous static key로 검증하며,
+기존 namespaced policy는 Argo가 prune했다. 시작 main
+`ae2a802ebcc3dd4e2476f962b0f3b467a6cd304d`로 rollback했을 때 ClusterPolicy `Audit`, 관련
+PolicyException 0건, root와 세 child `Synced/Healthy`를 확인하고 최종 child 선언과 라이브
+root를 `main`으로 복귀했다. 직접 후속 `AUDIT-01`은 `EDGE-01`이 남아 `BLOCKED`를 유지하므로
+새로 `READY`로 여는 작업은 없다.
 
 ## 7. 최소권한과 공개 경로
 

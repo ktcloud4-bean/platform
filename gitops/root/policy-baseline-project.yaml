@@ -9,15 +9,19 @@ metadata:
   labels:
     app.kubernetes.io/part-of: platform-gitops
 spec:
-  description: POL-01 Kyverno Audit 정책과 검증된 namespace NetworkPolicy 경계
+  description: POL-01/POL-02 Kyverno 정책과 검증된 namespace NetworkPolicy 경계
   sourceRepos:
     - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
   destinations:
+    - namespace: kyverno
+      server: https://kubernetes.default.svc
     - namespace: pomerium
       server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: kyverno.io
       kind: ClusterPolicy
   namespaceResourceWhitelist:
+    - group: kyverno.io
+      kind: PolicyException
     - group: networking.k8s.io
       kind: NetworkPolicy

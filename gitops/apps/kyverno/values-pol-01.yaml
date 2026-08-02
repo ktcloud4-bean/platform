@@ -4,9 +4,12 @@ crds:
     enabled: false
 
 features:
-  # POL-01은 전통적인 Kyverno ClusterPolicy의 Audit report만 사용한다.
+  # POL-01/POL-02는 전통적인 Kyverno ClusterPolicy를 사용한다.
   generateValidatingAdmissionPolicy:
     enabled: false
+  policyExceptions:
+    enabled: true
+    namespace: kyverno
 
 # Helm pre-delete hook은 원시 Kustomize manifest에서 수명 주기를 보장할 수 없다.
 # 동적 webhook은 README의 순서가 있는 rollback 절차로 제거한다.

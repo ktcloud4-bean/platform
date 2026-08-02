@@ -15,9 +15,13 @@ spec:
   destinations:
     - namespace: e2e-01
       server: https://kubernetes.default.svc
+    - namespace: kyverno
+      server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
+    - group: policies.kyverno.io
+      kind: ImageValidatingPolicy
   namespaceResourceWhitelist:
     - group: ""
       kind: ConfigMap
