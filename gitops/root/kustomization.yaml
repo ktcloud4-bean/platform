@@ -35,3 +35,5 @@ resources:
   - policy-baseline-application.yaml
   - e2e-01-project.yaml
   - e2e-01-application.yaml
+  - falco-project.yaml
+  - falco-application.yaml

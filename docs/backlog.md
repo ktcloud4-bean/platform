@@ -819,7 +819,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `POL-01 DONE` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
 | `E2E-01 DONE` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
 | `POL-02 READY` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
-| `FALCO-01 READY` | Falco runtime rule·출력 기준선 | `E2E-01`, `POL-01` | 없음 | Wazuh·Shuffle | 전용 테스트 이벤트 탐지, noise 기준, 대응 runbook 초안 |
+| `FALCO-01 DONE` | Falco runtime rule·출력 기준선 | `E2E-01`, `POL-01` | 없음 | Wazuh·Shuffle | 전용 테스트 이벤트 탐지, noise 기준, 대응 runbook 초안 |
 
 2026-08-02 `CAP-02`에서 핵심 서비스와 백업 배포가 끝난 현재값을 읽기 전용으로 재측정했다.
 Proxmox는 available RAM 41.30 GiB·swap 0, thin data/metadata 3.00%/0.33%, `/` 5%,
@@ -1116,6 +1116,26 @@ rollback해 E2E Application·namespace·AppProject를 제거하고 root·Jenkins
 제거하고 의도한 rule·alias diff만 승인한 직후 일반 drift 없음도 확인했다. OPNsense는
 재부팅하지 않았다. 따라서 `NET-04`를 `DONE`으로 닫고 모든 선행이 끝난 직접 후속
 `EDGE-01`만 `READY`로 연다. 조건부 `NIPS-01`은 `DEFERRED`를 유지한다.
+
+2026-08-03 `FALCO-01`에서 Falco `0.44.1`·chart `9.1.0`과 container plugin `0.7.1`을
+digest로 고정하고 Rocky Linux 9.8 kernel `5.14.0-687.10.1.el9_8.0.1.x86_64`의 BTF를 쓰는
+modern eBPF 기준선을 배포했다. Kubernetes API RBAC·ServiceAccount token 없이 k3s CRI socket
+하나와 read-only `/proc`·`/sys/kernel`, capability `BPF`·`PERFMON`·`SYS_RESOURCE`·
+`SYS_PTRACE`만 허용했다. `container_t`의 host proc/BPF EACCES가 확인돼 본 Falco container만
+`spc_t`를 적용하고 init container는 기존 type을 유지했다.
+
+설정 SHA `5edc2425615fde3a8776b8e165dca6cfe468ad97`와 root pointer
+`02b033a22bfccaf7282ad622461e7559748c69ea`에서 root·Falco child가 `Synced/Healthy`, Falco가
+`1/1 Ready`였다. 전용 namespace의 비특권 Pod가 `emptyDir`에 실제 marker 파일을 쓴
+`FALCO-01 Test Runtime File Write` event를 단일 JSON stdout 경로에서 확인하고 즉시 제거했다.
+이어진 60초 고정 창은 총 `0건`·`0건/시간`·상위 noisy rule 없음으로 `0–1건` 기준을 통과했다.
+적용 전/후 available RAM은 `11,169/10,994MiB`, swap 0, Falco working set `134MiB`로 12GiB
+경고 구간이지만 8GiB 정지선 위의 **GO**였다. 탐지 확인→workload·사용자·시각 식별→read-only
+조사→사람 승인형 격리/복구 판단→rollback 대응 초안을 남겼고 자동 대응은 없다. 시작 main
+`bd96f29097fbf5c6e0ae9f93a75f80d395932947`로 rollback해 Falco·테스트 자원이 없고 root가
+`Synced/Healthy`임을 확인했으며 최종 child 선언은 `main`이다. 직접 후속 `AUDIT-01`은
+`EDGE-01`·`POL-02`, `WAZUH-01`은 `AUDIT-01`·`OBS-01`, `SOAR-01`은 `OBS-01`·`WAZUH-01`이
+남아 모두 `BLOCKED`를 유지하므로 새로 `READY`로 여는 작업은 없다.
 
 ## 7. 최소권한과 공개 경로
 

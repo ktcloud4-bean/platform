@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: falco
+  namespace: falco
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: falco
+  namespace: falco
+spec:
+  template:
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: falco
+          volumeMounts:
+            - name: container-engine-socket-0
+              mountPath: /host/run/k3s/containerd/containerd.sock
+              readOnly: true
+            - name: plugins-install-dir
+              mountPath: /usr/share/falco/plugins
+              readOnly: true
+            - name: root-falco-fs
+              mountPath: /root/.falco
+            - name: proc-fs
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys-fs
+              mountPath: /sys/kernel
+              readOnly: true
+            - name: falco-yaml
+              mountPath: /etc/falco/falco.yaml
+              subPath: falco.yaml
+              readOnly: true
+            - name: rules-volume
+              mountPath: /etc/falco/rules.d
+              readOnly: true
+            - mountPath: /host/boot
+              $patch: delete
+            - mountPath: /host/lib/modules
+              $patch: delete
+            - mountPath: /host/usr
+              $patch: delete
+            - mountPath: /host/etc
+              $patch: delete
+      initContainers:
+        - name: falcoctl-artifact-install
+          volumeMounts:
+            - name: falcoctl-tmp
+              mountPath: /tmp
+            - name: falcoctl-sigstore
+              mountPath: /home/nonroot/.sigstore
+      volumes:
+        - name: container-engine-socket-0
+          hostPath:
+            path: /run/k3s/containerd/containerd.sock
+            type: Socket
+        - name: proc-fs
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: sys-fs
+          hostPath:
+            path: /sys/kernel
+            type: Directory
+        - name: falcoctl-tmp
+          emptyDir:
+            sizeLimit: 32Mi
+        - name: falcoctl-sigstore
+          emptyDir:
+            sizeLimit: 8Mi
+        - name: boot-fs
+          $patch: delete
+        - name: lib-modules
+          $patch: delete
+        - name: usr-fs
+          $patch: delete
+        - name: etc-fs
+          $patch: delete

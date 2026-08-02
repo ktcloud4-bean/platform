@@ -44,3 +44,4 @@ UI 위치나 명령을 추측해 미리 작성하지 않는다. 첫 PoC는 백�
 - [`aws-site-to-site-vpn.md`](aws-site-to-site-vpn.md) — 2026-07-31 `AWS-NET-01`에서 터널 확립·양방향 대조·기본 경로 불변·재부팅·장애 격리와 복구를 검증한 OPNsense↔AWS IPsec 절차
 - [`vault-secrets-engines.md`](vault-secrets-engines.md) — 2026-08-01 `VAULT-02`에서 Kubernetes auth 허용·거부, policy 격리, 동적 DB 자격증명의 TLS 접속과 revoke, 내부 PKI 발급·폐기, audit 기록을 검증한 Vault 구성 절차
 - [`headlamp-oidc-rbac.md`](headlamp-oidc-rbac.md) — `HEADLAMP-02`의 Keycloak OIDC·Pomerium Route·Kubernetes RBAC 전환과 독립 복구 절차(완료 증거 수집 전)
+- [`falco-runtime-response.md`](falco-runtime-response.md) — `FALCO-01`의 탐지 확인·read-only 조사·사람 승인형 격리/복구·rollback 대응 초안

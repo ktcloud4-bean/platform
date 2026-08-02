@@ -1,0 +1,238 @@
+image:
+  registry: docker.io
+  repository: falcosecurity/falco
+  tag: "0.44.1@sha256:d0cfe422d6ac0e0f20857798f46c7d7273210e1b064b22821e4e6e7f843cde6b"
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: falco
+
+# Container runtime annotation만 사용하므로 Kubernetes API 권한은 필요 없다.
+rbac:
+  create: false
+
+controller:
+  kind: daemonset
+  daemonset:
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 1
+
+driver:
+  enabled: true
+  kind: modern_ebpf
+  loader:
+    enabled: false
+  modernEbpf:
+    leastPrivileged: true
+    bufSizePreset: 4
+    cpusForEachBuffer: 2
+    dropFailedExit: false
+    disableIterators: false
+    sysfsMount: true
+
+containerSecurityContext:
+  privileged: false
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - BPF
+      - PERFMON
+      - SYS_RESOURCE
+      - SYS_PTRACE
+  seccompProfile:
+    type: RuntimeDefault
+  # container_t는 host proc과 BPF ring buffer map 접근을 EACCES로 거부한다.
+  # 본 Falco container만 spc_t로 전환하고 init container에는 적용하지 않는다.
+  seLinuxOptions:
+    type: spc_t
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+collectors:
+  enabled: true
+  containerEngine:
+    enabled: true
+    pluginRef: "ghcr.io/falcosecurity/plugins/plugin/container:0.7.1@sha256:f3d531f370e8e7907f5fbfc27f8cf99863563ae02174e420f8bbf8b2b4828891"
+    labelMaxLen: 100
+    withSize: false
+    hooks:
+      - create
+    engines:
+      docker:
+        enabled: false
+      podman:
+        enabled: false
+      containerd:
+        enabled: false
+      cri:
+        enabled: true
+        sockets:
+          - /run/k3s/containerd/containerd.sock
+      lxc:
+        enabled: false
+      libvirt_lxc:
+        enabled: false
+      bpm:
+        enabled: false
+  kubernetes:
+    enabled: false
+
+falcoctl:
+  image:
+    registry: docker.io
+    repository: falcosecurity/falcoctl
+    tag: "0.13.0@sha256:0eeb79adc580ae6a5abfdefd7f8f0fed9151fcb545f015c84e8f1d7b2d8a6b02"
+    pullPolicy: IfNotPresent
+  artifact:
+    install:
+      enabled: true
+      resources:
+        requests:
+          cpu: 20m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
+    follow:
+      enabled: false
+  config:
+    artifact:
+      allowedTypes:
+        - plugin
+      install:
+        resolveDeps: false
+        refs:
+          - "ghcr.io/falcosecurity/plugins/plugin/container:0.7.1@sha256:f3d531f370e8e7907f5fbfc27f8cf99863563ae02174e420f8bbf8b2b4828891"
+        rulesfilesDir: /rulesfiles
+        pluginsDir: /plugins
+        stateDir: /artifactstate
+
+metrics:
+  enabled: true
+  interval: 1h
+  outputRule: false
+  rulesCountersEnabled: true
+  resourceUtilizationEnabled: true
+  stateCountersEnabled: true
+  kernelEventCountersEnabled: true
+  libbpfStatsEnabled: false
+  pluginsMetricsEnabled: true
+  kernelIterEventCountersEnabled: true
+  service:
+    create: false
+
+falcosidekick:
+  enabled: false
+
+responseActions:
+  enabled: false
+
+falco:
+  # image 내 기본 plugin config와 chart 선언을 함께 읽지 않는다.
+  config_files: []
+  rules_files:
+    - /etc/falco/rules.d
+  watch_config_files: true
+  rules: []
+  priority: notice
+  json_output: true
+  json_include_output_property: false
+  json_include_message_property: false
+  json_include_output_fields_property: true
+  json_include_tags_property: false
+  time_format_iso_8601: true
+  buffered_outputs: false
+  outputs_queue:
+    capacity: 1024
+  append_output: []
+  stdout_output:
+    enabled: true
+  syslog_output:
+    enabled: false
+  file_output:
+    enabled: false
+  http_output:
+    enabled: false
+  program_output:
+    enabled: false
+  log_stderr: true
+  log_syslog: false
+  log_level: info
+  base_syscalls:
+    custom_set: []
+    repair: true
+    all: false
+  falco_libs:
+    snaplen: 0
+  syscall_event_drops:
+    threshold: 0.1
+    actions:
+      - log
+    rate: 0.03333
+    max_burst: 1
+    simulate_drops: false
+
+customRules:
+  falco-01-rules.yaml: |-
+    - rule: FALCO-01 Test Runtime File Write
+      desc: FALCO-01 완료 증거 전용 namespace에서 발생한 실제 파일 쓰기
+      condition: >
+        evt.type in (open, openat, openat2) and evt.is_open_write=true and
+        container.id != host and k8s.ns.name startswith "falco-01-test-" and
+        k8s.pod.name startswith "falco-01-event-" and
+        fd.name = "/tmp/falco-01-runtime-event"
+      output: >-
+        namespace=%k8s.ns.name pod=%k8s.pod.name container=%container.name process=%proc.name
+      priority: NOTICE
+      tags: [container, filesystem, falco-01]
+
+    - rule: Interactive Shell in Container
+      desc: 컨테이너에서 TTY가 연결된 대화형 shell 실행
+      condition: >
+        evt.type in (execve, execveat) and container.id != host and
+        proc.tty != 0 and proc.name in (bash, sh, dash, zsh, ksh, csh, fish)
+      output: >-
+        namespace=%k8s.ns.name pod=%k8s.pod.name container=%container.name process=%proc.name
+      priority: WARNING
+      tags: [container, process, shell]
+
+    - rule: Write Below Container Binary Directory
+      desc: 실행 중인 컨테이너의 표준 binary directory 쓰기
+      condition: >
+        evt.type in (open, openat, openat2) and evt.is_open_write=true and
+        container.id != host and
+        (fd.name startswith "/bin/" or fd.name startswith "/sbin/" or
+         fd.name startswith "/usr/bin/" or fd.name startswith "/usr/sbin/")
+      output: >-
+        namespace=%k8s.ns.name pod=%k8s.pod.name container=%container.name process=%proc.name
+      priority: ERROR
+      tags: [container, filesystem]
+
+    - rule: Mount Attempt in Container
+      desc: 실행 중인 컨테이너의 mount syscall 시도
+      condition: >
+        evt.type = mount and container.id != host
+      output: >-
+        namespace=%k8s.ns.name pod=%k8s.pod.name container=%container.name process=%proc.name
+      priority: WARNING
+      tags: [container, filesystem, mount]
