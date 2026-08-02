@@ -675,7 +675,7 @@ Ansible syntax-check·check/diff·적용·2차 `changed=0`, Warpgate 재부팅 �
 | `BKP-02 DONE` | Velero + node-agent/Kopia와 local PV restore PoC | `GITOPS-01`, `STOR-01`, `S3-01` | 없음 | 모든 k3s PVC | 테스트 namespace 삭제 후 리소스·파일 복원, hostPath 제약 판정 |
 | `BKP-03 DONE` | PostgreSQL native backup·Vault Raft snapshot | `PG-01`, `VAULT-02`, `S3-01` | 없음 | 인증·플랫폼 데이터 | 별도 DB/namespace에 point-in-time 또는 snapshot restore |
 | `BKP-04 DONE` | SeaweedFS 로컬 S3에서 AWS S3로 오프사이트 사본 생성 | `S3-01` | 없음 | 모든 백업의 물리 장애 대응 | 별도 최소권한 자격증명과 검증한 방식으로 전송, AWS S3에서 샘플 복원, 암호화·버전·보존·실패 경보 검증 |
-| `BKP-05 READY` | 통합 재해복구 drill·RPO/RTO 기록 | `BKP-01`, `BKP-02`, `BKP-03`, `BKP-04` | `K3S-BOOTSTRAP` | 공급망·공개 전환 gate | Git+S3만으로 핵심 서비스 복구, 누락·시간·수동 절차 기록 |
+| `BKP-05 DONE` | 통합 재해복구 drill·RPO/RTO 기록 | `BKP-01`, `BKP-02`, `BKP-03`, `BKP-04` | `K3S-BOOTSTRAP` | 공급망·공개 전환 gate | Git+S3만으로 핵심 서비스 복구, 누락·시간·수동 절차 기록 |
 | `PVE-BKP-01 DEFERRED` | 두 번째 SSD에 Proxmox VM backup | 두 번째 SSD 장착 | `PVE-LIVE` | 빠른 VM 복구 | 원본 NVMe와 다른 장치에 backup·restore; S3 앱 백업은 유지 |
 
 2026-08-01 `BKP-02`에서 Velero 1.18.2와 AWS plugin 1.14.2를 고정 digest로,
@@ -789,13 +789,25 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 직접 후속 `BKP-05`의 선행 `BKP-01`·`BKP-02`·`BKP-03`·`BKP-04`가 모두 `DONE`이고 현재
 `K3S-BOOTSTRAP` 잠금 소유 작업도 없으므로 `BKP-05`만 `READY`로 연다.
 
+2026-08-02 `BKP-05`는 Git revision `13382b46cbe2f82e8807d28b792beaa284601e53`과 AWS S3로
+통합 drill을 한 번 수행했다. 시작·종료 시 Node `Ready`, Vault unsealed,
+`platform-root`와 7개 child Application `Synced/Healthy`는 불변이었다. PostgreSQL
+`postgres-base-20260801T171906Z.tar.gz`는 격리 Unix socket cluster에서 11초 만에
+`keycloak_user` 1개·Keycloak public table 100개, TCP listener 0개로 복원됐다. 반면 AWS의
+`bkp-01-k3s-datastore`와 `bkp-02-velero` prefix는 각각 0 object라 k3s datastore와 PVC
+복구를 시작할 수 없었고, Vault snapshot은 있었지만 controller에 Shamir threshold key 입력이
+없어 unseal·KV read 전 중단했다. 전체 RPO/RTO는 따라서 무한대이며 ADR-0005 재검토 조건에
+해당한다. PostgreSQL 임시 archive·PGDATA, Vault restore namespace·port, VMID 9901의 부재를
+확인했고 기존 데이터는 변경하지 않았다. 상세 RPO/RTO, 저장소 밖 입력·수동 단계·중단 지점은
+[통합 재해복구 drill runbook](runbook/integrated-disaster-recovery-drill.md)이 소유한다.
+
 ## 6. 공급망과 정책
 
 `BKP-05` 이후 실제 데이터를 가진 서비스를 늘린다. 서로 다른 앱 디렉터리는 병렬 작업할 수 있다.
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `CAP-02 BLOCKED` | 핵심 서비스 후 남은 CPU·RAM·disk 재예산 | `BKP-05`, `HEADLAMP-02` | 없음 | 아래 전체 | Proxmox·VM·Pod 실측과 stop/go 기준 |
+| `CAP-02 READY` | 핵심 서비스 후 남은 CPU·RAM·disk 재예산 | `BKP-05`, `HEADLAMP-02` | 없음 | 아래 전체 | Proxmox·VM·Pod 실측과 stop/go 기준 |
 | `SCM-01 BLOCKED` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
 | `REG-01 BLOCKED` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
 | `CI-01 BLOCKED` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
