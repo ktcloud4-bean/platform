@@ -156,15 +156,12 @@ spec:
       ports:
         - port: 8443
           protocol: TCP
-    # 랩 DNS는 sso·authenticate hostname을 k3s 노드 IP로 해석한다. 그 443은
-    # svclb-traefik Pod의 hostPort가 받지만, kube-router는 hostPort DNAT
-    # 이전 목적지로 egress를 평가하므로 podSelector로는 이 경로를 허용할 수
-    # 없다(POL-01-FIX-01 실측). 주소의 단일 원본은 docs/ip-plan.md다.
-    # 모든 route upstream이 내부 http Service이므로 그 밖의 외부 443은 없다.
-    - to:
-        - ipBlock:
-            cidr: 10.10.20.10/32
-      ports:
+    # 랩 DNS는 sso·authenticate hostname을 k3s 노드 IP로 해석하고 그 443은
+    # svclb-traefik Pod의 hostPort가 받는다. 이 경로는 목적지를 좁힐 수 없다.
+    # POL-01-FIX-01에서 svclb podSelector와 노드 IP ipBlock을 각각 적용해
+    # 실측한 결과 둘 다 차단됐고, 목적 port만 제한할 때만 통과했다.
+    # 모든 route upstream이 내부 http Service이므로 외부 443은 이 경로뿐이다.
+    - ports:
         - port: 443
           protocol: TCP
 ---
@@ -186,10 +183,8 @@ spec:
     # Dashy는 [ADR-0014](../docs/adr/0014-dashy-access-portal.md)의 공개 PKCE
     # client로 자체 로그인하고, 서버가 Keycloak 서명 키로 그 토큰을 검증한다.
     # 이 egress가 없으면 검증이 fail되어 포털이 로그인 상태를 유지하지 못한다.
-    # 목적지 지정 근거는 위 pomerium Keycloak 경로 주석과 같다.
-    - to:
-        - ipBlock:
-            cidr: 10.10.20.10/32
-      ports:
+    # 목적지를 좁힐 수 없는 근거는 위 pomerium Keycloak 경로 주석과 같다.
+    # Dashy는 이 443 외의 egress가 없어 Vault·다른 namespace로 나가지 못한다.
+    - ports:
         - port: 443
           protocol: TCP
