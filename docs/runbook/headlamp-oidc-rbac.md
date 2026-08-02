@@ -43,7 +43,7 @@ Pomerium의 `allow_websockets`는 Route 입장 뒤 transport를 허용할 뿐이
 | `imcherry`, `/platform-users` | allow | 정확한 issuer, `aud`에 `headlamp`, username=`imcherry`, groups 문자열 배열, TTL 양수 | `oidc:imcherry`, `oidc:/platform-users` | namespace·node·Pod·Service·Event·workload·Job 조회와 `pods/log` allow | deny | 모든 namespace에서 deny | Secret·RBAC·TokenRequest·CSR 승인·webhook·CRD·node write deny |
 | `imcherry-admin`, `/platform-privileged` | allow | 위와 동일, username=`imcherry-admin`, 특권 group 포함 | `oidc:imcherry-admin`, `oidc:/platform-privileged` | 위와 동일 | Headlamp WebSocket handshake와 kubectl 호환 `pods/exec get/create` allow; `node -e process.exit(0)`만 사용 | `headlamp-rbac-test`의 ConfigMap만 create/update/patch/delete allow | 위와 동일 deny |
 | 무인증·잘못된 issuer/audience | deny | token 원문 미출력, 불일치 이유만 출력 | 해당 없음 또는 RBAC binding 없음 | deny | deny | deny | deny |
-| `headlamp-no-group` task 전용 platform realm identity | Pomerium Route 403 | `kc-verify`의 안전한 판정으로 groups 문자열 배열이 비었음을 확인한 뒤 Pomerium policy 판정 | Headlamp에 도달하지 않음 | deny | deny | deny | deny |
+| `headlamp-no-group` task 전용 platform realm identity | Pomerium Route 403 | Keycloak group mapper의 무 membership 결과인 groups claim 부재 또는 빈 배열만 허용한 뒤 Pomerium policy 판정 | Kubernetes RBAC binding 없음 | deny | deny | deny | deny |
 
 특권 사용자의 허용 변경은 verifier가 생성한 `headlamp-02-verify-*` ConfigMap 하나뿐이다.
 성공·실패·INT·TERM 모두 cleanup으로 삭제를 시도하고 잔류 0건을 확인한다. Argo가 소유한

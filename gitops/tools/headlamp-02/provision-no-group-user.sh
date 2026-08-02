@@ -11,7 +11,8 @@ usage() {
 --check는 platform realm의 headlamp-no-group user가 없거나 정확히 no-group 검증
 identity인지 읽기 전용으로 확인한다. --apply는 user가 없을 때만 외부 mode 0600
 password/TOTP 입력을 만들고 user 한 건을 추가한다. Keycloak 기본 CONFIGURE_TOTP action만,
-이미 no-group·password+TOTP가 일치하는 이 task 전용 identity에서 제거할 수 있다.
+또는 Keycloak VerifyProfile을 유발하는 빈 task 전용 profile만 정확히 일치하는
+no-group·password+TOTP identity에서 보정할 수 있다.
 기존 user, group, credential은 보정하지 않는다.
 EOF
 }
@@ -27,6 +28,9 @@ readonly issuer=https://sso.imcherry5778.xyz
 readonly issuer_host=sso.imcherry5778.xyz
 readonly connect_ip=${KC01_CONNECT_IP:-10.10.20.10}
 readonly username=headlamp-no-group
+readonly user_email=headlamp-no-group@imcherry5778.xyz
+readonly user_first_name=Headlamp
+readonly user_last_name=NoGroup
 readonly password_file=${KC01_SECRET_DIR}/headlamp-no-group-password
 readonly totp_file=${KC01_SECRET_DIR}/headlamp-no-group-totp
 repo_root=$(git rev-parse --show-toplevel)
@@ -105,6 +109,10 @@ assert_existing_user_matches() {
     length == 1 and
     .[0].username == "headlamp-no-group" and
     .[0].enabled == true and
+    .[0].email == "headlamp-no-group@imcherry5778.xyz" and
+    .[0].emailVerified == true and
+    .[0].firstName == "Headlamp" and
+    .[0].lastName == "NoGroup" and
     ((.[0].requiredActions // []) == [])
   ' "${users_json}" >/dev/null &&
     jq -e 'length == 0' "${groups_json}" >/dev/null &&
@@ -112,9 +120,49 @@ assert_existing_user_matches() {
 }
 
 safe_user_summary() {
-  jq '[.[] | {username, enabled, requiredActions: (.requiredActions // [])}]' "${users_json}"
+  jq '[.[] | {username, enabled, email: (.email // null), emailVerified: (.emailVerified // false), firstName: (.firstName // null), lastName: (.lastName // null), requiredActions: (.requiredActions // [])}]' "${users_json}"
   jq '[.[] | {path}]' "${groups_json}"
   jq '[.[] | {type, userLabel}]' "${credentials_json}"
+}
+
+only_missing_declared_profile() {
+  jq -e '
+    length == 1 and
+    .[0].username == "headlamp-no-group" and
+    .[0].enabled == true and
+    ((.[0].email // "") == "") and
+    ((.[0].firstName // "") == "") and
+    ((.[0].lastName // "") == "") and
+    ((.[0].emailVerified // false) == false) and
+    ((.[0].requiredActions // []) == [])
+  ' "${users_json}" >/dev/null &&
+    jq -e 'length == 0' "${groups_json}" >/dev/null &&
+    jq -e '([.[].type] | sort) == ["otp", "password"]' "${credentials_json}" >/dev/null
+}
+
+apply_declared_profile() {
+  local user_id
+  user_id=$(jq -r '.[0].id' "${users_json}")
+  [[ "${user_id}" =~ ^[0-9a-f-]{36}$ ]] || return 1
+  jq -n \
+    --arg username "${username}" \
+    --arg email "${user_email}" \
+    --arg first_name "${user_first_name}" \
+    --arg last_name "${user_last_name}" \
+    '{username: $username, enabled: true, email: $email, emailVerified: true, firstName: $first_name, lastName: $last_name, requiredActions: []}' \
+    >"${payload_json}"
+  local http_status
+  http_status=$(curl --silent --show-error \
+    --resolve "${issuer_host}:443:${connect_ip}" \
+    --output "${response_json}" --write-out '%{http_code}' \
+    --request PUT \
+    --header "@${admin_header}" \
+    --header 'Content-Type: application/json' \
+    --data-binary "@${payload_json}" \
+    "${issuer}/admin/realms/platform/users/${user_id}")
+  [[ "${http_status}" == 204 ]] || return 1
+  read_user
+  assert_existing_user_matches
 }
 
 only_default_configure_totp_action() {
@@ -156,6 +204,8 @@ case "${user_count}" in
   1)
     if assert_existing_user_matches; then
       echo "HEADLAMP-02 Keycloak 차이: ${username} user 1건 -> enabled, no-group, password+TOTP 일치"
+    elif [[ "${mode}" == --apply ]] && only_missing_declared_profile && apply_declared_profile; then
+      echo "HEADLAMP-02: task 전용 ${username}의 필수 profile만 선언값으로 보정했다."
     elif [[ "${mode}" == --apply ]] && only_default_configure_totp_action && clear_default_configure_totp_action; then
       echo "HEADLAMP-02: task 전용 ${username}의 기본 CONFIGURE_TOTP action만 제거했다."
     else
@@ -230,6 +280,10 @@ jq -n \
   '{
     username: "headlamp-no-group",
     enabled: true,
+    email: "headlamp-no-group@imcherry5778.xyz",
+    emailVerified: true,
+    firstName: "Headlamp",
+    lastName: "NoGroup",
     requiredActions: [],
     credentials: [
       {type: "password", value: ($password | rtrimstr("\n")), temporary: false},

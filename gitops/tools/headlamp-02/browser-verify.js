@@ -434,10 +434,12 @@ async function verifyNoGroupClaims(args) {
   if (!token) fail('no-group claim verification needs wrong-audience client input');
   try {
     const claims = decodeJwtClaims(token);
-    if (claims.iss !== EXPECTED_ISSUER || !Array.isArray(claims.groups) || claims.groups.length !== 0) {
-      fail('no-group identity did not produce an empty groups array');
+    const groupsAbsentOrEmpty = claims.groups === undefined
+      || (Array.isArray(claims.groups) && claims.groups.length === 0);
+    if (claims.iss !== EXPECTED_ISSUER || !groupsAbsentOrEmpty) {
+      fail(`no-group identity produced an unexpected groups claim: issuer=${claims.iss === EXPECTED_ISSUER ? 'ok' : 'mismatch'},groups=${JSON.stringify(claims.groups)}`);
     }
-    console.log('NO_GROUP_CLAIMS=issuer:ok,groups:empty');
+    console.log(`NO_GROUP_CLAIMS=issuer:ok,groups:${claims.groups === undefined ? 'absent' : 'empty'}`);
   } finally {
     token = '';
   }
@@ -527,7 +529,17 @@ async function main() {
     await page.goto(HEADLAMP_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForURL(/https:\/\/(headlamp|sso|k3s-01)\.imcherry5778\.xyz\/.*/, { timeout: 30000 });
     await loginIfKeycloakForm(page, args);
-    await page.waitForURL(/https:\/\/headlamp\.imcherry5778\.xyz\/.*/, { timeout: 45000 });
+    try {
+      await page.waitForURL(/https:\/\/headlamp\.imcherry5778\.xyz\/.*/, { timeout: 45000 });
+    } catch (error) {
+      const current = new URL(page.url());
+      const pageState = await page.evaluate(() => ({
+        title: document.title,
+        heading: document.querySelector('h1')?.textContent?.trim() || '',
+        labels: Array.from(document.querySelectorAll('label')).map((label) => label.textContent?.trim()).filter(Boolean),
+      }));
+      fail(`Pomerium navigation did not return to Headlamp: origin=${current.origin},path=${current.pathname},page=${JSON.stringify(pageState)}`);
+    }
 
     if (args.kind === 'no-group') {
       await verifyNoGroupClaims(args);
