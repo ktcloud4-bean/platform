@@ -1,6 +1,6 @@
 # 자원 예산과 정지 기준
 
-측정일: 2026-07-30. 이 문서는 `proxmox-01` 한 대의 CPU·RAM·디스크 예산과 정지 기준을 소유한다. 목표 배치는 `architecture.md`, 주소는 `ip-plan.md`, 작업 상태는 `backlog.md`가 계속 소유한다.
+기준 측정일: 2026-07-30. 최신 재측정일: 2026-08-02. 이 문서는 `proxmox-01` 한 대의 CPU·RAM·디스크 예산과 정지 기준을 소유한다. 목표 배치는 `architecture.md`, 주소는 `ip-plan.md`, 작업 상태는 `backlog.md`가 계속 소유한다.
 
 ## 측정 기준
 
@@ -105,10 +105,13 @@ Day 1 프로비저닝 572 GiB는 풀 793.80 GiB의 72.1%다. 즉 **Day 1에는 �
 | 풀 크기 | 793.80 GiB |
 | Day 1 프로비저닝 합계 | 572 GiB (72.1%) |
 | 미프로비저닝 여유 | 221.8 GiB (27.9%) |
-| 프로비저닝 상한 (`CAP-02` 이전) | 714 GiB — 풀의 90%, 과할당 금지 |
-| 과할당 절대 상한 (`CAP-02` 이후) | 992 GiB — 1.25:1 |
+| 기본 프로비저닝 상한 | 714 GiB — 풀의 90%, 과할당 없음 |
+| 조건부 과할당 절대 상한 (`CAP-02` 결정) | 992 GiB — 1.25:1 |
 
-상한 열을 모두 적용하면 944 GiB로 1.19:1이 된다. 이는 `CAP-02`에서 실사용 데이터를 근거로만 허용한다.
+상한 열을 모두 적용하면 944 GiB로 1.19:1이 된다. `CAP-02`에서 핵심 서비스와 백업을
+배포한 뒤에도 실사용률이 3.00%임을 확인했으므로 1.25:1까지 조건부 과할당을 허용한다.
+다만 714 GiB를 넘는 증설은 한 번에 하나씩 하고, thin data·metadata와 게스트 여유가 모두
+경고 미만일 때만 진행한다. 992 GiB는 목표가 아니라 절대 상한이다.
 
 ### 실사용 정지 기준
 
@@ -121,7 +124,7 @@ Day 1 프로비저닝 572 GiB는 풀 793.80 GiB의 72.1%다. 즉 **Day 1에는 �
 | 70% 이상 | 정지 | 신규 VM 생성·디스크 확장·`K3S-HEAVY` 배포 금지 |
 | 85% 이상 | 비상 | 데이터 투입 중단. `fstrim`으로 회수하고 실패 시 워크로드를 줄인다 |
 
-metadata 사용률은 50%에서 경고, 70%에서 정지한다. 현재 0.24%다.
+metadata 사용률은 50%에서 경고, 70%에서 정지한다. 최신 실측은 0.33%다.
 
 풀이 소진되면 게스트 쓰기가 실패하고 파일시스템이 손상될 수 있다. `lvextend`로 벌 수 있는 시간은 VG 여유 16.00 GiB, 곧 풀의 2.0%뿐이다. 85%를 비상으로 두는 근거가 이것이다.
 
@@ -131,7 +134,7 @@ metadata 사용률은 50%에서 경고, 70%에서 정지한다. 현재 0.24%다.
 
 | 항목 | 예산 | 근거 |
 |---|---|---|
-| 호스트 OS·PVE 사용 중 | 4.13 GiB | 실측 |
+| 호스트 OS·PVE 사용 중 | 4.16 GiB | `CAP-02` 실측 |
 | ext4 예약 블록 | 4.80 GiB | 사용 불가. 여유 계산에서 이미 제외됨 |
 | ISO (`template/iso`) | 15 GiB | Rocky 9 Minimal + PVE ISO + 직전 버전 1개 |
 | `snippets`·`import` | 5 GiB | `OS-01`의 cloud-init 자료 |
@@ -255,6 +258,7 @@ Node memory가 기존 정지 기준에 접근하면 replica·limit을 늘리지 
 | thin 풀 사용률 | `lvs -o data_percent pve/data` | 60% | 70% |
 | thin metadata 사용률 | `lvs -o metadata_percent pve/data` | 50% | 70% |
 | 호스트 RAM 여유 | `free -m`의 `available` | 12 GiB 미만 | 8 GiB 미만 |
+| `k3s-01` RAM 여유 | 게스트 `free -m`의 `available` | 12 GiB 미만 | 8 GiB 미만 |
 | RAM 배정 합계 | 구성 합 + VM당 0.20 GiB | 52 GiB | 56.5 GiB |
 | vCPU 배정 합계 | 구성 합 | 24 | 30 |
 | 호스트 부하 | `uptime` 15분 load | 20 | 30 지속 |
@@ -383,11 +387,59 @@ PostgreSQL physical archive·manifest와 Vault Raft snapshot·manifest를 각각
 뜻이다. 기존 volume은 계속 object를 담을 수 있다. 새 collection이 필요하면 이 값을 자동으로
 낮추거나 volume을 재사용하지 말고, disk 여유와 의존 서비스 재시작 영향을 다시 승인받아 올린다.
 
+### `CAP-02` 핵심 서비스 배포 후 실측 (2026-08-02)
+
+`BKP-05`와 `HEADLAMP-02` 완료 뒤 2026-08-02 11:54–11:56 KST에 읽기 전용으로
+측정했다. Proxmox 명령은 한 SSH 세션에, 각 게스트 명령은 게스트별 한 세션에 묶었다.
+
+| Proxmox 지표 | 실측 | 경고 | 정지 | 판정 |
+|---|---|---|---|---|
+| CPU / 15분 load | 20 thread / 0.30 | 20 | 30 지속 | 정상 |
+| RAM total / available | 62.53 / 41.30 GiB | available 12 GiB 미만 | available 8 GiB 미만 | 정상 |
+| swap 사용 | 0 / 8.00 GiB | 0 초과 | 지속 사용 | 정상 |
+| `local` | 총 93.93 · 사용 4.16 · 여유 84.96 GiB; `/` 5% | `/` 70% | `/` 80% | 정상 |
+| `local-lvm` data / metadata | 23.81 / 793.80 GiB · 3.00% / 0.33% | 60% / 50% | 70% / 70% | 정상 |
+| VG `pve` 여유 | 16.00 GiB | — | — | 변화 없음 |
+| VM 배정 합계 | 실행 VM 5대 · 18 vCPU · RAM 회계 41.00 GiB · disk 572 GiB | 24 vCPU / 52 GiB | 30 vCPU / 56.5 GiB | 정상 |
+
+| VM | vCPU / 15분 load | RAM total / available | guest root 총량 / 사용 / 여유 | 판정 |
+|---|---|---|---|---|
+| `k3s-01` | 8 / 0.15 | 23,771 / 20,050 MiB | 198.86 / 9.90 / 188.96 GiB · 5% | 정상 |
+| `postgres-01` | 4 / 0.00 | 7,680 / 7,206 MiB | 98.86 / 2.08 / 96.78 GiB · 3% | 정상 |
+| `object-01` | 2 / 0.00 | 3,655 / 2,842 MiB | 198.86 / 3.02 / 195.84 GiB · 2% | 정상 |
+| `warpgate-01` | 2 / 0.00 | 1,771 / 1,426 MiB | 38.86 / 1.53 / 37.33 GiB · 4% | 정상 |
+| `netbird-01` | 2 / 0.00 | 1,771 / 1,261 MiB | 30.86 / 2.80 / 28.06 GiB · 10% | 정상 |
+
+게스트 swap은 5대 모두 0이다. `k3s-01`의 `/var/lib/rancher/k3s`는 6.67 GiB다.
+metrics-server가 응답한 실행 Pod 22개의 순간 사용량은 다음과 같다.
+
+| namespace | Pod 수 | CPU | memory |
+|---|---:|---:|---:|
+| `argocd` | 7 | 34m | 611 MiB |
+| `crowdsec-01` | 3 | 3m | 121 MiB |
+| `headlamp` | 1 | 1m | 20 MiB |
+| `keycloak` | 1 | 1m | 653 MiB |
+| `kube-system` | 5 | 6m | 268 MiB |
+| `pomerium` | 2 | 16m | 100 MiB |
+| `vault` | 1 | 4m | 147 MiB |
+| `velero` | 2 | 2m | 148 MiB |
+| **합계** | **22** | **67m** | **2,068 MiB** |
+
+같은 시점의 Node 사용량은 173m / 4,426 MiB이고 guest `available`은 19.58 GiB다.
+PVC 요청 합계는 5.125 GiB(`crowdsec-db-pvc` 1 GiB, `traefik` 128 MiB,
+`vault-data` 4 GiB)로 96 GiB 경고까지 90.875 GiB가 남았다.
+
+stop/go 판정은 **GO**다. `SCM-01`·`REG-01`·`QUALITY-01`·`AWX-01`은 현재 여유로
+각각 순차 배포를 시작할 수 있다. 이는 네 앱의 최종 동시 사용량을 사전 보장한다는 뜻이 아니며,
+각 작업은 배포 직후 같은 지표를 읽고 다음 작업 진행 여부를 판정한다. 현 배치에서 추가 Pod가
+먼저 소비하는 경계는 `k3s-01` RAM이다. guest `available`은 12 GiB 경고까지 7.58 GiB,
+8 GiB 정지까지 11.58 GiB 남아 있어 CPU·guest disk·PVC보다 먼저 재검토할 가능성이 높다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.
 - `K3S-HEAVY` 배포 전후: Wazuh·관측 스택은 한 번에 하나씩 올리고 매번 위 지표를 다시 읽는다.
-- `CAP-02`: `BKP-05`와 `HEADLAMP-02` 이후 실측으로 전면 재예산한다. 과할당 허용 여부도 여기서 결정한다.
+- `SCM-01`·`REG-01`·`QUALITY-01`·`AWX-01` 직후: 한 번에 하나씩 위 지표를 다시 읽고 다음 배포의 stop/go를 판정한다.
 - 하드웨어 변경: 두 번째 SSD 장착(`PVE-BKP-01`), RAM 증설, 물리 노드 추가.
 
 ## 이 문서가 소유하지 않는 것

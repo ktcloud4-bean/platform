@@ -807,12 +807,12 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `CAP-02 READY` | 핵심 서비스 후 남은 CPU·RAM·disk 재예산 | `BKP-05`, `HEADLAMP-02` | 없음 | 아래 전체 | Proxmox·VM·Pod 실측과 stop/go 기준 |
-| `SCM-01 BLOCKED` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
-| `REG-01 BLOCKED` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
+| `CAP-02 DONE` | 핵심 서비스 후 남은 CPU·RAM·disk 재예산 | `BKP-05`, `HEADLAMP-02` | 없음 | 아래 전체 | Proxmox·VM·Pod 실측과 stop/go 기준 |
+| `SCM-01 READY` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
+| `REG-01 READY` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
 | `CI-01 BLOCKED` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
-| `QUALITY-01 BLOCKED` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO |
-| `AWX-01 BLOCKED` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
+| `QUALITY-01 READY` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO |
+| `AWX-01 READY` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
 | `UPDATE-01 BLOCKED` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
 | `SCAN-01 BLOCKED` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
 | `SIGN-01 BLOCKED` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
@@ -820,6 +820,15 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `E2E-01 BLOCKED` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
 | `POL-02 BLOCKED` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
 | `FALCO-01 BLOCKED` | Falco runtime rule·출력 기준선 | `E2E-01`, `POL-01` | 없음 | Wazuh·Shuffle | 전용 테스트 이벤트 탐지, noise 기준, 대응 runbook 초안 |
+
+2026-08-02 `CAP-02`에서 핵심 서비스와 백업 배포가 끝난 현재값을 읽기 전용으로 재측정했다.
+Proxmox는 available RAM 41.30 GiB·swap 0, thin data/metadata 3.00%/0.33%, `/` 5%,
+15분 load 0.30이고 VM 5대 배정은 18 vCPU·RAM 회계 41.00 GiB·disk 572 GiB다.
+각 게스트는 RAM·root 여유가 정상이며, k3s 실행 Pod 22개 합계는 67m·2,068 MiB,
+Node는 173m·4,426 MiB, PVC 요청은 5.125 GiB다. 모든 stop 기준에 여유가 있어
+`SCM-01`·`REG-01`·`QUALITY-01`·`AWX-01` 진입은 `GO`로 판정한다. 추가 Pod에서 먼저
+접근할 가능성이 큰 경계는 `k3s-01` RAM이며 12 GiB 경고까지 7.58 GiB가 남았다.
+CAP-02의 모든 직접 후속은 다른 선행도 `DONE`이므로 네 작업만 `READY`로 연다.
 
 ## 7. 최소권한과 공개 경로
 
