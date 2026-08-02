@@ -144,8 +144,8 @@ spec:
         - port: 8080
           protocol: TCP
     # Pomerium의 OIDC provider와 authenticate URL은 기존 Traefik HTTPS
-    # hostname 경로를 사용한다. 외부 443은 kube-proxy DNAT 뒤 Traefik의
-    # websecure target port 8443으로 NetworkPolicy가 평가된다.
+    # hostname 경로를 사용한다. Service ClusterIP를 경유하는 호출은 kube-proxy
+    # DNAT 뒤 Traefik의 websecure target port 8443으로 평가된다.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -156,8 +156,47 @@ spec:
       ports:
         - port: 8443
           protocol: TCP
-    # 다른 기존 외부 HTTPS egress는 IP를 새 단일 원본처럼 복제하지 않고
-    # 목적 port만 제한한다.
-    - ports:
+    # 랩 DNS는 sso·authenticate hostname을 노드 IP로 해석하고 그 443은
+    # svclb-traefik Pod의 hostPort가 받는다. hostNetwork를 쓰지 않으므로
+    # NetworkPolicy 목적지는 노드 IP가 아니라 그 Pod다. 모든 route upstream은
+    # 내부 http Service이므로 이 경로 밖의 외부 443 egress는 필요하지 않다.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              svccontroller.k3s.cattle.io/svcname: traefik
+      ports:
+        - port: 443
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pol-01-dashy-required-egress
+  namespace: pomerium
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: dashy
+      app.kubernetes.io/component: portal
+  policyTypes:
+    - Egress
+  egress:
+    # Dashy는 [ADR-0014](../docs/adr/0014-dashy-access-portal.md)의 공개 PKCE
+    # client로 자체 로그인하고, 서버가 Keycloak 서명 키로 그 토큰을 검증한다.
+    # 이 egress가 없으면 검증이 fail되어 포털이 로그인 상태를 유지하지 못한다.
+    # 목적지는 Pomerium의 Keycloak 경로와 같은 svclb-traefik Pod hostPort다.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              svccontroller.k3s.cattle.io/svcname: traefik
+      ports:
         - port: 443
           protocol: TCP

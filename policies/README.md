@@ -17,6 +17,21 @@ NetworkPolicy는 k3s 내장 kube-router가 실제 강제하므로 새 namespace�
 `REG-01`은 기존 `pomerium` egress allowlist에 Harbor nginx Pod TCP 8080 한 경로만
 추가한다. Harbor namespace의 새 default-deny를 함께 만들지는 않는다.
 
+## Keycloak egress 경로
+
+`pomerium` namespace의 두 workload는 모두 Keycloak에 나가야 한다. Pomerium은 OIDC
+discovery와 token 교환을, Dashy는 [ADR-0014](../docs/adr/0014-dashy-access-portal.md)의
+공개 PKCE client로 받은 토큰의 서명 검증을 각각 수행한다. Dashy의 이 경로는 `POL-01`
+default-deny 도입 때 누락돼 포털이 로그인 상태를 유지하지 못했고 `POL-01-FIX-01`이
+`pol-01-dashy-required-egress`로 보정했다.
+
+두 정책의 목적지는 Traefik Pod가 아니라 `svclb-traefik` Pod다. 랩 DNS가 `sso` hostname을
+노드 IP로 해석하고 그 443은 `hostNetwork`를 쓰지 않는 svclb Pod의 hostPort가 받으므로,
+NetworkPolicy는 노드 IP가 아니라 그 Pod를 목적지로 평가한다. Traefik Pod TCP 8443 규칙은
+Service ClusterIP를 경유하는 호출만 담당한다. 같은 작업에서 Pomerium의 목적지 없는 443
+규칙을 이 경로로 좁혔다. 모든 route upstream이 내부 http Service이므로 그 밖의 외부 443
+egress는 필요하지 않다.
+
 ## POL-02 적용 결과
 
 - 임시 예외 `pol-02-expiring-exception`은 `2026-08-02T15:27:28Z` 전 정확한 이름에서만
