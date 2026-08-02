@@ -7,8 +7,11 @@ set -Eeuo pipefail
 readonly issuer=https://sso.imcherry5778.xyz
 readonly issuer_host=sso.imcherry5778.xyz
 readonly connect_ip=${KC01_CONNECT_IP:-}
+readonly k3s_host=${K3S_HOST:-rocky@k3s-01.imcherry5778.xyz}
+readonly known_hosts=${K3S_SSH_KNOWN_HOSTS:-/home/imcherry/.ssh/known_hosts}
 repo_root=$(git rev-parse --show-toplevel)
 readonly repo_root
+readonly break_glass_check=${repo_root}/gitops/tools/headlamp-02/check-break-glass.sh
 temp_dir=$(mktemp -d)
 readonly temp_dir
 umask 077
@@ -46,6 +49,15 @@ cleanup() {
   exit "${cleanup_status}"
 }
 trap cleanup EXIT INT TERM
+
+check_break_glass() {
+  [[ -x "${break_glass_check}" ]] || {
+    echo "HEADLAMP-02 break-glass verifier가 없다." >&2
+    exit 1
+  }
+  K3S_HOST="${k3s_host}" K3S_SSH_KNOWN_HOSTS="${known_hosts}" \
+    "${break_glass_check}"
+}
 
 for required in \
   verify-client-secret daily-password daily-totp \
@@ -102,12 +114,14 @@ python3 "${repo_root}/gitops/tools/kc-01/browser-login.py" \
   --totp-file "${KC01_SECRET_DIR}/local-admin-totp" \
   --header-file "${temp_dir}/local.header" \
   "${browser_route[@]}" \
+  --capture-callback \
   --expect-realm-role admin
 
 http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
   "${curl_route[@]}" \
   --header "@${temp_dir}/local.header" "${issuer}/admin/realms/platform")
 [[ "${http_status}" == 200 ]]
+check_break_glass
 
 echo "KC-01 복구 시험: platform realm을 일시 비활성화합니다."
 printf '{"enabled":false}\n' >"${temp_dir}/disable.json"
@@ -140,6 +154,7 @@ http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_
   "${curl_route[@]}" \
   --header "@${temp_dir}/local.header" "${issuer}/admin/realms/platform")
 [[ "${http_status}" == 200 ]]
+check_break_glass
 
 echo "KC-01 복구 시험: master 로컬 관리 경로로 platform realm을 복구합니다."
 printf '{"enabled":true}\n' >"${temp_dir}/enable.json"
@@ -159,4 +174,5 @@ http_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_
   --data-binary "@${temp_dir}/daily-restored.form" \
   "${issuer}/realms/platform/protocol/openid-connect/token")
 [[ "${http_status}" == 200 ]]
+check_break_glass
 echo "KC-01: IdP realm 장애와 독립된 로컬 관리자 복구 시험 통과"
