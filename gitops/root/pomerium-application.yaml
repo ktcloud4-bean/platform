@@ -13,7 +13,7 @@ spec:
   project: pomerium
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: main
+    targetRevision: headlamp-02-fix-05-settings-8fd9ad31b6867ca8f119be76b1c9f1fc1b3a3e42
     path: gitops/apps/pomerium
   destination:
     server: https://kubernetes.default.svc
