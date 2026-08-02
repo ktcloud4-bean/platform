@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: policy-baseline
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  project: policy-baseline
+  source:
+    repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
+    targetRevision: main
+    path: policies
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pomerium
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ApplyOutOfSyncOnly=true
+      - ServerSideApply=true
+      - PruneLast=true
+      - PrunePropagationPolicy=foreground

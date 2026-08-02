@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: policy-baseline
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: Prune=false
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  description: POL-01 Kyverno Audit 정책과 검증된 namespace NetworkPolicy 경계
+  sourceRepos:
+    - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
+  destinations:
+    - namespace: pomerium
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: kyverno.io
+      kind: ClusterPolicy
+  namespaceResourceWhitelist:
+    - group: networking.k8s.io
+      kind: NetworkPolicy

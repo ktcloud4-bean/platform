@@ -1,0 +1,150 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pol-01-default-deny
+  namespace: pomerium
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pol-01-dns-egress
+  namespace: pomerium
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pol-01-pomerium-from-traefik
+  namespace: pomerium
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pomerium
+      app.kubernetes.io/component: server
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pol-01-dashy-from-pomerium
+  namespace: pomerium
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: dashy
+      app.kubernetes.io/component: portal
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pomerium
+              app.kubernetes.io/component: server
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pol-01-pomerium-required-egress
+  namespace: pomerium
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pomerium
+      app.kubernetes.io/component: server
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: dashy
+              app.kubernetes.io/component: portal
+      ports:
+        - port: 8080
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
+        - port: 8200
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: headlamp
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: headlamp
+              app.kubernetes.io/component: server
+      ports:
+        - port: 4466
+          protocol: TCP
+    # Pomerium의 OIDC provider와 authenticate URL은 기존 Traefik HTTPS
+    # hostname 경로를 사용한다. 외부 443은 kube-proxy DNAT 뒤 Traefik의
+    # websecure target port 8443으로 NetworkPolicy가 평가된다.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: 8443
+          protocol: TCP
+    # 다른 기존 외부 HTTPS egress는 IP를 새 단일 원본처럼 복제하지 않고
+    # 목적 port만 제한한다.
+    - ports:
+        - port: 443
+          protocol: TCP

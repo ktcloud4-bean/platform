@@ -1,0 +1,39 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pol-01-require-pod-run-as-non-root
+  annotations:
+    policies.kyverno.io/title: Pod-level runAsNonRoot Audit baseline
+    policies.kyverno.io/category: Pod Security Baseline
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  validationFailureAction: Audit
+  admission: true
+  background: true
+  emitWarning: false
+  rules:
+    - name: require-pod-run-as-non-root
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+      validate:
+        allowExistingViolations: true
+        message: Pod spec.securityContext.runAsNonRoot must be true.
+        pattern:
+          spec:
+            securityContext:
+              runAsNonRoot: true

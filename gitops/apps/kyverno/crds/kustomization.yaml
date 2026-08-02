@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - kyverno.io_cleanuppolicies.yaml
+  - kyverno.io_clustercleanuppolicies.yaml
+  - kyverno.io_clusterpolicies.yaml
+  - kyverno.io_globalcontextentries.yaml
+  - kyverno.io_policies.yaml
+  - kyverno.io_policyexceptions.yaml
+  - kyverno.io_updaterequests.yaml
+  - policies.kyverno.io_deletingpolicies.yaml
+  - policies.kyverno.io_generatingpolicies.yaml
+  - policies.kyverno.io_imagevalidatingpolicies.yaml
+  - policies.kyverno.io_mutatingpolicies.yaml
+  - policies.kyverno.io_namespaceddeletingpolicies.yaml
+  - policies.kyverno.io_namespacedgeneratingpolicies.yaml
+  - policies.kyverno.io_namespacedimagevalidatingpolicies.yaml
+  - policies.kyverno.io_namespacedmutatingpolicies.yaml
+  - policies.kyverno.io_namespacedvalidatingpolicies.yaml
+  - policies.kyverno.io_policyexceptions.yaml
+  - policies.kyverno.io_validatingpolicies.yaml
+  - reports.kyverno.io_clusterephemeralreports.yaml
+  - reports.kyverno.io_ephemeralreports.yaml
+  - wgpolicyk8s.io_clusterpolicyreports.yaml
+  - wgpolicyk8s.io_policyreports.yaml

@@ -816,7 +816,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `UPDATE-01 BLOCKED` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
 | `SCAN-01 BLOCKED` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
 | `SIGN-01 BLOCKED` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
-| `POL-01 READY` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
+| `POL-01 DONE` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
 | `E2E-01 BLOCKED` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
 | `POL-02 BLOCKED` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
 | `FALCO-01 BLOCKED` | Falco runtime rule·출력 기준선 | `E2E-01`, `POL-01` | 없음 | Wazuh·Shuffle | 전용 테스트 이벤트 탐지, noise 기준, 대응 runbook 초안 |
@@ -829,6 +829,19 @@ Node는 173m·4,426 MiB, PVC 요청은 5.125 GiB다. 모든 stop 기준에 여�
 `SCM-01`·`REG-01`·`QUALITY-01`·`AWX-01` 진입은 `GO`로 판정한다. 추가 Pod에서 먼저
 접근할 가능성이 큰 경계는 `k3s-01` RAM이며 12 GiB 경고까지 7.58 GiB가 남았다.
 CAP-02의 모든 직접 후속은 다른 선행도 `DONE`이므로 네 작업만 `READY`로 연다.
+
+2026-08-02 `POL-01`에서 Kyverno `v1.18.2` admission·reports controller와 Pod-level
+`runAsNonRoot` 누락 Audit 규칙 한 건을 배포했고, 기존 워크로드 위반이 PolicyReport의 `fail`로
+남는 것을 확인했다. k3s Flannel과 내장 kube-router가 `KUBE-NWPLCY`·`KUBE-POD-FW` 체인을
+설치해 NetworkPolicy를 실제 강제하므로 통신표가 명확한 `pomerium` namespace에만 default-deny와
+DNS·Traefik·Dashy·Vault·Headlamp·기존 HTTPS 허용 기준선을 적용했다. 선택 대상 검증 Pod에서
+클러스터 DNS와 Vault·Headlamp·SSO HTTPS egress가 모두 성공했고, 기존 보호 route는 Pomerium
+sign-in으로 `302` 응답했다. 검증 SHA의 `platform-root`와 두 child는 모두 `Synced/Healthy`였다.
+Git에 선언한 Secret은 0건이며 admission webhook이 자체 관리하는 TLS CA·leaf Secret 두 개만
+라이브에 존재한다. 시작 main `930fc672e81e1b376402d8ca2edbb84c21b30db3`로 순서 있게 rollback해
+정책·NetworkPolicy·controller·CRD·동적 webhook을 제거하고 root를 `main`의 `Synced/Healthy`로
+복구했다. `E2E-01`은 `CI-01`·`QUALITY-01`·`SIGN-01`이 남고 `FALCO-01`은 `E2E-01`이 남으므로
+둘 다 `BLOCKED`를 유지하며 새로 여는 직접 후속은 없다.
 
 ## 7. 최소권한과 공개 경로
 

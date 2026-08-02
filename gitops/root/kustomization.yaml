@@ -17,3 +17,7 @@ resources:
   - crowdsec-application.yaml
   - velero-project.yaml
   - velero-application.yaml
+  - kyverno-project.yaml
+  - kyverno-application.yaml
+  - policy-baseline-project.yaml
+  - policy-baseline-application.yaml

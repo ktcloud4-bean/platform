@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pol-01-egress-verify
+  namespace: pomerium
+  labels:
+    app.kubernetes.io/name: pomerium
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: pol-01-verification
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: verify
+      image: docker.io/library/busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -ec
+        - |
+          nslookup kubernetes.default.svc.cluster.local
+          echo POL-01_DNS_OK
+          nc -z -w 5 vault.vault.svc.cluster.local 8200
+          echo POL-01_VAULT_EGRESS_OK
+          nc -z -w 5 headlamp.headlamp.svc.cluster.local 80
+          echo POL-01_HEADLAMP_EGRESS_OK
+          nc -z -w 5 sso.imcherry5778.xyz 443
+          echo POL-01_HTTPS_EGRESS_OK
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests:
+          cpu: 5m
+          memory: 8Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi

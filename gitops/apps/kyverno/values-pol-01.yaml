@@ -1,0 +1,39 @@
+crds:
+  install: false
+  migration:
+    enabled: false
+
+features:
+  # POL-01은 전통적인 Kyverno ClusterPolicy의 Audit report만 사용한다.
+  generateValidatingAdmissionPolicy:
+    enabled: false
+
+# Helm pre-delete hook은 원시 Kustomize manifest에서 수명 주기를 보장할 수 없다.
+# 동적 webhook은 README의 순서가 있는 rollback 절차로 제거한다.
+webhooksCleanup:
+  enabled: false
+
+admissionController:
+  replicas: 1
+  revisionHistoryLimit: 2
+  initContainer:
+    image:
+      tag: "v1.18.2@sha256:cd8cb4a31d25b3992734fb8f24a90ef691c90ce49338c89bea96792160eacb98"
+  container:
+    image:
+      tag: "v1.18.2@sha256:0a540e2ddf74d0d2d3d45f9ef248d7dbc96576accdbcc6a2dd7eaff9fea56504"
+
+# generate·mutate-existing은 POL-01 범위가 아니다.
+backgroundController:
+  enabled: false
+
+# CleanupPolicy와 별도 cleanup webhook은 POL-01 범위가 아니다.
+cleanupController:
+  enabled: false
+
+reportsController:
+  enabled: true
+  replicas: 1
+  revisionHistoryLimit: 2
+  image:
+    tag: "v1.18.2@sha256:f09cf305170014e191b94e1c54f5be73163d8824eefad49349675c4efe43159a"
