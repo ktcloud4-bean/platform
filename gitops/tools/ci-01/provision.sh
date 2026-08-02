@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2029
+# shellcheck disable=SC2029,SC2329
 # CI-01: Jenkins가 소비하는 저장소 밖 동적 객체만 선언한다.
 #   Gitea  scm-recovery/ci01-build-smoke repo와 read-only deploy key
 #   Harbor ci01-evidence / ci01-denied project와 project-scoped robot
@@ -9,17 +9,25 @@ set -Eeuo pipefail
 
 usage() {
   cat <<'EOF'
-사용법: KTC_SECRET_ROOT=<저장소 밖 root> gitops/tools/ci-01/provision.sh --check|--apply|--destroy
+사용법: KTC_SECRET_ROOT=<저장소 밖 root> gitops/tools/ci-01/provision.sh <mode>
 
 --check   안전한 메타데이터만 읽고 아무것도 바꾸지 않는다.
 --apply   absent 상태에서 CI-01 객체를 만든다. 기존 객체가 선언과 다르면 중단한다.
 --seed    기존 repo의 seed 3개를 저장소 선언과 같게 맞춘다. 다른 객체는 건드리지 않는다.
 --destroy CI-01이 만든 객체만 제거한다. 다른 repo/project/Vault 경로는 건드리지 않는다.
+--signing-key-check             현재 SIGN-01 key를 복호화하지 않고 공개키 일치까지 판정한다.
+--signing-key-create            signing key가 없을 때 generation 1과 거부 시험 공개키를 만든다.
+--signing-key-rotate            새 active key를 다음 KV version에 쓰고 이전 공개키를 보존한다.
+--signing-key-recover <version> 지정 KV version의 private key를 검증해 새 current version으로 복구한다.
+--signing-key-destroy           SIGN-01 key 필드만 current KV version에서 제거한다.
 EOF
 }
 
 mode=${1:-}
-if [[ ${mode} != --check && ${mode} != --apply && ${mode} != --seed && ${mode} != --destroy ]]; then
+if [[ ${mode} != --check && ${mode} != --apply && ${mode} != --seed && ${mode} != --destroy && \
+      ${mode} != --signing-key-check && ${mode} != --signing-key-create && \
+      ${mode} != --signing-key-rotate && ${mode} != --signing-key-recover && \
+      ${mode} != --signing-key-destroy ]]; then
   usage >&2
   exit 2
 fi
@@ -47,6 +55,7 @@ repo_root=$(git rev-parse --show-toplevel)
 readonly repo_root
 readonly seed_dir=${repo_root}/gitops/tools/ci-01/seed
 readonly policy_file=${repo_root}/infra/vault/scripts/policies/jenkins.hcl
+readonly release_metadata=${repo_root}/gitops/apps/jenkins/release-metadata.env
 
 check_private_file() {
   local path=$1
@@ -62,6 +71,246 @@ check_private_file() {
       ;;
   esac
 }
+
+if [[ ${mode} == --signing-key-* ]]; then
+  check_private_file "${vault_root_token_file}"
+  [[ -s ${release_metadata} ]] || { echo "Cosign release metadata가 없다" >&2; exit 1; }
+  command -v jq >/dev/null
+  command -v openssl >/dev/null
+  command -v podman >/dev/null
+  [[ -d /dev/shm && -w /dev/shm ]] || { echo "/dev/shm tmpfs를 쓸 수 없다" >&2; exit 1; }
+
+  readonly signing_ssh_options=(
+    -o BatchMode=yes
+    -o StrictHostKeyChecking=yes
+    -o "UserKnownHostsFile=${known_hosts}"
+    -o PasswordAuthentication=no
+  )
+
+  signing_vault_exec() {
+    {
+      tr -d '\n' <"${vault_root_token_file}"
+      printf '\n'
+      cat
+    } | ssh "${signing_ssh_options[@]}" "${k3s_host}" \
+      "${kubectl_command} -n vault exec -i vault-0 -- sh -c '
+        set -eu
+        read -r VAULT_TOKEN
+        export VAULT_TOKEN
+        exec sh -eu
+      '"
+  }
+
+  read_release_value() {
+    awk -F= -v key="$1" '$1 == key {print substr($0, index($0, "=") + 1); exit}' \
+      "${release_metadata}"
+  }
+
+  cosign_image=$(read_release_value COSIGN_IMAGE)
+  cosign_index_digest=$(read_release_value COSIGN_IMAGE_INDEX_DIGEST)
+  [[ ${cosign_image} == ghcr.io/sigstore/cosign/cosign:v* && \
+     ${cosign_index_digest} =~ ^sha256:[0-9a-f]{64}$ ]] || {
+    echo "Cosign 공식 image 고정값 형식이 잘못됐다" >&2
+    exit 1
+  }
+  readonly cosign_image_ref=${cosign_image}@${cosign_index_digest}
+
+  umask 077
+  signing_temp_dir=$(mktemp -d /dev/shm/sign-01.XXXXXX)
+  readonly signing_temp_dir
+  cleanup_signing_key() {
+    local exit_code=$?
+    rm -rf -- "${signing_temp_dir}"
+    return "${exit_code}"
+  }
+  trap cleanup_signing_key EXIT INT TERM
+
+  podman pull --quiet "${cosign_image_ref}" >/dev/null
+
+  cosign_run() {
+    podman run --rm --network=none --userns=keep-id \
+      --user "$(id -u):$(id -g)" --security-opt label=disable \
+      --env COSIGN_PASSWORD \
+      --volume "${signing_temp_dir}:/work:rw" \
+      --entrypoint /ko-app/cosign "${cosign_image_ref}" "$@"
+  }
+
+  read_runtime() {
+    local version=${1:-}
+    if [[ -n ${version} ]]; then
+      [[ ${version} =~ ^[1-9][0-9]*$ ]] || { echo "KV version은 양의 정수여야 한다" >&2; exit 1; }
+      printf 'VAULT_FORMAT=json vault kv get -version=%s kv/jenkins/runtime\n' "${version}" |
+        signing_vault_exec
+    else
+      signing_vault_exec <<'REMOTE'
+VAULT_FORMAT=json vault kv get kv/jenkins/runtime
+REMOTE
+    fi
+  }
+
+  write_runtime() {
+    local json_file=$1
+    {
+      printf 'cat >/tmp/sign01-runtime.json <<%s\n' "'SIGN01RUNTIME'"
+      cat "${json_file}"
+      printf '\nSIGN01RUNTIME\n'
+      printf 'vault kv put kv/jenkins/runtime @/tmp/sign01-runtime.json >/dev/null\n'
+      printf 'rm -f /tmp/sign01-runtime.json\n'
+    } | signing_vault_exec >/dev/null
+  }
+
+  generate_key_pair() {
+    local prefix=$1 password_var=$2
+    local generated_password
+    generated_password=$(openssl rand -hex 32)
+    printf -v "${password_var}" '%s' "${generated_password}"
+    COSIGN_PASSWORD=${generated_password} cosign_run generate-key-pair \
+      --output-key-prefix "/work/${prefix}" >/dev/null
+    chmod 0600 "${signing_temp_dir}/${prefix}.key" "${signing_temp_dir}/${prefix}.pub"
+    unset generated_password
+  }
+
+  verify_key_pair() {
+    local private_file=$1 password=$2 expected_public=$3 derived_file=$4
+    COSIGN_PASSWORD=${password} cosign_run public-key --key "/work/${private_file}" >"${signing_temp_dir}/${derived_file}"
+    cmp -s "${signing_temp_dir}/${derived_file}" "${signing_temp_dir}/${expected_public}" || {
+      echo "encrypted private key와 저장된 public key가 일치하지 않는다" >&2
+      exit 1
+    }
+  }
+
+  require_signing_keys() {
+    local json_file=$1
+    jq -e '
+      .data.data as $d |
+      ($d.cosign_private_key | type == "string" and length > 0) and
+      ($d.cosign_password | type == "string" and length > 0) and
+      ($d.cosign_public_key | type == "string" and length > 0) and
+      ($d.cosign_reject_public_key | type == "string" and length > 0) and
+      ($d.cosign_key_generation | type == "number" and . >= 1)
+    ' "${json_file}" >/dev/null || {
+      echo "SIGN-01 key 필드가 없거나 형식이 잘못됐다" >&2
+      exit 1
+    }
+  }
+
+  current_json=${signing_temp_dir}/current.json
+  read_runtime >"${current_json}"
+
+  if [[ ${mode} == --signing-key-create ]]; then
+    existing_signing_keys=$(jq '[.data.data | keys[] | select(startswith("cosign_"))] | length' "${current_json}")
+    [[ ${existing_signing_keys} -eq 0 ]] || {
+      echo "기존 SIGN-01 key를 덮어쓰지 않는다" >&2
+      exit 1
+    }
+    active_password=
+    reject_password=
+    generate_key_pair active active_password
+    generate_key_pair reject reject_password
+    [[ -n ${reject_password} ]]
+    desired_json=${signing_temp_dir}/desired.json
+    jq --rawfile private "${signing_temp_dir}/active.key" \
+      --arg password "${active_password}" \
+      --rawfile public "${signing_temp_dir}/active.pub" \
+      --rawfile reject_public "${signing_temp_dir}/reject.pub" '
+        .data.data + {
+          cosign_private_key: $private,
+          cosign_password: $password,
+          cosign_public_key: $public,
+          cosign_reject_public_key: $reject_public,
+          cosign_key_generation: 1
+        }
+      ' "${current_json}" >"${desired_json}"
+    unset active_password reject_password
+    write_runtime "${desired_json}"
+  elif [[ ${mode} == --signing-key-rotate ]]; then
+    require_signing_keys "${current_json}"
+    current_generation=$(jq -r '.data.data.cosign_key_generation' "${current_json}")
+    next_generation=$((current_generation + 1))
+    active_password=
+    generate_key_pair active active_password
+    desired_json=${signing_temp_dir}/desired.json
+    jq --argjson generation "${next_generation}" \
+      --rawfile private "${signing_temp_dir}/active.key" \
+      --arg password "${active_password}" \
+      --rawfile public "${signing_temp_dir}/active.pub" '
+        .data.data as $d |
+        ($d + {
+          cosign_previous_public_key: $d.cosign_public_key,
+          cosign_previous_key_generation: $d.cosign_key_generation,
+          cosign_private_key: $private,
+          cosign_password: $password,
+          cosign_public_key: $public,
+          cosign_key_generation: $generation
+        }) | del(.cosign_recovered_from_version)
+      ' "${current_json}" >"${desired_json}"
+    unset active_password
+    write_runtime "${desired_json}"
+  elif [[ ${mode} == --signing-key-recover ]]; then
+    recovery_version=${2:-}
+    [[ ${recovery_version} =~ ^[1-9][0-9]*$ ]] || {
+      echo "--signing-key-recover에는 KV version이 필요하다" >&2
+      exit 2
+    }
+    require_signing_keys "${current_json}"
+    recovery_json=${signing_temp_dir}/recovery.json
+    read_runtime "${recovery_version}" >"${recovery_json}"
+    require_signing_keys "${recovery_json}"
+    jq -j '.data.data.cosign_private_key' "${recovery_json}" >"${signing_temp_dir}/recovery.key"
+    jq -j '.data.data.cosign_public_key' "${recovery_json}" >"${signing_temp_dir}/recovery.pub"
+    recovery_password=$(jq -r '.data.data.cosign_password' "${recovery_json}")
+    verify_key_pair recovery.key "${recovery_password}" recovery.pub recovered-derived.pub
+    current_generation=$(jq -r '.data.data.cosign_key_generation' "${current_json}")
+    next_generation=$((current_generation + 1))
+    desired_json=${signing_temp_dir}/desired.json
+    jq --argjson generation "${next_generation}" --argjson source_version "${recovery_version}" \
+      --rawfile private "${signing_temp_dir}/recovery.key" \
+      --arg password "${recovery_password}" \
+      --rawfile public "${signing_temp_dir}/recovery.pub" '
+        .data.data as $d |
+        $d + {
+          cosign_previous_public_key: $d.cosign_public_key,
+          cosign_previous_key_generation: $d.cosign_key_generation,
+          cosign_private_key: $private,
+          cosign_password: $password,
+          cosign_public_key: $public,
+          cosign_key_generation: $generation,
+          cosign_recovered_from_version: $source_version
+        }
+      ' "${current_json}" >"${desired_json}"
+    unset recovery_password
+    write_runtime "${desired_json}"
+  elif [[ ${mode} == --signing-key-destroy ]]; then
+    require_signing_keys "${current_json}"
+    desired_json=${signing_temp_dir}/desired.json
+    jq '.data.data | with_entries(select(.key | startswith("cosign_") | not))' \
+      "${current_json}" >"${desired_json}"
+    write_runtime "${desired_json}"
+    final_json=${signing_temp_dir}/final.json
+    read_runtime >"${final_json}"
+    final_version=$(jq -r '.data.metadata.version' "${final_json}")
+    remaining=$(jq '[.data.data | keys[] | select(startswith("cosign_"))] | length' "${final_json}")
+    [[ ${remaining} -eq 0 ]]
+    echo "SIGN-01 key 제거: kv-version=${final_version} current-fields=0"
+    exit 0
+  fi
+
+  final_json=${signing_temp_dir}/final.json
+  read_runtime >"${final_json}"
+  require_signing_keys "${final_json}"
+  jq -j '.data.data.cosign_private_key' "${final_json}" >"${signing_temp_dir}/current.key"
+  jq -j '.data.data.cosign_public_key' "${final_json}" >"${signing_temp_dir}/current.pub"
+  current_password=$(jq -r '.data.data.cosign_password' "${final_json}")
+  verify_key_pair current.key "${current_password}" current.pub current-derived.pub
+  unset current_password
+  final_version=$(jq -r '.data.metadata.version' "${final_json}")
+  final_generation=$(jq -r '.data.data.cosign_key_generation' "${final_json}")
+  final_key_id=$(awk 'NR > 1 {printf "\n"} {printf "%s", $0}' \
+    "${signing_temp_dir}/current-derived.pub" | sha256sum | awk '{print "sha256:"$1}')
+  recovery_source=$(jq -r '.data.data.cosign_recovered_from_version // "none"' "${final_json}")
+  echo "SIGN-01 key: mode=${mode} kv-version=${final_version} generation=${final_generation} key-id=${final_key_id} recovered-from=${recovery_source}"
+  exit 0
+fi
 
 for private_input in "${jenkins_env}" "${gitea_env}" "${harbor_env}" "${vault_root_token_file}"; do
   check_private_file "${private_input}"

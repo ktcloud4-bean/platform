@@ -1,10 +1,13 @@
-// CI-01 pipeline을 SCAN-01 gate로 확장한다.
+// CI-01 pipeline을 SCAN-01 gate와 SIGN-01 고정 digest handoff로 확장한다.
 // pass: config/image gate -> CycloneDX OCI artifact -> image push -> release handoff
 // fail: 고정 취약 base가 image gate를 넘지 못하고 Harbor credential/push 전에 종료
 node('ci01-buildah') {
     def registry = 'harbor.imcherry5778.xyz'
     def allowed = "${registry}/ci01-evidence/ci01-app"
     def scanCase = params.SCAN01_CASE ?: 'pass'
+    def signCase = params.SIGN01_CASE ?: 'off'
+    def signImageDigest = 'sha256:50ac62320ee4ebce0da8cb6c05bac072da3c07cb31559487a1f3fb1028a63fe3'
+    def signSbomDigest = 'sha256:ced6c83cd50d2324bef40f8a4b625fc266bed96c128cf5e01b2bc22c9a0eeb5e'
     def baseImages = [
         pass: 'docker.io/library/hello-world:latest@sha256:c3cbe1cc1aa588a64951ac6286e0df7b27fe2e6324b1001c619bb358770c0178',
         fail: 'docker.io/library/alpine:3.18.0@sha256:02bb6f428431fbc2809c5d1b41eab5a68350194fb508869a33cb1af4444c9b11'
@@ -12,10 +15,157 @@ node('ci01-buildah') {
     if (!baseImages.containsKey(scanCase)) {
         error("허용하지 않은 SCAN01_CASE=${scanCase}")
     }
+    if (!(signCase in ['off', 'pass', 'reject'])) {
+        error("허용하지 않은 SIGN01_CASE=${signCase}")
+    }
 
     def tag = "scan-b${env.BUILD_NUMBER}"
     def localImage = "localhost/scan01-ci:${tag}"
     def archive = "${env.WORKSPACE}/scan01-image.tar"
+
+    if (signCase != 'off') {
+        def imageRef = "${allowed}@${signImageDigest}"
+        def sbomRef = "${allowed}@${signSbomDigest}"
+
+        stage('SIGN-01 fixed digest handoff') {
+            echo "sign01-case=${signCase}"
+            echo "sign01-image-subject=${imageRef}"
+            echo "sign01-sbom-subject=${sbomRef}"
+        }
+
+        if (signCase == 'pass') {
+            stage('SIGN-01 sign and verify') {
+                withCredentials([
+                    usernamePassword(credentialsId: 'harbor-robot-ci01',
+                                     usernameVariable: 'CI01_ROBOT_USER',
+                                     passwordVariable: 'CI01_ROBOT_SECRET'),
+                    string(credentialsId: 'cosign-private-key-sign01', variable: 'SIGN01_PRIVATE_KEY'),
+                    string(credentialsId: 'cosign-password-sign01', variable: 'COSIGN_PASSWORD'),
+                    string(credentialsId: 'cosign-public-key-sign01', variable: 'SIGN01_PUBLIC_KEY')
+                ]) {
+                    withEnv([
+                        "CI01_REGISTRY=${registry}",
+                        "SIGN01_IMAGE_REF=${imageRef}",
+                        "SIGN01_SBOM_REF=${sbomRef}"
+                    ]) {
+                        container('cosign') {
+                            sh '''
+set -eu
+private_key=/home/cosign/sign01.key
+public_key=/home/cosign/sign01.pub
+cleanup() {
+    set +e
+    rm -f -- "${private_key}" "${public_key}" \
+        /home/cosign/image-preverify.log /home/cosign/sbom-preverify.log \
+        /home/cosign/image-verify.json /home/cosign/sbom-verify.json
+}
+trap cleanup EXIT HUP INT TERM
+set +x
+printf '%s' "${SIGN01_PRIVATE_KEY}" >"${private_key}"
+printf '%s' "${SIGN01_PUBLIC_KEY}" >"${public_key}"
+chmod 0400 "${private_key}" "${public_key}"
+printf '%s' "${CI01_ROBOT_SECRET}" | cosign login \
+    --username "${CI01_ROBOT_USER}" --password-stdin "${CI01_REGISTRY}" >/dev/null
+set -x
+
+ensure_signature() {
+    label=$1
+    subject=$2
+    preverify_log=/home/cosign/${label}-preverify.log
+    verify_json=/home/cosign/${label}-verify.json
+
+    set +e
+    cosign verify --key "${public_key}" --insecure-ignore-tlog=true \
+        "${subject}" >"${preverify_log}" 2>&1
+    existing_status=$?
+    set -e
+    if [ "${existing_status}" -eq 0 ]; then
+        signature_state=existing
+    elif grep -Eiq 'no signatures found|no matching signatures|invalid signature|signature verification failed' \
+        "${preverify_log}"; then
+        cosign sign --yes --key "${private_key}" \
+            --tlog-upload=false --use-signing-config=false \
+            --registry-referrers-mode=oci-1-1 "${subject}"
+        signature_state=attached
+    else
+        echo "${label} signature 존재 판정이 registry/key mismatch 밖에서 실패했다" >&2
+        sed -n '1,20p' "${preverify_log}" >&2
+        exit 1
+    fi
+
+    cosign verify --key "${public_key}" --insecure-ignore-tlog=true \
+        "${subject}" >"${verify_json}"
+    echo "sign01-${label}-signature=${signature_state} subject=${subject}"
+    echo "sign01-${label}-verification=pass subject=${subject}"
+}
+
+ensure_signature image "${SIGN01_IMAGE_REF}"
+ensure_signature sbom "${SIGN01_SBOM_REF}"
+echo "sign01-key-id=sha256:$(awk 'NR > 1 {printf "\n"} {printf "%s", $0}' "${public_key}" | sha256sum | awk '{print $1}')"
+'''
+                        }
+                    }
+                }
+            }
+
+            stage('release handoff') {
+                echo 'sign01-release-handoff=ready case=pass'
+            }
+            return
+        }
+
+        stage('SIGN-01 reject untrusted key') {
+            withCredentials([
+                usernamePassword(credentialsId: 'harbor-robot-ci01',
+                                 usernameVariable: 'CI01_ROBOT_USER',
+                                 passwordVariable: 'CI01_ROBOT_SECRET'),
+                string(credentialsId: 'cosign-reject-public-key-sign01', variable: 'SIGN01_REJECT_PUBLIC_KEY')
+            ]) {
+                withEnv([
+                    "CI01_REGISTRY=${registry}",
+                    "SIGN01_IMAGE_REF=${imageRef}"
+                ]) {
+                    container('cosign') {
+                        sh '''
+set -eu
+reject_key=/home/cosign/sign01-reject.pub
+reject_log=/home/cosign/sign01-reject.log
+cleanup() {
+    set +e
+    rm -f -- "${reject_key}" "${reject_log}"
+}
+trap cleanup EXIT HUP INT TERM
+set +x
+printf '%s' "${SIGN01_REJECT_PUBLIC_KEY}" >"${reject_key}"
+chmod 0400 "${reject_key}"
+printf '%s' "${CI01_ROBOT_SECRET}" | cosign login \
+    --username "${CI01_ROBOT_USER}" --password-stdin "${CI01_REGISTRY}" >/dev/null
+set -x
+
+set +e
+cosign verify --key "${reject_key}" --insecure-ignore-tlog=true \
+    "${SIGN01_IMAGE_REF}" \
+    >"${reject_log}" 2>&1
+verify_status=$?
+set -e
+if [ "${verify_status}" -eq 0 ]; then
+    echo '다른 공개키가 SIGN-01 image signature를 허용했다' >&2
+    exit 1
+fi
+if ! grep -Eiq 'no matching signatures|no matching attestations|invalid signature|signature verification failed|accepted signatures do not match threshold' "${reject_log}"; then
+    echo '다른 공개키가 아닌 경계에서 검증이 실패했다' >&2
+    sed -n '1,20p' "${reject_log}" >&2
+    exit 1
+fi
+echo "sign01-verification=reject subject=${SIGN01_IMAGE_REF} reason=untrusted-key"
+exit 42
+'''
+                    }
+                }
+            }
+        }
+        return
+    }
 
     stage('checkout') {
         checkout([

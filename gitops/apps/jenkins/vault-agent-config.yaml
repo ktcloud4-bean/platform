@@ -88,3 +88,47 @@ data:
     {{- end -}}
     EOT
     }
+
+    template {
+      destination          = "/vault/secrets/cosign_private_key"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/jenkins/runtime" -}}
+    {{ .Data.data.cosign_private_key }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/cosign_password"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/jenkins/runtime" -}}
+    {{ .Data.data.cosign_password }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/cosign_public_key"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/jenkins/runtime" -}}
+    {{ .Data.data.cosign_public_key }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/cosign_reject_public_key"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/jenkins/runtime" -}}
+    {{ .Data.data.cosign_reject_public_key }}
+    {{- end -}}
+    EOT
+    }

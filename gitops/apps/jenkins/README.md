@@ -1,7 +1,8 @@
 # Jenkins CI GitOps 기준선
 
-이 디렉터리는 `CI-01`의 Jenkins controller 배포·동적 Kubernetes build agent 격리와
-`SCAN-01`의 Trivy image/config gate·SBOM 저장을 소유한다. Docker-in-Docker, privileged container,
+이 디렉터리는 `CI-01`의 Jenkins controller 배포·동적 Kubernetes build agent 격리,
+`SCAN-01`의 Trivy image/config gate·SBOM 저장과 `SIGN-01`의 Cosign 서명·검증을 소유한다.
+Docker-in-Docker, privileged container,
 Docker socket 마운트, hostPath, Kubernetes Secret과 UI 수동 설정은 사용하지 않는다.
 이미지 version·digest·license 근거는 [`release-metadata.env`](release-metadata.env),
 플러그인 고정 집합은 [`plugins.txt`](plugins.txt)가 소유한다.
@@ -17,6 +18,7 @@ controller ── Kubernetes API (namespace jenkins의 Pod만)
                               └─ buildah ── docker.io base pull
                               └─ trivy ── read-only DB/checks PVC
                               └─ oras  ── Harbor image digest에 CycloneDX 첨부
+                              └─ cosign ── 고정 image/SBOM digest 서명·공개키 검증
 
 Trivy DB bootstrap Job/CronJob ── public HTTPS ── 공식 DB/checks OCI repository
                              └─ 1 GiB cache PVC
@@ -88,6 +90,97 @@ gate를 통과한 local image tar에서 Trivy CycloneDX JSON을 만들고, image
 `application/vnd.cyclonedx+json` artifact를 첨부한다. Jenkins archive에는 같은 SBOM을
 복제하지 않는다. `SIGN-01`은 이 subject digest와 accessory를 그대로 받아 CycloneDX
 predicate의 서명·attestation 대상으로 쓸 수 있다.
+
+## SIGN-01 결정과 근거
+
+1. 라이브 Vault에는 transit mount가 없고 agent Pod에는 Vault·ServiceAccount token이 없으므로,
+   hashivault KMS는 engine·policy뿐 아니라 새 token 전달 경계를 요구한다.
+2. Vault KV 키쌍은 기존 `kv/jenkins/runtime` → controller Vault Agent → memory `emptyDir` →
+   JCasC credential 경로를 그대로 확장해 agent 변경을 Cosign container 한 건으로 제한한다.
+3. keyless/Fulcio는 공개 CA 의존이라 제외한다. KV v2 version으로 회전·복구를 실증할 수 있고
+   ADR-0013의 소비 경계를 벗어나지 않으므로 새 ADR은 만들지 않는다.
+
+Cosign `3.1.2`의 공식 `-dev` image를 공식 index digest로 고정한다. 기본 image는 UID 65532의
+shell-less 정적 image라 Jenkins가 build 동안 container를 유지하고 `sh` step을 실행할 수 없다.
+공식 dev variant는 같은 release binary와 `/busybox/sh`·`sleep`을 제공한다. Cosign container는
+기존 `ci01-buildah` 동적 agent Pod에만 있고 build 종료와 함께 사라진다. `RuntimeDefault`,
+non-root UID 1000, read-only root filesystem, `drop: [ALL]`이며 HOME과 `/tmp`만 memory
+`emptyDir`이다. 상시 Deployment·Service·namespace·PVC는 추가하지 않는다.
+
+### 키 소유·회전·복구
+
+| 항목 | 소유·경계 |
+|---|---|
+| encrypted private key·password | Vault KV v2 `kv/jenkins/runtime`; Git·Kubernetes Secret·workspace disk에 두지 않음 |
+| active public key | 같은 KV의 `cosign_public_key`; E2E-01/POL-02는 별도 최소권한 Vault role로 읽어 검증기에 전달 |
+| previous public key | 회전·복구 때 current KV의 `cosign_previous_public_key`에 한 세대 보존 |
+| negative-test key | 다른 keypair의 공개키만 `cosign_reject_public_key`에 보존하고 private key는 생성 tmpfs와 함께 제거 |
+| key id | PEM 내부 줄바꿈은 유지하고 마지막 LF만 제거한 SHA-256; 공개 metadata로만 기록 |
+
+생성·회전·복구는 workstation `/dev/shm`에서 공식 Cosign image를 `--network=none`으로 실행하고,
+비밀 원문을 stdout·명령 인자에 내보내지 않는다. 모든 write는 기존 runtime의 비-SIGN 필드를
+그대로 보존한 새 KV version이다.
+
+| 단계 | 명령 | 성공 조건 |
+|---|---|---|
+| 최초 생성 | `gitops/tools/ci-01/provision.sh --signing-key-create` | SIGN 필드가 없을 때만 generation 1 생성 |
+| 현재 판정 | `gitops/tools/ci-01/provision.sh --signing-key-check` | encrypted private key에서 유도한 public key가 저장값과 일치 |
+| 회전 | `gitops/tools/ci-01/provision.sh --signing-key-rotate` | 새 generation을 current로 쓰고 직전 public key 보존 |
+| 복구 | `gitops/tools/ci-01/provision.sh --signing-key-recover <kv-version>` | 지정 version의 keypair 일치 확인 뒤 새 current version으로 복구 |
+| 작업 중단 정리 | `gitops/tools/ci-01/provision.sh --signing-key-destroy` | current에서 `cosign_*`만 제거하고 CI-01 다섯 필드는 보존 |
+
+회전 중 consumer는 current와 previous 공개키를 함께 신뢰하고 새 artifact는 current key로만
+서명한다. E2E-01/POL-02가 current key를 채택하고 이전 key로 서명된 artifact의 보존 경계가
+끝난 뒤에만 previous trust를 제거한다. Vault 전체 장애의 복구는 기존 Raft snapshot과 Shamir
+입력 경계를 그대로 따르며, 이 절차는 그 복원 뒤 지정 KV version을 current로 승격하는 단계다.
+
+### 서명·검증과 downstream handoff
+
+SIGN-01 pipeline은 새 image를 build하지 않는다. `SIGN01_CASE=pass|reject`일 때 SCAN-01이 넘긴
+아래 두 immutable subject만 사용하고 기존 config/image gate·push stage를 건너뛴다.
+
+- image manifest: `ci01-evidence/ci01-app@sha256:50ac62320ee4ebce0da8cb6c05bac072da3c07cb31559487a1f3fb1028a63fe3`
+- CycloneDX accessory: 같은 repository의 `sha256:ced6c83cd50d2324bef40f8a4b625fc266bed96c128cf5e01b2bc22c9a0eeb5e`
+
+둘 다 `COSIGN_EXPERIMENTAL=1`을 명시한 OCI 1.1 referrer signature로 붙이고 digest
+reference에서 active 공개키로 다시 읽어 검증한다. Cosign 3.1.2가 sign의 OCI 1.1 mode를
+아직 명시적 gate 뒤에 두며 verify는 같은 환경에서 referrer를 자동 탐색한다. 공개
+Fulcio·Rekor·timestamp service는 사용하지 않으므로 sign은
+`--tlog-upload=false --use-signing-config=false`, verify는 고정 공개키와
+`--insecure-ignore-tlog=true`를 함께 쓴다. 여기서 tlog 무시는 keyless 신뢰로 후퇴하는 것이
+아니라 이 랩의 Vault 소유 공개키만 trust root로 삼는다는 뜻이다.
+
+`pass` build는 active 공개키로 기존 signature를 먼저 판정한다. 이미 유효하면 재사용하고,
+signature가 없거나 previous key만 있으면 current signature를 한 번만 추가한 뒤 image와
+accessory 검증이 모두 성공해야 release handoff를 낸다. registry/auth 같은 다른 실패를
+signature 부재로 해석해 재서명하지 않는다.
+`reject` build는 서명하지 않고 같은 image signature를 고정된 다른 공개키로 검증하며,
+signature mismatch가 확인되면 의도한 `FAILURE`로 끝나 release handoff를 내지 않는다.
+Kyverno `verifyImages` enforce 선언은 E2E-01/POL-02가 소유한다. 두 작업은 이 절의 digest-only
+reference, OCI 1.1 referrer mode, current/previous 공개키 교대 규칙을 입력으로 사용한다.
+
+### SIGN-01 완료 증거 (2026-08-02)
+
+키 소유·회전·복구는 최초 생성 KV version 2/generation 1, 회전 version 3/generation 2,
+version 2에서 복구한 새 current version 4/generation 3 순서로 실증했다. 최종
+`--signing-key-check`는 encrypted private key에서 유도한 public key와 저장값의 일치 및
+key ID `sha256:d8fd0bd410281f1827770b82518ee9738d0a17be6d64021800ceab049c1b1be2`,
+`recovered-from=2`를 확인했다.
+
+서명·검증은 pipeline build 6에서 SCAN-01 image와 CycloneDX accessory의 기존 current-key
+signature를 각각 재사용해 둘 다 검증하고 release handoff를 냈다. build 7은 같은 image를
+negative-test 공개키로 검증해 Cosign의 `accepted signatures do not match threshold`
+응답과 함께 의도한 `FAILURE`가 됐으며 서명 추가·scan stage·release handoff는 없었다.
+초기 build 4의 OCI 1.1 experimental gate 누락과 build 5의 verify 미지원 option은 각 로그로
+원인을 특정한 뒤 고쳤고, build 5가 이미 붙인 유효 signature는 project robot에 delete 권한을
+추가하지 않고 build 6에서 재사용했다.
+
+최종 검증 직전 `k3s-01` available RAM은 `11,472MiB`, swap은 0으로 12 GiB 경고 구간이지만
+8 GiB 정지선 위의 **GO**였다. Jenkins 설정
+`d2e61fd62767b7d01722fb2600dbf936d719cee4`와 root pointer
+`06c194aec60afe9fa6eb40a39bb2c94fcb1e90fc`에서 root·Jenkins가
+`Synced/Healthy`였다. 시작 main `c05892d1306eb18785525022fa80cea119863b2d`로 rollback한
+뒤에도 둘 다 `Synced/Healthy`였고, 최종 child 선언은 `main`이다.
 
 ## 스스로 결정한 값과 근거
 
@@ -162,7 +255,8 @@ pinned host key는 `provision.sh`가 만들어 Vault로 직접 옮기고 이 파
 사용하지 않는다. 패턴과 재검토 조건은 [ADR-0013](../../../docs/adr/0013-keycloak-secret-consumption.md)을 따른다.
 
 controller Pod의 명시적 Vault Agent init container가 `audience=vault` projected token으로
-`jenkins` role에 로그인해 `kv/jenkins/runtime`의 다섯 값을 memory `emptyDir`에 mode `0400`
+`jenkins` role에 로그인해 `kv/jenkins/runtime`의 CI-01 다섯 값과 SIGN-01 네 값을
+memory `emptyDir`에 mode `0400`
 파일로 렌더링하고 종료한다. 파일 이름이 곧 JCasC 변수 이름이며 controller는
 `SECRETS=/vault/secrets`로 이를 읽는다.
 
@@ -172,6 +266,9 @@ controller Pod의 명시적 Vault Agent init container가 `audience=vault` proje
 | `gitea_ssh_private_key` | read-only deploy key |
 | `gitea_known_hosts` | Gitea SSH host key 고정 |
 | `harbor_robot_name` / `harbor_robot_secret` | project-scoped push robot |
+| `cosign_private_key` / `cosign_password` | encrypted signing key와 Cosign key password |
+| `cosign_public_key` | active signature 검증과 downstream handoff |
+| `cosign_reject_public_key` | 다른 key 거부 시험 전용 공개키 |
 
 상시 Jenkins container에는 Vault용 token이 없다. kubernetes plugin이 쓰는 API token은
 kubelet 자동 마운트가 아니라 별도 projected volume이며 기본 audience라 `audience=vault`인
@@ -207,6 +304,8 @@ export KTC_SECRET_ROOT=/home/imcherry/secrets/ktcloud4-bean
 python3 gitops/tools/ci-01/prepare-secret-input.py --output "$KTC_SECRET_ROOT/jenkins/env"
 gitops/tools/ci-01/provision.sh --check
 gitops/tools/ci-01/provision.sh --apply
+gitops/tools/ci-01/provision.sh --signing-key-create
+gitops/tools/ci-01/provision.sh --signing-key-check
 ```
 
 `provision.sh`는 저장소 밖 동적 객체만 소유하며 absent 상태에서만 만든다.
@@ -215,6 +314,9 @@ gitops/tools/ci-01/provision.sh --apply
 2. 그 repo 한 곳에만 붙는 read-only deploy key와 Gitea가 이미 소유한 SSH host key 고정.
 3. Harbor `ci01-evidence`·`ci01-denied` private project와 `ci01-evidence` 전용 push/pull robot.
 4. Vault `jenkins` policy, `audience=vault` Kubernetes auth role, `kv/jenkins/runtime`.
+
+SIGN-01 key mode는 위 네 객체를 새로 만들지 않고 기존 `kv/jenkins/runtime`의 SIGN 필드만
+새 KV version으로 관리한다. 기존 CI-01 다섯 값은 byte-for-byte 보존한다.
 
 중간에 실패하면 그 실행이 만든 것만 되돌린다. `--destroy`는 위 네 가지만 제거하고
 다른 repo·project·Vault 경로는 건드리지 않는다.
@@ -233,7 +335,7 @@ infra/opnsense/scripts/check-drift.sh --update
 | wave | 리소스 | 성공 조건 |
 |---|---|---|
 | `-3` | Namespace | 전용 namespace 생성 |
-| `-2` | ServiceAccount·Role/RoleBinding·trust/Vault/JCasC/plugin/agent ConfigMap | 비밀 없는 identity와 선언 준비 |
+| `-2` | ServiceAccount·Role/RoleBinding·trust/Vault/JCasC/plugin/agent ConfigMap | 비밀 없는 identity와 Cosign 포함 agent 선언 준비 |
 | `-1` | ClusterIP Service 2개·Trivy cache PVC/ConfigMap/NetworkPolicy·bootstrap Job | UI·agent 경계 준비, cache PVC bind와 최초 DB 갱신 완료 |
 | `0` | PVC·Deployment·Trivy DB CronJob | Vault init 종료, 고정 플러그인/JCasC 적용, 독립 DB 갱신 가능 |
 
@@ -283,6 +385,23 @@ gitops/tools/scan-01/verify-live.sh
 3. agent 비특권 spec, credential 마스킹, Gitea/Harbor 인증 경계는 CI-01 완료 증거를 재실행하지
    않는다. 검증기는 build 완료 감지와 local port 선점, 선언형 bootstrap Job 완료를 결정론적으로
    처리한다.
+
+## SIGN-01 완료 증거
+
+적용 직전 RAM 정지선을 먼저 읽고, pipeline은 정확히 두 번만 실행한다.
+
+```bash
+gitops/tools/sign-01/check-capacity.sh
+gitops/tools/sign-01/verify-live.sh
+```
+
+1. `pass` build 한 번은 SCAN-01이 넘긴 image manifest와 CycloneDX accessory digest를 각각
+   서명하고 active 공개키로 둘 다 검증한 뒤 release handoff를 낸다.
+2. `reject` build 한 번은 같은 image signature를 별도 고정 공개키로 검증해 `FAILURE`가 되고,
+   새 서명과 release handoff가 모두 없어야 한다.
+3. key lifecycle은 `--signing-key-create` → `--signing-key-rotate` → 최초 KV version의
+   `--signing-key-recover` → `--signing-key-check` 한 경로로 판정한다. CI-01 secret masking·
+   agent spec, REG-01 robot 권한과 SCAN-01 gate/SBOM 연결은 다시 검증하지 않는다.
 
 ### 2026-08-02 라이브 검증 (build 6)
 
@@ -338,6 +457,11 @@ gitops/tools/scan-01/verify-live.sh
 
 검증이 실패하면 먼저 Pod 로그, pipeline 콘솔과 API 응답에서 실패 지점을 특정한다.
 추정으로 securityContext, capability나 storage 설정을 바꾸지 않는다.
+
+SIGN-01 branch 검증 rollback은 `platform-root`와 Jenkins seed를 시작 main으로 되돌린다.
+기존 CI-01/SCAN-01 workload·PVC·Gitea repo·Harbor project/robot은 삭제하지 않는다. 작업을
+중단할 때만 `provision.sh --signing-key-destroy`로 current KV의 `cosign_*` 필드만 제거한다.
+성공 뒤에는 main 재채택을 위해 key를 유지한다.
 
 1. `platform-root`를 기록한 시작 main SHA로 되돌린다.
 2. root의 reconcile을 잠시 멈추고 AppProject가 있는 상태에서 `Application/jenkins`를

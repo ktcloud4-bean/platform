@@ -112,6 +112,27 @@ jenkins:
                   - envVar:
                       key: "HOME"
                       value: "/home/oras"
+              - name: "cosign"
+                # 공식 dev variant만 shell을 포함한다. release·source·index digest는
+                # release-metadata.env가 소유한다.
+                image: "ghcr.io/sigstore/cosign/cosign:v3.1.2-dev@sha256:3e3b4a13f159ebfb188744622136a16a079c42d52ce502f6221f27575ee86b7e"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                command: "/busybox/sleep"
+                args: "infinity"
+                ttyEnabled: false
+                resourceRequestCpu: "20m"
+                resourceRequestMemory: "64Mi"
+                resourceLimitCpu: "500m"
+                resourceLimitMemory: "256Mi"
+                envVars:
+                  - envVar:
+                      key: "HOME"
+                      value: "/home/cosign"
+                  # Cosign 3.1.2는 OCI 1.1 referrer mode를 이 명시적 gate 뒤에 둔다.
+                  - envVar:
+                      key: "COSIGN_EXPERIMENTAL"
+                      value: "1"
             # ContainerTemplate이 표현하지 못하는 보안 경계는 raw Pod spec으로 덮는다.
             # root·privileged·Docker socket·hostPath는 어느 계층에도 없다.
             yamlMergeStrategy: "merge"
@@ -199,6 +220,22 @@ jenkins:
                         mountPath: /home/oras
                       - name: oras-tmp
                         mountPath: /tmp
+                  - name: cosign
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: true
+                      seccompProfile:
+                        type: RuntimeDefault
+                      capabilities:
+                        drop: ["ALL"]
+                    volumeMounts:
+                      - name: cosign-home
+                        mountPath: /home/cosign
+                      - name: cosign-tmp
+                        mountPath: /tmp
                 volumes:
                   - name: buildah-home
                     emptyDir:
@@ -223,6 +260,14 @@ jenkins:
                   - name: oras-tmp
                     emptyDir:
                       sizeLimit: 64Mi
+                  - name: cosign-home
+                    emptyDir:
+                      medium: Memory
+                      sizeLimit: 8Mi
+                  - name: cosign-tmp
+                    emptyDir:
+                      medium: Memory
+                      sizeLimit: 16Mi
 
 credentials:
   system:
@@ -242,6 +287,26 @@ credentials:
               description: "CI-01 Harbor project-scoped robot"
               username: "${harbor_robot_name}"
               password: "${harbor_robot_secret}"
+          - string:
+              scope: GLOBAL
+              id: "cosign-private-key-sign01"
+              description: "SIGN-01 Vault KV encrypted Cosign private key"
+              secret: "${cosign_private_key}"
+          - string:
+              scope: GLOBAL
+              id: "cosign-password-sign01"
+              description: "SIGN-01 Cosign private key password"
+              secret: "${cosign_password}"
+          - string:
+              scope: GLOBAL
+              id: "cosign-public-key-sign01"
+              description: "SIGN-01 active Cosign public key"
+              secret: "${cosign_public_key}"
+          - string:
+              scope: GLOBAL
+              id: "cosign-reject-public-key-sign01"
+              description: "SIGN-01 fixed untrusted public key for the negative test"
+              secret: "${cosign_reject_public_key}"
 
 security:
   # Gitea SSH host key는 known_hosts 파일이 아니라 선언한 값으로 고정한다.
@@ -261,13 +326,14 @@ unclassified:
 jobs:
   - script: |
       pipelineJob('ci01-image-build') {
-        description('CI-01/SCAN-01: Gitea clone -> config/image gate -> CycloneDX OCI artifact -> Harbor push')
+        description('CI-01/SCAN-01/SIGN-01: build/scan handoff 또는 고정 digest Cosign 서명·검증')
         logRotator {
           numToKeep(20)
           artifactNumToKeep(0)
         }
         parameters {
           choiceParam('SCAN01_CASE', ['pass', 'fail'], 'SCAN-01 gate 검증 입력. 기본 pass이며 fail은 push 전에 종료한다.')
+          choiceParam('SIGN01_CASE', ['off', 'pass', 'reject'], 'SIGN-01은 SCAN-01 고정 digest만 사용한다. 기본 off는 기존 build/scan 경로다.')
         }
         definition {
           cpsScm {

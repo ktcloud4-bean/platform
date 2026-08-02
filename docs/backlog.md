@@ -815,9 +815,9 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `AWX-01 DONE` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
 | `UPDATE-01 DONE` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
 | `SCAN-01 DONE` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
-| `SIGN-01 READY` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
+| `SIGN-01 DONE` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
 | `POL-01 DONE` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
-| `E2E-01 BLOCKED` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
+| `E2E-01 READY` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
 | `POL-02 BLOCKED` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
 | `FALCO-01 BLOCKED` | Falco runtime rule·출력 기준선 | `E2E-01`, `POL-01` | 없음 | Wazuh·Shuffle | 전용 테스트 이벤트 탐지, noise 기준, 대응 runbook 초안 |
 
@@ -1063,6 +1063,27 @@ stop/go는 **GO**지만 12 GiB 경고 구간이다. 검증 시 root
 `a3870b2858db269ee28ad3e1c5502ae4820a8979`로 rollback한 뒤 root·Jenkins를 mutable `main`의
 `Synced/Healthy`로 복구했고 최종 child 선언은 `main`이다. 직접 후속 `SIGN-01`은
 `REG-01`·`SCAN-01`·`VAULT-02`가 모두 `DONE`이므로 `READY`로 연다.
+
+2026-08-02 `SIGN-01`에서 라이브에 없는 Vault transit은 새 token 전달 경계를 요구하므로,
+기존 Vault Agent memory `emptyDir` 소비 경계를 유지하는 KV v2 키쌍을 채택했다. 최초 생성
+version 2/generation 1, 회전 version 3/generation 2, version 2에서 새 current로 복구한
+version 4/generation 3을 실증했고, 최종 key ID는
+`sha256:d8fd0bd410281f1827770b82518ee9738d0a17be6d64021800ceab049c1b1be2`다.
+
+완료 증거 pipeline build `6`은 SCAN-01 image digest
+`sha256:50ac62320ee4ebce0da8cb6c05bac072da3c07cb31559487a1f3fb1028a63fe3`와 CycloneDX
+accessory digest `sha256:ced6c83cd50d2324bef40f8a4b625fc266bed96c128cf5e01b2bc22c9a0eeb5e`의
+current-key signature를 검증하고 release handoff를 냈다. build `7`은 고정된 다른 공개키에서
+Cosign signature threshold mismatch로 `FAILURE`가 됐고 서명 추가·scan stage·release
+handoff는 없었다.
+
+최종 적용 직전 `k3s-01` available RAM은 `11,472MiB`, swap은 0으로 12 GiB 경고 구간이지만
+8 GiB 정지선 위의 **GO**였다. 검증 시 Jenkins 설정
+`d2e61fd62767b7d01722fb2600dbf936d719cee4`와 root pointer
+`06c194aec60afe9fa6eb40a39bb2c94fcb1e90fc`는 `Synced/Healthy`였다. 시작 main
+`c05892d1306eb18785525022fa80cea119863b2d`로 rollback한 뒤에도 root·Jenkins를
+`Synced/Healthy`로 복구했고 최종 child 선언은 `main`이다. 직접 후속 `E2E-01`만 모든
+선행이 충족돼 `READY`로 열었고 `POL-02`·`FALCO-01`은 `E2E-01`이 남아 `BLOCKED`를 유지한다.
 
 ## 7. 최소권한과 공개 경로
 
