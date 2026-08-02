@@ -25,12 +25,26 @@ discovery와 token 교환을, Dashy는 [ADR-0014](../docs/adr/0014-dashy-access-
 default-deny 도입 때 누락돼 포털이 로그인 상태를 유지하지 못했고 `POL-01-FIX-01`이
 `pol-01-dashy-required-egress`로 보정했다.
 
-두 정책의 목적지는 Traefik Pod가 아니라 `svclb-traefik` Pod다. 랩 DNS가 `sso` hostname을
-노드 IP로 해석하고 그 443은 `hostNetwork`를 쓰지 않는 svclb Pod의 hostPort가 받으므로,
-NetworkPolicy는 노드 IP가 아니라 그 Pod를 목적지로 평가한다. Traefik Pod TCP 8443 규칙은
-Service ClusterIP를 경유하는 호출만 담당한다. 같은 작업에서 Pomerium의 목적지 없는 443
-규칙을 이 경로로 좁혔다. 모든 route upstream이 내부 http Service이므로 그 밖의 외부 443
-egress는 필요하지 않다.
+이 경로는 목적지를 좁힐 수 없다. 랩 DNS가 `sso` hostname을 k3s 노드 IP로 해석하고 그 443은
+`svclb-traefik` Pod의 hostPort가 받는데, `POL-01-FIX-01`에서 svclb `podSelector`와 노드 IP
+`ipBlock`을 각각 적용해 실측한 결과 둘 다 차단됐다. 목적 port만 제한할 때 통과했으므로
+Pomerium의 기존 443 규칙을 좁히려던 시도는 철회하고 그대로 두었다.
+
+port만 제한한 규칙은 단독으로 두어도 동작하지 않는다. Dashy에 그 규칙 하나만 부여했을 때는
+노드 IP 경로가 계속 거부됐고, Traefik Pod TCP 8443 규칙을 함께 둔 뒤에야 통과했다. 같은 경로를
+쓰는 Pomerium이 처음부터 동작한 것도 두 규칙을 함께 갖고 있었기 때문이다. 두 workload의 egress
+구성을 같게 유지한다. 모든 route upstream이 내부 http Service이므로 그 밖의 외부 443 egress는
+필요하지 않다.
+
+## POL-01-FIX-01 검증 결과
+
+- Dashy Pod에서 Keycloak discovery 도달 양성, Dashy 로그의 `token verification failed`
+  신규 발생 0건.
+- 음성 경계 유지: Dashy → Vault TCP 8200, Dashy → Gitea TCP 3000 모두 차단.
+- headless 브라우저 검증에서 `imcherry`의 보호 route 200과 그룹 타일 표시 확인,
+  Pomerium error 로그 0건으로 기존 route 회귀 없음.
+- 시작 main `30600f43632c`로 rollback해 `platform-root`와 `policy-baseline`의
+  `Synced/Healthy`를 확인했다. 최종 child 선언은 `main`이다.
 
 ## POL-02 적용 결과
 

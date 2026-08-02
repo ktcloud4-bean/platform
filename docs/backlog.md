@@ -817,6 +817,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `SCAN-01 DONE` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
 | `SIGN-01 DONE` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
 | `POL-01 DONE` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
+| `POL-01-FIX-01 DONE` | `pomerium` default-deny에서 누락된 Dashy → Keycloak egress 보정 | `POL-01` | 없음 | Dashy Portal 로그인 | Dashy Keycloak discovery 도달 양성과 `token verification failed` 신규 0건, Vault 8200·Gitea 3000 음성 유지, headless 브라우저 보호 route 200·그룹 타일 표시, Pomerium error 로그 0건, 목적지 축소 3형태(svclb `podSelector`·노드 IP `ipBlock`·단독 port 규칙) 차단 실측, main rollback 뒤 `Synced/Healthy` |
 | `E2E-01 DONE` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
 | `POL-02 DONE` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
 | `FALCO-01 DONE` | Falco runtime rule·출력 기준선 | `E2E-01`, `POL-01` | 없음 | Wazuh·Shuffle | 전용 테스트 이벤트 탐지, noise 기준, 대응 runbook 초안 |
@@ -1150,6 +1151,19 @@ E2E namespace만 고르는 `ImageValidatingPolicy`의 current/previous static ke
 PolicyException 0건, root와 세 child `Synced/Healthy`를 확인하고 최종 child 선언과 라이브
 root를 `main`으로 복귀했다. 직접 후속 `AUDIT-01`은 `EDGE-01`이 남아 `BLOCKED`를 유지하므로
 새로 `READY`로 여는 작업은 없다.
+
+2026-08-03 `POL-01-FIX-01`에서 `pomerium` namespace default-deny에 Dashy의 Keycloak egress
+예외가 없어 Portal이 로그인 상태를 유지하지 못하던 결함을 보정했다. Pomerium은 예외를
+받았지만 Dashy는 DNS 외 모든 egress가 막혀 서버측 토큰 검증이 `fetch failed`로 실패했고,
+브라우저에는 `Your session has expired`로만 보였다. 이 경로의 목적지는 좁힐 수 없다.
+svclb `podSelector`와 노드 IP `ipBlock`을 각각 적용해 실측한 결과 둘 다 차단됐고, 목적 port만
+제한한 규칙도 단독으로는 동작하지 않아 Traefik TCP 8443 규칙과 함께 둔 뒤에야 통과했다.
+같은 경로를 쓰는 Pomerium이 처음부터 동작한 것도 두 규칙을 함께 갖고 있었기 때문이므로,
+Pomerium의 443 규칙을 좁히려던 시도는 철회하고 두 workload의 구성을 같게 유지했다. 검증
+SHA에서 Dashy Keycloak 도달 양성, `token verification failed` 신규 0건, Vault 8200·Gitea 3000
+음성 유지, headless 브라우저의 보호 route 200과 그룹 타일 표시, Pomerium error 로그 0건을
+확인했다. 시작 main `30600f43632c`로 rollback해 root와 `policy-baseline`의 `Synced/Healthy`와
+최종 child 선언 `main`을 확인했다. 새로 `READY`로 여는 작업은 없다.
 
 ## 7. 최소권한과 공개 경로
 
