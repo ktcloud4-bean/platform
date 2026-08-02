@@ -156,17 +156,14 @@ spec:
       ports:
         - port: 8443
           protocol: TCP
-    # 랩 DNS는 sso·authenticate hostname을 노드 IP로 해석하고 그 443은
-    # svclb-traefik Pod의 hostPort가 받는다. hostNetwork를 쓰지 않으므로
-    # NetworkPolicy 목적지는 노드 IP가 아니라 그 Pod다. 모든 route upstream은
-    # 내부 http Service이므로 이 경로 밖의 외부 443 egress는 필요하지 않다.
+    # 랩 DNS는 sso·authenticate hostname을 k3s 노드 IP로 해석한다. 그 443은
+    # svclb-traefik Pod의 hostPort가 받지만, kube-router는 hostPort DNAT
+    # 이전 목적지로 egress를 평가하므로 podSelector로는 이 경로를 허용할 수
+    # 없다(POL-01-FIX-01 실측). 주소의 단일 원본은 docs/ip-plan.md다.
+    # 모든 route upstream이 내부 http Service이므로 그 밖의 외부 443은 없다.
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              svccontroller.k3s.cattle.io/svcname: traefik
+        - ipBlock:
+            cidr: 10.10.20.10/32
       ports:
         - port: 443
           protocol: TCP
@@ -189,14 +186,10 @@ spec:
     # Dashy는 [ADR-0014](../docs/adr/0014-dashy-access-portal.md)의 공개 PKCE
     # client로 자체 로그인하고, 서버가 Keycloak 서명 키로 그 토큰을 검증한다.
     # 이 egress가 없으면 검증이 fail되어 포털이 로그인 상태를 유지하지 못한다.
-    # 목적지는 Pomerium의 Keycloak 경로와 같은 svclb-traefik Pod hostPort다.
+    # 목적지 지정 근거는 위 pomerium Keycloak 경로 주석과 같다.
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              svccontroller.k3s.cattle.io/svcname: traefik
+        - ipBlock:
+            cidr: 10.10.20.10/32
       ports:
         - port: 443
           protocol: TCP
