@@ -49,7 +49,9 @@ Vault는 동작을 멈추도록 설계돼 있기 때문이다.
 
 Pod 로그는 k3s가 로테이션하므로 그 위험이 없다. 대신 Pod가 재생성되면 과거 로그는 사라진다.
 Wazuh 도입 시 노드의 Pod 로그를 agent가 수집하거나 file/socket device를 **추가**하면 되고,
-보존 기준은 `AUDIT-01`이 소유한다. audit device는 여러 개를 동시에 붙일 수 있다.
+보안/운영 분류, 필수 필드, 마스킹과 Wazuh 90일 보존 기준은
+[`AUDIT-01` 이벤트 표준](../../docs/audit-event-standard.md)이 소유한다. audit device는 여러 개를
+동시에 붙일 수 있다.
 
 ## 실행
 

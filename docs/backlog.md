@@ -1214,10 +1214,20 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `AUDIT-01 READY` | Suricata·CrowdSec AppSec(Coraza/CRS)·Falco·Kubernetes·Vault·Keycloak·Pomerium·접근 서비스 이벤트 분류 | `EDGE-01`, `POL-02`, `FALCO-01` | 없음 | Loki·Wazuh | 보안/운영 경계, 시각·사용자·요청 ID, 마스킹, 보존 기준 |
-| `LOKI-01 BLOCKED` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
+| `AUDIT-01 DONE` | Suricata·CrowdSec AppSec(Coraza/CRS)·Falco·Kubernetes·Vault·Keycloak·Pomerium·접근 서비스 이벤트 분류 | `EDGE-01`, `POL-02`, `FALCO-01` | 없음 | Loki·Wazuh | 보안/운영 경계, 시각·사용자·요청 ID, 마스킹, 보존 기준 |
+| `LOKI-01 READY` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
 | `OBS-01 BLOCKED` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·OPNsense·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
 | `WAZUH-01 BLOCKED` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
+
+2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
+[단일 분류·보존 표준](audit-event-standard.md)을 확정했다. 탐지 event는 Wazuh 30일,
+API·identity·접근 감사 metadata는 Wazuh 90일, 운영 로그는 Loki 7일로 분리하고 같은 event의
+중복 저장을 금지했다. UTC 시각, native 사용자·SA·peer와 request/trace/session/flow ID를
+필수 계약으로 두되 없는 ID는 `없음`과 대체 composite key를 명시했다. token·Secret·body·
+command argument·파일/세션 내용은 수집 전에 제거하며, 저장 후 일일 증가량에서 역산한 Wazuh
+16 GiB·Loki 14 GiB hard cap을 후속 capacity gate로 넘긴다. GitOps와 라이브 구성은 바꾸지
+않았다. 따라서 직접 후속 중 선행이 모두 충족된 `LOKI-01`만 `READY`로 열고, `WAZUH-01`은
+`OBS-01`이 남아 `BLOCKED`를 유지한다.
 
 ## 10. 마지막 단계: Shuffle
 
