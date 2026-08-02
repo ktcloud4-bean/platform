@@ -41,6 +41,7 @@
 | `GIT-WF-02 DONE` | 개발 작업의 승인·main 선행 live 검증·실패 rollback 규칙을 간소화 | `GIT-WF-01` | 없음 | 모든 작업 | 작업 배정 범위는 재승인하지 않음, production Argo는 main 유지, 성공은 main 1커밋·실패만 revert, 재시도는 새 FIX ID |
 | `GIT-WF-03 DONE` | Argo 검증을 merge 전으로 옮겨 실패가 main 이력에 쌓이지 않게 규칙 교체 | `GIT-WF-02` | 없음 | 모든 작업 | `ARGO-ROOT` 잠금과 rebase 선행 아래 merge 전 라이브 검증, 실패는 같은 브랜치에서 재시도, main revert·OPS 스냅샷·재시도 FIX ID 커밋 폐지, 작업 ID 하나당 main 커밋 하나 |
 | `GIT-WF-04 DONE` | `AGENTS.md` 안전 원칙 섹션을 단일 원본 문서로 되돌려 중복 제거 | `GIT-WF-03` | 없음 | 모든 작업 | 네 항목이 `README.md`·`.gitignore`·백로그 규칙 6에 이미 존재함을 확인하고 복제본만 삭제 |
+| `GIT-WF-05 DONE` | 검증 범위·속도·실패 원인분석 원칙을 `AGENTS.md`에 명시 | `GIT-WF-04` | 없음 | 모든 작업 | 완료 증거 표 항목만 검증, 중복 검증 금지, 검증 도구는 대상 제약을 계산해 결정론적으로, 실패는 원인 특정 후 수정, 불안정한 검증은 도구부터 의심 |
 
 2026-08-02 `GIT-WF-03`은 `GIT-WF-02`가 만든 "실패는 main에서 revert하고 재시도는 새 FIX ID"
 규칙을 폐기했다. 그 규칙은 Argo 검증을 main에서만 할 수 있다고 전제해 실패 한 번마다 적용·
