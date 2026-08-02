@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: awx
+namePrefix: awx-operator-
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "-10"
+resources:
+  - vendor/crd/bases/awx.ansible.com_awxs.yaml
+  - vendor/crd/bases/awx.ansible.com_awxbackups.yaml
+  - vendor/crd/bases/awx.ansible.com_awxrestores.yaml
+  - vendor/crd/bases/awx.ansible.com_awxmeshingresses.yaml
+  - vendor/rbac/service_account.yaml
+  - vendor/rbac/role.yaml
+  - vendor/rbac/role_binding.yaml
+  - vendor/rbac/leader_election_role.yaml
+  - vendor/rbac/leader_election_role_binding.yaml
+  - vendor/manager/manager.yaml
+images:
+  - name: controller
+    newName: quay.io/ansible/awx-operator
+    newTag: 2.19.1@sha256:7302e0c8e5a79c11275848b36c63c61d8e7487840164c109b7cda9aa93456901
+patches:
+  - path: manager-patch.yaml
+  - path: namespace-patch.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: controller-manager
+      namespace: system
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/imagePullSecrets

@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-01-pomerium-to-awx
+  namespace: pomerium
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: pomerium
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pomerium
+      app.kubernetes.io/component: server
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: awx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: awx-web
+              app.kubernetes.io/component: awx
+      ports:
+        - port: 8052
+          protocol: TCP

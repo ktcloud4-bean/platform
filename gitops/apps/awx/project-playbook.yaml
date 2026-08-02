@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: awx-manual-project
+  namespace: awx
+  annotations:
+    argocd.argoproj.io/sync-wave: "-6"
+data:
+  verify-credential.yml: |
+    ---
+    - name: AWX-01 credential 격리 read-only 판정
+      hosts: all
+      gather_facts: false
+      any_errors_fatal: true
+      tasks:
+        - name: 할당된 HTTP credential로 선언된 host 하나만 조회
+          ansible.builtin.uri:
+            url: "http://{{ inventory_hostname }}:8080/allowed"
+            method: GET
+            user: "{{ lookup('ansible.builtin.env', 'AWX_VERIFY_USER') }}"
+            password: "{{ lookup('ansible.builtin.env', 'AWX_VERIFY_PASSWORD') }}"
+            force_basic_auth: true
+            return_content: false
+            status_code: 200
+          register: verifier_response
+          check_mode: false
+          no_log: true
+
+        - name: HTTP 200 결과만 비밀 없이 기록
+          ansible.builtin.assert:
+            that:
+              - verifier_response.status == 200
+            success_msg: "AWX-01 credential boundary: declared in-cluster host returned HTTP 200"
+            fail_msg: "AWX-01 credential boundary: access denied"

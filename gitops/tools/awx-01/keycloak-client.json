@@ -1,0 +1,50 @@
+{
+  "clientId": "awx",
+  "name": "AWX-01",
+  "description": "AWX Generic OIDC Authorization Code client",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "clientAuthenticatorType": "client-secret",
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "authorizationServicesEnabled": false,
+  "consentRequired": false,
+  "frontchannelLogout": false,
+  "fullScopeAllowed": false,
+  "rootUrl": "https://awx.imcherry5778.xyz",
+  "baseUrl": "https://awx.imcherry5778.xyz/",
+  "redirectUris": [
+    "https://awx.imcherry5778.xyz/sso/complete/oidc/"
+  ],
+  "webOrigins": [
+    "https://awx.imcherry5778.xyz"
+  ],
+  "attributes": {
+    "post.logout.redirect.uris": "https://awx.imcherry5778.xyz/"
+  },
+  "defaultClientScopes": [
+    "profile",
+    "email"
+  ],
+  "optionalClientScopes": [
+    "offline_access"
+  ],
+  "protocolMappers": [
+    {
+      "name": "groups",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "groups",
+        "full.path": "true",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }
+  ]
+}

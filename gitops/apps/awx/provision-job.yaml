@@ -1,0 +1,73 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: awx-provision
+  namespace: awx
+  annotations:
+    # AWX CR과 같은 wave에서 시작해 API가 준비될 때까지 기다린다. 알 수 없는
+    # custom-resource health가 다음 wave를 막더라도 bootstrap이 교착되지 않는다.
+    argocd.argoproj.io/sync-wave: "-5"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  template:
+    spec:
+      serviceAccountName: awx-provisioner
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args: ["agent", "-config=/vault/config/provision.hcl"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          volumeMounts:
+            - {name: vault-agent-config, mountPath: /vault/config, readOnly: true}
+            - {name: trust, mountPath: /vault/tls, readOnly: true}
+            - {name: rendered, mountPath: /vault/secrets}
+            - {name: vault-token, mountPath: /var/run/secrets/vault, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      containers:
+        - name: provision
+          image: quay.io/ansible/awx-ee:24.6.1@sha256:89593d2a0268acacdbd1c075d8810ab50d961cf7769e36de19219bb6cb4efcc1
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/scripts/provision.py"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          volumeMounts:
+            - {name: script, mountPath: /scripts, readOnly: true}
+            - {name: rendered, mountPath: /vault/secrets, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: vault-agent-config
+          configMap: {name: awx-vault-agent}
+        - name: script
+          configMap: {name: awx-provision-script, defaultMode: 0550}
+        - name: trust
+          configMap: {name: awx-trust-bundles}
+        - name: rendered
+          emptyDir: {medium: Memory, sizeLimit: 8Mi}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 16Mi}
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 600, audience: vault}

@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: awx-verifier
+  namespace: awx
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: awx-verifier}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: awx-verifier}
+    spec:
+      serviceAccountName: awx-verifier
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args: ["agent", "-config=/vault/config/verifier.hcl"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          volumeMounts:
+            - {name: vault-agent-config, mountPath: /vault/config, readOnly: true}
+            - {name: trust, mountPath: /vault/tls, readOnly: true}
+            - {name: secret, mountPath: /etc/awx-secret}
+            - {name: vault-token, mountPath: /var/run/secrets/vault, readOnly: true}
+            - {name: vault-tmp, mountPath: /tmp}
+      containers:
+        - name: verifier
+          image: docker.io/nginxinc/nginx-unprivileged:1.27.0-alpine@sha256:f9abf2e3f911c05e28d97b2e6826ebe83a2fb26ec5d441522d3b2a8a6f7947ad
+          imagePullPolicy: IfNotPresent
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          volumeMounts:
+            - {name: nginx-config, mountPath: /etc/nginx/conf.d, readOnly: true}
+            - {name: nginx-config, mountPath: /usr/share/nginx/html/allowed.txt, subPath: allowed.txt, readOnly: true}
+            - {name: secret, mountPath: /etc/awx-secret, readOnly: true}
+            - {name: nginx-tmp, mountPath: /tmp}
+            - {name: nginx-cache, mountPath: /var/cache/nginx}
+            - {name: nginx-run, mountPath: /var/run}
+      volumes:
+        - name: vault-agent-config
+          configMap: {name: awx-vault-agent}
+        - name: trust
+          configMap: {name: awx-trust-bundles}
+        - name: nginx-config
+          configMap: {name: awx-verifier-nginx}
+        - name: secret
+          emptyDir: {medium: Memory, sizeLimit: 1Mi}
+        - name: vault-tmp
+          emptyDir: {medium: Memory, sizeLimit: 4Mi}
+        - name: nginx-tmp
+          emptyDir: {sizeLimit: 8Mi}
+        - name: nginx-cache
+          emptyDir: {sizeLimit: 16Mi}
+        - name: nginx-run
+          emptyDir: {medium: Memory, sizeLimit: 4Mi}
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 600, audience: vault}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: awx-verifier
+  namespace: awx
+spec:
+  type: ClusterIP
+  selector: {app.kubernetes.io/name: awx-verifier}
+  ports:
+    - {name: http, port: 8080, targetPort: http}

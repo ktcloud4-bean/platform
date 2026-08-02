@@ -812,7 +812,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `REG-01 READY` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
 | `CI-01 BLOCKED` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
 | `QUALITY-01 READY` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO |
-| `AWX-01 READY` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
+| `AWX-01 DONE` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
 | `UPDATE-01 READY` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
 | `SCAN-01 BLOCKED` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
 | `SIGN-01 BLOCKED` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
@@ -857,6 +857,24 @@ HMAC 전달 204와 별도 wrong-secret hook의 receiver 403을 확인한 뒤 두
 `Synced/Healthy`와 Gitea workload/PVC orphan 보전을 확인했다. 최종 child 선언은 `main`이다.
 직접 후속은 `SCM-01`·`VAULT-02`가 모두 끝난 `UPDATE-01`만 `READY`로 열고,
 `CI-01`은 `REG-01`이 남아 `BLOCKED`를 유지한다.
+
+2026-08-02 `AWX-01`에서 AWX Operator `2.19.1`과 AWX `24.6.1`을 외부
+`postgres-01` 전용 DB·최소권한 role, Vault KV v2와 명시적 Vault Agent init,
+digest 고정 이미지로 배포했다. Pomerium은 정확한 `claim/groups` 두 개만 허용하고 AWX
+Keycloak OIDC 뒤에서 `AWX Operators`와 `AWX Approvers` object role을 분리한다. 정적 운영
+inventory는 `docs/ip-plan.md`의 canonical VM 5대와 동적 source 0건으로 일치했고, 모든 실제
+job은 선택지 (b)의 cluster 내부 verifier 한 host로만 제한했다. 따라서 이 완료 증거는 실제
+운영 대상의 cross-VLAN SSH 접근 증거가 아니며, 해당 방화벽·통신표는 `NET-04`가 소유한다.
+
+같은 시점에 허용 credential job `9` 성공과 미할당 template·credential 403을 대조했고
+Git·AWX Pod 로그·job stdout의 비밀 원문은 0건이었다. operator의 apply 직접 실행과 approval은
+403이었고 privileged approver가 승인한 workflow `10`만 성공했다. 배포 직후 `k3s-01` guest
+available은 `15,598MiB`, swap 0으로 12/8GiB 경고·정지 기준 밖이어서 **GO**다. 검증 설정 SHA
+`b9c94e63af4ea4dbfd0961304576d74dd3ad765f`와 root pointer
+`dabfd737fae340b3259e22a689512d5a0ea04814`에서 root·AWX·Pomerium이 `Synced/Healthy`였고,
+시작 main `ee5c0280df4e9f29dc5f3dbdd1db9891ab8f2322`로 rollback해 root의
+`Synced/Healthy`와 AWX 리소스 정리를 확인했다. 최종 child 선언은 `main`이다. 현재 백로그에서
+`AWX-01`을 선행으로 갖는 작업은 없어 새로 `READY`로 여는 직접 후속은 없다.
 
 2026-08-02 `POL-01`에서 Kyverno `v1.18.2` admission·reports controller와 Pod-level
 `runAsNonRoot` 누락 Audit 규칙 한 건을 배포했고, 기존 워크로드 위반이 PolicyReport의 `fail`로

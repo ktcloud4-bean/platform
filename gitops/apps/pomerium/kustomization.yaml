@@ -33,4 +33,5 @@ resources:
   - dashy-service.yaml
   - dashy-deployment.yaml
   - gitea-egress.yaml
+  - awx-egress.yaml
   - ingress.yaml

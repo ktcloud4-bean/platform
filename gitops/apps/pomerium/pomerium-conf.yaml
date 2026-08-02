@@ -82,3 +82,17 @@ routes:
       - allow:
           or:
             - claim/groups: /platform-users
+
+  # AWX-01: browser 진입은 정확한 Keycloak groups claim만 허용한다.
+  # authenticated_user, email/domain 같은 fallback 정책은 두지 않는다.
+  - name: awx
+    description: AWX-01 Keycloak OIDC 및 AWX 조직·팀 RBAC 자동화 UI
+    from: https://awx.imcherry5778.xyz
+    to: http://awx-service.awx.svc.cluster.local:80
+    preserve_host_header: true
+    allow_websockets: true
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users
+            - claim/groups: /platform-privileged

@@ -1,0 +1,68 @@
+apiVersion: awx.ansible.com/v1beta1
+kind: AWX
+metadata:
+  name: awx
+  namespace: awx
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  admin_user: awx-recovery
+  admin_email: awx-recovery@imcherry5778.xyz
+  admin_password_secret: awx-admin-password
+  secret_key_secret: awx-secret-key
+  postgres_configuration_secret: awx-postgres-configuration
+  bundle_cacert_secret: awx-bundle-ca
+
+  # 외부 postgres-01만 사용한다. 검증 playbook은 read-only ConfigMap으로 공급한다.
+  projects_persistence: false
+  create_preload_data: false
+  garbage_collect_secrets: false
+  service_type: ClusterIP
+  ingress_type: none
+  web_replicas: 1
+  task_replicas: 1
+
+  image: quay.io/ansible/awx
+  image_version: 24.6.1@sha256:5d47e132014ae4c6a026a2e8f19ce7b3cf3c8f313d59e44fdfa95cd9f3669209
+  control_plane_ee_image: quay.io/ansible/awx-ee:24.6.1@sha256:89593d2a0268acacdbd1c075d8810ab50d961cf7769e36de19219bb6cb4efcc1
+  init_container_image: quay.io/ansible/awx-ee
+  init_container_image_version: 24.6.1@sha256:89593d2a0268acacdbd1c075d8810ab50d961cf7769e36de19219bb6cb4efcc1
+  ee_images:
+    - name: AWX EE 24.6.1
+      image: quay.io/ansible/awx-ee:24.6.1@sha256:89593d2a0268acacdbd1c075d8810ab50d961cf7769e36de19219bb6cb4efcc1
+  redis_image: docker.io/library/redis
+  redis_image_version: 7.2.5@sha256:3aaec283e6e593bde528077d60280ac1589887067a39273348860837c9346d7e
+  image_pull_policy: IfNotPresent
+
+  extra_volumes: |
+    - name: awx-manual-project
+      configMap:
+        name: awx-manual-project
+        defaultMode: 0444
+  task_extra_volume_mounts: |
+    - name: awx-manual-project
+      mountPath: /var/lib/awx/projects/awx01
+      readOnly: true
+  web_extra_volume_mounts: |
+    - name: awx-manual-project
+      mountPath: /var/lib/awx/projects/awx01
+      readOnly: true
+
+  web_resource_requirements:
+    requests: {cpu: 200m, memory: 1Gi}
+    limits: {cpu: "1", memory: 2Gi}
+  task_resource_requirements:
+    requests: {cpu: 300m, memory: 1536Mi}
+    limits: {cpu: "2", memory: 3Gi}
+  ee_resource_requirements:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  redis_resource_requirements:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 512Mi}
+  init_container_resource_requirements:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 512Mi}
+  rsyslog_resource_requirements:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 512Mi}

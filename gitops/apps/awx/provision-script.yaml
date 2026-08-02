@@ -1,0 +1,252 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: awx-provision-script
+  namespace: awx
+  annotations:
+    argocd.argoproj.io/sync-wave: "-6"
+data:
+  provision.py: |
+    #!/usr/bin/env python3
+    import base64
+    import json
+    import time
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    BASE = "http://awx-service.awx.svc.cluster.local"
+    API = BASE + "/api/v2"
+    runtime = json.load(open("/vault/secrets/runtime.json", encoding="utf-8"))
+    admin_password = runtime["admin_password"]
+    auth = base64.b64encode(f"awx-recovery:{admin_password}".encode()).decode()
+
+    def api(method, path, body=None, expected=(200, 201, 202, 204)):
+        data = None if body is None else json.dumps(body).encode()
+        request = urllib.request.Request(
+            API + path,
+            data=data,
+            method=method,
+            headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                if response.status not in expected:
+                    raise RuntimeError(f"예상 밖 HTTP {response.status}: {method} {path}")
+                raw = response.read()
+                return {} if not raw else json.loads(raw)
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode(errors="replace")[:1000]
+            raise RuntimeError(f"HTTP {error.code}: {method} {path}: {detail}") from error
+
+    def wait_ready():
+        for attempt in range(180):
+            try:
+                result = api("GET", "/ping/")
+                if result.get("version"):
+                    print(f"AWX API 준비됨: {result['version']}")
+                    return
+            except Exception:
+                pass
+            if attempt % 12 == 0:
+                print(f"AWX API 준비 대기: {attempt + 1}/180")
+            time.sleep(5)
+        raise RuntimeError("AWX API 준비 시간이 초과됨")
+
+    def one(endpoint, filters):
+        query = urllib.parse.urlencode(filters)
+        result = api("GET", f"/{endpoint}/?{query}")
+        if result["count"] > 1:
+            raise RuntimeError(f"중복 객체: {endpoint} {filters}")
+        return result["results"][0] if result["count"] == 1 else None
+
+    def ensure(endpoint, filters, declaration, update=True):
+        current = one(endpoint, filters)
+        if current is None:
+            current = api("POST", f"/{endpoint}/", declaration)
+            print(f"생성: {endpoint}/{current['id']} {filters}")
+        elif update:
+            current = api("PATCH", f"/{endpoint}/{current['id']}/", declaration)
+            print(f"일치화: {endpoint}/{current['id']} {filters}")
+        return current
+
+    def attach(path, object_id):
+        current = api("GET", path)
+        if any(item["id"] == object_id for item in current.get("results", [])):
+            return
+        api("POST", path, {"id": object_id})
+
+    def object_role(obj, role_name):
+        return obj["summary_fields"]["object_roles"][role_name]["id"]
+
+    def give_team_role(obj, role_name, team):
+        attach(f"/roles/{object_role(obj, role_name)}/teams/", team["id"])
+
+    wait_ready()
+
+    api("PATCH", "/settings/system/", {"TOWER_URL_BASE": "https://awx.imcherry5778.xyz"})
+    api("PATCH", "/settings/oidc/", {
+        "SOCIAL_AUTH_OIDC_KEY": "awx",
+        "SOCIAL_AUTH_OIDC_SECRET": runtime["oidc_client_secret"],
+        "SOCIAL_AUTH_OIDC_OIDC_ENDPOINT": "https://sso.imcherry5778.xyz/realms/platform",
+        "SOCIAL_AUTH_OIDC_VERIFY_SSL": True,
+    })
+    api("PATCH", "/settings/authentication/", {
+        "SOCIAL_AUTH_ORGANIZATION_MAP": {
+            "Platform": {
+                "users": ["imcherry", "imcherry-admin"],
+                "admins": [],
+                "remove_users": True,
+                "remove_admins": True,
+            }
+        },
+        "SOCIAL_AUTH_TEAM_MAP": {
+            "AWX Operators": {"organization": "Platform", "users": ["imcherry"], "remove": True},
+            "AWX Approvers": {"organization": "Platform", "users": ["imcherry-admin"], "remove": True},
+        },
+    })
+
+    organization = ensure("organizations", {"name": "Platform"}, {
+        "name": "Platform",
+        "description": "AWX-01 최소권한 조직",
+        "max_hosts": 0,
+    })
+    operators = ensure("teams", {"name": "AWX Operators", "organization": organization["id"]}, {
+        "name": "AWX Operators", "organization": organization["id"],
+        "description": "check 및 승인 workflow 시작 권한",
+    })
+    approvers = ensure("teams", {"name": "AWX Approvers", "organization": organization["id"]}, {
+        "name": "AWX Approvers", "organization": organization["id"],
+        "description": "apply approval 전용 권한",
+    })
+
+    production = ensure("inventories", {"name": "운영 VM 정적 인벤토리 (실행 금지)", "organization": organization["id"]}, {
+        "name": "운영 VM 정적 인벤토리 (실행 금지)",
+        "organization": organization["id"],
+        "description": "docs/ip-plan.md 고정 VM 선언. NET-04 전에는 AWX 실행 권한과 credential을 부여하지 않는다.",
+        "variables": json.dumps({"awx01_source": "docs/ip-plan.md", "awx01_remote_execution": False}),
+    })
+    host_groups = {
+        "vlan20-k3s": ["k3s-01.imcherry5778.xyz"],
+        "vlan30-dmz": ["warpgate-01.imcherry5778.xyz", "netbird-01.imcherry5778.xyz"],
+        "vlan50-data": ["postgres-01.imcherry5778.xyz", "object-01.imcherry5778.xyz"],
+    }
+    for group_name, hostnames in host_groups.items():
+        group = ensure("groups", {"name": group_name, "inventory": production["id"]}, {
+            "name": group_name, "inventory": production["id"],
+            "description": "docs/ip-plan.md 기반 정적 그룹",
+        })
+        for hostname in hostnames:
+            host = ensure("hosts", {"name": hostname, "inventory": production["id"]}, {
+                "name": hostname, "inventory": production["id"], "enabled": True,
+                "description": "AWX-01 정적 선언; NET-04 전 실행 금지",
+                "variables": json.dumps({"awx01_cross_vlan_ssh_validated": False}),
+            })
+            attach(f"/groups/{group['id']}/hosts/", host["id"])
+
+    boundary = ensure("inventories", {"name": "AWX-01 검증 전용 (cluster 내부)", "organization": organization["id"]}, {
+        "name": "AWX-01 검증 전용 (cluster 내부)",
+        "organization": organization["id"],
+        "description": "선택지 (b) 증거 전용. 실제 운영 대상의 cross-VLAN 접근 증거가 아니다.",
+    })
+    boundary_host = ensure("hosts", {"name": "awx-verifier.awx.svc.cluster.local", "inventory": boundary["id"]}, {
+        "name": "awx-verifier.awx.svc.cluster.local", "inventory": boundary["id"], "enabled": True,
+        "description": "AWX-01 선택지 (b) cluster 내부 HTTP 검증 대상",
+        "variables": json.dumps({"ansible_connection": "local", "awx01_validation_only": True}),
+    })
+
+    credential_type = ensure("credential_types", {"name": "AWX-01 HTTP Basic"}, {
+        "name": "AWX-01 HTTP Basic",
+        "description": "검증 endpoint에만 쓰는 username/password 환경 주입",
+        "kind": "cloud",
+        "inputs": {
+            "fields": [
+                {"id": "username", "type": "string", "label": "Username"},
+                {"id": "password", "type": "string", "label": "Password", "secret": True},
+            ],
+            "required": ["username", "password"],
+        },
+        "injectors": {"env": {"AWX_VERIFY_USER": "{{ username }}", "AWX_VERIFY_PASSWORD": "{{ password }}"}},
+    }, update=False)
+    allowed_credential = ensure("credentials", {"name": "AWX-01 verifier allowed", "organization": organization["id"]}, {
+        "name": "AWX-01 verifier allowed", "organization": organization["id"],
+        "description": "cluster 내부 검증 대상 하나에만 할당",
+        "credential_type": credential_type["id"],
+        "inputs": {"username": "awx-boundary", "password": runtime["verifier_password"]},
+    })
+    denied_credential = ensure("credentials", {"name": "AWX-01 verifier denied", "organization": organization["id"]}, {
+        "name": "AWX-01 verifier denied", "organization": organization["id"],
+        "description": "음성 대조 전용; AWX Operators에는 할당하지 않음",
+        "credential_type": credential_type["id"],
+        "inputs": {"username": "awx-boundary", "password": runtime["verifier_denied_password"]},
+    })
+
+    project = ensure("projects", {"name": "AWX-01 선언 저장소", "organization": organization["id"]}, {
+        "name": "AWX-01 선언 저장소", "organization": organization["id"],
+        "description": "GitOps ConfigMap이 공급하는 read-only 검증 playbook",
+        "scm_type": "", "scm_url": "", "scm_branch": "", "scm_refspec": "",
+        "scm_clean": False, "scm_delete_on_update": False, "scm_track_submodules": False,
+        "scm_update_on_launch": False, "allow_override": False,
+        "credential": None, "local_path": "awx01",
+    })
+
+    common_template = {
+        "project": project["id"], "inventory": boundary["id"],
+        "playbook": "verify-credential.yml",
+        "limit": "awx-verifier.awx.svc.cluster.local", "ask_limit_on_launch": False,
+        "ask_inventory_on_launch": False, "ask_credential_on_launch": False,
+        "ask_job_type_on_launch": False, "forks": 1, "verbosity": 0,
+    }
+    check_template = ensure("job_templates", {"name": "AWX-01 credential check"}, {
+        **common_template, "name": "AWX-01 credential check", "description": "기본 check(dry-run), 허용 credential",
+        "job_type": "check",
+    })
+    denied_template = ensure("job_templates", {"name": "AWX-01 credential denied"}, {
+        **common_template, "name": "AWX-01 credential denied", "description": "음성 대조 전용, Operators 미할당 credential",
+        "job_type": "check",
+    })
+    apply_template = ensure("job_templates", {"name": "AWX-01 approved apply"}, {
+        **common_template, "name": "AWX-01 approved apply", "description": "approval 뒤에만 실행되는 read-only HTTP 판정",
+        "job_type": "run",
+    })
+    attach(f"/job_templates/{check_template['id']}/credentials/", allowed_credential["id"])
+    attach(f"/job_templates/{denied_template['id']}/credentials/", denied_credential["id"])
+    attach(f"/job_templates/{apply_template['id']}/credentials/", allowed_credential["id"])
+
+    workflow = ensure("workflow_job_templates", {"name": "AWX-01 check-to-apply 승인"}, {
+        "name": "AWX-01 check-to-apply 승인", "organization": organization["id"],
+        "description": "사람 approval 전에는 apply node가 시작되지 않는다.",
+        "ask_variables_on_launch": False, "allow_simultaneous": False,
+    })
+    approval_node = one("workflow_job_template_nodes", {
+        "workflow_job_template": workflow["id"], "identifier": "human-approval",
+    })
+    if approval_node is None:
+        approval_node = api("POST", "/workflow_job_template_nodes/", {
+            "workflow_job_template": workflow["id"], "identifier": "human-approval",
+            "all_parents_must_converge": True,
+        })
+        approval_template = api("POST", f"/workflow_job_template_nodes/{approval_node['id']}/create_approval_template/", {
+            "name": "AWX-01 사람 승인", "description": "AWX Approvers만 승인", "timeout": 900,
+        })
+    else:
+        approval_template = api("GET", approval_node["related"]["unified_job_template"].removeprefix("/api/v2").rstrip("/") + "/")
+    apply_node = one("workflow_job_template_nodes", {
+        "workflow_job_template": workflow["id"], "identifier": "approved-apply",
+    })
+    if apply_node is None:
+        apply_node = api("POST", "/workflow_job_template_nodes/", {
+            "workflow_job_template": workflow["id"], "identifier": "approved-apply",
+            "unified_job_template": apply_template["id"], "all_parents_must_converge": True,
+        })
+    attach(f"/workflow_job_template_nodes/{approval_node['id']}/success_nodes/", apply_node["id"])
+
+    give_team_role(boundary, "use_role", operators)
+    give_team_role(allowed_credential, "use_role", operators)
+    give_team_role(check_template, "execute_role", operators)
+    give_team_role(workflow, "execute_role", operators)
+    give_team_role(workflow, "approval_role", approvers)
+
+    # 실행 금지 인벤토리, denied credential, denied/apply JT에는 Operators role을
+    # 절대 붙이지 않는다. 다음 단계 verify-live.sh가 이를 같은 시점에 대조한다.
+    print("AWX-01 선언 provisioning 완료")

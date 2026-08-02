@@ -64,6 +64,13 @@ vault write auth/kubernetes/role/pomerium \
   token_policies="pomerium" \
   token_no_default_policy=true \
   token_ttl=15m token_max_ttl=1h
+vault write auth/kubernetes/role/awx \
+  bound_service_account_names="awx-vault-bootstrap,awx-provisioner,awx-verifier" \
+  bound_service_account_namespaces="awx" \
+  audience="vault" \
+  token_policies="awx" \
+  token_no_default_policy=true \
+  token_ttl=15m token_max_ttl=1h
 EOF
 
 echo "== 5. 내부 PKI =="

@@ -435,6 +435,25 @@ stop/go 판정은 **GO**다. `SCM-01`·`REG-01`·`QUALITY-01`·`AWX-01`은 현�
 먼저 소비하는 경계는 `k3s-01` RAM이다. guest `available`은 12 GiB 경고까지 7.58 GiB,
 8 GiB 정지까지 11.58 GiB 남아 있어 CPU·guest disk·PVC보다 먼저 재검토할 가능성이 높다.
 
+### `AWX-01` 배포 직후 실측 (2026-08-02)
+
+16:11 KST의 최종 완료 증거 실행에서 읽었다. 배포 직전 guest `available`은
+17,970 MiB였고 12 GiB 경고선 위라 적용 gate는 **GO**였다.
+
+| 지표 | 배포 직후 실측 | stop 기준 | 판정 |
+|---|---:|---:|---|
+| `k3s-01` guest available / swap | 15,598 / 0 MiB | available 12 GiB 미만 경고·8 GiB 미만 정지, swap 사용 시 재검토 | 정상 |
+| `k3s-01` guest `/` 사용 | 8% | 75% 경고 | 정상 |
+| k3s Node CPU / memory | 782m(9%) / 7,840 MiB(32%) | guest available 경계를 우선 적용 | 정상 |
+| PVC 수 | 4개 | 요청 합계와 guest disk 경계를 함께 관측 | 정상 |
+| Proxmox available / swap | 34,428 / 0 MiB | available 12 GiB 미만, swap 사용 | 정상 |
+| `local-lvm` data / metadata | 4.08% / 0.37% | 60% / 50% | 정상 |
+| Proxmox `/` 사용 | 5% | 70% | 정상 |
+
+배포 직후 stop/go 판정은 **GO**다. `k3s-01` guest available은 12 GiB 경고선까지
+3,310 MiB가 남았다. AWX 완료 증거의 job은 cluster 내부 verifier만 사용했으므로 이 측정은
+실제 운영 VM의 cross-VLAN SSH 허용이나 부하를 증명하지 않는다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.
