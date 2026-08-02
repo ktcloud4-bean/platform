@@ -184,7 +184,17 @@ spec:
     # client로 자체 로그인하고, 서버가 Keycloak 서명 키로 그 토큰을 검증한다.
     # 이 egress가 없으면 검증이 fail되어 포털이 로그인 상태를 유지하지 못한다.
     # 목적지를 좁힐 수 없는 근거는 위 pomerium Keycloak 경로 주석과 같다.
-    # Dashy는 이 443 외의 egress가 없어 Vault·다른 namespace로 나가지 못한다.
+    # 규칙 구성은 같은 경로를 쓰는 pomerium egress와 동일하게 맞춘다.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: 8443
+          protocol: TCP
     - ports:
         - port: 443
           protocol: TCP
