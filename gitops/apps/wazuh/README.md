@@ -308,6 +308,32 @@ source port 하나로 `emerging-scan.rules`의 sid `2029054`가 정확히 한 �
 5. `wazuh` alias 내부 A 1건, 내부 AAAA·공개 A/AAAA 0건
 6. immutable SHA의 `platform-root`·`wazuh`·`pomerium` child `Synced/Healthy`
 
+### 2026-08-04 라이브 완료 증거
+
+immutable root `f96520c5f13dd8e1a002102d1c1819007e206a2a`와 child 설정
+`b7a36d8d1ad2ed2f71085a593b90d322d6c63ab0`(`wazuh`·`pomerium` 둘 다 이 commit)에서 다음을
+검증했다.
+
+| acceptance | 라이브 증거 | 판정 |
+|---|---|---|
+| capacity 정지선 | 배포 전 available 13,179,863,040 bytes(12.273 GiB)·swap 0, 배포 후 available 12,715,151,360 bytes(11.842 GiB)·swap 0, PVC 91.125 GiB로 배포 전후 불변 | 통과, 8 GiB 정지선 위 3.842 GiB |
+| `SOAR-01` 진입선 | 배포 후 available 11.842 GiB, 진입선 12 GiB에 169,750,528 bytes(약 161.9 MiB) 미달 | **미달**, `k3s-01` 32 GiB 증설이 `SOAR-01` 선행 |
+| Dashboard D30/A90 검색 | `admin` 계정으로 Dashboard 자체 보안에 로그인 뒤 `/api/console/proxy`로 `wazuh-alerts-4.x-*`(sid `2029054*`)·`wazuh-alerts-4.x-audit-*`(`rule.id:[100100 TO 100109]`) 조회, 둘 다 기존 저장 문서 hit | 통과 |
+| RBAC | `/platform-privileged`(`imcherry-admin`)는 Pomerium Route 통과, `/platform-users`만 가진 `imcherry`는 403 | 통과 |
+| active response·ISM 불변 | running `ossec.conf`의 `<active-response><disabled>yes</disabled>`, `ar.conf` 차단성 명령 0건, `wazuh-01-d30`·`wazuh-01-a90` 정책 그대로 | 통과 |
+| alias | Unbound `wazuh` A 1건, 공개 A/AAAA 미등록(내부 alias만 추가) | 통과 |
+| Argo | 위 immutable root·child가 모두 `Synced/Healthy` | 통과 |
+
+`gitops/root/wazuh-project.yaml`의 `namespaceResourceWhitelist`에 `apps/Deployment`가 없어서
+첫 sync가 `resource apps:Deployment is not permitted in project wazuh`로 거부됐다. manager·
+indexer가 StatefulSet만 썼기 때문에 이 whitelist에 Deployment가 없었다. 같은 커밋에서
+`apps/Deployment`를 추가해 해결했다.
+
+indexer·manager는 배포 전후로 Pod 재시작·restart count 변화가 없었다(`wazuh-indexer-0`,
+`wazuh-manager-master-0` 둘 다 8h 무변화). `pomerium` Deployment는 새 ConfigMap 해시를
+반영하며 정상적으로 한 번 재기동했다(기존 Route·Portal 기능 영향 없음, Grafana·Argo 등
+기존 Route는 이 재기동과 무관하게 유지).
+
 ## Rollback
 
 라이브 검증이 실패하면 새 작업 ID를 만들지 않고 아래 순서로 되돌린 뒤 같은 브랜치에서

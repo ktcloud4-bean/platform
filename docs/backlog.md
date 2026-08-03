@@ -1467,7 +1467,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `WAZUH-01 DONE` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle, `CERTMGR-01` | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 | `WAZUH-01-FIX-01 DONE` | WAZUH-01의 OPNsense live 상태와 masked drift snapshot을 일치시키고, 성공 경로에서 snapshot 갱신이 다시 누락되지 않도록 절차를 보정 (`gitops/tools/wazuh-01/apply-opnsense.sh`, `infra/opnsense/config.xml`) | `WAZUH-01` | `OPNSENSE-LIVE` | `OBS-02` | 라이브 Wazuh Agent 설정이 WAZUH-01 선언과 exact match, IDS 차이가 `persisted_at` metadata뿐이며 의미 설정 차이 0건이거나 다르면 변경 없이 중단, 갱신 전 sanitized drift가 승인된 WAZUH Agent subtree와 판정된 metadata 차이뿐, `check-drift.sh --update` 뒤 일반 drift 없음, snapshot의 credential 원문 0건과 Wazuh password masking 유지, 향후 성공 절차가 exact drift 분류 → snapshot update → 일반 drift 확인 없이는 완료되지 않음, 작업 전후 OPNsense live revision·Wazuh service·PF·NAT·DNS·IDS 의미 설정 불변, 최신 main에서 `platform-root`·`wazuh`가 `Synced/Healthy` |
 | `OBS-02 DONE` | Grafana·Prometheus·Alertmanager UI를 Pomerium Route로 노출하고 최소 대시보드 확보 (`gitops/apps/obs/`) | `OBS-01`, `POM-01` | `OPNSENSE-LIVE` | 운영 경보 silence·팀 온보딩 | Route 3건과 `pomerium`→`obs` NetworkPolicy egress 선언, Grafana 로그인 뒤 node·PVC·Loki 대표 패널 표시, Prometheus target `up=1`과 PromQL 실행, Alertmanager silence 생성·조회·만료 왕복, `/platform-users` 허용과 미소속 계정 403의 같은 시점 대조 및 Alertmanager 쓰기 경로의 `/platform-privileged` 한정, alias 3건 내부 A만·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig generation·Traefik Pod UID·restart 불변, 배포 전후 available RAM 정지선 통과와 신규 PVC 0개, Argo child `Synced/Healthy`와 OPNsense drift 없음, rollback 뒤 기존 Route·경보 전달 회귀 없음 |
-| `WAZUH-02 READY` | Wazuh Dashboard 배포와 보안 이벤트 조사 경로 확보 (`gitops/apps/wazuh/`) | `WAZUH-01`, `POM-01`, `CAP-04` | `K3S-HEAVY`, `OPNSENSE-LIVE` | 사고 조사·`SOAR-01` 용량 | 배포 직전 capacity gate 재측정으로 자기 8 GiB 정지선 통과를 판정하고 배포 후 available이 `SOAR-01` 진입선 12 GiB를 남기는지 기록(미달이면 `k3s-01` 32 GiB 증설이 `SOAR-01`의 선행임을 함께 기록), Dashboard를 `WAZUH-01`과 같은 4.14.7 계열 고정 version·image digest로 선언, Pomerium Route와 `pomerium`→`wazuh` NetworkPolicy egress, Dashboard 로그인 뒤 `D30`·`A90` index 검색과 `WAZUH-01`의 Suricata sid `2029054` 재현, indexer 자격증명을 Kubernetes Secret 원문 없이 Vault Agent로만 주입, `/platform-privileged` 허용과 일상 계정 거부, active response 비활성과 ISM 정책 두 건 불변, `wazuh` alias 내부 A 1건·공개 A/AAAA 0건, 배포 후 available·PVC 정지선 통과, Argo child `Synced/Healthy`, rollback 뒤 indexer·manager·retention 회귀 없음 |
+| `WAZUH-02 DONE` | Wazuh Dashboard 배포와 보안 이벤트 조사 경로 확보 (`gitops/apps/wazuh/`) | `WAZUH-01`, `POM-01`, `CAP-04` | `K3S-HEAVY`, `OPNSENSE-LIVE` | 사고 조사·`SOAR-01` 용량 | 배포 직전 capacity gate 재측정으로 자기 8 GiB 정지선 통과를 판정하고 배포 후 available이 `SOAR-01` 진입선 12 GiB를 남기는지 기록(미달이면 `k3s-01` 32 GiB 증설이 `SOAR-01`의 선행임을 함께 기록), Dashboard를 `WAZUH-01`과 같은 4.14.7 계열 고정 version·image digest로 선언, Pomerium Route와 `pomerium`→`wazuh` NetworkPolicy egress, Dashboard 로그인 뒤 `D30`·`A90` index 검색과 `WAZUH-01`의 Suricata sid `2029054` 재현, indexer 자격증명을 Kubernetes Secret 원문 없이 Vault Agent로만 주입, `/platform-privileged` 허용과 일상 계정 거부, active response 비활성과 ISM 정책 두 건 불변, `wazuh` alias 내부 A 1건·공개 A/AAAA 0건, 배포 후 available·PVC 정지선 통과, Argo child `Synced/Healthy`, rollback 뒤 indexer·manager·retention 회귀 없음 |
 
 2026-08-03 `OBS-02`와 `WAZUH-02`를 신설한다. 두 작업은 결정된 목표와 실제 구현이 어긋난
 상태를 닫는다. 이 저장소는 ADR과 `architecture.md`가 "무엇을 만들 것인가"를, 백로그가
@@ -1525,6 +1525,29 @@ alias 모두 A `10.10.20.10` 하나, 내부 AAAA와 공개 A/AAAA 0건이었고 
 통과했고 신규 PVC·HelmChartConfig generation·Traefik Pod UID/restart 변화는 없었다. rollback 뒤
 root·`obs`·`pomerium`은 literal `main`에서 `Synced/Healthy`였고 기존 Pomerium Route와
 Alertmanager Ready endpoint는 유지됐다. 직접 후속은 없다.
+
+2026-08-04 `WAZUH-02`에서 immutable root `f96520c5f13dd8e1a002102d1c1819007e206a2a`와 child
+`b7a36d8d1ad2ed2f71085a593b90d322d6c63ab0`(`wazuh`·`pomerium` 둘 다 같은 commit)로 Wazuh
+Dashboard를 검증했다. `admin` 계정으로 Dashboard 자체 보안에 로그인한 뒤
+`/api/console/proxy`로 `wazuh-alerts-4.x-*`의 sid `2029054*`와 `wazuh-alerts-4.x-audit-*`의
+`rule.id:[100100 TO 100109]`를 조회해 `WAZUH-01`이 이미 수집한 문서를 Dashboard 경로로
+찾았다(새 트래픽 재생성 없음). `/platform-privileged`(`imcherry-admin`)는 Route를 통과했고
+`/platform-users`만 가진 `imcherry`는 403이었다. active response `disabled=yes`와
+`wazuh-01-d30`·`wazuh-01-a90` ISM 정책은 배포 전후로 그대로였고 indexer·manager Pod는
+재시작 없이 8시간 무변화를 유지했다. `wazuh` AppProject의 `namespaceResourceWhitelist`에
+`apps/Deployment`가 없어 첫 sync가 거부된 것을 원인으로 확인해 같은 commit에서 whitelist를
+넓혔다(manager·indexer가 StatefulSet만 써서 최초 선언에 빠져 있었다). capacity gate는 배포
+전 available 13,179,863,040 bytes(12.273 GiB)에서 배포 후 12,715,151,360 bytes(11.842 GiB)로
+자기 8 GiB 정지선을 통과했고 PVC는 91.125 GiB로 불변이었다. 다만 `SOAR-01` 진입선
+12 GiB(12,884,901,888 bytes)에는 169,750,528 bytes(약 161.9 MiB) 미달이었다. Unbound `wazuh`
+alias는 내부 A 1건만 등록했고 공개 A/AAAA는 없다. rollback 절차는 indexer·manager를 건드리지
+않고 Dashboard 리소스와 `kv/wazuh/dashboard`만 되돌리도록 새로 설계했다(WAZUH-01의 전체
+namespace 삭제 rollback과 분리).
+
+`SOAR-01`은 이 결과로 진입선 미달이 확정됐으므로 `READY`로 열지 않고 `BLOCKED`를 유지한다.
+`k3s-01` 32 GiB 증설([runbook](runbook/k3s-ram-expansion.md))이 그 선행이며, 아직 전용 작업
+ID가 없으므로 새로 열지 않고 이 사실만 기록한다. 증설 작업 ID를 만드는 결정은 이 세션 범위가
+아니다.
 
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
 [단일 분류·보존 표준](audit-event-standard.md)을 확정했다. 탐지 event는 Wazuh 30일,

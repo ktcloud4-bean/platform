@@ -106,6 +106,7 @@ def dashboard_login(opener, password_file: Path):
         f"{WAZUH_URL}/auth/login",
         method="POST",
         payload={"username": "admin", "password": password},
+        headers={"osd-xsrf": "true"},
     )
     if status != 200:
         raise VerificationHTTPError(
@@ -116,8 +117,7 @@ def dashboard_login(opener, password_file: Path):
 def console_search(opener, index_pattern: str, query_string: str):
     global CURRENT_STAGE
     CURRENT_STAGE = f"discover-search:{index_pattern}"
-    path = urllib.parse.quote(f"{index_pattern}/_search", safe="")
-    encoded = urllib.parse.urlencode({"path": path, "method": "GET"})
+    encoded = urllib.parse.urlencode({"path": f"{index_pattern}/_search", "method": "GET"})
     status, final_url, body = request(
         opener,
         f"{WAZUH_URL}/api/console/proxy?{encoded}",
@@ -154,11 +154,14 @@ def main():
     ):
         require_secret_file(Path(secret_file))
 
+    # `/app/login`은 OpenSearch Dashboards 자체 인증 없이도 응답하는 정적 로그인 페이지라
+    # Pomerium Route 통과 여부만 판정하는 probe로 쓴다. `/api/status`는 Dashboard 자체
+    # 보안 플러그인이 세션 없이 401을 반환해 Pomerium 통과 여부와 구분할 수 없었다.
     CURRENT_STAGE = "platform-privileged-route-session"
     privileged_opener = login(
         browser,
         args.connect_ip,
-        f"{WAZUH_URL}/api/status",
+        f"{WAZUH_URL}/app/login",
         args.privileged_username,
         args.privileged_password_file,
         args.privileged_totp_file,
@@ -168,7 +171,7 @@ def main():
     deny_opener = login(
         browser,
         args.connect_ip,
-        f"{WAZUH_URL}/api/status",
+        f"{WAZUH_URL}/app/login",
         args.deny_username,
         args.deny_password_file,
         args.deny_totp_file,

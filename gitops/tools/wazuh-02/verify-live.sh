@@ -142,14 +142,25 @@ remote_kubectl -n pomerium rollout status deployment/pomerium --timeout=180s >/d
   || fail deployment 'pomerium/pomerium이 Ready가 아니다.'
 
 # indexer/manager 회귀 확인: WAZUH-01이 이미 판정한 값이 그대로인지만 본다.
+# remote_kubectl은 ssh로 인자를 다시 이어 붙이므로 "<"·">" 같은 셸 특수문자가 있는
+# 명령은 여기서 heredoc 하나로 묶어 원격 셸에 통째로 전달한다.
 manager_pod=$(remote_kubectl -n wazuh get pod -l app.kubernetes.io/component=manager -o jsonpath='{.items[0].metadata.name}')
 [[ -n ${manager_pod} ]] || fail regression 'manager Pod를 찾지 못했다.'
-remote_kubectl -n wazuh exec "${manager_pod}" -- \
+# shellcheck disable=SC2029
+regression_result=$(ssh "${ssh_options[@]}" "${k3s_host}" "MANAGER_POD='${manager_pod}' KUBECTL_CMD='${kubectl_command}' bash -s" <<'REMOTE'
+set -euo pipefail
+${KUBECTL_CMD} -n wazuh exec "${MANAGER_POD}" -- \
   grep -A1 '<active-response>' /var/ossec/etc/ossec.conf | grep -q '<disabled>yes</disabled>' \
-  || fail regression 'manager active-response가 더 이상 disabled=yes가 아니다.'
-ar_dangerous=$(remote_kubectl -n wazuh exec "${manager_pod}" -- \
+  && echo 'ACTIVE_RESPONSE_DISABLED=yes' || echo 'ACTIVE_RESPONSE_DISABLED=no'
+ar_dangerous=$(${KUBECTL_CMD} -n wazuh exec "${MANAGER_POD}" -- \
   grep -Ec 'firewall-drop|host-deny|route-null|disable-account|netsh|ip-customblock' \
   /var/ossec/etc/shared/ar.conf || true)
+echo "AR_DANGEROUS_COUNT=${ar_dangerous}"
+REMOTE
+)
+grep -q '^ACTIVE_RESPONSE_DISABLED=yes$' <<<"${regression_result}" \
+  || fail regression 'manager active-response가 더 이상 disabled=yes가 아니다.'
+ar_dangerous=$(awk -F= '$1=="AR_DANGEROUS_COUNT"{print $2}' <<<"${regression_result}")
 [[ ${ar_dangerous} == 0 ]] || fail regression 'manager ar.conf에 차단성 active-response 명령이 생겼다.'
 
 indexer_port=${WAZUH02_INDEXER_FORWARD_PORT:-19201}
