@@ -1386,6 +1386,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `OBS-01 DONE` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
 | `OPN-METRICS-01 DONE` | OPNsense exporter와 최소 metric 방화벽 경로 | `OBS-01` | `OPNSENSE-LIVE` | 운영 경보 | exporter target `up=1`, CPU·memory·interface 대표 시계열, 최소 rule 한 건과 rollback·drift 없음 |
 | `WAZUH-01 DONE` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle, `CERTMGR-01` | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
+| `WAZUH-01-FIX-01 DONE` | WAZUH-01의 OPNsense live 상태와 masked drift snapshot을 일치시키고, 성공 경로에서 snapshot 갱신이 다시 누락되지 않도록 절차를 보정 (`gitops/tools/wazuh-01/apply-opnsense.sh`, `infra/opnsense/config.xml`) | `WAZUH-01` | `OPNSENSE-LIVE` | `OBS-02` | 라이브 Wazuh Agent 설정이 WAZUH-01 선언과 exact match, IDS 차이가 `persisted_at` metadata뿐이며 의미 설정 차이 0건이거나 다르면 변경 없이 중단, 갱신 전 sanitized drift가 승인된 WAZUH Agent subtree와 판정된 metadata 차이뿐, `check-drift.sh --update` 뒤 일반 drift 없음, snapshot의 credential 원문 0건과 Wazuh password masking 유지, 향후 성공 절차가 exact drift 분류 → snapshot update → 일반 drift 확인 없이는 완료되지 않음, 작업 전후 OPNsense live revision·Wazuh service·PF·NAT·DNS·IDS 의미 설정 불변, 최신 main에서 `platform-root`·`wazuh`가 `Synced/Healthy` |
 | `OBS-02 READY` | Grafana·Prometheus·Alertmanager UI를 Pomerium Route로 노출하고 최소 대시보드 확보 (`gitops/apps/obs/`) | `OBS-01`, `POM-01` | `OPNSENSE-LIVE` | 운영 경보 silence·팀 온보딩 | Route 3건과 `pomerium`→`obs` NetworkPolicy egress 선언, Grafana 로그인 뒤 node·PVC·Loki 대표 패널 표시, Prometheus target `up=1`과 PromQL 실행, Alertmanager silence 생성·조회·만료 왕복, `/platform-users` 허용과 미소속 계정 403의 같은 시점 대조 및 Alertmanager 쓰기 경로의 `/platform-privileged` 한정, alias 3건 내부 A만·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig generation·Traefik Pod UID·restart 불변, 배포 전후 available RAM 정지선 통과와 신규 PVC 0개, Argo child `Synced/Healthy`와 OPNsense drift 없음, rollback 뒤 기존 Route·경보 전달 회귀 없음 |
 | `WAZUH-02 READY` | Wazuh Dashboard 배포와 보안 이벤트 조사 경로 확보 (`gitops/apps/wazuh/`) | `WAZUH-01`, `POM-01`, `CAP-04` | `K3S-HEAVY`, `OPNSENSE-LIVE` | 사고 조사·`SOAR-01` 용량 | 배포 직전 capacity gate 재측정으로 자기 8 GiB 정지선 통과를 판정하고 배포 후 available이 `SOAR-01` 진입선 12 GiB를 남기는지 기록(미달이면 `k3s-01` 32 GiB 증설이 `SOAR-01`의 선행임을 함께 기록), Dashboard를 `WAZUH-01`과 같은 4.14.7 계열 고정 version·image digest로 선언, Pomerium Route와 `pomerium`→`wazuh` NetworkPolicy egress, Dashboard 로그인 뒤 `D30`·`A90` index 검색과 `WAZUH-01`의 Suricata sid `2029054` 재현, indexer 자격증명을 Kubernetes Secret 원문 없이 Vault Agent로만 주입, `/platform-privileged` 허용과 일상 계정 거부, active response 비활성과 ISM 정책 두 건 불변, `wazuh` alias 내부 A 1건·공개 A/AAAA 0건, 배포 후 available·PVC 정지선 통과, Argo child `Synced/Healthy`, rollback 뒤 indexer·manager·retention 회귀 없음 |
 
@@ -1546,6 +1547,45 @@ merge 전 실패는 모두 상태와 로그가 가리킨 지점만 고쳤다. `p
 ingest pipeline에서 제외했다. OPNsense 룰셋은 `NIDS-01` 소유라 이 작업에서 바꾸지 않았고
 소스에서 이 룰을 정리하는 일은 후속 작업으로 남는다. 따라서 `WAZUH-01`을 완료하고 선행이
 모두 충족된 직접 후속 `SOAR-01`만 `READY`로 연다.
+
+2026-08-03 `WAZUH-01` squash commit(`862db2970b73b4b7c00792ccce5658d7032b419c`)이 merge된 뒤
+post-merge 결함이 드러났다. `WAZUH-01`은 OPNsense에 `os-wazuh-agent`와 WazuhAgent 설정을 실제
+적용했고 라이브 WazuhAgent `persisted_at`은 18:13:26 KST다. 같은 작업은 19:19:02 KST에 main으로
+merge됐지만 그 squash commit에는 `infra/opnsense/config.xml` 변경이 없다. 원인은
+`gitops/tools/wazuh-01/apply-opnsense.sh`의 성공 경로가 agent 적용과 readback까지만 수행하고
+`check-drift.sh --update`와 후속 일반 drift 검사를 호출하지 않기 때문이며,
+`gitops/apps/wazuh/README.md`의 설치 절차와 완료 증거에도 snapshot 갱신 단계가 없었다. 그 결과
+라이브에는 저장소 snapshot에 없는 `os-wazuh-agent`·WazuhAgent subtree가 남았다. 같은 날 IDS
+`persisted_at`은 21:08:39 KST로 별도 갱신됐는데, 직전 sanitized diff에서는 IDS의 의미 설정
+차이 없이 `persisted_at`만 달랐다. 이 drift 때문에 merge 전 라이브 검증을 요구하는 `OBS-02`의
+gate가 시작되지 못하고 중단됐다. IDS 21:08 write의 실행 주체는 이 시점까지 확인되지 않았으며
+`WAZUH-01-FIX-01`이 read-only config history/revision metadata로 다시 판정한다.
+
+2026-08-03 `WAZUH-01-FIX-01`에서 `OPNSENSE-LIVE` 잠금 아래 read-only 조회로 원인을 재확인하고
+snapshot을 보정했다. plugin `os-wazuh-agent`는 버전 `1.3_1` installed, 서비스 `running`이었고
+`/api/wazuhagent/settings/get` 값은 `apply-opnsense.sh`의 선언(서버·포트·suricata_eve_log=1·
+active response/rootcheck/syscollector/syscheck/remote_commands=0)과 exact match였다. IDS
+subtree는 `persisted_at`을 제외한 전체 XML을 직접 대조해 의미 설정 차이 0건을 확인했다.
+21:08 write의 실행 주체는 OPNsense API가 read-only config history/revision 조회 endpoint를
+제공하지 않아 확정하지 못했다. `actor=미확인`, `semantic_diff=0`으로 증거 한계를 남긴다.
+sanitized drift는 firmware plugins 목록의 `os-wazuh-agent` 추가, `WazuhAgent` subtree 신규
+추가, IDS `persisted_at` 변경 세 hunk뿐이었고 다른 PF·NAT·DNS·인터페이스·Suricata 설정
+diff는 0건이었다.
+
+절차는 `apply-opnsense.sh`가 `check-drift.sh --update`를 직접 호출하지 않도록 유지하고,
+새 `gitops/tools/wazuh-01/classify_opnsense_drift.py`와
+`finalize-opnsense-snapshot.sh`로 exact-diff gate를 분리했다. gate는 승인된 세 hunk
+패턴과 순서까지 완전히 일치하는 diff만 통과시키며, fixture 테스트로 foreign PF 변경과
+`WazuhAgent` 필드 조작(`active_response.enabled`를 `general.enabled`와 같은 문자열로
+위장하는 경우 포함)이 `--update` 전에 거부됨을 확인했다. `shellcheck`와
+`python3 -m unittest`가 모두 통과했다. gate 통과 후 `check-drift.sh --update`로 snapshot을
+갱신했고 곧바로 실행한 일반 `check-drift.sh`는 드리프트 없음이었다. 갱신된
+`infra/opnsense/config.xml`에서 password는 `***MASKED***`이고 저장소 밖 authd password
+원문과 대조해 일치하는 원문이 없음을 확인했다. `git diff --check`도 통과했다. 이 작업은
+GET 요청과 로컬 Git 파일만 바꿨고 OPNsense에 POST/PUT/DELETE를 보내지 않아 live revision·
+Wazuh service·PF·NAT·DNS·IDS 의미 설정은 작업 전후 불변이다. 따라서 `WAZUH-01-FIX-01`을
+완료한다. `OBS-02`는 이미 `READY`이므로 상태를 다시 쓰지 않으며, 이 완료로 `OBS-02`의 merge
+전 gate를 막던 drift가 해소되어 `OBS-02`는 새 전용 branch/worktree로 다시 시작할 수 있다.
 
 ## 10. 마지막 단계: Shuffle
 

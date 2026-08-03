@@ -73,7 +73,7 @@
     <firmware version="1.0.1" persisted_at="1785198670.57" description="Firmware settings">
       <mirror />
       <flavour />
-      <plugins>os-acme-client,os-node_exporter</plugins>
+      <plugins>os-acme-client,os-node_exporter,os-wazuh-agent</plugins>
       <type />
       <subscription />
       <reboot>0</reboot>
@@ -2203,7 +2203,7 @@
         <interface />
       </general>
     </Hostwatch>
-    <IDS version="1.1.2" persisted_at="1785445956.85" description="Intrusion detection">
+    <IDS version="1.1.2" persisted_at="1785758919.18" description="Intrusion detection">
       <rules />
       <policies />
       <userDefinedRules>
@@ -3203,6 +3203,40 @@
       <ntp>0</ntp>
       <zfs>0</zfs>
     </NodeExporter>
+    <WazuhAgent version="0.0.0" persisted_at="1785748406.92" description="Wazuh Agent">
+      <general>
+        <enabled>1</enabled>
+        <server_address>10.10.20.10</server_address>
+        <agent_name>opnsense-01</agent_name>
+        <protocol>tcp</protocol>
+        <port>31514</port>
+        <debug_level>0</debug_level>
+      </general>
+      <auth>
+        <password>***MASKED***</password>
+        <port>31515</port>
+      </auth>
+      <logcollector>
+        <remote_commands>0</remote_commands>
+        <syslog_programs />
+        <suricata_eve_log>1</suricata_eve_log>
+      </logcollector>
+      <rootcheck>
+        <enabled>0</enabled>
+      </rootcheck>
+      <syscollector>
+        <enabled>0</enabled>
+      </syscollector>
+      <syscheck>
+        <enabled>0</enabled>
+      </syscheck>
+      <active_response>
+        <enabled>0</enabled>
+        <remote_commands>0</remote_commands>
+        <fw_alias_ignore />
+        <repeated_offenders />
+      </active_response>
+    </WazuhAgent>
   </OPNsense>
   <hasync version="1.0.2" persisted_at="1785198670.63" description="HA sync">
     <disablepreempt>0</disablepreempt>

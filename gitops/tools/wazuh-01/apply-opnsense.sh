@@ -5,6 +5,12 @@
 # active response, remote command, rootcheck, syscollector, syscheck, syslog 수집은 모두 끈다.
 # 방화벽 rule, NAT, DNS, Suricata 룰셋, 인터페이스는 바꾸지 않는다.
 # authd 등록 password는 저장소 밖 mode 0600 입력에서 읽고 출력하지 않는다.
+#
+# apply 성공은 라이브 적용이 끝났다는 뜻이지 스냅샷이 갱신됐다는 뜻이 아니다. 이 스크립트는
+# check-drift.sh --update를 호출하지 않는다. 전체 검증 전에 스냅샷을 갱신하면 실패한 상태나
+# 동시 foreign drift를 정상 상태로 흡수할 수 있기 때문이다 (WAZUH-01-FIX-01). verify-live.sh의
+# 다섯 완료 증거가 모두 통과한 뒤에만 finalize-opnsense-snapshot.sh를 실행해 exact-diff gate를
+# 통과한 diff만 승인한다.
 set -euo pipefail
 
 readonly action=${1:-}
@@ -201,6 +207,7 @@ if [[ ${action} == apply ]]; then
     || fail '저장된 agent 설정이 계획과 다르다.'
   echo "Settings=PASS server=${manager_address}:${manager_events_port} auth_port=${manager_auth_port} suricata_eve_log=1 active_response=0 rootcheck=0 syscollector=0 syscheck=0 remote_commands=0"
   echo 'WAZUH01_OPNSENSE_APPLY=PASS'
+  echo 'NextStep=verify-live.sh 통과 후 finalize-opnsense-snapshot.sh로 승인된 diff만 --update'
   exit 0
 fi
 

@@ -170,11 +170,24 @@ A90 룰을 이 범위 밖 ID로 추가하면 라우팅이 조용히 깨지므로
 4. Argo가 `platform-root`에서 `wazuh` child를 동기화한다.
 5. OPNsense Wazuh Agent를 [`apply-opnsense.sh`](../../tools/wazuh-01/apply-opnsense.sh)로 설치·등록한다.
 6. `gitops/tools/wazuh-01/verify-live.sh verify`를 한 번 실행한다.
+7. 6까지 모두 통과한 뒤에만
+   [`finalize-opnsense-snapshot.sh`](../../tools/wazuh-01/finalize-opnsense-snapshot.sh)를 실행해
+   `infra/opnsense/config.xml` masked drift snapshot을 갱신한다.
+
+`apply-opnsense.sh apply`의 성공은 라이브 적용이 끝났다는 뜻이지 snapshot이 갱신됐다는 뜻이
+아니다. `apply-opnsense.sh`는 `check-drift.sh --update`를 직접 호출하지 않는다. 6번 전에
+snapshot을 갱신하면 아직 실패한 배포나 동시 foreign drift를 정상 상태로 흡수할 수 있기
+때문이다(`WAZUH-01-FIX-01`). `finalize-opnsense-snapshot.sh`는 live와 snapshot의 diff를
+hunk 단위로 승인 목록(firmware plugin 목록의 `os-wazuh-agent` 추가, `WazuhAgent` subtree
+신규 추가, `IDS`의 `persisted_at`만 변경)과 대조하는 exact-diff gate를 통과한 뒤에만
+`check-drift.sh --update`를 부르고, 그 직후 일반 `check-drift.sh`로 drift가 없는지 다시
+확인한다. 승인 범위 밖 차이가 하나라도 있으면 라이브를 건드리지 않고 중단한다.
 
 ## 완료 증거
 
 [`verify-live.sh`](../../tools/wazuh-01/verify-live.sh) 하나가 아래 다섯 개만 판정한다.
-UI 클릭, 중복 port-forward, 별도 smoke test, 부하 시험은 하지 않는다.
+UI 클릭, 중복 port-forward, 별도 smoke test, 부하 시험은 하지 않는다. OPNsense snapshot
+갱신은 `verify-live.sh`가 아니라 위 설치 7단계의 `finalize-opnsense-snapshot.sh`가 소유한다.
 
 1. 대표 Suricata event 한 건이 소스에서 Wazuh로 직접 수집·탐지·검색됨
 2. Loki relay 부재와 같은 고정창의 Loki 보안 event 복제본 0건
