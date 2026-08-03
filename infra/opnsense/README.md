@@ -35,6 +35,7 @@ check-drift.sh --update로 스냅샷 승인
 | SSH | LAN listen, 공개키 관리 |
 | DNS | Unbound recursion, DNSSEC, exact split override; 공인 zone 전체 forwarding 비활성 |
 | DHCP | Dnsmasq; 현재 동적·정적 hostname record 없음 |
+| Metrics | `os-node_exporter`가 관리 주소에만 bind하고 CPU·meminfo·netdev를 노출; PLATFORM의 k3s-01 TCP 9100 exact PASS 한 건 |
 | ACME | Cloudflare DNS-01 wildcard, 자동갱신 cron |
 | NAT | automatic outbound NAT |
 | IPsec | `AWS-NET-01` swanctl Connections 1개(IKEv2, policy-based, static). PSK는 스냅샷에서 제거된다 |
@@ -60,6 +61,14 @@ check-drift.sh --update로 스냅샷 승인
 소유한다. `NET-03` 절차는 bootstrap 당시의 역사 증거로만 보존한다.
 EDGE-01이 추가한 Warpgate direct peer control rule과 rollback은
 [`docs/runbook/netbird-public-edge.md`](../../docs/runbook/netbird-public-edge.md)가 소유한다.
+
+## OPN-METRICS-01 최소 수집 경로
+
+OPNsense 플러그인 `os-node_exporter`만 설치해 CPU·memory·interface collector를 활성화했다.
+API credential이 추가로 필요한 외부 exporter는 사용하지 않는다. PLATFORM의 k3s-01에서
+관리 주소 TCP 9100으로 향하는 `opt2` ingress exact PASS 한 건만 NET-04 비공개 목적지 BLOCK
+앞에 두며, 다른 관리 UI·VLAN 경계는 열지 않는다. 선언·실측값·UUID 기반 rollback 절차는
+[`gitops/apps/obs/README.md`](../../gitops/apps/obs/README.md)가 소유한다.
 
 ## IDS 경계
 

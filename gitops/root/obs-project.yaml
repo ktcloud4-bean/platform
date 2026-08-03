@@ -48,6 +48,8 @@ spec:
     - group: monitoring.coreos.com
       kind: PrometheusRule
     - group: monitoring.coreos.com
+      kind: ScrapeConfig
+    - group: monitoring.coreos.com
       kind: ServiceMonitor
     - group: networking.k8s.io
       kind: NetworkPolicy

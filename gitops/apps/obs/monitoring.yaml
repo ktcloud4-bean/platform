@@ -40,6 +40,24 @@ spec:
       interval: 30s
       scrapeTimeout: 10s
 ---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: opnsense-node
+  namespace: obs
+  labels:
+    release: obs
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  metricsPath: /metrics
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
+  staticConfigs:
+    - targets:
+        - 10.10.10.1:9100
+      labels:
+        instance: opnsense.imcherry5778.xyz
+---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:

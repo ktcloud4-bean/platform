@@ -1,8 +1,9 @@
 # OBS-01 metrics·경보 기준선
 
 이 디렉터리는 단일 노드 `k3s-01`의 Prometheus Operator, Prometheus, Alertmanager,
-node-exporter, kube-state-metrics, Grafana와 인증서 probe만 소유한다. Wazuh 보안 event,
-Loki 수집 경계, 자동 대응, 방화벽, 공개 DNS·NAT·Ingress와 다른 앱의 선언은 소유하지 않는다.
+node-exporter, kube-state-metrics, Grafana, 인증서 probe와 OPNsense node_exporter scrape를
+소유한다. Wazuh 보안 event, Loki 수집 경계, 자동 대응, 공개 DNS·NAT·Ingress와 다른 앱의
+선언은 소유하지 않는다.
 
 ## 수집 경계
 
@@ -13,10 +14,17 @@ Loki 수집 경계, 자동 대응, 방화벽, 공개 DNS·NAT·Ingress와 다른
 | backup | `velero`, `velero_backup_total` | `obs`의 ServiceMonitor가 기존 `velero` Service를 선택 |
 | certificate | `obs-blackbox`, `probe_success`, `probe_ssl_earliest_cert_expiry` | blackbox-exporter가 기존 Traefik의 `k3s-01.imcherry5778.xyz` TLS를 검증 |
 | 수집 pipeline | `loki`·`alloy`, `loki_build_info`·`alloy_build_info` | `obs`의 ServiceMonitor가 기존 `loki` namespace Service를 선택 |
+| OPNsense | `opnsense-node`, CPU·memory·interface node metric | 이 앱의 외부 static target ScrapeConfig |
 
-Prometheus는 `obs` namespace에 있는 `release=obs` ServiceMonitor와 PrometheusRule만
-선택한다. Velero와 Loki 선언은 수정하지 않는다. OPNsense exporter·SNMP·방화벽 rule은
-`OPN-METRICS-01`로 분리했으며 OBS-01 증거에 포함하지 않는다.
+Prometheus는 `obs` namespace에 있는 `release=obs` ServiceMonitor·PrometheusRule·ScrapeConfig를
+선택한다. Velero와 Loki 선언은 수정하지 않는다. `OPN-METRICS-01`의 OPNsense static target,
+Prometheus egress와 방화벽 rule은 이 앱을 확장하며 OBS-01의 과거 증거에는 포함하지 않는다.
+
+OPNsense 플러그인 node_exporter와 API 기반 opnsense-exporter를 한 번 비교했고, 추가 API
+credential 없이 CPU·memory·interface를 얻는 더 짧은 경로라 `os-node_exporter`를 선택했다.
+플러그인은 관리 주소 한 곳의 TCP 9100에만 bind하고 CPU·meminfo·netdev collector만 켠다.
+Kubernetes Service가 없는 외부 static endpoint이므로 ServiceMonitor가 아니라 ScrapeConfig를
+사용한다. SNMP, dashboard와 alert rule은 이 작업 범위가 아니다.
 
 기존 인프라에는 cert-manager와 cert-manager 소유 Certificate가 없다. 인증서 완료 증거는
 새 CA controller를 설치하는 대신 실제 외부 진입점인 Traefik `websecure` ClusterIP에 SNI
@@ -34,9 +42,9 @@ Grafana는 ClusterIP만 만들며 Ingress와 공개 DNS가 없다. Grafana admin
 credential을 저장하지 않는다.
 
 NetworkPolicy는 `obs`를 ingress·egress default deny로 시작한다. namespace 내부 통신, CoreDNS,
-Kubernetes API, node-exporter의 node IP TCP 9100, 기존 Velero·Loki·Alloy metric port,
-Grafana init→Vault TCP 8200, blackbox→Traefik TCP 8443과 `obs-01-verification` label의 임시
-receiver TCP 8080만 연다.
+Kubernetes API, node-exporter의 node IP TCP 9100, OPNsense 관리 주소 TCP 9100 한 건, 기존
+Velero·Loki·Alloy metric port, Grafana init→Vault TCP 8200, blackbox→Traefik TCP 8443과
+`obs-01-verification` label의 임시 receiver TCP 8080만 연다.
 
 ## 용량과 보존
 
@@ -140,3 +148,39 @@ pointer SHA로 전환한다. 실패하거나 검증이 끝나면 다음 순서�
 임시 라이브 검증 rollback에서 삭제되는 OBS-01 PVC는 아직 운영 데이터를 소유하지 않는다.
 로컬 0600 Grafana password input과 Vault policy·role·KV는 다음 main sync를 위해 보존하며,
 credential 회전은 이 rollback 범위가 아니다.
+
+## OPN-METRICS-01 적용과 rollback
+
+[`apply-live.sh`](../../tools/opn-metrics-01/apply-live.sh)는 일반 drift가 없는 상태에서 플러그인을
+설치·최소 설정하고, `opt2`의 기존 비공개 목적지 BLOCK보다 앞에 k3s-01→OPNsense TCP 9100
+exact PASS 한 건을 disabled로 stage해 의미값을 읽은 뒤 enable·apply한다. 원본 config와 생성
+rule UUID는 저장소 밖 mode 0700/0600 복구 지점에 남긴다.
+
+[`verify-live.sh`](../../tools/opn-metrics-01/verify-live.sh) 한 번만 실행해 immutable root/child,
+target `up=1`, CPU·memory·interface 시계열, 저장 rule과 PF runtime을 판정한 뒤에만
+`check-drift.sh --update`와 일반 drift 검사를 순서대로 실행한다. 실패하면 출력된 단계부터
+원인을 특정하고 root를 시작 main SHA로 되돌린다. 방화벽은 생성 UUID만 disable·apply한 뒤
+삭제·apply하고, 이 작업이 처음 설치한 node_exporter를 disable·remove한다. 마지막으로 시작
+스냅샷과 일반 drift가 일치하는지 확인한다. 기존 OBS PVC·Secret·Vault 입력은 삭제하거나
+회전하지 않는다.
+
+### 2026-08-03 라이브 완료 증거
+
+immutable root `addba0e1aa8e6625345641b0d19929ee99e4f0b8`과 child
+`df003d3fe221b488da7c4e24872fb3bf121b91c5`에서 `verify-live.sh`를 한 번 실행했다.
+
+| acceptance | 라이브 증거 | 판정 |
+|---|---|---|
+| target | `up{job="scrapeConfig/obs/opnsense-node",instance="opnsense.imcherry5778.xyz"}=1` | 통과 |
+| CPU | `node_cpu_seconds_total{cpu="3",mode="idle"}=133659.968503937` | 통과 |
+| memory | `node_memory_size_bytes=33280430080` | 통과 |
+| interface | `node_network_receive_bytes_total{device="igc1"}=7359887362` | 통과 |
+| 방화벽 | UUID `850333eb-ba9f-4a03-a846-81b6bd24e1cf`, sequence 1020, PF rule 1개, packets 11, bytes 5436 | 통과 |
+| drift·Argo | `check-drift.sh --update` 뒤 일반 검사 drift 없음, 위 immutable root·child `Synced/Healthy` | 통과 |
+
+적용 중 첫 PF runtime 판정은 300초 캐시가 남는 rule 검색 응답에서 `pf_rules`를 읽어 실패했다.
+응답과 설치본 controller를 대조해 캐시 없는 `filter_util/rule_stats`가 같은 UUID의 PF rule 1개를
+반환함을 확인한 뒤 검증기만 고쳤으며, 방화벽을 다시 적용하지 않았다. 독립 복구 지점은
+`/home/imcherry/.local/state-backups/opn-metrics-01-nKnokVNk`, 변경 전 config revision은
+`1785711551.50`이다. 검증 종료 뒤 root와 child는 시작 SHA
+`3ab89ab66bc6217c8ca789f034485e41a1e77f08`을 거쳐 literal `main`으로 복구했다.

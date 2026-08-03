@@ -73,7 +73,7 @@
     <firmware version="1.0.1" persisted_at="1785198670.57" description="Firmware settings">
       <mirror />
       <flavour />
-      <plugins>os-acme-client</plugins>
+      <plugins>os-acme-client,os-node_exporter</plugins>
       <type />
       <subscription />
       <reboot>0</reboot>
@@ -413,7 +413,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1785711551.49" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1785732326.85" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -1816,6 +1816,62 @@
             <shaper2 />
             <description>EDGE-01 Warpgate to NetBird control</description>
           </rule>
+          <rule uuid="850333eb-ba9f-4a03-a846-81b6bd24e1cf">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1020</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.10.1</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>9100</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>OPN-METRICS-01: k3s-01 Prometheus에서 OPNsense node_exporter TCP 9100만 허용</description>
+          </rule>
         </rules>
         <snatrules />
         <npt />
@@ -3131,6 +3187,22 @@
       </validations>
       <actions />
     </AcmeClient>
+    <NodeExporter version="0.2.0" persisted_at="1785732320.51" description="node_exporter configuration">
+      <enabled>1</enabled>
+      <listenaddress>10.10.10.1</listenaddress>
+      <listenport>9100</listenport>
+      <cpu>1</cpu>
+      <exec>0</exec>
+      <filesystem>0</filesystem>
+      <loadavg>0</loadavg>
+      <meminfo>1</meminfo>
+      <netdev>1</netdev>
+      <time>0</time>
+      <devstat>0</devstat>
+      <interrupts>0</interrupts>
+      <ntp>0</ntp>
+      <zfs>0</zfs>
+    </NodeExporter>
   </OPNsense>
   <hasync version="1.0.2" persisted_at="1785198670.63" description="HA sync">
     <disablepreempt>0</disablepreempt>

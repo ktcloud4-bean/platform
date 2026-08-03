@@ -1218,7 +1218,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `AUDIT-01 DONE` | Suricata·CrowdSec AppSec(Coraza/CRS)·Falco·Kubernetes·Vault·Keycloak·Pomerium·접근 서비스 이벤트 분류 | `EDGE-01`, `POL-02`, `FALCO-01` | 없음 | Loki·Wazuh | 보안/운영 경계, 시각·사용자·요청 ID, 마스킹, 보존 기준 |
 | `LOKI-01 DONE` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
 | `OBS-01 DONE` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
-| `OPN-METRICS-01 READY` | OPNsense exporter와 최소 metric 방화벽 경로 | `OBS-01` | `OPNSENSE-LIVE` | 운영 경보 | exporter target `up=1`, CPU·memory·interface 대표 시계열, 최소 rule 한 건과 rollback·drift 없음 |
+| `OPN-METRICS-01 DONE` | OPNsense exporter와 최소 metric 방화벽 경로 | `OBS-01` | `OPNSENSE-LIVE` | 운영 경보 | exporter target `up=1`, CPU·memory·interface 대표 시계열, 최소 rule 한 건과 rollback·drift 없음 |
 | `WAZUH-01 BLOCKED` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
@@ -1268,6 +1268,20 @@ Wazuh 자원은 모두 변경하지 않았다. 따라서 다섯 완료 증거는
 `BLOCKED`로 되돌린다. 재진입은 배포 직전 available이 최소 11 GiB(8 GiB 정지선 + Wazuh
 3 GiB) 이상이고 swap 0, guest root 여유 20% 이상, 기존 PVC와 Wazuh 16 GiB의 합계가
 96 GiB 미만인 때 같은 gate를 다시 한 번 통과하는 조건이다. `SOAR-01`은 계속 `BLOCKED`다.
+
+2026-08-03 `OPN-METRICS-01`에서 추가 credential이 없는 최단 경로인 OPNsense
+`os-node_exporter`를 관리 주소에만 bind하고 CPU·meminfo·netdev collector만 활성화했다.
+Prometheus는 외부 static target ScrapeConfig와 exact egress 한 건으로 수집했고 target
+`up=1`, CPU `node_cpu_seconds_total=133659.968503937`, memory
+`node_memory_size_bytes=33280430080`, interface
+`node_network_receive_bytes_total{device="igc1"}=7359887362`를 실제 조회했다. k3s-01에서
+OPNsense TCP 9100으로 향하는 방화벽 PASS UUID `850333eb-ba9f-4a03-a846-81b6bd24e1cf`는
+sequence 1020의 PF rule 1개로 적용됐고 packets 11, bytes 5436을 기록했다. immutable root
+`addba0e1aa8e6625345641b0d19929ee99e4f0b8`과 child
+`df003d3fe221b488da7c4e24872fb3bf121b91c5`가 `Synced/Healthy`였으며 스냅샷 승인 뒤 일반
+drift 검사는 무변경이었다. rollback은 생성 UUID만 disable·apply·delete·apply하고 이 작업이
+설치한 exporter를 disable·remove하는 경로로 고정했다. 직접 후속 ID가 없어 새로 `READY`로
+여는 작업은 없으며 `WAZUH-01`과 `SOAR-01`은 기존 `BLOCKED`를 유지한다.
 
 ## 10. 마지막 단계: Shuffle
 
