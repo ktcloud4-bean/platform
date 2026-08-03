@@ -286,7 +286,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `NB-02 DONE` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
 | `WG-02 DONE` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | `OPNSENSE-LIVE`, `PUBLIC-DNS` | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
 | `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
-| `VAULT-03 READY` | Vault UI를 Pomerium 우회 표준 Ingress와 Vault OIDC auth method로 노출 (`gitops/apps/vault/`) | `VAULT-02`, `KC-01`, `INGRESS-01`, `KMS-01` | `VAULT-CONFIG`, `OPNSENSE-LIVE` | Vault 일상 운영·복구 독립성 | Vault OIDC auth method와 전용 Keycloak client 연결로 UI 사용자가 자기 policy 경로만 읽고 타 경로·`sys/mounts`는 403, Pomerium을 경유하지 않는 표준 Ingress와 자체서명 backend TLS 신뢰 설정, Pomerium Pod 정지 중 Vault UI 로그인 성공으로 복구 독립성 실증, root token·port-forward break-glass 보존 확인, audit device에 UI 로그인 event 기록과 token 원문 0건, `vault` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건과 `ip-plan.md` 노출 정의 갱신, Traefik 정적 설정·Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Vault Agent 소비자 회귀 없음 |
+| `VAULT-03 DONE` | Vault UI를 Pomerium 우회 표준 Ingress와 Vault OIDC auth method로 노출 (`gitops/apps/vault/`) | `VAULT-02`, `KC-01`, `INGRESS-01`, `KMS-01` | `VAULT-CONFIG`, `OPNSENSE-LIVE` | Vault 일상 운영·복구 독립성 | Vault OIDC auth method와 전용 Keycloak client 연결로 UI 사용자가 자기 policy 경로만 읽고 타 경로·`sys/mounts`는 403, Pomerium을 경유하지 않는 표준 Ingress와 자체서명 backend TLS 신뢰 설정, Pomerium Pod 정지 중 Vault UI 로그인 성공으로 복구 독립성 실증, root token·port-forward break-glass 보존 확인, audit device에 UI 로그인 event 기록과 token 원문 0건, `vault` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건과 `ip-plan.md` 노출 정의 갱신, Traefik 정적 설정·Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Vault Agent 소비자 회귀 없음 |
 | `GITOPS-02 DONE` | Argo CD UI Pomerium Route와 최소권한 RBAC 연결 | `GITOPS-01`, `POM-01` | `OPNSENSE-LIVE` | GitOps 일상 조회 | Pomerium 통과만으로 Argo 권한이 생기지 않음을 Argo 자체 OIDC·RBAC의 allow/deny로 실증, 조회 계정의 `platform-root`·child `Synced/Healthy` 조회 성공과 수동 sync·삭제·repo credential 조회 거부, `pomerium`→`argocd` NetworkPolicy egress 명시, `argo` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig·Traefik Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Route와 root Application 회귀 없음 |
 
 2026-08-03 `VAULT-03`과 `GITOPS-02`를 신설한다. 두 작업은 [`ip-plan.md`](ip-plan.md)가 이미
@@ -341,6 +341,43 @@ merge 전 `ARGO-ROOT` 잠금 확보 과정에서 병렬 `PKI-01` 세션이 같�
 targetRevision을 반복 전환하는 것을 발견해 충돌 여부를 사용자에게 확인받은 뒤, `PKI-01`
 merge(`origin/main` → `01eaaf2`) 완료를 기다려 브랜치를 재rebase하고 진행했다. 검증 뒤
 `platform-root`는 기록해 둔 main SHA로 정확히 복귀했다.
+
+2026-08-04 `VAULT-03`에서 Vault UI를 Pomerium 뒤에 두지 않는 표준 Ingress로 노출하고
+`auth/oidc`·전용 policy·identity group-alias로 권한을 Vault 자신이 판정하게 했다. 자체서명
+backend TLS 신뢰는 `ServersTransport`(`vault-backend-tls`, `serverName=vault.vault.svc.
+cluster.local`)와 그 인증서만 담은 `Secret`(`vault-ingress-ca`)으로 구성했다. 라이브에서
+Traefik의 `service.serversscheme`·`service.serverstransport` annotation은 Ingress가 아니라
+backend Service에 있어야 적용된다는 것을 500 Internal Server Error로 실제 확인해
+`service.yaml`로 옮겼다. Ingress에 두면 Traefik이 두 annotation을 조용히 무시하고 평문
+HTTP로 backend에 붙어 Vault가 즉시 거부했다.
+
+Keycloak confidential client(`vault`) 생성 스크립트의 secret 생성 파이프(`cut -c1-48`이
+자체 개행을 하나 더 붙이고 그 위에 `printf '\n'`이 개행 하나를 더 붙여 파일 끝에 개행 두
+개가 남음)와 검증부(`jq rtrimstr("\n")`, 개행 하나만 제거)가 Vault 쪽 주입(`tr -d '\n'`,
+전체 제거)과 불일치해 Keycloak엔 개행이 포함된 값이, Vault엔 개행 없는 값이 각각 등록되는
+`unauthorized_client` 실패를 라이브에서 재현했다. 생성은 `head -c 48`로, 두 소비측 비교는
+`gsub("\n"; "")`로 통일해 재현·수정했다.
+
+`auth/oidc/role/ui-viewer`는 `bound_audiences=vault`로 aud claim을 제한하고
+`allowed_redirect_uris`를 Vault UI의 실제 callback 경로 하나로 좁혔으며 `token_policies`를
+비워 내장 `default` policy만 자동 부여되게 했다. `vault-ui-operator` policy(`kv/data/*`,
+`kv/metadata/*` read/list만)는 identity group(`vault-ui-platform-privileged`, external)의
+group-alias로 Keycloak `groups` claim의 `/platform-privileged`에만 연결했다.
+
+라이브 검증은 Pomerium Deployment를 0 replica로 내린 한 창에서 `imcherry-admin`
+(`/platform-privileged`)의 Vault UI OIDC 로그인 성공(복구 독립성), 발급된 token의
+`policies=[default, vault-ui-operator]`, `kv/data/keycloak/runtime` 200과 `sys/mounts`·
+`auth/token/create` 403, audit device(`stdout`)에 `auth/oidc` 이벤트 기록과 token 원문
+0건을 모두 확인했다. root token `token lookup`은 `policies=[root]`를 유지했고
+`kubectl port-forward svc/vault 8200`도 그대로 열렸다. Pomerium을 원래 replica 수로
+복구한 뒤 Keycloak·Pomerium Pod가 모두 회귀 없이 `Running`을 유지함을 확인했다.
+`HelmChartConfig/traefik` resourceVersion과 Traefik Pod UID·restart count는 검증 시작
+기준값과 끝까지 동일했고 `vault-0`의 restart count도 0을 유지했다(StatefulSet 무변경).
+
+`vault` 내부 alias(`vault.imcherry5778.xyz` → `10.10.20.10`)를 Unbound에 추가하고
+`check-drift.sh --update`로 스냅샷을 갱신했다. `ip-plan.md`의 노출 정의를 "내부 관리
+경로만"에서 "Pomerium 미경유 표준 Ingress; 실제 권한은 Vault 자체 OIDC·policy가 판정"으로
+갱신했다. `VAULT-03`을 선행으로 가진 작업은 없으므로 새로 여는 후속은 없다.
 
 2026-08-03 `PKI-01`의 첫 mTLS consumer를 CrowdSec agent↔LAPI로 정하고 인증서 발급·갱신
 경로를 cert-manager + Vault Issuer로 결정했다. 따라서 `PKI-01`은 `DEFERRED`를 벗고 새 선행

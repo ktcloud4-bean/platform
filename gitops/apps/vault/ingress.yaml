@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vault
+  namespace: vault
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt-production
+    # backend scheme·serversTransport(자체서명 TLS 신뢰, VAULT-01)는 이 Ingress가 아니라
+    # service.yaml의 vault Service annotation이 소유한다. 기존 Pomerium Route 8건은
+    # 전부 평문 HTTP upstream이라 이 경로에만 필요하다.
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  ingressClassName: traefik
+  rules:
+    # hostname의 단일 원본은 docs/ip-plan.md다. Pomerium을 경유하지 않는 표준 Ingress이며
+    # 권한 판정은 Vault 자체 OIDC auth method와 policy가 한다(VAULT-03).
+    - host: vault.imcherry5778.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vault
+                port:
+                  name: https
+  tls:
+    - hosts:
+        - vault.imcherry5778.xyz

@@ -33,6 +33,7 @@ Vault API의 상태이므로 Argo의 대상이 아니다. 그렇다고 이 값�
 | `database/` | PostgreSQL 단기 자격증명. 연결은 `sslmode=verify-full` |
 | `pki/` | 내부 workload TLS/mTLS. root CA는 `ktcloud4-bean Internal CA` |
 | audit device `stdout/` | 감사 이벤트를 Pod 로그로 |
+| `auth/oidc` | Vault UI 사람 로그인(VAULT-03). Keycloak `platform` realm confidential client `vault` |
 
 `UPDATE-01`의 `renovate` policy와 Kubernetes auth role은 `renovate` namespace의 동명
 ServiceAccount만 `audience=vault`로 허용하고 `kv/renovate/runtime` 한 경로만 읽힌다. PAT와
@@ -76,6 +77,7 @@ database 연결을 만든 직후 `rotate-root`를 호출해 사람이 아는 비
 | `scripts/configure.sh` | mount·auth·policy·role 생성 (재실행 가능) |
 | `scripts/policies/*.hcl` | 앱별 policy 원문 |
 | `scripts/configure-bkp03-snapshot.sh` | BKP-03 snapshot read policy·periodic token 선언 |
+| `scripts/configure-vault-03-oidc.sh` | VAULT-03 `auth/oidc`, `vault-ui-operator` policy, `/platform-privileged` identity group-alias 선언 |
 | `scripts/verify-bkp03-isolated-restore.sh` | Service 없는 별도 Vault에서 Raft restore 검증·정리 |
 | `restore/bkp03-isolated-restore.yaml` | loopback·default-deny·임시 Raft restore Pod |
 

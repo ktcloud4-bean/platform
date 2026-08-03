@@ -196,7 +196,7 @@ NetBird 단독 외부 공개 정책은 `EDGE-01`, 조건부 Cloudflare HTTP 공�
 | `access.imcherry5778.xyz` | service alias | Pomerium 보호 Dashy 포털 | 내부·NetBird 경유; clientless 공개는 `EDGE-02 DEFERRED` | Unbound alias → `k3s-01` (`10.10.20.10`); POM-01 등록 |
 | `argo.imcherry5778.xyz` | service alias | Argo CD | Pomerium; 실제 권한은 Argo 자체 OIDC·RBAC가 판정 | Unbound alias → `k3s-01` (`10.10.20.10`); GITOPS-02 등록, 내부 AAAA·공개 A/AAAA 0건 |
 | `headlamp.imcherry5778.xyz` | service alias | Headlamp | Pomerium | `TARGET`; HEADLAMP-02 `OPNSENSE-LIVE` 승인 뒤 Unbound alias → `k3s-01` (`10.10.20.10`), 내부 AAAA·공개 A/AAAA 0건 |
-| `vault.imcherry5778.xyz` | service alias | Vault | 내부 관리 경로만 | 미등록 |
+| `vault.imcherry5778.xyz` | service alias | Vault | Pomerium 미경유 표준 Ingress; 실제 권한은 Vault 자체 OIDC·policy가 판정 | Unbound alias → `k3s-01` (`10.10.20.10`); VAULT-03 등록, 내부 AAAA·공개 A/AAAA 0건 |
 | `git.imcherry5778.xyz` | service alias | Gitea | UI는 Pomerium, Git data는 사설 SSH | Unbound alias → `k3s-01` (`10.10.20.10`); SCM-01 등록, 내부 AAAA 0건 |
 | `jenkins.imcherry5778.xyz` | service alias | Jenkins | Pomerium | Unbound alias → `k3s-01` (`10.10.20.10`); CI-01 등록, 내부 AAAA 0건 |
 | `sonar.imcherry5778.xyz` | service alias | SonarQube | Pomerium | Unbound alias → `k3s-01` (`10.10.20.10`); QUALITY-01 등록, 내부 AAAA 0건 |

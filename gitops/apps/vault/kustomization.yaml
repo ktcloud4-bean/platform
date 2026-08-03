@@ -9,3 +9,5 @@ resources:
   - pvc.yaml
   - service.yaml
   - statefulset.yaml
+  - serverstransport.yaml
+  - ingress.yaml

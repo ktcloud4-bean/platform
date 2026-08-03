@@ -2592,7 +2592,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785770563.86" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785776229.92" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2858,6 +2858,13 @@
           <hostname>argo</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>Argo CD Pomerium Route alias (GITOPS-02)</description>
+        </alias>
+        <alias uuid="cb5880b7-510e-476f-8117-df4be009ee57">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>vault</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>Vault standard Ingress alias (VAULT-03)</description>
         </alias>
       </aliases>
     </unboundplus>

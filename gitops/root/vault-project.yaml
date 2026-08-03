@@ -29,3 +29,12 @@ spec:
       kind: PersistentVolumeClaim
     - group: apps
       kind: StatefulSet
+    # VAULT-03: Pomerium을 경유하지 않는 표준 Ingress와 그 자체서명 backend TLS 신뢰 설정.
+    - group: networking.k8s.io
+      kind: Ingress
+    - group: traefik.io
+      kind: ServersTransport
+    # vault-ingress-ca 하나만 담는다. 값은 VAULT-01이 이미 공개한 leaf 인증서이며
+    # private key나 unseal 자료가 아니다.
+    - group: ''
+      kind: Secret

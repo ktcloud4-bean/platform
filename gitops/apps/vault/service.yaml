@@ -6,6 +6,11 @@ metadata:
   labels:
     app.kubernetes.io/part-of: platform-gitops
     app.kubernetes.io/name: vault
+  annotations:
+    # VAULT-03: Traefik의 backend scheme·serversTransport 지정은 Ingress가 아니라
+    # 이 Service의 annotation으로 읽는다. vault listener는 자체서명 TLS다(VAULT-01).
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    traefik.ingress.kubernetes.io/service.serverstransport: vault-vault-backend-tls@kubernetescrd
 spec:
   type: ClusterIP
   selector:

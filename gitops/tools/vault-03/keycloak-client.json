@@ -1,0 +1,46 @@
+{
+  "clientId": "vault",
+  "name": "VAULT-03 Vault UI OIDC",
+  "description": "VAULT-03 confidential Authorization Code client; 실제 권한 판정은 Vault 자체 OIDC auth method와 policy가 한다",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "clientAuthenticatorType": "client-secret",
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "authorizationServicesEnabled": false,
+  "consentRequired": false,
+  "frontchannelLogout": false,
+  "fullScopeAllowed": false,
+  "rootUrl": "https://vault.imcherry5778.xyz",
+  "baseUrl": "https://vault.imcherry5778.xyz/ui/",
+  "redirectUris": [
+    "https://vault.imcherry5778.xyz/ui/vault/auth/oidc/oidc/callback"
+  ],
+  "webOrigins": [
+    "https://vault.imcherry5778.xyz"
+  ],
+  "attributes": {},
+  "defaultClientScopes": [
+    "profile",
+    "email"
+  ],
+  "optionalClientScopes": [],
+  "protocolMappers": [
+    {
+      "name": "groups",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "groups",
+        "full.path": "true",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }
+  ]
+}
