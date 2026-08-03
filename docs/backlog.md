@@ -1380,7 +1380,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `OPN-METRICS-01 DONE` | OPNsense exporter와 최소 metric 방화벽 경로 | `OBS-01` | `OPNSENSE-LIVE` | 운영 경보 | exporter target `up=1`, CPU·memory·interface 대표 시계열, 최소 rule 한 건과 rollback·drift 없음 |
 | `WAZUH-01 DONE` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle, `CERTMGR-01` | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 | `OBS-02 READY` | Grafana·Prometheus·Alertmanager UI를 Pomerium Route로 노출하고 최소 대시보드 확보 (`gitops/apps/obs/`) | `OBS-01`, `POM-01` | `OPNSENSE-LIVE` | 운영 경보 silence·팀 온보딩 | Route 3건과 `pomerium`→`obs` NetworkPolicy egress 선언, Grafana 로그인 뒤 node·PVC·Loki 대표 패널 표시, Prometheus target `up=1`과 PromQL 실행, Alertmanager silence 생성·조회·만료 왕복, `/platform-users` 허용과 미소속 계정 403의 같은 시점 대조 및 Alertmanager 쓰기 경로의 `/platform-privileged` 한정, alias 3건 내부 A만·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig generation·Traefik Pod UID·restart 불변, 배포 전후 available RAM 정지선 통과와 신규 PVC 0개, Argo child `Synced/Healthy`와 OPNsense drift 없음, rollback 뒤 기존 Route·경보 전달 회귀 없음 |
-| `WAZUH-02 READY` | Wazuh Dashboard 배포와 보안 이벤트 조사 경로 확보 (`gitops/apps/wazuh/`) | `WAZUH-01`, `POM-01`, `CAP-04` | `K3S-HEAVY`, `OPNSENSE-LIVE` | 사고 조사·`SOAR-01` 용량 | 배포 직전 capacity gate 재측정과 `SOAR-01` 진입선 12 GiB 잔여 판정(침범하면 `k3s-01` 32 GiB 증설을 선행으로 기록하고 중단), Dashboard를 `WAZUH-01`과 같은 4.14.7 계열 고정 version·image digest로 선언, Pomerium Route와 `pomerium`→`wazuh` NetworkPolicy egress, Dashboard 로그인 뒤 `D30`·`A90` index 검색과 `WAZUH-01`의 Suricata sid `2029054` 재현, indexer 자격증명을 Kubernetes Secret 원문 없이 Vault Agent로만 주입, `/platform-privileged` 허용과 일상 계정 거부, active response 비활성과 ISM 정책 두 건 불변, `wazuh` alias 내부 A 1건·공개 A/AAAA 0건, 배포 후 available·PVC 정지선 통과, Argo child `Synced/Healthy`, rollback 뒤 indexer·manager·retention 회귀 없음 |
+| `WAZUH-02 READY` | Wazuh Dashboard 배포와 보안 이벤트 조사 경로 확보 (`gitops/apps/wazuh/`) | `WAZUH-01`, `POM-01`, `CAP-04` | `K3S-HEAVY`, `OPNSENSE-LIVE` | 사고 조사·`SOAR-01` 용량 | 배포 직전 capacity gate 재측정으로 자기 8 GiB 정지선 통과를 판정하고 배포 후 available이 `SOAR-01` 진입선 12 GiB를 남기는지 기록(미달이면 `k3s-01` 32 GiB 증설이 `SOAR-01`의 선행임을 함께 기록), Dashboard를 `WAZUH-01`과 같은 4.14.7 계열 고정 version·image digest로 선언, Pomerium Route와 `pomerium`→`wazuh` NetworkPolicy egress, Dashboard 로그인 뒤 `D30`·`A90` index 검색과 `WAZUH-01`의 Suricata sid `2029054` 재현, indexer 자격증명을 Kubernetes Secret 원문 없이 Vault Agent로만 주입, `/platform-privileged` 허용과 일상 계정 거부, active response 비활성과 ISM 정책 두 건 불변, `wazuh` alias 내부 A 1건·공개 A/AAAA 0건, 배포 후 available·PVC 정지선 통과, Argo child `Synced/Healthy`, rollback 뒤 indexer·manager·retention 회귀 없음 |
 
 2026-08-03 `OBS-02`와 `WAZUH-02`를 신설한다. 두 작업은 결정된 목표와 실제 구현이 어긋난
 상태를 닫는다. 이 저장소는 ADR과 `architecture.md`가 "무엇을 만들 것인가"를, 백로그가
@@ -1401,12 +1401,15 @@ ADR-0007을 대체하는 새 결정도 없으므로 현재는 결정과 구현�
 14,481,977,344 bytes(13.487 GiB)이고 `SOAR-01` 진입선이 12 GiB이므로 잔여는 1.487 GiB다.
 Dashboard가 이를 소비하면 `SOAR-01`은 `k3s-01`을 32 GiB로 올리기 전에는 진입할 수 없다. 이
 lane의 상한은 `CAP-04`가 계산한 대로 32 GiB이며 36 GiB는 VM RAM 회계를 53 GiB로 만들어
-52 GiB 경고선을 넘는다. 따라서 먼저 배포하는 쪽이 용량을 가져가고, 두 작업 모두 배포 직전
-gate에서 상대 작업의 진입선 잔여를 함께 판정한다. 이 문서는 순서를 강제하지 않지만, 사람이
-경보를 눈으로 확인할 창 없이 자동 대응을 얹는 것은 ADR-0007의 재검토 조건인 "경보 분류,
-보존기간과 오탐 기준이 합의된다"와 어긋난다. `WAZUH-01`이 NIDS-01 테스트 룰 3건이 전체
-경보의 99.87%를 만드는 것을 발견한 것도 이런 종류의 판단이다. 이 때문에 `SOAR-01`보다
-`WAZUH-02`를 먼저 수행할 것을 권고하되, `SOAR-01`의 선행과 상태는 이 작업에서 바꾸지 않는다.
+52 GiB 경고선을 넘는다.
+
+따라서 `SOAR-01`의 선행에 `WAZUH-02`를 추가하고 규칙 2에 따라 `READY`에서 `BLOCKED`로
+되돌린다. 사람이 경보를 눈으로 확인할 창 없이 자동 대응을 얹는 것은 ADR-0007의 재검토 조건인
+"경보 분류, 보존기간과 오탐 기준이 합의된다"를 충족하지 못한 채 SOAR를 시작하는 것이다.
+`WAZUH-01`이 `NIDS-01` 테스트 룰 3건으로 전체 경보의 99.87%가 만들어지는 것을 발견해 저장
+직전 ingest에서 제외한 것이 그 판단의 실례다. 이 종류의 오탐은 조사 창구 없이 찾기 어렵고,
+찾지 못한 채 자동화를 얹으면 오탐에 반응하는 흐름이 된다. `SOAR-01`은 `WAZUH-02` 완료 뒤 남은
+available로 진입선 12 GiB를 다시 판정하며, 미달이면 `k3s-01` 32 GiB 증설이 선행이다.
 
 `OBS-02`는 `ip-plan.md`가 `grafana.imcherry5778.xyz`의 노출을 `Pomerium`으로 적어 두고도
 소유 작업이 없어 미등록으로 남은 항목을 닫는다. `OBS-01`의 완료 증거는 Alertmanager까지의
@@ -1541,7 +1544,7 @@ ingest pipeline에서 제외했다. OPNsense 룰셋은 `NIDS-01` 소유라 이 �
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `SOAR-01 READY` | Shuffle read-only·사람 승인형 SOAR PoC | `OBS-01`, `WAZUH-01`, `FALCO-01`, `CAP-04` | `K3S-HEAVY` | 사고대응 | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch, 경보 수신→정보 보강→통지→승인 흐름, 최소권한 credential |
+| `SOAR-01 BLOCKED` | Shuffle read-only·사람 승인형 SOAR PoC | `OBS-01`, `WAZUH-01`, `WAZUH-02`, `FALCO-01`, `CAP-04` | `K3S-HEAVY` | 사고대응 | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch, 경보 수신→정보 보강→통지→승인 흐름, 최소권한 credential |
 | `SOAR-02 DEFERRED` | 되돌릴 수 있는 대응 한 가지 자동화 | `SOAR-01`, 검증된 incident runbook | 없음 | 접근 정책 | 반복 시험, 승인·감사·rollback; 방화벽·계정 무인 파괴 금지 |
 
 Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 보안 사건에 반응하는 흐름만 소유한다.
