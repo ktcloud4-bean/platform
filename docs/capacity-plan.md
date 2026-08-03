@@ -535,6 +535,31 @@ SHA로 rollback했으며 아래 값은 다음 main sync의 예상 기준선이�
 overhead를 다시 판정하고, 부족하면 replica나 disk가 아니라 수집 source와 retention을 먼저 줄인다.
 이후 상한을 넘으면 PVC·bucket을 늘리지 않고 허용 event class를 줄인다.
 
+### `WAZUH-01` 배포 전 capacity gate (2026-08-03)
+
+13:32 KST에 `K3S-HEAVY` 최초 적용 전에 읽기 전용으로 한 번 측정했다. Wazuh resource를
+배포하지 않았으므로 post 값과 index 관측창은 없다. 배포 예상치는
+[Wazuh 공식 Kubernetes 최소 요구량](https://documentation.wazuh.com/current/deployment-options/deploying-with-kubernetes/kubernetes-conf.html)의
+가용 메모리 3 GiB를 사용했다. dashboard를 뒤로 미루거나 single-node로 줄여도 이 공식
+최소값 아래를 용량 근거로 사용하지 않는다.
+
+| 지표 | 배포 전 실측·예상 | 경고·정지 기준 | 판정 |
+|---|---:|---|---|
+| `k3s-01` available | 9,946,275,840 bytes (9.263 GiB) | 12 GiB 미만 경고, 8 GiB 미만 정지 | 경고 구간 |
+| 8 GiB 정지선까지 RAM 여유 | 1,356,341,248 bytes (1.263 GiB) | Wazuh 최소 3 GiB를 수용해야 함 | 부족 |
+| Wazuh 최소 3 GiB 적용 후 예상 available | 6,725,050,368 bytes (6.263 GiB) | 8,589,934,592 bytes (8 GiB) 이상 | **STOP** |
+| 정지선 대비 예상 부족량 | 1,864,884,224 bytes (1.737 GiB) | 0 이하여야 함 | 부족 |
+| swap / guest root 여유 | 0 bytes / 84% | swap 사용, root 여유 20% 미만 | 정상 |
+| PVC 요청 합계 / Wazuh 예상 | 75.125 / 16 GiB | 96 GiB 경고, 120 GiB 정지 | 정상 |
+| Wazuh 포함 예상 PVC 합계 | 91.125 GiB | 96 GiB 미만 | 정상, 4.875 GiB 여유 |
+
+RAM 하나가 정지선을 깨므로 `WAZUH-01`은 정상 중단했다. replica·heap·PVC·disk를 늘리거나
+공식 최소 아래로 줄이지 않았고, 선언·Kubernetes API audit·OPNsense agent·라이브 자원은
+변경하지 않았다. 재진입 최소 조건은 배포 전 available 11 GiB(11,811,160,064 bytes) 이상,
+swap 0, guest root 여유 20% 이상, Wazuh 포함 PVC 합계 96 GiB 미만이다. 이 조건을 만든
+선행 capacity 회수 또는 RAM 재배정은 해당 소유 작업에서 처리하고 `WAZUH-01`은 그 뒤 같은
+배포 전 gate부터 다시 시작한다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.

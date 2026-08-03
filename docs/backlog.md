@@ -1219,7 +1219,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `LOKI-01 DONE` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
 | `OBS-01 DONE` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
 | `OPN-METRICS-01 READY` | OPNsense exporter와 최소 metric 방화벽 경로 | `OBS-01` | `OPNSENSE-LIVE` | 운영 경보 | exporter target `up=1`, CPU·memory·interface 대표 시계열, 최소 rule 한 건과 rollback·drift 없음 |
-| `WAZUH-01 READY` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
+| `WAZUH-01 BLOCKED` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
 [단일 분류·보존 표준](audit-event-standard.md)을 확정했다. 탐지 event는 Wazuh 30일,
@@ -1255,6 +1255,19 @@ Prometheus running retention은 3일·6 GiB, PVC는 8 GiB와 Alertmanager 1 GiB�
 `544d6611c4d43f8443cba905f56059be4c80fa05`가 `Synced/Healthy`였다. OPNsense metrics는 승인대로
 `OPN-METRICS-01`로 분리했다. 따라서 `OBS-01`을 완료하고 직접 후속 `OPN-METRICS-01`과
 `WAZUH-01`을 `READY`로 연다. `SOAR-01`은 `WAZUH-01`이 남아 `BLOCKED`를 유지한다.
+
+2026-08-03 `WAZUH-01`은 최초 적용 전 capacity gate에서 **STOP**했다. 13:32 KST의
+`k3s-01` available은 9,946,275,840 bytes였고 8 GiB 정지선까지 1,356,341,248 bytes
+(1.263 GiB)만 남았다. [Wazuh 공식 Kubernetes 최소 요구량](https://documentation.wazuh.com/current/deployment-options/deploying-with-kubernetes/kubernetes-conf.html)인
+3 GiB를 가장 낮은 배포 예상치로 적용해도 post-available은 6,725,050,368 bytes
+(6.263 GiB)로 정지선을 1,864,884,224 bytes(1.737 GiB) 밑돈다. swap은 0, guest root
+여유는 84%였고 PVC는 75.125 GiB에서 Wazuh 16 GiB를 더한 91.125 GiB로 96 GiB 경고선
+안이므로 중단 원인은 RAM 하나다. replica·heap·PVC를 공식 최소 아래로 줄이거나 disk를
+늘리지 않았으며 GitOps 선언, Kubernetes API audit 설정, OPNsense agent, `ARGO-ROOT`와 라이브
+Wazuh 자원은 모두 변경하지 않았다. 따라서 다섯 완료 증거는 실행하지 않고 `WAZUH-01`을
+`BLOCKED`로 되돌린다. 재진입은 배포 직전 available이 최소 11 GiB(8 GiB 정지선 + Wazuh
+3 GiB) 이상이고 swap 0, guest root 여유 20% 이상, 기존 PVC와 Wazuh 16 GiB의 합계가
+96 GiB 미만인 때 같은 gate를 다시 한 번 통과하는 조건이다. `SOAR-01`은 계속 `BLOCKED`다.
 
 ## 10. 마지막 단계: Shuffle
 
