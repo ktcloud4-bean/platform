@@ -286,6 +286,33 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `NB-02 DONE` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
 | `WG-02 DONE` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | `OPNSENSE-LIVE`, `PUBLIC-DNS` | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
 | `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
+| `VAULT-03 READY` | Vault UI를 Pomerium 우회 표준 Ingress와 Vault OIDC auth method로 노출 (`gitops/apps/vault/`) | `VAULT-02`, `KC-01`, `INGRESS-01`, `KMS-01` | `VAULT-CONFIG`, `OPNSENSE-LIVE` | Vault 일상 운영·복구 독립성 | Vault OIDC auth method와 전용 Keycloak client 연결로 UI 사용자가 자기 policy 경로만 읽고 타 경로·`sys/mounts`는 403, Pomerium을 경유하지 않는 표준 Ingress와 자체서명 backend TLS 신뢰 설정, Pomerium Pod 정지 중 Vault UI 로그인 성공으로 복구 독립성 실증, root token·port-forward break-glass 보존 확인, audit device에 UI 로그인 event 기록과 token 원문 0건, `vault` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건과 `ip-plan.md` 노출 정의 갱신, Traefik 정적 설정·Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Vault Agent 소비자 회귀 없음 |
+| `GITOPS-02 READY` | Argo CD UI Pomerium Route와 최소권한 RBAC 연결 | `GITOPS-01`, `POM-01` | `OPNSENSE-LIVE` | GitOps 일상 조회 | Pomerium 통과만으로 Argo 권한이 생기지 않음을 Argo 자체 OIDC·RBAC의 allow/deny로 실증, 조회 계정의 `platform-root`·child `Synced/Healthy` 조회 성공과 수동 sync·삭제·repo credential 조회 거부, `pomerium`→`argocd` NetworkPolicy egress 명시, `argo` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig·Traefik Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Route와 root Application 회귀 없음 |
+
+2026-08-03 `VAULT-03`과 `GITOPS-02`를 신설한다. 두 작업은 [`ip-plan.md`](ip-plan.md)가 이미
+목표 노출 방식을 적어 두었지만 이를 소유한 작업 ID가 없어 구현되지 않은 항목을 닫는다.
+`argo.imcherry5778.xyz`의 노출은 `Pomerium`으로, `vault.imcherry5778.xyz`는 `내부 관리
+경로만`으로 기록돼 있고 둘 다 내부 DNS는 `미등록`이다.
+
+`GITOPS-01`이 UI·Ingress를 만들지 않은 것은 bootstrap 시점 제약이었다. 당시에는 `POM-01`이
+없었으므로 보호 경로를 만들 수단 자체가 없었다. `POM-01` 완료 뒤 route를 추가하는 후속이
+만들어지지 않아 현재까지 SSH와 localhost port-forward가 유일한 조회 경로다. 일상 조회는
+[ADR-0004](adr/0004-zero-trust-identity-and-management-access.md)대로 Headlamp가 담당하므로
+`GITOPS-02`는 필수 경로가 아니라 조회 편의이며 우선순위가 가장 낮다. Pomerium 통과가 Argo
+권한이 되지 않게 하는 경계는 `HEADLAMP-02`가 Kubernetes RBAC로 판정한 것과 같은 이유로
+Argo 자체 RBAC가 소유한다.
+
+`VAULT-03`은 Vault UI를 노출하되 Pomerium 뒤에 두지 않는다.
+[`architecture.md`](architecture.md)의 요구는 "Vault 복구는 Pomerium이나 Dashy를 유일한
+경로로 삼지 않는다"이지 노출 금지가 아니므로, break-glass를 보존하는 한 노출은 결정 변경이
+아니다. 다만 Pomerium을 고치기 위해 봐야 하는 것이 Vault인데 그 Vault를 Pomerium 뒤에 두면
+복구 순환이 생긴다. `KMS-01`의 auto-unseal은 Vault가 sealed여서 Pomerium이 client secret을
+읽지 못하는 축을 줄였지만, Pomerium이 Vault KV에 의존하는 축과 이 복구 순환 축은 줄이지
+않았다. auto-unseal은 오히려 공인 AWS KMS endpoint 의존을 더했고 `KMS-01`의 IAM 회수 시험이
+`AccessDenied`로 Vault를 NotReady로 만든 것을 이미 확인했으므로 sealed 확률은 0이 아니다.
+Vault는 OIDC auth method와 policy로 UI 사용자 권한을 스스로 판정하므로 Pomerium을 끼우면
+인증만 두 겹이 된다. 기존 Pomerium Route 여덟 건은 모두 평문 HTTP upstream인데 Vault
+listener는 자체서명 TLS이므로, Pomerium 계층을 빼면 신뢰 설정도 한 곳으로 줄어든다.
 
 2026-08-03 `PKI-01`의 첫 mTLS consumer를 CrowdSec agent↔LAPI로 정하고 인증서 발급·갱신
 경로를 cert-manager + Vault Issuer로 결정했다. 따라서 `PKI-01`은 `DEFERRED`를 벗고 새 선행
@@ -1352,6 +1379,47 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `OBS-01 DONE` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
 | `OPN-METRICS-01 DONE` | OPNsense exporter와 최소 metric 방화벽 경로 | `OBS-01` | `OPNSENSE-LIVE` | 운영 경보 | exporter target `up=1`, CPU·memory·interface 대표 시계열, 최소 rule 한 건과 rollback·drift 없음 |
 | `WAZUH-01 DONE` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle, `CERTMGR-01` | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
+| `OBS-02 READY` | Grafana·Prometheus·Alertmanager UI를 Pomerium Route로 노출하고 최소 대시보드 확보 (`gitops/apps/obs/`) | `OBS-01`, `POM-01` | `OPNSENSE-LIVE` | 운영 경보 silence·팀 온보딩 | Route 3건과 `pomerium`→`obs` NetworkPolicy egress 선언, Grafana 로그인 뒤 node·PVC·Loki 대표 패널 표시, Prometheus target `up=1`과 PromQL 실행, Alertmanager silence 생성·조회·만료 왕복, `/platform-users` 허용과 미소속 계정 403의 같은 시점 대조 및 Alertmanager 쓰기 경로의 `/platform-privileged` 한정, alias 3건 내부 A만·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig generation·Traefik Pod UID·restart 불변, 배포 전후 available RAM 정지선 통과와 신규 PVC 0개, Argo child `Synced/Healthy`와 OPNsense drift 없음, rollback 뒤 기존 Route·경보 전달 회귀 없음 |
+| `WAZUH-02 READY` | Wazuh Dashboard 배포와 보안 이벤트 조사 경로 확보 (`gitops/apps/wazuh/`) | `WAZUH-01`, `POM-01`, `CAP-04` | `K3S-HEAVY`, `OPNSENSE-LIVE` | 사고 조사·`SOAR-01` 용량 | 배포 직전 capacity gate 재측정과 `SOAR-01` 진입선 12 GiB 잔여 판정(침범하면 `k3s-01` 32 GiB 증설을 선행으로 기록하고 중단), Dashboard를 `WAZUH-01`과 같은 4.14.7 계열 고정 version·image digest로 선언, Pomerium Route와 `pomerium`→`wazuh` NetworkPolicy egress, Dashboard 로그인 뒤 `D30`·`A90` index 검색과 `WAZUH-01`의 Suricata sid `2029054` 재현, indexer 자격증명을 Kubernetes Secret 원문 없이 Vault Agent로만 주입, `/platform-privileged` 허용과 일상 계정 거부, active response 비활성과 ISM 정책 두 건 불변, `wazuh` alias 내부 A 1건·공개 A/AAAA 0건, 배포 후 available·PVC 정지선 통과, Argo child `Synced/Healthy`, rollback 뒤 indexer·manager·retention 회귀 없음 |
+
+2026-08-03 `OBS-02`와 `WAZUH-02`를 신설한다. 두 작업은 결정된 목표와 실제 구현이 어긋난
+상태를 닫는다. 이 저장소는 ADR과 `architecture.md`가 "무엇을 만들 것인가"를, 백로그가
+"무엇을 할 것인가"를 소유하는데 둘을 대조하는 절차가 없다. "완료 증거 표에 적힌 항목만
+검증한다"는 규칙은 중복 검증과 drift를 막지만, 완료 증거 표에 들어가지 않은 목표는 소유자
+없이 남는다. 아래 두 건이 그 경우다.
+
+`WAZUH-02`가 닫는 것은 명시적 결정이다.
+[ADR-0007](adr/0007-detection-and-observability-staging.md)은 "보안 이벤트는 각 소스에서
+Wazuh로 직접 수집하고 Wazuh Dashboard에서 조사한다"로 조사 창구를 Dashboard로 정했고
+[`architecture.md`](architecture.md)의 탐지 흐름도 `Wazuh → Wazuh Dashboard → Shuffle`이다.
+`WAZUH-01`이 Dashboard를 배포하지 않은 근거는
+[`wazuh/README.md`](../gitops/apps/wazuh/README.md)의 "완료 증거를 indexer REST API로 만들 수
+있다" 한 줄이며 이는 검증 범위 최소화의 결과이지 Dashboard가 불필요하다는 판정이 아니다.
+ADR-0007을 대체하는 새 결정도 없으므로 현재는 결정과 구현이 어긋난 상태다.
+
+`WAZUH-02`와 `SOAR-01`은 같은 여유 용량을 두고 경쟁한다. `CAP-04` 시점 `k3s-01` available은
+14,481,977,344 bytes(13.487 GiB)이고 `SOAR-01` 진입선이 12 GiB이므로 잔여는 1.487 GiB다.
+Dashboard가 이를 소비하면 `SOAR-01`은 `k3s-01`을 32 GiB로 올리기 전에는 진입할 수 없다. 이
+lane의 상한은 `CAP-04`가 계산한 대로 32 GiB이며 36 GiB는 VM RAM 회계를 53 GiB로 만들어
+52 GiB 경고선을 넘는다. 따라서 먼저 배포하는 쪽이 용량을 가져가고, 두 작업 모두 배포 직전
+gate에서 상대 작업의 진입선 잔여를 함께 판정한다. 이 문서는 순서를 강제하지 않지만, 사람이
+경보를 눈으로 확인할 창 없이 자동 대응을 얹는 것은 ADR-0007의 재검토 조건인 "경보 분류,
+보존기간과 오탐 기준이 합의된다"와 어긋난다. `WAZUH-01`이 NIDS-01 테스트 룰 3건이 전체
+경보의 99.87%를 만드는 것을 발견한 것도 이런 종류의 판단이다. 이 때문에 `SOAR-01`보다
+`WAZUH-02`를 먼저 수행할 것을 권고하되, `SOAR-01`의 선행과 상태는 이 작업에서 바꾸지 않는다.
+
+`OBS-02`는 `ip-plan.md`가 `grafana.imcherry5778.xyz`의 노출을 `Pomerium`으로 적어 두고도
+소유 작업이 없어 미등록으로 남은 항목을 닫는다. `OBS-01`의 완료 증거는 Alertmanager까지의
+실제 경보 전달이었고 Grafana UI는 증거가 아니어서 port-forward 확인조차 하지 않았다. 즉
+수집과 전달은 검증됐지만 사람이 보는 창은 한 번도 열린 적이 없으며 `defaultDashboardsEnabled`도
+꺼져 있다. 따라서 이 작업은 route만이 아니라 열었을 때 볼 것이 있는 상태까지를 범위로 한다.
+Prometheus와 Alertmanager는 `ip-plan.md`의 DNS 표에 이름이 없으므로 alias를 새로 추가한다.
+ADR-0007이 Grafana를 창구로 지정한 것은 사실이나 Prometheus UI를 금지하지는 않았고,
+Alertmanager silence는 Grafana가 대체하지 않는 운영 경로다. 세 서비스는 같은 `obs`
+namespace에 이미 배포돼 있어 Route 추가는 RAM을 늘리지 않으므로 `K3S-HEAVY` 잠금과 capacity
+gate 없이 한 작업으로 묶는다. 다만 `pomerium` namespace는 default-deny이고 `POL-01-FIX-01`이
+Dashy→Keycloak egress 누락으로 이미 한 번 실패했으므로 대상 namespace egress를 Route와 함께
+선언한다.
 
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
 [단일 분류·보존 표준](audit-event-standard.md)을 확정했다. 탐지 event는 Wazuh 30일,
