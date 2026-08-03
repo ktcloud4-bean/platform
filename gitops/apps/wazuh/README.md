@@ -1,9 +1,10 @@
 # WAZUH-01 보안 이벤트 직접 수집 PoC
 
-이 디렉터리는 단일 노드 `k3s-01`의 Wazuh manager 한 대와 Wazuh indexer 한 대,
-D30·A90 보존 정책, `wazuh` namespace default-deny NetworkPolicy를 소유한다.
-Loki 수집 경계, OPNsense Suricata 룰셋, Kyverno 정책 본문, 공개 DNS·Ingress,
-active response와 SOAR는 소유하지 않는다.
+이 디렉터리는 단일 노드 `k3s-01`의 Wazuh manager 한 대, Wazuh indexer 한 대,
+Wazuh Dashboard 한 대, D30·A90 보존 정책, `wazuh` namespace default-deny NetworkPolicy를
+소유한다. Loki 수집 경계, OPNsense Suricata 룰셋, Kyverno 정책 본문, 공개 DNS,
+Pomerium Route·Ingress(둘 다 `gitops/apps/pomerium` 소유), active response와 SOAR는
+소유하지 않는다.
 
 분류·보존의 단일 원본은 [`docs/audit-event-standard.md`](../../../docs/audit-event-standard.md)이고
 자원 한도의 단일 원본은 [`docs/capacity-plan.md`](../../../docs/capacity-plan.md)다.
@@ -58,7 +59,7 @@ Pod에 `spc_t`나 privileged를 주지 않는다.
 | manager limit | cpu 1, memory 1536Mi | upstream base 512Mi와 `envs/eks` 2Gi 사이 |
 | indexer PVC | 15 GiB `local-path` | Wazuh PVC 합계 상한 16 GiB |
 | manager PVC | 1 GiB `local-path` | upstream 기본 500Mi 이상 |
-| Dashboard | 배포하지 않음 | 완료 증거를 indexer REST API로 만들 수 있다 |
+| Dashboard | cpu 500m/mem 1Gi limit, PVC 없음 | WAZUH-02. upstream처럼 stateless 컨테이너라 재기동마다 keystore·wazuh.yml을 다시 만든다 |
 
 `local-path`는 PVC 요청량을 강제하지 않는다. 16 GiB는 선언 상한이자 capacity 회계 단위이며,
 실제 저장 상한은 아래 ISM 보존 정책과 `verify-live.sh`의 환산 판정이 지킨다.
@@ -160,6 +161,62 @@ rule ID 할당은 A90 `100100`~`100109`, D30 `100120`~`100129`, O7 억제 `10013
 A90 룰을 이 범위 밖 ID로 추가하면 라우팅이 조용히 깨지므로 같은 변경에서 이 정규식도
 갱신한다.
 
+## WAZUH-02 Dashboard 조사 UI
+
+Dashboard의 외부 진입은 `pomerium` 앱이 소유하는 표준 Kubernetes `Ingress`와 선언형
+Route(`gitops/apps/pomerium/pomerium-conf.yaml`의 `wazuh` Route) 하나뿐이다. 이 앱에는 별도
+Ingress·공개 DNS·NAT가 없다.
+
+| UI | 내부 upstream | Pomerium claim 경계 |
+|---|---|---|
+| `wazuh.imcherry5778.xyz` | `wazuh-dashboard.wazuh.svc.cluster.local:5601` | `/platform-privileged`만(사고 조사 도구라 `/platform-users`는 거부) |
+
+`wazuh-default-deny`는 cross-namespace ingress도 막으므로 Pomerium egress만으로는
+Dashboard에 도달하지 못한다. `wazuh-dashboard-pomerium-ingress`(이 앱)와
+`wazuh-02-pomerium-to-wazuh`(`gitops/apps/pomerium/wazuh-egress.yaml`)가 정확히 짝을
+이룬다. `OBS-02`가 이 짝을 빼먹어 503을 겪은 전례가 있다.
+
+### credential 설계
+
+Dashboard는 두 자격증명만 쓰고 둘 다 새로 만들지 않는다.
+
+- indexer 인증: upstream demo는 `kibanaserver` 내부 사용자를 새로 만들지만, `indexer.yaml`의
+  `internal_users.yml`에는 `admin` 한 명만 둔다는 WAZUH-01 결정을 유지한다. 그래서
+  `DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`(컨테이너 entrypoint가 OpenSearch Dashboards
+  keystore의 `opensearch.username`/`opensearch.password`로 그대로 쓰는 값)에 기존 indexer
+  admin 자격증명을 재사용한다. 컨테이너가 실제로 읽는 값은 이 keystore 값뿐이라
+  `INDEXER_USERNAME`/`INDEXER_PASSWORD`(upstream 매니페스트가 선언하지만 `entrypoint.sh`·
+  `wazuh_app_config.sh` 어느 쪽도 참조하지 않는 값)는 선언하지 않는다.
+- Wazuh API 인증: `WAZUH-01`의 manager가 이미 provisioning한 `wazuh-01-api` 사용자(`kv/wazuh/manager`의
+  `api_username`/`api_password`)를 그대로 재사용한다. 새 API 사용자를 만들지 않는다.
+
+두 값 모두 `gitops/tools/wazuh-02/provision.sh`가 WAZUH-01 provision이 이미 만든 로컬
+입력(`root-ca.pem`, `indexer-admin-password`, `api-password`)에서 복사해 새 경로
+`kv/wazuh/dashboard`에 쓴다. 새 credential을 생성하지 않고, indexer·manager·bootstrap의
+policy·role·kv는 건드리지 않는다.
+
+| Vault 경로 | 소비자 | 내용 |
+|---|---|---|
+| `kv/wazuh/dashboard` | `wazuh-dashboard` SA | root CA, `dashboard_username`/`password`(admin 재사용), `api_username`/`password`(`wazuh-01-api` 재사용) |
+
+### 설계 결정: 내부 TLS·PVC 없음
+
+Dashboard의 `server.ssl.*`는 켜지 않는다(`files/opensearch_dashboards.yml`). ClusterIP로만
+존재하고 Pomerium이 외부 TLS를 종단하므로 내부 자체 서명 TLS 계층을 추가로 얹지 않는다.
+`OBS-02` Grafana·`GITOPS-02` Argo(Route에서 `tls_skip_verify`로 자체서명을 흡수)와 같은
+결정이다. indexer(9200)로 나가는 연결은 여전히 TLS이며 기본값인 full hostname 검증을 쓴다
+(indexer node 인증서 SAN에 `indexer.wazuh.svc.cluster.local`이 이미 있다).
+
+PVC도 만들지 않는다. upstream Dashboard 컨테이너는 상태를 갖지 않는다. keystore와
+`data/wazuh/config/wazuh.yml`은 매 기동마다 entrypoint가 다시 만들거나 멱등하게 append한다.
+
+### Kyverno
+
+새 `PolicyException`이 없다. `wazuh-dashboard` 컨테이너는 upstream Dockerfile이 만드는
+`wazuh-dashboard` 사용자(UID/GID 1000)로 이미 non-root로 뜨고 `cap_net_bind_service`도
+빌드 시점에 제거돼 있어 `pol-01-require-pod-run-as-non-root`를 그대로 통과한다.
+`drop: [ALL]` 뒤에 추가하는 capability도 없다.
+
 ## 설치
 
 1. `gitops/tools/wazuh-01/provision.sh apply`로 Vault policy·role·KV를 만든다.
@@ -182,6 +239,17 @@ hunk 단위로 승인 목록(firmware plugin 목록의 `os-wazuh-agent` 추가, 
 신규 추가, `IDS`의 `persisted_at`만 변경)과 대조하는 exact-diff gate를 통과한 뒤에만
 `check-drift.sh --update`를 부르고, 그 직후 일반 `check-drift.sh`로 drift가 없는지 다시
 확인한다. 승인 범위 밖 차이가 하나라도 있으면 라이브를 건드리지 않고 중단한다.
+
+### WAZUH-02 설치
+
+WAZUH-01이 이미 `Synced/Healthy`인 상태를 전제로 한다.
+
+1. `gitops/tools/wazuh-02/provision.sh apply`로 `kv/wazuh/dashboard` Vault policy·role·KV를
+   만든다(WAZUH-01의 policy·role·kv는 바꾸지 않는다).
+2. `gitops/tools/wazuh-02/verify-live.sh capacity-pre`로 배포 전 available·swap·PVC를 기록한다.
+3. Argo가 `platform-root`에서 `wazuh`·`pomerium` child를 동기화해 Dashboard와 Route를 만든다.
+4. `gitops/tools/wazuh-02/opnsense-alias.py apply`로 `wazuh` Unbound alias를 등록한다.
+5. `gitops/tools/wazuh-02/verify-live.sh verify`를 한 번 실행한다.
 
 ## 완료 증거
 
@@ -221,6 +289,50 @@ source port 하나로 `emerging-scan.rules`의 sid `2029054`가 정확히 한 �
 - 오탐 gate는 고정창의 D30·A90 index 내용만 본다. OPNsense가 만들지만 중앙 저장에서
   제외한 event의 오탐률은 이 gate가 판정하지 않는다.
 - Wazuh API(TCP 55000)는 ClusterIP만 있고 완료 증거에 쓰지 않는다.
+
+### WAZUH-02 완료 증거
+
+[`verify-live.sh`](../../tools/wazuh-02/verify-live.sh) 하나가 아래만 판정한다. WAZUH-01이
+이미 판정한 Suricata 수집·D30/A90 라우팅·NIDS-01 제외는 다시 검증하지 않는다.
+
+1. 배포 직전·직후 available·swap·PVC가 정지선 이내, 배포 후 available이 `SOAR-01` 진입선
+   12 GiB를 남기는지 기록
+2. Dashboard 로그인 뒤 D30(`wazuh-alerts-4.x-*`)·A90(`wazuh-alerts-4.x-audit-*`) index를
+   검색해 `WAZUH-01`이 이미 수집한 대표 Suricata event(sid `2029054`)를 Dashboard UI 경로로
+   조회. 새 트래픽을 만들어 재수집을 다시 검증하지 않는다 — 이미 저장된 event를 Dashboard가
+   실제로 질의·표시하는지만 본다.
+3. `/platform-privileged` 계정은 Route 통과, `/platform-users`만 있는 계정과 미소속 계정은
+   403
+4. active response 비활성과 ISM 정책(`wazuh-01-d30`, `wazuh-01-a90`) 두 건이 배포 전후로
+   그대로임
+5. `wazuh` alias 내부 A 1건, 내부 AAAA·공개 A/AAAA 0건
+6. immutable SHA의 `platform-root`·`wazuh`·`pomerium` child `Synced/Healthy`
+
+### 2026-08-04 라이브 완료 증거
+
+immutable root `f96520c5f13dd8e1a002102d1c1819007e206a2a`와 child 설정
+`b7a36d8d1ad2ed2f71085a593b90d322d6c63ab0`(`wazuh`·`pomerium` 둘 다 이 commit)에서 다음을
+검증했다.
+
+| acceptance | 라이브 증거 | 판정 |
+|---|---|---|
+| capacity 정지선 | 배포 전 available 13,179,863,040 bytes(12.273 GiB)·swap 0, 배포 후 available 12,715,151,360 bytes(11.842 GiB)·swap 0, PVC 91.125 GiB로 배포 전후 불변 | 통과, 8 GiB 정지선 위 3.842 GiB |
+| `SOAR-01` 진입선 | 배포 후 available 11.842 GiB, 진입선 12 GiB에 169,750,528 bytes(약 161.9 MiB) 미달 | **미달**, `k3s-01` 32 GiB 증설이 `SOAR-01` 선행 |
+| Dashboard D30/A90 검색 | `admin` 계정으로 Dashboard 자체 보안에 로그인 뒤 `/api/console/proxy`로 `wazuh-alerts-4.x-*`(sid `2029054*`)·`wazuh-alerts-4.x-audit-*`(`rule.id:[100100 TO 100109]`) 조회, 둘 다 기존 저장 문서 hit | 통과 |
+| RBAC | `/platform-privileged`(`imcherry-admin`)는 Pomerium Route 통과, `/platform-users`만 가진 `imcherry`는 403 | 통과 |
+| active response·ISM 불변 | running `ossec.conf`의 `<active-response><disabled>yes</disabled>`, `ar.conf` 차단성 명령 0건, `wazuh-01-d30`·`wazuh-01-a90` 정책 그대로 | 통과 |
+| alias | Unbound `wazuh` A 1건, 공개 A/AAAA 미등록(내부 alias만 추가) | 통과 |
+| Argo | 위 immutable root·child가 모두 `Synced/Healthy` | 통과 |
+
+`gitops/root/wazuh-project.yaml`의 `namespaceResourceWhitelist`에 `apps/Deployment`가 없어서
+첫 sync가 `resource apps:Deployment is not permitted in project wazuh`로 거부됐다. manager·
+indexer가 StatefulSet만 썼기 때문에 이 whitelist에 Deployment가 없었다. 같은 커밋에서
+`apps/Deployment`를 추가해 해결했다.
+
+indexer·manager는 배포 전후로 Pod 재시작·restart count 변화가 없었다(`wazuh-indexer-0`,
+`wazuh-manager-master-0` 둘 다 8h 무변화). `pomerium` Deployment는 새 ConfigMap 해시를
+반영하며 정상적으로 한 번 재기동했다(기존 Route·Portal 기능 영향 없음, Grafana·Argo 등
+기존 Route는 이 재기동과 무관하게 유지).
 
 ## Rollback
 
@@ -263,3 +375,27 @@ OPNsense Wazuh Agent는 `apply-opnsense.sh rollback`이 서비스 정지 → 설
 Kubernetes API audit는 `infra/ansible/roles/k3s_baseline`에서 audit 인자와 정책 파일을
 제거하고 playbook을 다시 실행해 되돌린다. Vault policy·role·KV와 저장소 밖 credential
 입력은 다음 main sync를 위해 보존하며 credential 회전은 이 rollback 범위가 아니다.
+
+### WAZUH-02 rollback
+
+위 절차는 WAZUH-01 최초 배포용이다. indexer·manager가 이미 운영 중인 지금은 그 절차를 쓰지
+않는다. Dashboard만 되돌리고 indexer·manager·retention(ISM 정책, D30·A90 데이터)은 그대로
+둔다.
+
+1. `dashboard.yaml`을 `kustomization.yaml`의 `resources`에서, `vault-agent-dashboard.hcl`과
+   `wazuh-dashboard-conf` 항목을 `configMapGenerator`에서 빼고 `serviceaccounts.yaml`의
+   `wazuh-dashboard` SA와 `network-policies.yaml`의
+   `wazuh-dashboard-pomerium-ingress`를 지운 뒤 커밋한다. `gitops/apps/pomerium`의 `wazuh`
+   Route, `wazuh-egress.yaml`, `ingress.yaml`의 `wazuh.imcherry5778.xyz` host/tls 항목도
+   같은 커밋에서 함께 뺀다.
+2. `platform-root`의 automated sync가 살아 있으면 위 커밋을 반영해 `wazuh`·`pomerium`
+   child가 Dashboard Deployment/Service/ConfigMap과 Route·NetworkPolicy만 prune한다.
+   `wazuh-indexer`·`wazuh-manager-master` StatefulSet과 그 PVC는 kustomization에 그대로
+   남아 있으므로 건드려지지 않는다.
+3. `gitops/tools/wazuh-02/provision.sh rollback`으로 `kv/wazuh/dashboard`와
+   `wazuh-dashboard` policy·role만 지운다. `kv/wazuh/{indexer,manager,bootstrap}`은
+   손대지 않는다.
+4. `gitops/tools/wazuh-02/opnsense-alias.py rollback`으로 `wazuh` Unbound alias를 지운다.
+5. `docs/ip-plan.md`의 `wazuh.imcherry5778.xyz` 행을 제거한다.
+6. indexer `_cluster/health`와 manager `statefulset/wazuh-manager-master` rollout이 rollback
+   전후로 동일하게 Healthy인지 확인해 회귀가 없음을 판정한다.
