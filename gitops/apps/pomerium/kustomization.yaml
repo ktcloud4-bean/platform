@@ -38,4 +38,5 @@ resources:
   - jenkins-egress.yaml
   - argocd-egress.yaml
   - obs-egress.yaml
+  - wazuh-egress.yaml
   - ingress.yaml

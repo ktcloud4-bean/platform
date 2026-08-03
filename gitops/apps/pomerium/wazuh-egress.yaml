@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-02-pomerium-to-wazuh
+  namespace: pomerium
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: pomerium
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pomerium
+      app.kubernetes.io/component: server
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: wazuh
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: wazuh
+              app.kubernetes.io/component: dashboard
+      ports:
+        - port: 5601
+          protocol: TCP

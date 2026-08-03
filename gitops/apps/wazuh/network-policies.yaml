@@ -65,6 +65,33 @@ spec:
         - protocol: TCP
           port: 8200
 ---
+# WAZUH-02: Pomerium server Pod만 Dashboard의 5601로 들어온다. wazuh-default-deny가
+# cross-namespace ingress를 막으므로 pomerium 쪽 egress(gitops/apps/pomerium)와 정확히
+# 짝을 이뤄야 한다. OBS-02가 이 짝을 빼먹어 503을 겪은 전례가 있다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-dashboard-pomerium-ingress
+  namespace: wazuh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh
+      app.kubernetes.io/component: dashboard
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pomerium
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pomerium
+              app.kubernetes.io/component: server
+      ports:
+        - protocol: TCP
+          port: 5601
+---
 # Suricata alert를 보내는 OPNsense Wazuh Agent만 manager의 등록·수집 port로 들어온다.
 # NodePort Service는 externalTrafficPolicy=Local이라 source IP가 보존된다. OPNsense는
 # 자기 인터페이스 주소로 발신하므로 MGMT(10.10.10.1)와 PLATFORM(10.10.20.1) 두 주소만 연다.

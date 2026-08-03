@@ -135,6 +135,16 @@ spec:
                 name: pomerium
                 port:
                   name: http
+    - host: wazuh.imcherry5778.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pomerium
+                port:
+                  name: http
   tls:
     - hosts:
         - access.imcherry5778.xyz
@@ -149,3 +159,4 @@ spec:
         - grafana.imcherry5778.xyz
         - prometheus.imcherry5778.xyz
         - alertmanager.imcherry5778.xyz
+        - wazuh.imcherry5778.xyz

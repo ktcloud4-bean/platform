@@ -1,0 +1,183 @@
+# WAZUH-02 dashboard. wazuh-kubernetes v4.14.7의
+# indexer_stack/wazuh-dashboard/dashboard-deploy.yaml·dashboard-svc.yaml에서 파생했다.
+#
+# 변경점과 이유:
+# - Service type LoadBalancer -> ClusterIP. 외부 진입은 Pomerium Route(`gitops/apps/pomerium`)
+#   하나만 소유하고 이 앱에는 별도 Ingress·공개 DNS가 없다.
+# - INDEXER_USERNAME/PASSWORD, DASHBOARD_USERNAME/PASSWORD를 그대로 두는 대신 admin 계정을
+#   재사용한다. upstream demo는 `kibanaserver` 내부 사용자를 새로 만들지만
+#   `indexer.yaml`의 internal_users.yml에는 admin 한 명만 있다는 결정(WAZUH-01)을 유지하기
+#   위해 DASHBOARD_USERNAME/PASSWORD에 그 admin 자격증명을 그대로 넣는다.
+#   INDEXER_USERNAME/PASSWORD 자체는 이 이미지의 entrypoint.sh·wazuh_app_config.sh 어느 쪽도
+#   읽지 않는 값이라(OpenSearch 인증은 keystore의 opensearch.username/password로만 동작)
+#   컨테이너에 선언하지 않는다.
+# - SERVER_SSL_ENABLED와 그 인증서 mount 제거: `files/opensearch_dashboards.yml` 머리말과
+#   같은 이유로 내부 자체 서명 TLS 계층을 추가하지 않는다.
+# - WAZUH_API_URL을 이 namespace의 실제 manager Service(`wazuh.wazuh.svc.cluster.local:55000`)로
+#   고정한다. API_USERNAME/PASSWORD는 manager가 이미 provisioning한 `wazuh-01-api` 자격증명을
+#   그대로 재사용한다(새 API 사용자를 만들지 않는다).
+# - Secret 원문은 Git·Kubernetes Secret 어디에도 없다. Vault Agent init이 memory emptyDir에만
+#   렌더한다(manager·indexer와 같은 경로).
+apiVersion: v1
+kind: Service
+metadata:
+  name: wazuh-dashboard
+  namespace: wazuh
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: dashboard
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: dashboard
+  ports:
+    - name: dashboard
+      port: 5601
+      targetPort: dashboard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-dashboard
+  namespace: wazuh
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh
+      app.kubernetes.io/component: dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wazuh
+        app.kubernetes.io/component: dashboard
+    spec:
+      serviceAccountName: wazuh-dashboard
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/vault-agent.hcl
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config/vault-agent.hcl
+              subPath: vault-agent-dashboard.hcl
+              readOnly: true
+            - name: vault-agent-config
+              mountPath: /vault/tls/vault.crt
+              subPath: vault.crt
+              readOnly: true
+            - name: dashboard-secrets
+              mountPath: /vault/secrets
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+      containers:
+        - name: wazuh-dashboard
+          image: docker.io/wazuh/wazuh-dashboard:4.14.7@sha256:48ef2aff42f62ecc7c4a4879f8364696cc26e31634acd9bc3f92a09c3aca413c
+          imagePullPolicy: IfNotPresent
+          # Vault Agent가 렌더한 wazuh.env(DASHBOARD_*·API_* 자격증명)를 process env로 올린
+          # 뒤 upstream entrypoint를 PID 1로 exec한다. manager와 같은 경로다.
+          command: [/bin/bash, -ec]
+          args:
+            - |
+              set -a
+              . /vault/secrets/wazuh.env
+              set +a
+              exec /entrypoint.sh
+          env:
+            - name: WAZUH_API_URL
+              value: https://wazuh.wazuh.svc.cluster.local:55000
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            privileged: false
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          ports:
+            - name: dashboard
+              containerPort: 5601
+          startupProbe:
+            tcpSocket:
+              port: dashboard
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: dashboard
+            periodSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - name: dashboard-conf
+              mountPath: /usr/share/wazuh-dashboard/config/opensearch_dashboards.yml
+              subPath: opensearch_dashboards.yml
+              readOnly: true
+            - name: dashboard-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+      volumes:
+        - name: vault-agent-config
+          configMap:
+            name: wazuh-vault-agent
+            defaultMode: 0444
+        - name: dashboard-conf
+          configMap:
+            name: wazuh-dashboard-conf
+            defaultMode: 0444
+        - name: dashboard-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: vault
+                  expirationSeconds: 600

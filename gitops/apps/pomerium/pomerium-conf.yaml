@@ -182,3 +182,15 @@ routes:
       - allow:
           or:
             - claim/groups: /platform-privileged
+
+  # WAZUH-02: 사고 조사 도구라 일상 계정(/platform-users)은 통과시키지 않는다.
+  # /platform-privileged만 허용하고, indexer·API 자격증명은 Dashboard Pod의 Vault Agent가
+  # 별도로 판정한다(이 Route policy는 Pomerium 진입만 판정한다).
+  - name: wazuh
+    description: WAZUH-02 Wazuh Dashboard security investigation UI; privileged accounts only
+    from: https://wazuh.imcherry5778.xyz
+    to: http://wazuh-dashboard.wazuh.svc.cluster.local:5601
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-privileged

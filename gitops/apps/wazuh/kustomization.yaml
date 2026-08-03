@@ -6,6 +6,7 @@ resources:
   - indexer.yaml
   - bootstrap-job.yaml
   - manager.yaml
+  - dashboard.yaml
   - network-policies.yaml
 configMapGenerator:
   - name: wazuh-vault-agent
@@ -14,7 +15,12 @@ configMapGenerator:
       - vault-agent-indexer.hcl=files/vault-agent-indexer.hcl
       - vault-agent-manager.hcl=files/vault-agent-manager.hcl
       - vault-agent-bootstrap.hcl=files/vault-agent-bootstrap.hcl
+      - vault-agent-dashboard.hcl=files/vault-agent-dashboard.hcl
       - vault.crt=files/vault.crt
+  - name: wazuh-dashboard-conf
+    namespace: wazuh
+    files:
+      - opensearch_dashboards.yml=files/opensearch_dashboards.yml
   - name: wazuh-indexer-conf
     namespace: wazuh
     files:
