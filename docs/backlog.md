@@ -271,7 +271,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `INGRESS-01 DONE` | Traefik 단일 ingress·별도 DNS-01 인증서 | `GITOPS-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 모든 HTTP 앱 | 80→443, 내부·외부 split DNS, OPNsense 개인키 미복사, source IP 판정 |
 | `VAULT-01 DONE` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
 | `VAULT-02 DONE` | KV v2·Kubernetes auth·DB engine·PKI·audit policy ([runbook](runbook/vault-secrets-engines.md)) | `VAULT-01`, `PG-01`, `NET-03A` | 없음 | 모든 플랫폼 앱 | 바인딩 SA만 로그인·타 SA/role 403, policy allow/deny 403, 동적 DB credential의 TLSv1.3 verify-full 접속·타 DB 거부·revoke 후 인증 실패와 role 삭제, PKI 체인 검증·CRL 폐기·공인 이름 거부, audit 108건과 평문 시크릿 0건, vault ns Secret 0건 유지 |
-| `CERTMGR-01 BLOCKED` | cert-manager 도입과 Vault PKI를 CA로 쓰는 Issuer 연결 (`gitops/apps/cert-manager/`) | `VAULT-02`, `WAZUH-01` | `VAULT-CONFIG` | `PKI-01`, 내부 인증서 자동화 | 고정 version·image digest·CRD 선언과 Argo child `Synced/Healthy`, cert-manager 전용 Kubernetes auth role·policy가 자기 PKI role로만 발급하고 타 경로는 403, 시험 Certificate 한 장의 발급·Secret 생성·chain 검증과 즉시 제거, 단축 `renewBefore`로 자동 갱신 실증, Vault sealed 상태에서 기존 인증서 유효·신규 발급만 실패, 배포 전후 available RAM·PVC 정지선 통과, Argo revert rollback 뒤 기존 워크로드 회귀 없음 |
+| `CERTMGR-01 READY` | cert-manager 도입과 Vault PKI를 CA로 쓰는 Issuer 연결 (`gitops/apps/cert-manager/`) | `VAULT-02`, `WAZUH-01` | `VAULT-CONFIG` | `PKI-01`, 내부 인증서 자동화 | 고정 version·image digest·CRD 선언과 Argo child `Synced/Healthy`, cert-manager 전용 Kubernetes auth role·policy가 자기 PKI role로만 발급하고 타 경로는 403, 시험 Certificate 한 장의 발급·Secret 생성·chain 검증과 즉시 제거, 단축 `renewBefore`로 자동 갱신 실증, Vault sealed 상태에서 기존 인증서 유효·신규 발급만 실패, 배포 전후 available RAM·PVC 정지선 통과, Argo revert rollback 뒤 기존 워크로드 회귀 없음 |
 | `PKI-01 BLOCKED` | Vault PKI를 첫 실제 consumer인 CrowdSec agent↔LAPI mTLS lifecycle에 연결 | `VAULT-02`, `CERTMGR-01` | `VAULT-CONFIG` | 내부 서비스 인증·인가 | CrowdSec 전용 최소권한 PKI role과 허용 밖 이름·OU 거부, agent↔LAPI mTLS 실제 연결 성공과 잘못된 CA·OU 거부, LAPI의 OU 기반 agent/bouncer 구분 보존, 자동 갱신·reload, revoke 뒤 CRL 등재와 해당 인증서 거부, Vault sealed 중 기존 인증서 유지·신규 발급만 실패, Git·로그의 private key 0건, `tls.enabled=false` rollback 뒤 `CROWDSEC-FIX-01` 기능(정상 200·공격 403·exact 예외) 회귀 없음 |
 | `KC-01 DONE` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `KC-01-FIX-01 DONE` | bootstrap 메모리 시크릿 정리를 fail-closed로 보정 | `KC-01` 배포 선언 | 없음 | Keycloak bootstrap | Agent/bootstrap 동일 UID, 렌더링 파일 정리 실패 시 Job 실패, v1 prune·v2 성공 |
@@ -314,8 +314,11 @@ LAPI는 `agent-ou` 같은 OU 값으로 agent와 bouncer를 구분하므로 role�
 더 줄이지만 `VAULT-INIT` 단독 창을 요구하므로 순서를 강제하지 않는다.
 
 `CERTMGR-01`이 `WAZUH-01`을 선행으로 갖는 것은 논리 의존이 아니라 용량 순서다. cert-manager는
-controller·webhook·cainjector Pod를 더하는데 `WAZUH-01`의 배포 직전 capacity gate가 아직
-판정되지 않았다. `WAZUH-01`이 실측을 끝낸 뒤 같은 기준으로 재측정한다.
+controller·webhook·cainjector Pod를 더하므로 `WAZUH-01`의 capacity gate가 먼저 판정돼야 했다.
+`WAZUH-01` 배포 후 `k3s-01` available은 14,584,446,976 bytes로 12 GiB 경고선 위이고 PVC 합계
+91.125 GiB도 96 GiB 경고선 안이므로, 선행이 모두 `DONE`인 `CERTMGR-01`을 `READY`로 연다. 이
+값은 판정 근거일 뿐이므로 배포 직전에 같은 기준으로 다시 측정한다. `PKI-01`은 `CERTMGR-01`이
+남아 `BLOCKED`를 유지한다.
 
 2026-08-01 `POM-01`에서 Pomerium Core `v0.33.0`과 Dashy `4.5.0`을 각 공식
 multi-arch image index digest로 고정하고 전용 AppProject·child Application·namespace에
@@ -1242,13 +1245,25 @@ SHA에서 Dashy Keycloak 도달 양성, `token verification failed` 신규 0건,
 | `EDGE-01 DONE` | NetBird 단독 공개 DNS·NAT allowlist, 이전 프로젝트 공개 DNS 잔여 정리, Warpgate direct recovery peer와 최소 NetBird policy ([runbook](runbook/netbird-public-edge.md)) | `CROWDSEC-FIX-01`, `POM-01`, `NB-02`, `NIDS-01`, `NET-04` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 사용자 | 공개 권위 DNS는 DNS-only `netbird` A 1건·그 밖의 record 0건, WAN NAT는 NetBird TCP 80/443·UDP 3478만 존재, IDS 관측과 Warpgate TCP 8888 direct-peer 복구 경로가 Cloudflare proxy와 독립 |
 | `EDGE-02 DEFERRED` | Cloudflare proxied HTTP WAF·origin 제한·`sso`/Portal 공개 DNS·NAT | `EDGE-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | clientless Portal·외부 OIDC 셀프서비스 | 허용 hostname만 proxied 공개, origin 직접 우회 차단, IDS 경보·NetBird/Warpgate 복구 경로 독립 |
 | `NIPS-01 DEFERRED` | 검증된 Suricata rule만 선택적 IPS로 승격 | `NIDS-01`, `NET-04` | `OPNSENSE-LIVE` | 전체 프로젝트 통신 | 정상 트래픽·오탐·부모 인터페이스·offloading·처리량·장애·즉시 rollback 검증; 공개의 필수 gate 아님 |
-| `KMS-01 DEFERRED` | Vault Shamir→AWS KMS auto-unseal migration | `BKP-05` | `VAULT-INIT` | Vault 부팅·복구 | 사전 snapshot, KMS 장애 시험, seal rollback drill; VPN은 선행 아님 |
+| `KMS-01 READY` | Vault Shamir→AWS KMS auto-unseal migration | `BKP-05` | `VAULT-INIT` | Vault 부팅·복구 | 사전 snapshot, KMS 장애 시험, seal rollback drill, [ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md) 재검토 조건 2의 AWS IAM·KMS 최소권한과 비용·감사 기준 검증, migration 뒤 재부팅에서 사람 개입 없는 unseal과 Shamir 복귀 경로 보존; VPN은 선행 아님 |
 
 `EDGE-02`는 NetBird에 먼저 가입하지 않은 외부 기기의 Keycloak 대화형 로그인 또는
 NetBird 없이 쓰는 clientless Pomerium Portal이 실제 요구될 때만 재검토한다. 같은 WAN
 IPv4의 TCP 443은 현재 NetBird가 소유하므로, 별도 공인 IPv4나 Cloudflare origin port
 override처럼 L4 소유권 충돌을 해소하는 설계가 먼저 확정돼야 한다. AWS Site-to-Site VPN,
 AWS SAML과 공인 AWS API로 나가는 오프사이트 백업은 이 공개 HTTP 경로의 재검토 조건이 아니다.
+
+2026-08-03 `KMS-01`의 `DEFERRED`를 해제하고 `READY`로 연다.
+[ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md)의 재검토 조건 중 "Vault와 S3 복구
+drill을 완료한다"는 `BKP-03`의 Raft snapshot restore와 `BKP-05`의 통합 재해복구 drill로
+충족됐다. "수동 unseal이 허용 가능한 운영시간을 반복해서 초과한다"는 아직 한 번이지만,
+`CAP-03`의 cold start에서 threshold 3/3 수동 unseal이 실제로 필요했고 `CERTMGR-01`·`PKI-01`이
+Vault 가용성에 의존하기 시작하므로 재부팅 비용은 계속 늘어난다. 남은 조건인 "AWS IAM·KMS
+최소권한과 비용·감사 기준 검증"은 별도 gate로 두지 않고 `KMS-01`의 완료 증거에 넣었다.
+
+`KMS-01`은 `VAULT-INIT`을 단독으로 잡고 Vault를 내렸다 올린다. Vault Agent init을 쓰는 앱의
+Pod 재생성이나 `CERTMGR-01`의 Issuer 검증과 같은 창에서 실행하면 실패 원인을 분리할 수 없으므로
+겹치지 않게 잡는다. auto-unseal로 바꾼 뒤에도 Shamir 복귀 경로는 보존한다.
 
 2026-08-03 `EDGE-01`에서 공개 권위 DNS를 DNS-only `netbird` A 한 건으로 정리하고 현재
 OPNsense WAN IPv4로 교정했다. 두 authoritative NS에서 그 밖의 A·AAAA·CNAME 0건과 일본
