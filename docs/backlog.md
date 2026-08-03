@@ -959,6 +959,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `CAP-02 DONE` | 핵심 서비스 후 남은 CPU·RAM·disk 재예산 | `BKP-05`, `HEADLAMP-02` | 없음 | 아래 전체 | Proxmox·VM·Pod 실측과 stop/go 기준 |
 | `CAP-03 DONE` | `k3s-01` RAM을 24 GiB에서 28 GiB로 증설해 Wazuh 재진입 용량 확보 | `CAP-02` | `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP` | `WAZUH-01` | OpenTofu가 VMID 120 memory `24576→28672`만 `0 add, 1 change, 0 destroy`로 계획, state 사본·rollback 확보, 정상 재부팅 뒤 boot ID 변경·guest RAM 증가·swap 0·Node Ready·Argo 전체 `Synced/Healthy`, host/guest/PVC 정지선 통과와 Wazuh 재진입 available 11 GiB 이상, 최종 plan 무변경 |
 | `CAP-04 DONE` | Shuffle 진입 용량 판정과 필요할 때만 `k3s-01` RAM 증설 | `CAP-03`, `WAZUH-01` | `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP` | `SOAR-01` | Shuffle 공식 최소 요구량과 자체 OpenSearch 분리 배포를 전제로 계산한 진입선과 현재 실측 대조, 미달일 때만 OpenTofu가 VMID 120 memory `28672→32768`만 `0 add, 1 change, 0 destroy`로 계획하고 state 사본·rollback 확보, 재부팅 뒤 boot ID 변경·guest RAM 증가·swap 0·Node Ready·Vault 재unseal·Argo 전체 `Synced/Healthy`, 배정 합계 52 GiB 경고선 미만 유지, PVC 선언 합계를 96 GiB 경고와 120 GiB 정지로 구분해 재판정하고 Shuffle 몫 배정, 증설이 불필요하면 근거와 `SOAR-01` 진입선만 기록하고 라이브 변경 0, 최종 plan 무변경 |
+| `CAP-05 READY` | `WAZUH-02` 배포 후 미달로 확인된 `SOAR-01` 진입선을 충족하도록 `k3s-01` RAM을 28 GiB에서 32 GiB로 증설 | `CAP-04`, `WAZUH-02` | `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP` | `SOAR-01` | OpenTofu가 VMID 120 memory `28672→32768`만 `0 add, 1 change, 0 destroy`로 계획, state 사본·rollback 확보, 정상 재부팅 뒤 boot ID 변경·guest RAM 증가·swap 0·Node Ready·Vault 재unseal·Argo 전체 `Synced/Healthy`, VM RAM 배정 합계 52 GiB 경고선 미만 유지, PVC 선언·정지선 불변, 재부팅 뒤 `k3s-01` available이 `SOAR-01` 진입선 12 GiB 이상임을 재측정하고 충족 시에만 `SOAR-01`을 `READY`로 전환, 최종 plan 무변경 |
 | `SCM-01 DONE` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
 | `REG-01 DONE` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
 | `CI-01 DONE` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
@@ -1548,6 +1549,15 @@ namespace 삭제 rollback과 분리).
 `k3s-01` 32 GiB 증설([runbook](runbook/k3s-ram-expansion.md))이 그 선행이며, 아직 전용 작업
 ID가 없으므로 새로 열지 않고 이 사실만 기록한다. 증설 작업 ID를 만드는 결정은 이 세션 범위가
 아니다.
+
+2026-08-04 `CAP-04`, `WAZUH-02`가 모두 `DONE`이라 `CAP-05`를 신설해 `READY`로 연다.
+`CAP-03`(24→28 GiB)과 같은 VMID 120, 같은 잠금(`PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP`)
+구조를 그대로 따르며 목표만 28→32 GiB로 바뀐다. `CAP-04`가 이미 이 증설을 조건부로
+계획해뒀던 값(`28672→32768`, `0 add, 1 change, 0 destroy`)을 그대로 쓴다. 라이브 적용은
+OpenTofu apply와 `k3s-01` 단일 서버 재부팅을 수반해 AGENTS.md의 "k3s server·물리 호스트
+재시작" 승인 대상이므로, plan 확정 뒤 적용 직전에 별도 승인을 받는다. 완료 뒤에는
+`k3s-01` available을 재측정해 `SOAR-01` 진입선 12 GiB 충족 여부로 `SOAR-01`의 `READY` 전환을
+다시 판단한다.
 
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
 [단일 분류·보존 표준](audit-event-standard.md)을 확정했다. 탐지 event는 Wazuh 30일,
