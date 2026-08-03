@@ -39,3 +39,5 @@ resources:
   - falco-application.yaml
   - loki-project.yaml
   - loki-application.yaml
+  - obs-project.yaml
+  - obs-application.yaml

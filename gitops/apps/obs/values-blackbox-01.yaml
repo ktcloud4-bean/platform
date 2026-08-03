@@ -1,0 +1,59 @@
+fullnameOverride: obs-blackbox
+
+image:
+  registry: quay.io
+  repository: prometheus/blackbox-exporter
+  tag: v0.28.0
+  digest: sha256:e753ff9f3fc458d02cca5eddab5a77e1c175eee484a8925ac7d524f04366c2fc
+  pullPolicy: IfNotPresent
+
+config:
+  modules:
+    http_tls:
+      prober: http
+      timeout: 5s
+      http:
+        valid_http_versions: [HTTP/1.1, HTTP/2.0]
+        preferred_ip_protocol: ip4
+        fail_if_not_ssl: true
+        tls_config:
+          insecure_skip_verify: false
+
+podSecurityContext:
+  runAsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+  seccompProfile:
+    type: RuntimeDefault
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 24Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+serviceMonitor:
+  enabled: true
+  defaults:
+    labels:
+      release: obs
+    interval: 30s
+    scrapeTimeout: 10s
+    module: http_tls
+  targets:
+    - name: traefik-certificate
+      url: https://traefik.kube-system.svc:443
+      hostname: k3s-01.imcherry5778.xyz

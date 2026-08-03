@@ -1,6 +1,6 @@
 # 자원 예산과 정지 기준
 
-기준 측정일: 2026-07-30. 최신 재측정일: 2026-08-02. 이 문서는 `proxmox-01` 한 대의 CPU·RAM·디스크 예산과 정지 기준을 소유한다. 목표 배치는 `architecture.md`, 주소는 `ip-plan.md`, 작업 상태는 `backlog.md`가 계속 소유한다.
+기준 측정일: 2026-07-30. 최신 재측정일: 2026-08-03. 이 문서는 `proxmox-01` 한 대의 CPU·RAM·디스크 예산과 정지 기준을 소유한다. 목표 배치는 `architecture.md`, 주소는 `ip-plan.md`, 작업 상태는 `backlog.md`가 계속 소유한다.
 
 ## 측정 기준
 
@@ -514,6 +514,25 @@ S3 저장량을 30분 고정창으로 한 번 관측했다. Loki는 chunk를 `ob
 
 배포 직후 available은 정지선보다 2,119.895 MiB 높고 PVC 선언 합계는 변하지 않아
 `LOKI-01` stop/go는 **GO**다. retained chunk와 일 환산 증가량은 hard cap보다 충분히 작다.
+
+### `OBS-01` 배포 전·후 실측 (2026-08-03)
+
+최신 main을 포함한 immutable root와 child에서 node·PVC·backup·certificate·Loki·Alloy 지표와
+Alertmanager 실제 전달을 한 번 검증한 최종 성공 실행 값이다. 검증 뒤 child와 PVC는 시작 main
+SHA로 rollback했으며 아래 값은 다음 main sync의 예상 기준선이다.
+
+| 지표 | 실측 | 경고·정지 기준 | 판정 |
+|---|---:|---|---|
+| `k3s-01` 배포 직전 available | 10,273,751,040 bytes (9,797.812 MiB) | 12 GiB 미만 경고, 8 GiB 미만 정지 | 경고 구간 |
+| 배포 직후 available / 감소량 | 9,978,179,584 / 295,571,456 bytes (9,515.934 / 281.879 MiB) | 8 GiB 미만 정지 | **GO** |
+| swap / guest root 여유 | 0 bytes / 84% | swap 사용, root 여유 20% 미만 | 정상 |
+| PVC 요청 합계 / OBS-01 | 75.125 / 9 GiB | 96 GiB 경고, 120 GiB 정지 | 정상 |
+| Prometheus / Alertmanager PVC | 8 / 1 GiB | OBS-01 합계 10 GiB 이하 | 정상 |
+| Prometheus running retention | 3일 / 6 GiB | PVC 8 GiB보다 작은 size cap | 정상 |
+
+배포 직후 available은 8 GiB 정지선보다 1,323.93 MiB 높다. Wazuh 16 GiB를 더하면 PVC 선언
+합계는 91.125 GiB로 96 GiB 경고선까지 4.875 GiB만 남으므로 `WAZUH-01`은 16 GiB와 index
+overhead를 다시 판정하고, 부족하면 replica나 disk가 아니라 수집 source와 retention을 먼저 줄인다.
 이후 상한을 넘으면 PVC·bucket을 늘리지 않고 허용 event class를 줄인다.
 
 ## 재검토 시점

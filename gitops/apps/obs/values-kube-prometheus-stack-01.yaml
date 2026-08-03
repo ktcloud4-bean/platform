@@ -1,0 +1,396 @@
+nameOverride: obs
+fullnameOverride: obs
+
+crds:
+  enabled: true
+  upgradeJob:
+    enabled: false
+
+defaultRules:
+  create: false
+
+alertmanager:
+  enabled: true
+  serviceAccount:
+    automountServiceAccountToken: false
+  config:
+    global:
+      resolve_timeout: 1m
+    route:
+      group_by: [alertname]
+      group_wait: 5s
+      group_interval: 1m
+      repeat_interval: 12h
+      receiver: discard
+      routes:
+        - receiver: obs-01-verification
+          matchers:
+            - alertname = "OBS01Delivery"
+    receivers:
+      - name: discard
+      - name: obs-01-verification
+        webhook_configs:
+          - url: http://obs-01-alert-sink.obs-01-test.svc:8080/alerts
+            send_resolved: true
+  alertmanagerSpec:
+    automountServiceAccountToken: false
+    image:
+      registry: quay.io
+      repository: prometheus/alertmanager
+      tag: v0.33.1
+      sha: 9e082985f56f4c8c9f724e18f2288c6708f472e56a5286b8863d080434ea065d
+    replicas: 1
+    retention: 120h
+    resources:
+      requests:
+        cpu: 25m
+        memory: 96Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+    securityContext:
+      fsGroup: 65534
+      runAsGroup: 65534
+      runAsNonRoot: true
+      runAsUser: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 1Gi
+
+grafana:
+  enabled: true
+  defaultDashboardsEnabled: false
+  ingress:
+    enabled: false
+  service:
+    type: ClusterIP
+  serviceAccount:
+    create: true
+    name: obs-grafana
+    automountServiceAccountToken: false
+  automountServiceAccountToken: false
+  testFramework:
+    enabled: false
+  image:
+    registry: docker.io
+    repository: grafana/grafana
+    tag: 13.1.1
+    sha: 7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b
+  initChownData:
+    enabled: false
+  persistence:
+    enabled: false
+    inMemory:
+      enabled: false
+  sidecar:
+    dashboards:
+      enabled: false
+    datasources:
+      enabled: false
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          uid: prometheus
+          type: prometheus
+          access: proxy
+          url: http://obs-prometheus.obs.svc:9090
+          isDefault: true
+          editable: false
+        - name: Alertmanager
+          uid: alertmanager
+          type: alertmanager
+          access: proxy
+          url: http://obs-alertmanager.obs.svc:9093
+          editable: false
+          jsonData:
+            implementation: prometheus
+  env:
+    GF_SECURITY_ADMIN_USER: admin
+    GF_SECURITY_ADMIN_PASSWORD__FILE: /vault/secrets/admin-password
+    GF_USERS_ALLOW_SIGN_UP: "false"
+    GF_ANALYTICS_REPORTING_ENABLED: "false"
+    GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+  extraInitContainers:
+    - name: vault-agent
+      image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+      imagePullPolicy: IfNotPresent
+      args:
+        - agent
+        - -config=/vault/config/vault-agent.hcl
+      securityContext:
+        runAsUser: 100
+        runAsGroup: 472
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop: [ALL]
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+      volumeMounts:
+        - name: obs-grafana-runtime-config
+          mountPath: /vault/config
+          readOnly: true
+        - name: obs-grafana-runtime-config
+          mountPath: /vault/tls/vault.crt
+          subPath: vault.crt
+          readOnly: true
+        - name: obs-grafana-runtime-secrets
+          mountPath: /vault/secrets
+        - name: vault-agent-tmp
+          mountPath: /tmp
+        - name: vault-token
+          mountPath: /var/run/secrets/vault
+          readOnly: true
+  extraContainerVolumes:
+    - name: vault-token
+      projected:
+        defaultMode: 0440
+        sources:
+          - serviceAccountToken:
+              path: token
+              audience: vault
+              expirationSeconds: 600
+  extraVolumeMounts:
+    - name: obs-grafana-runtime-secrets
+      mountPath: /vault/secrets
+      readOnly: true
+  extraVolumes:
+    - name: obs-grafana-runtime-secrets
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Mi
+    - name: vault-agent-tmp
+      emptyDir:
+        medium: Memory
+        sizeLimit: 16Mi
+    - name: obs-grafana-runtime-config
+      configMap:
+        name: obs-grafana-runtime-config
+
+kubeApiServer:
+  enabled: false
+kubelet:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+coreDns:
+  enabled: false
+kubeDns:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+kubeStateMetrics:
+  enabled: true
+kube-state-metrics:
+  automountServiceAccountToken: true
+  image:
+    registry: registry.k8s.io
+    repository: kube-state-metrics/kube-state-metrics
+    tag: v2.19.1
+    sha: sha256:85108987d044b18a098126732f98602df408888c0f7d456241f5abefb9744bc1
+  collectors:
+    - nodes
+    - persistentvolumeclaims
+    - persistentvolumes
+    - pods
+  prometheus:
+    monitor:
+      enabled: true
+  resources:
+    requests:
+      cpu: 20m
+      memory: 48Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  securityContext:
+    enabled: true
+    runAsGroup: 65534
+    runAsUser: 65534
+    fsGroup: 65534
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ALL]
+
+nodeExporter:
+  enabled: true
+  operatingSystems:
+    linux:
+      enabled: true
+    aix:
+      enabled: false
+    darwin:
+      enabled: false
+prometheus-node-exporter:
+  image:
+    registry: quay.io
+    repository: prometheus/node-exporter
+    tag: v1.12.1
+    distroless: true
+    digest: sha256:8c9bac11973b94b59be88d6e11fee4429aa743c8846cdc75d65b18db33f6a106
+  serviceAccount:
+    automountServiceAccountToken: false
+  prometheus:
+    monitor:
+      enabled: true
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 96Mi
+  securityContext:
+    fsGroup: 65534
+    runAsGroup: 65534
+    runAsNonRoot: true
+    runAsUser: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+
+prometheusOperator:
+  enabled: true
+  tls:
+    enabled: false
+  admissionWebhooks:
+    enabled: false
+    patch:
+      enabled: false
+  serviceMonitor:
+    selfMonitor: false
+  kubeletService:
+    enabled: false
+  kubeletEndpointsEnabled: false
+  kubeletEndpointSliceEnabled: false
+  image:
+    registry: quay.io
+    repository: prometheus-operator/prometheus-operator
+    tag: v0.93.0
+    sha: a001ed10a3823bbf2410ea347796d0e35ff8decd24fb98acbe7ab9e98d431c39
+  resources:
+    requests:
+      cpu: 30m
+      memory: 64Mi
+    limits:
+      cpu: 300m
+      memory: 192Mi
+  prometheusConfigReloader:
+    image:
+      registry: quay.io
+      repository: prometheus-operator/prometheus-config-reloader
+      tag: v0.93.0
+      sha: 0ccb22ca9f3f6fd9f76ce95585d18bd2e363d421c534dde710be4bd13caa551d
+    resources:
+      requests:
+        cpu: 10m
+        memory: 24Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+
+prometheus:
+  enabled: true
+  prometheusSpec:
+    automountServiceAccountToken: true
+    image:
+      registry: quay.io
+      repository: prometheus/prometheus
+      tag: v3.13.2-distroless
+      sha: 64f71bb84e03c855948418b0fc5dea53e9543d8e3fc9931598f583805507f05e
+    replicas: 1
+    shards: 1
+    retention: 3d
+    retentionSize: 6GiB
+    scrapeInterval: 30s
+    scrapeTimeout: 10s
+    evaluationInterval: 30s
+    walCompression: true
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector:
+      matchLabels:
+        release: obs
+    serviceMonitorNamespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: obs
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector:
+      matchLabels:
+        release: obs
+    ruleNamespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: obs
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector:
+      matchLabels:
+        release: obs
+    podMonitorNamespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: obs
+    probeSelectorNilUsesHelmValues: false
+    probeSelector:
+      matchLabels:
+        release: obs
+    probeNamespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: obs
+    resources:
+      requests:
+        cpu: 100m
+        memory: 384Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    securityContext:
+      fsGroup: 65534
+      runAsGroup: 65534
+      runAsNonRoot: true
+      runAsUser: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 8Gi

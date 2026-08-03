@@ -270,6 +270,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `INGRESS-01 DONE` | Traefik 단일 ingress·별도 DNS-01 인증서 | `GITOPS-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 모든 HTTP 앱 | 80→443, 내부·외부 split DNS, OPNsense 개인키 미복사, source IP 판정 |
 | `VAULT-01 DONE` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
 | `VAULT-02 DONE` | KV v2·Kubernetes auth·DB engine·PKI·audit policy ([runbook](runbook/vault-secrets-engines.md)) | `VAULT-01`, `PG-01`, `NET-03A` | 없음 | 모든 플랫폼 앱 | 바인딩 SA만 로그인·타 SA/role 403, policy allow/deny 403, 동적 DB credential의 TLSv1.3 verify-full 접속·타 DB 거부·revoke 후 인증 실패와 role 삭제, PKI 체인 검증·CRL 폐기·공인 이름 거부, audit 108건과 평문 시크릿 0건, vault ns Secret 0건 유지 |
+| `PKI-01 DEFERRED` | Vault PKI를 실제 내부 workload mTLS 인증서 lifecycle에 연결 | `VAULT-02` | `VAULT-CONFIG` | 내부 서비스 인증·인가 | 실제 mTLS consumer 한 곳, service별 최소권한 role, 자동 갱신·reload, revoke·CRL, Vault 장애 시 동작, private key 비노출, rollback |
 | `KC-01 DONE` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `KC-01-FIX-01 DONE` | bootstrap 메모리 시크릿 정리를 fail-closed로 보정 | `KC-01` 배포 선언 | 없음 | Keycloak bootstrap | Agent/bootstrap 동일 UID, 렌더링 파일 정리 실패 시 Job 실패, v1 prune·v2 성공 |
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-PERF-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
@@ -1216,8 +1217,9 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 |---|---|---|---|---|---|
 | `AUDIT-01 DONE` | Suricata·CrowdSec AppSec(Coraza/CRS)·Falco·Kubernetes·Vault·Keycloak·Pomerium·접근 서비스 이벤트 분류 | `EDGE-01`, `POL-02`, `FALCO-01` | 없음 | Loki·Wazuh | 보안/운영 경계, 시각·사용자·요청 ID, 마스킹, 보존 기준 |
 | `LOKI-01 DONE` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
-| `OBS-01 READY` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·OPNsense·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
-| `WAZUH-01 BLOCKED` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
+| `OBS-01 DONE` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
+| `OPN-METRICS-01 READY` | OPNsense exporter와 최소 metric 방화벽 경로 | `OBS-01` | `OPNSENSE-LIVE` | 운영 경보 | exporter target `up=1`, CPU·memory·interface 대표 시계열, 최소 rule 한 건과 rollback·drift 없음 |
+| `WAZUH-01 READY` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
 [단일 분류·보존 표준](audit-event-standard.md)을 확정했다. 탐지 event는 Wazuh 30일,
@@ -1239,6 +1241,20 @@ index label은 일곱 저cardinality field뿐이며 Pod·resource UID는 structu
 immutable root·child의 `Synced/Healthy`를 확인했다. 신규 PVC는 0개이며 배포 직후 available은
 8 GiB 정지선보다 2,119.895 MiB 높았다. 따라서 `LOKI-01`을 완료하고 직접 후속 `OBS-01`만
 `READY`로 연다. `WAZUH-01`은 `OBS-01`이 남아 `BLOCKED`를 유지한다.
+
+2026-08-03 `OBS-01`에서 kube-prometheus-stack chart `88.1.3`과 blackbox chart `11.16.0`을
+tarball SHA·source commit·image digest로 고정해 Prometheus Operator, Prometheus,
+Alertmanager, node-exporter, kube-state-metrics, Grafana를 배포했다. node·PVC·Velero backup,
+Traefik의 실제 TLS 인증서와 Loki·Alloy target은 모두 `up=1`이었고 각각 대표 시계열을
+조회했다. cert-manager는 현재 설치·소비자가 없어 추가하지 않았고 인증서는 blackbox가
+SNI와 chain을 검증했다. 전용 rule은 Prometheus firing, Alertmanager active를 거쳐 임시
+receiver에 `RECEIVED alertname=OBS01Delivery status=firing`으로 실제 수신됐고 자원은 제거했다.
+Prometheus running retention은 3일·6 GiB, PVC는 8 GiB와 Alertmanager 1 GiB뿐이었다. 최종
+배포 전·후 available은 10,273,751,040→9,978,179,584 bytes, swap 0, PVC 합계는
+66.125→75.125 GiB였으며 immutable root `d9b7d31aa23b93a04e7dca8bcc99a6949302f71f`와 child
+`544d6611c4d43f8443cba905f56059be4c80fa05`가 `Synced/Healthy`였다. OPNsense metrics는 승인대로
+`OPN-METRICS-01`로 분리했다. 따라서 `OBS-01`을 완료하고 직접 후속 `OPN-METRICS-01`과
+`WAZUH-01`을 `READY`로 연다. `SOAR-01`은 `WAZUH-01`이 남아 `BLOCKED`를 유지한다.
 
 ## 10. 마지막 단계: Shuffle
 
