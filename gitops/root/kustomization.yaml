@@ -43,3 +43,5 @@ resources:
   - obs-application.yaml
   - wazuh-project.yaml
   - wazuh-application.yaml
+  - cert-manager-project.yaml
+  - cert-manager-application.yaml

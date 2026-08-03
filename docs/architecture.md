@@ -94,7 +94,8 @@ Git에는 PVC 선언만 저장하고 PVC 데이터나 노드 디렉터리명을 
 | 네트워크 IDS | Suricata alert-only | OPNsense |
 | 원격 네트워크 접근 | NetBird | 전용 VM |
 | 특권 세션 | Warpgate | 전용 VM |
-| 시크릿·내부 PKI | Vault | k3s |
+| 시크릿·내부 CA·발급 정책 | Vault | k3s |
+| Kubernetes 내부 인증서 lifecycle | cert-manager | k3s; Vault PKI ClusterIssuer |
 | GitOps | Argo CD | k3s |
 | Kubernetes 관리 UI | Headlamp | k3s |
 | SCM·CI·품질·레지스트리 | Gitea · Jenkins · SonarQube · Harbor | k3s |
@@ -155,7 +156,7 @@ SeaweedFS S3 API와 비 HTTP 프로토콜도 Pomerium Portal 경로와 분리한
 | Pomerium | Keycloak 신원으로 Route 접근 결정·업스트림 프록시 |
 | 애플리케이션 | 서비스 내부 RBAC |
 
-OPNsense, Proxmox, k3s ingress와 Warpgate는 같은 공개 DNS zone을 사용해도 인증서 private key와 DNS API token을 공유하지 않는다. 각 계층이 별도 인증서를 발급하고, Vault PKI는 내부 TLS·mTLS에 사용한다. Warpgate의 공인 단일-host 인증서는 브라우저 SSO callback 신뢰를 위한 것이며 public A/AAAA·NAT·공개 진입을 뜻하지 않는다.
+OPNsense, Proxmox, k3s ingress와 Warpgate는 같은 공개 DNS zone을 사용해도 인증서 private key와 DNS API token을 공유하지 않는다. 각 계층이 별도 인증서를 발급하고, Vault PKI는 내부 TLS·mTLS에 사용한다. Kubernetes 내부 인증서는 Vault가 CA key·trust domain·발급 policy를, cert-manager가 CSR·갱신·consumer namespace Secret 반영을 소유한다. cert-manager가 생성한 private key는 Git이나 Vault로 보내지 않으며 consumer namespace의 RBAC·backup 경계 안에 둔다. 이 controller는 공인 관리 인증서를 대체하지 않는다. 상세 선택은 [ADR-0016](adr/0016-cert-manager-vault-pki-lifecycle.md)을 따른다. Warpgate의 공인 단일-host 인증서는 브라우저 SSO callback 신뢰를 위한 것이며 public A/AAAA·NAT·공개 진입을 뜻하지 않는다.
 
 오리진 WAF middleware는 전역 기본값이 아니다. 먼저 전용 내부 test route에서만 검증하고,
 Keycloak·NetBird·관리 UI와 기존 공개 route에는 각 소유 작업의 별도 승인·회귀 검증 없이
@@ -220,7 +221,7 @@ auto-unseal로 전환했다. KMS는 서울 region 공인 API endpoint를 사용�
 의존하지 않는다. KMS 장애 중 재기동하면 Vault는 sealed로 남으므로, recovery share와 root token은
 Git·클러스터 밖에 보관하고 검증된 seal migration으로 Shamir에 복귀한다.
 
-Vault PKI는 내부 workload 인증서용이며 Proxmox·OPNsense·ingress의 공인 관리 인증서를 자동으로 대체하지 않는다. 사설 CA로 옮기려면 모든 관리 client의 trust 배포와 Vault 장애 시 복구 독립성을 먼저 별도 결정으로 검증한다.
+Vault PKI는 내부 workload 인증서용이며 Proxmox·OPNsense·ingress의 공인 관리 인증서를 자동으로 대체하지 않는다. Kubernetes 내부 Certificate는 cert-manager가 Vault의 전용 signing endpoint에 CSR을 보내고 결과와 private key를 consumer namespace Secret에 반영한다. Vault가 sealed이면 기존 Secret 인증서는 유지되지만 신규 발급·갱신만 멈춘다. 사설 CA로 옮기려면 모든 관리 client의 trust 배포와 Vault 장애 시 복구 독립성을 먼저 별도 결정으로 검증한다.
 
 사용할 기능은 다음으로 제한한다.
 

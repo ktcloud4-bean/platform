@@ -67,7 +67,9 @@ policies/      Kyverno · NetworkPolicy · 서명 검증 정책
 
 ## 시크릿
 
-- Git에는 참조와 정책만 두고 값은 Vault에 둔다.
+- Git에는 참조와 정책만 두고 애플리케이션 비밀 값은 Vault에 둔다. cert-manager가 생성하는
+  인증서 private key는 예외적으로 consumer namespace의 Kubernetes Secret에만 두며 Git이나
+  Vault에 복제하지 않는다. 이 경계는 ADR-0016이 소유한다.
 - Vault 이전의 부트스트랩 값은 저장소 밖에서 최소 기간만 보관한다.
 - OPNsense 원본 백업, tfstate, kubeconfig, Shamir share와 root token은 Git 금지다.
 - 예제 파일에는 실제와 다른 명백한 자리표시자만 사용한다.

@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - install.yaml
+  - vault-issuer-rbac.yaml
+  - vault-clusterissuer.yaml
+secretGenerator:
+  - name: vault-server-ca
+    namespace: cert-manager
+    files:
+      - ca.crt=files/vault.crt
+    options:
+      disableNameSuffixHash: true
+      labels:
+        app.kubernetes.io/name: cert-manager
+        app.kubernetes.io/component: vault-issuer
+        app.kubernetes.io/part-of: platform-gitops

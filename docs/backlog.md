@@ -271,8 +271,8 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `INGRESS-01 DONE` | Traefik 단일 ingress·별도 DNS-01 인증서 | `GITOPS-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 모든 HTTP 앱 | 80→443, 내부·외부 split DNS, OPNsense 개인키 미복사, source IP 판정 |
 | `VAULT-01 DONE` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
 | `VAULT-02 DONE` | KV v2·Kubernetes auth·DB engine·PKI·audit policy ([runbook](runbook/vault-secrets-engines.md)) | `VAULT-01`, `PG-01`, `NET-03A` | 없음 | 모든 플랫폼 앱 | 바인딩 SA만 로그인·타 SA/role 403, policy allow/deny 403, 동적 DB credential의 TLSv1.3 verify-full 접속·타 DB 거부·revoke 후 인증 실패와 role 삭제, PKI 체인 검증·CRL 폐기·공인 이름 거부, audit 108건과 평문 시크릿 0건, vault ns Secret 0건 유지 |
-| `CERTMGR-01 READY` | cert-manager 도입과 Vault PKI를 CA로 쓰는 Issuer 연결 (`gitops/apps/cert-manager/`) | `VAULT-02`, `WAZUH-01` | `VAULT-CONFIG` | `PKI-01`, 내부 인증서 자동화 | 고정 version·image digest·CRD 선언과 Argo child `Synced/Healthy`, cert-manager 전용 Kubernetes auth role·policy가 자기 PKI role로만 발급하고 타 경로는 403, 시험 Certificate 한 장의 발급·Secret 생성·chain 검증과 즉시 제거, 단축 `renewBefore`로 자동 갱신 실증, Vault sealed 상태에서 기존 인증서 유효·신규 발급만 실패, 배포 전후 available RAM·PVC 정지선 통과, Argo revert rollback 뒤 기존 워크로드 회귀 없음 |
-| `PKI-01 BLOCKED` | Vault PKI를 첫 실제 consumer인 CrowdSec agent↔LAPI mTLS lifecycle에 연결 | `VAULT-02`, `CERTMGR-01` | `VAULT-CONFIG` | 내부 서비스 인증·인가 | CrowdSec 전용 최소권한 PKI role과 허용 밖 이름·OU 거부, agent↔LAPI mTLS 실제 연결 성공과 잘못된 CA·OU 거부, LAPI의 OU 기반 agent/bouncer 구분 보존, 자동 갱신·reload, revoke 뒤 CRL 등재와 해당 인증서 거부, Vault sealed 중 기존 인증서 유지·신규 발급만 실패, Git·로그의 private key 0건, `tls.enabled=false` rollback 뒤 `CROWDSEC-FIX-01` 기능(정상 200·공격 403·exact 예외) 회귀 없음 |
+| `CERTMGR-01 DONE` | cert-manager 도입과 Vault PKI를 CA로 쓰는 Issuer 연결 (`gitops/apps/cert-manager/`) | `VAULT-02`, `WAZUH-01` | `VAULT-CONFIG` | `PKI-01`, 내부 인증서 자동화 | 고정 version·image digest·CRD 선언과 Argo child `Synced/Healthy`, cert-manager 전용 Kubernetes auth role·policy가 자기 PKI role로만 발급하고 타 경로는 403, 시험 Certificate 한 장의 발급·Secret 생성·chain 검증과 즉시 제거, 단축 `renewBefore`로 자동 갱신 실증, Vault sealed 상태에서 기존 인증서 유효·신규 발급만 실패, 배포 전후 available RAM·PVC 정지선 통과, Argo revert rollback 뒤 기존 워크로드 회귀 없음 |
+| `PKI-01 READY` | Vault PKI를 첫 실제 consumer인 CrowdSec agent↔LAPI mTLS lifecycle에 연결 | `VAULT-02`, `CERTMGR-01` | `VAULT-CONFIG` | 내부 서비스 인증·인가 | CrowdSec 전용 최소권한 PKI role과 허용 밖 이름·OU 거부, agent↔LAPI mTLS 실제 연결 성공과 잘못된 CA·OU 거부, LAPI의 OU 기반 agent/bouncer 구분 보존, 자동 갱신·reload, revoke 뒤 CRL 등재와 해당 인증서 거부, Vault sealed 중 기존 인증서 유지·신규 발급만 실패, Git·로그의 private key 0건, `tls.enabled=false` rollback 뒤 `CROWDSEC-FIX-01` 기능(정상 200·공격 403·exact 예외) 회귀 없음 |
 | `KC-01 DONE` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `KC-01-FIX-01 DONE` | bootstrap 메모리 시크릿 정리를 fail-closed로 보정 | `KC-01` 배포 선언 | 없음 | Keycloak bootstrap | Agent/bootstrap 동일 UID, 렌더링 파일 정리 실패 시 Job 실패, v1 prune·v2 성공 |
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-PERF-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
@@ -346,6 +346,13 @@ controller·webhook·cainjector Pod를 더하므로 `WAZUH-01`의 capacity gate�
 91.125 GiB도 96 GiB 경고선 안이므로, 선행이 모두 `DONE`인 `CERTMGR-01`을 `READY`로 연다. 이
 값은 판정 근거일 뿐이므로 배포 직전에 같은 기준으로 다시 측정한다. `PKI-01`은 `CERTMGR-01`이
 남아 `BLOCKED`를 유지한다.
+
+2026-08-03 `CERTMGR-01`에서 cert-manager `v1.21.1`과 CRD 6개, image index digest 4개를
+고정하고 Vault 전용 PKI role·policy·Kubernetes auth role을 연결했다. 시험 Certificate 한 장으로
+발급·Secret·chain, 단축 갱신 한 사이클, sealed 상태의 기존 인증서 유효와 신규 발급 실패를
+확인했으며 AWS KMS auto-unseal 직후 시험 자원을 제거했다. 배포 전후 capacity 정지선과 Argo
+revert 뒤 기존 Application 21개의 무회귀도 통과했으므로 `CERTMGR-01`을 `DONE`으로 닫고, 모든
+선행이 끝난 직접 후속 `PKI-01`만 `READY`로 연다. 실제 CrowdSec consumer 연결은 하지 않았다.
 
 2026-08-01 `POM-01`에서 Pomerium Core `v0.33.0`과 Dashy `4.5.0`을 각 공식
 multi-arch image index digest로 고정하고 전용 AppProject·child Application·namespace에
