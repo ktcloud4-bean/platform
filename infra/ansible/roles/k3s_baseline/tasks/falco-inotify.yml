@@ -1,0 +1,40 @@
+---
+- name: Falco inotify instance sysctl 선언
+  ansible.builtin.copy:
+    dest: "{{ k3s_falco_inotify_sysctl_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # CAP-03: Falco 재부팅 복원에 필요한 root UID inotify instance 여유
+      fs.inotify.max_user_instances={{ k3s_falco_inotify_max_user_instances }}
+  register: k3s_falco_inotify_sysctl_file
+
+- name: Falco inotify instance sysctl 적용
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sysctl
+      - -p
+      - "{{ k3s_falco_inotify_sysctl_path }}"
+  when:
+    - not ansible_check_mode
+    - k3s_falco_inotify_sysctl_file.changed
+
+- name: Falco inotify instance sysctl 조회
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sysctl
+      - -n
+      - fs.inotify.max_user_instances
+  register: k3s_falco_inotify_max_user_instances_live
+  changed_when: false
+  check_mode: false
+
+- name: Falco inotify instance sysctl 하한 확인
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_check_mode and k3s_falco_inotify_sysctl_file.changed) or
+        (k3s_falco_inotify_max_user_instances_live.stdout | int >=
+         k3s_falco_inotify_max_user_instances | int)
+    fail_msg: fs.inotify.max_user_instances가 Falco 재부팅 복원 하한보다 낮다.

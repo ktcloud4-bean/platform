@@ -49,6 +49,10 @@
 canonical 이름만 `object-01`로 전환했다. 따라서 이번 전환으로 추가되는 vCPU·RAM·thin
 프로비저닝은 0이다.
 
+`CAP-03`은 `k3s-01`만 28 GiB로 올려 VM RAM 합계를 44 GiB로 만들었다. 위 Day 1 표는 최초
+생성 기준으로 유지하고, 현재 증설값과 실측은 아래 `CAP-03` 기록이 소유한다. QEMU overhead
+1 GiB를 더한 적용 후 RAM 회계는 45 GiB다.
+
 VM 분리 근거는 [ADR-0003](adr/0003-service-vm-boundaries.md), 단일 k3s와 local storage 선택은 [ADR-0002](adr/0002-single-node-k3s-and-local-storage.md)를 따른다.
 
 ### 공통 VM 옵션
@@ -559,6 +563,63 @@ RAM 하나가 정지선을 깨므로 `WAZUH-01`은 정상 중단했다. replica�
 swap 0, guest root 여유 20% 이상, Wazuh 포함 PVC 합계 96 GiB 미만이다. 이 조건을 만든
 선행 capacity 회수 또는 RAM 재배정은 해당 소유 작업에서 처리하고 `WAZUH-01`은 그 뒤 같은
 배포 전 gate부터 다시 시작한다.
+
+### `CAP-03` RAM 증설 승인 전 실측 (2026-08-03)
+
+13:50 KST에 strict SSH 읽기 전용 조회와 현재 OpenTofu state의 refresh plan으로 측정했다.
+apply와 VM 재부팅 전 값이며, post 열은 4 GiB 차이를 단순 반영한 예상치다. 실제 완료
+판정은 승인된 apply와 정상 재부팅 뒤 같은 지표를 한 번 재측정해 이 표에 추가한다.
+
+| 지표 | 적용 전 실측 | 적용 후 목표·예상 | 경고·정지 기준 | 판정 |
+|---|---:|---:|---:|---|
+| Proxmox RAM 총량 / available | 67,136,507,904 / 29,864,136,704 bytes (62.526 / 27.813 GiB) | available 약 23.813 GiB | available 12 GiB 미만 경고, 8 GiB 미만 정지 | **GO** |
+| Proxmox swap 사용 | 0 bytes | 0 bytes | 0 초과 재검토, 지속 사용 정지 | 정상 |
+| VM RAM 회계 | 41 GiB (VM 40 + overhead 1) | 45 GiB (VM 44 + overhead 1) | 52 GiB 경고, 56.5 GiB 정지 | **GO**, 경고선까지 7 GiB |
+| host load15 / root 사용률 | 0.52 / 5% | 실측 대상 | 20·70% 경고, 30·80% 정지 | 정상 |
+| thin data / metadata | 5.76% / 0.43% | 변화 없음 | 60%·50% 경고, 각 70% 정지 | 정상 |
+| VMID 120 memory / balloon | 24,576 / 0 MiB | 28,672 / 0 MiB | `k3s-01` 상한 36 GiB, balloon 금지 | **GO** |
+| `k3s-01` 총 RAM / available | 24,926,670,848 / 9,857,167,360 bytes (23.215 / 9.180 GiB) | available 약 14,152,134,656 bytes (13.180 GiB) | Wazuh 재진입 11 GiB | **GO**, 2.180 GiB 예상 여유 |
+| Wazuh 최소 3 GiB 반영 후 available | — | 약 10,930,909,184 bytes (10.180 GiB) | 8 GiB 정지 | **GO**, 2.180 GiB 예상 여유 |
+| guest swap / root 여유 | 0 bytes / 84% | 실측 대상 | swap 사용 재검토, root 여유 20% 미만 정지 | 정상 |
+| PVC 요청 / Wazuh 포함 예상 | 75.125 / 91.125 GiB | 변화 없음 | 96 GiB 경고, 120 GiB 정지 | 정상, 경고선까지 4.875 GiB |
+
+baseline plan은 state resource 5개 모두 `no-op`, 비통과 check 0건이었다. 증설 선언의
+허용 plan은 VMID 120의 `memory.dedicated 24576→28672` 한 건만
+`0 add, 1 change, 0 destroy`여야 한다. CPU·disk·NIC·다른 VM·PVC 변화나 replace가 있으면
+apply하지 않는다. 상세 승인 영향과 rollback은
+[`k3s-01 RAM 증설 runbook`](runbook/k3s-ram-expansion.md)이 소유한다.
+
+### `CAP-03` RAM 증설 전·후 실측 (2026-08-03)
+
+수정 승인 binary plan을 실제 state에 한 번 적용하고, OS 재부팅으로 pending memory가 활성화되지
+않은 원인을 확인한 뒤 승인된 cold start 한 번으로 VMID 120의 RAM을 활성화했다. 적용 전 값은
+최종 apply 직전, 적용 후 값은 Vault·CrowdSec·Falco 재부팅 복구와 임시 검증 자원 제거 뒤의
+완료 증거 실행이다.
+
+| 지표 | 적용 전 실측 | 적용 후 실측 | 경고·정지 기준 | 판정 |
+|---|---:|---:|---:|---|
+| Proxmox RAM 총량 / available | 67,136,507,904 / 29,862,977,536 bytes (62.526 / 27.812 GiB) | 67,136,507,904 / 35,921,670,144 bytes (62.526 / 33.455 GiB) | available 12 GiB 미만 경고, 8 GiB 미만 정지 | **GO** |
+| Proxmox swap 사용 | 0 bytes | 0 bytes | 0 초과 재검토, 지속 사용 정지 | 정상 |
+| VM RAM 회계 | 41 GiB (VM 40 + overhead 1) | 45 GiB (VM 44 + overhead 1) | 52 GiB 경고, 56.5 GiB 정지 | **GO**, 경고선까지 7 GiB |
+| host load15 / root 사용률 | 0.73 / 5% | 0.52 / 5% | 20·70% 경고, 30·80% 정지 | 정상 |
+| thin data / metadata | 5.76% / 0.43% | 5.82% / 0.43% | 60%·50% 경고, 각 70% 정지 | 정상 |
+| VMID 120 memory / balloon | 24,576 / 0 MiB | 28,672 / 0 MiB | `k3s-01` 상한 36 GiB, balloon 금지 | **GO** |
+| `k3s-01` 총 RAM / available | 24,926,670,848 / 9,916,096,512 bytes (23.215 / 9.235 GiB) | 29,154,533,376 / 16,839,221,248 bytes (27.152 / 15.683 GiB) | Wazuh 재진입 11 GiB | **GO**, 재진입선 위 4.683 GiB |
+| Wazuh 최소 3 GiB 반영 후 available | 6,694,871,040 bytes (6.235 GiB) | 13,617,995,776 bytes (12.683 GiB) | 8 GiB 정지 | **GO**, 정지선 위 4.683 GiB |
+| guest swap / root 사용률 | 0 bytes / 16% | 0 bytes / 16% | swap 사용 재검토, root 여유 20% 미만 정지 | 정상 |
+| PVC 요청 / Wazuh 포함 예상 | 75.125 / 91.125 GiB | 75.125 / 91.125 GiB | 96 GiB 경고, 120 GiB 정지 | 정상, 경고선까지 4.875 GiB |
+
+최종 guest boot ID는 `4e745572-8cf3-4bd2-91c2-a572ad45a382`, k3s `/readyz=ok`, Node
+`Ready`, Vault `sealed=false`, swap 0이다. Falco 재생성 회귀 뒤 Pod는 새 UID에서 Ready·restart
+0이고 inotify 초기화 오류와 신규 `runAsNonRoot` admission 거부는 0건이었다. PVC는 9개,
+요청 합계 75.125 GiB로 불변이다.
+
+최종 OpenTofu refresh plan
+`31a4985740727cc53b89d7b5d29b62d45a1ddc66def45f238c1fef68ab8a34d4`는 mode `0600`으로
+저장소 밖에 있으며 state resource 5개가 모두 `no-op`, 변경 0건, 비통과 check 0건이다. plan
+전후 state SHA-256은
+`b6275be5d8ea2ffcdc5cb327c2a31857ea219f445581d0eaffb9828f2cbf68ea`로 불변이다. RAM·swap·disk·
+PVC gate가 모두 정지선 안이므로 `WAZUH-01` 재진입 판정은 **GO**다.
 
 ## 재검토 시점
 

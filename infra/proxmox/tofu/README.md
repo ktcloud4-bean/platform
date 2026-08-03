@@ -4,7 +4,10 @@
 
 ## 지금 이 구성이 소유하는 것
 
-`VM-01`이 2026-07-31에 VM 5대를 한 번의 apply로 만들었다. state에는 리소스 5개가 있고 `tofu plan`은 무변경이다.
+`VM-01`이 2026-07-31에 VM 5대를 한 번의 apply로 만들었다. state에는 리소스 5개가 있다.
+`CAP-03`은 VMID 120의 RAM만 24 GiB에서 28 GiB로 올렸고 최종 refresh plan에서 다섯
+리소스 모두 무변경을 확인했다. 적용·cold start·재부팅 복원·rollback은
+[k3s-01 RAM 증설 runbook](../../../docs/runbook/k3s-ram-expansion.md)이 소유한다.
 
 gate 값은 저장소 밖 변수 파일로 주입한다. gate를 비우고 `tofu plan`을 돌리면 여전히 리소스 0개와 `blocked_by`가 나온다. 이것이 선행 조건을 잃었을 때의 정상 동작이다.
 

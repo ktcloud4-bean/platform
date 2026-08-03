@@ -6,10 +6,33 @@
 
 `POL-02`는 `POL-01`에서 Audit한 Pod-level `runAsNonRoot` 규칙 한 건만 `Enforce`로
 승격한다. 적용 전 PolicyReport에서 확인한 `argocd`, `awx`, `crowdsec-01`, `velero`의 기존
-workload만 정확한 kind·이름·policy rule로 예외 처리한다. 예외는 `kyverno` namespace에서만
-인식되며 `2026-09-02T15:00:00Z` 뒤에는 `time_now_utc()` 조건이 거짓이 되어 같은 위반
-입력을 admission에서 거부한다. 소유자와 보정 사유는 각 `PolicyException` annotation이
-소유한다. background report에는 예외를 적용하지 않아 남은 위반을 숨기지 않는다.
+workload만 정확한 kind·이름·policy rule로 예외 처리한다. 이 네 예외는 `kyverno`
+namespace에서만 인식되며 `2026-09-02T15:00:00Z` 뒤에는 `time_now_utc()` 조건이 거짓이 되어
+같은 위반 입력을 admission에서 거부한다. 소유자와 보정 사유는 각 `PolicyException`
+annotation이 소유한다. background report에는 예외를 적용하지 않아 남은 위반을 숨기지
+않는다.
+
+## Falco root sensor 경계
+
+`CAP-03` cold start 뒤 기존 Falco Pod는 root UID inotify instance `127/128` 고갈로 재기동에
+실패했다. `fs.inotify.max_user_instances=256`으로 원인을 제거한 뒤 Pod를 교체하자, 이번에는
+POL-02가 새 Pod의 Pod-level `runAsNonRoot` 누락을 admission에서 거부했다. 고정 Falco
+`0.44.1` image 자체의 OCI user가 `0`이므로 boolean을 참으로 쓰는 보정은 kubelet 실패를
+감출 뿐이다.
+
+Falco는 일반 workload 예외가 아니라 modern eBPF host sensor로 명시한다. 만료 없는 두
+`PolicyException`은 `falco` namespace의 `Pod/falco-*`와 `DaemonSet/falco`, 해당 direct·autogen
+rule 하나씩만 허용한다. 범위를 넓히는 대신 `pol-02-falco-root-sensor-baseline` Enforce가
+고정 image digest·ServiceAccount·token 미자동 mount·비privileged·권한 상승 금지·read-only
+rootfs·RuntimeDefault seccomp·네 capability와 세 hostPath만 허용한다. image digest, capability,
+hostPath 또는 ServiceAccount를 바꾸면 예외와 보상 정책을 같은 변경에서 재검토한다.
+
+[`verify-falco-recreate.sh`](../gitops/tools/cap-03/verify-falco-recreate.sh)는 준비된 Pod가 있다는
+사실만 보지 않는다. 정확한 정책·예외 범위를 먼저 확인하고 API-valid한
+`allowPrivilegeEscalation=true` 변형이 보상 정책에서 server dry-run 거부되는지 확인한다. 그
+다음 Falco Pod 한 건을 삭제해 새 UID가 120초 안에 Ready가 되는지, `runAsNonRoot` admission
+거부 count와 inotify 초기화 오류가 늘지 않는지 판정한다. 이 검증으로 기존 Pod가 Enforce
+전부터 남아 결함을 숨기는 경로를 차단한다.
 
 NetworkPolicy는 k3s 내장 kube-router가 실제 강제하므로 새 namespace에 기계적으로 복제하지
 않고, 통신표와 대표 경로가 확인된 namespace만 별도 검증 뒤 추가한다.

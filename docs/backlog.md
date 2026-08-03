@@ -809,6 +809,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `CAP-02 DONE` | 핵심 서비스 후 남은 CPU·RAM·disk 재예산 | `BKP-05`, `HEADLAMP-02` | 없음 | 아래 전체 | Proxmox·VM·Pod 실측과 stop/go 기준 |
+| `CAP-03 DONE` | `k3s-01` RAM을 24 GiB에서 28 GiB로 증설해 Wazuh 재진입 용량 확보 | `CAP-02` | `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP` | `WAZUH-01` | OpenTofu가 VMID 120 memory `24576→28672`만 `0 add, 1 change, 0 destroy`로 계획, state 사본·rollback 확보, 정상 재부팅 뒤 boot ID 변경·guest RAM 증가·swap 0·Node Ready·Argo 전체 `Synced/Healthy`, host/guest/PVC 정지선 통과와 Wazuh 재진입 available 11 GiB 이상, 최종 plan 무변경 |
 | `SCM-01 DONE` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
 | `REG-01 DONE` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
 | `CI-01 DONE` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
@@ -831,6 +832,41 @@ Node는 173m·4,426 MiB, PVC 요청은 5.125 GiB다. 모든 stop 기준에 여�
 `SCM-01`·`REG-01`·`QUALITY-01`·`AWX-01` 진입은 `GO`로 판정한다. 추가 Pod에서 먼저
 접근할 가능성이 큰 경계는 `k3s-01` RAM이며 12 GiB 경고까지 7.58 GiB가 남았다.
 CAP-02의 모든 직접 후속은 다른 선행도 `DONE`이므로 네 작업만 `READY`로 연다.
+
+2026-08-03 `CAP-03` 승인 전 준비에서 strict SSH 읽기 전용 실측과 현재 OpenTofu state의
+무변경 baseline plan을 완료했다. Proxmox host available은 29,864,136,704 bytes
+(27.813 GiB), swap 사용 0, thin data/metadata 5.76%/0.43%, `/` 사용률 5%, 15분 load
+0.52다. 현재 VM RAM 회계는 41 GiB이고 증설 후 45 GiB로 52 GiB 경고선보다 7 GiB
+낮다. `k3s-01`은 VMID 120, running, `memory=24576`, `balloon=0`이며 guest available은
+9,857,167,360 bytes(9.180 GiB), swap 0, root 여유 84%, PVC 요청 75.125 GiB다.
+4 GiB를 더하면 guest available 단순 예상은 13.180 GiB로 Wazuh 재진입선 11 GiB보다
+2.180 GiB 높다. baseline plan은 5개 state resource 모두 `no-op`, 비통과 check 0건이다.
+실제 OpenTofu apply와 `k3s-01` 정상 재부팅은 승인 전이라 수행하지 않았으며
+[CAP-03 runbook](runbook/k3s-ram-expansion.md)의 검증된 `0 add, 1 change, 0 destroy` binary
+plan과 rollback 절차로만 진행한다.
+
+2026-08-03 `CAP-03`에서 승인 plan SHA
+`f8d311c0a424abfaa66d54c0140165c9906774bd63f284eb8fb826dd0cf0e3d0`을 실제 state에 적용해
+VMID 120의 memory만 `24576→28672`, balloon 0으로 바꿨다. OS 재부팅은 QEMU pending memory를
+활성화하지 않아 승인된 cold start 한 번으로 boot ID
+`4e745572-8cf3-4bd2-91c2-a572ad45a382`, guest `MemTotal=29,154,533,376 bytes`를 확인했다.
+Vault는 저장소 밖 unseal key threshold `3/3`으로 `sealed=false` 복구했고, CrowdSec은 재부팅
+뒤 비멱등 `emptyDir` init의 정확한 Pod만 교체했다.
+
+Falco는 root UID inotify instance `127/128` 고갈을 `256` 영구 선언으로 보정하고, 재생성 때
+드러난 POL-02 누락은 만료 없는 exact Pod·DaemonSet 예외와 전용 보상 Enforce 정책으로
+해결했다. immutable root `8c299322a49a0bcf55edc39309f69ed305e762cc`, 설정
+`bc8da181eecc00392585311628a2a7f3bbdb73de`에서 권한 상승 음성 표본이 거부되고 실제 Falco
+Pod UID가 `0a0451fd-739a-439b-8918-95ec8ee6a330→697979bc-7471-4f85-bb3a-33478ef4b1d9`로
+바뀌어 Ready·restart 0, 신규 admission 거부 0건이었다. 검증 뒤 시작 main으로 rollback해
+root·policy-baseline·Falco가 `Synced/Healthy`, child 선언이 literal `main`임을 확인했다.
+
+최종 Proxmox available은 35,921,670,144 bytes·swap 0, `k3s-01` available은
+16,839,221,248 bytes(15.683 GiB)·swap 0, root 사용률 16%, PVC는 75.125 GiB다. Wazuh 3 GiB
+반영 후에도 12.683 GiB로 8 GiB 정지선 위이며 Wazuh 포함 PVC 91.125 GiB는 96 GiB 경고선
+미만이다. 최종 OpenTofu plan은 resource 5개 모두 `no-op`, 변경·비통과 check 0건이고 state
+SHA는 불변이었다. 따라서 `CAP-03`을 `DONE`으로 닫고 모든 선행이 끝난 직접 후속
+`WAZUH-01`을 `READY`로 연다.
 
 2026-08-02 `SCM-01`에서 Gitea `v1.27.1` 공식 rootless image index digest와 Vault Agent를
 고정해 전용 AppProject·child Application·namespace에 배포했다. 관계형 데이터는
@@ -1219,7 +1255,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `LOKI-01 DONE` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
 | `OBS-01 DONE` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
 | `OPN-METRICS-01 DONE` | OPNsense exporter와 최소 metric 방화벽 경로 | `OBS-01` | `OPNSENSE-LIVE` | 운영 경보 | exporter target `up=1`, CPU·memory·interface 대표 시계열, 최소 rule 한 건과 rollback·drift 없음 |
-| `WAZUH-01 BLOCKED` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
+| `WAZUH-01 READY` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
 [단일 분류·보존 표준](audit-event-standard.md)을 확정했다. 탐지 event는 Wazuh 30일,

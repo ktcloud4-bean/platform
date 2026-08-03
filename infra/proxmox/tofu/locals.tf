@@ -5,7 +5,7 @@ locals {
   # 값의 단일 원본은 문서다. 여기는 그 값을 실행 가능한 형태로 옮긴 구현이며
   # 문서에 같은 표를 다시 쓰지 않는다.
   #
-  #   vcpu · memory_mib · disk_gib  ← docs/capacity-plan.md "VM 기준표"의 Day 1 열
+  #   vcpu · memory_mib · disk_gib  ← docs/capacity-plan.md "VM 기준표"와 작업별 증설 기록
   #   vlan_id · ipv4_*              ← docs/ip-plan.md "목표 VLAN"·"고정 배정"
   #   name                          ← docs/ip-plan.md "DNS와 도메인"의 canonical host
   #   role                          ← docs/ip-plan.md "목표 VLAN"의 이름을 소문자로. Proxmox 태그에만 쓴다
@@ -22,7 +22,7 @@ locals {
       vm_id         = 120
       role          = "platform"
       vcpu          = 8
-      memory_mib    = 24576 # 24 GiB
+      memory_mib    = 28672 # 28 GiB; CAP-03
       disk_gib      = 200
       vlan_id       = 20
       ipv4_cidr     = "10.10.20.10/24"

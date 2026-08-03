@@ -99,6 +99,11 @@
          k3s_sonarqube_vm_max_map_count | int)
     fail_msg: vm.max_map_count가 SonarQube 공식 하한보다 낮다.
 
+- name: Falco inotify instance 기준선 적용
+  ansible.builtin.import_tasks: falco-inotify.yml
+  tags:
+    - falco_inotify
+
 - name: 현재 IPv4 주소 조회
   ansible.builtin.command:
     cmd: ip -j address show

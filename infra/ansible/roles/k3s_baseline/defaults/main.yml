@@ -24,6 +24,12 @@ k3s_server_token_path: /var/lib/rancher/k3s/server/token
 k3s_sonarqube_sysctl_path: /etc/sysctl.d/99-sonarqube.conf
 k3s_sonarqube_vm_max_map_count: 524288
 
+# CAP-03: 단일 노드 재부팅 뒤 root UID inotify instance가 127/128에 도달해
+# Falco가 handler를 만들지 못했다. watch 상한은 그대로 두고 instance 수만 2배로
+# 늘려 재부팅 순서와 무관하게 modern eBPF Falco가 기동할 여유를 둔다.
+k3s_falco_inotify_sysctl_path: /etc/sysctl.d/99-falco-inotify.conf
+k3s_falco_inotify_max_user_instances: 256
+
 # k3s가 매 시작 때 되쓰는 packaged local-storage AddOn과 동일 리소스를 경쟁하지
 # 않도록 packaged AddOn은 끄고, 같은 provisioner 버전의 STOR-01 manifest를
 # Ansible이 소유한다.

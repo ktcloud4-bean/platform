@@ -1,0 +1,124 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pol-02-falco-root-sensor-baseline
+  annotations:
+    policies.kyverno.io/title: Falco root sensor compensating controls
+    policies.kyverno.io/category: Runtime Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    pod-policies.kyverno.io/autogen-controllers: DaemonSet
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  validationFailureAction: Enforce
+  admission: true
+  background: true
+  emitWarning: false
+  rules:
+    - name: require-falco-root-sensor-baseline
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - falco
+              names:
+                - falco-*
+      validate:
+        allowExistingViolations: false
+        message: Falco root sensor must keep the pinned image and least-privileged security baseline.
+        pattern:
+          metadata:
+            labels:
+              app.kubernetes.io/name: falco
+              app.kubernetes.io/instance: falco
+          spec:
+            serviceAccountName: falco
+            automountServiceAccountToken: false
+            =(hostNetwork): false
+            =(hostPID): false
+            =(hostIPC): false
+            containers:
+              - name: falco
+                image: docker.io/falcosecurity/falco:0.44.1@sha256:d0cfe422d6ac0e0f20857798f46c7d7273210e1b064b22821e4e6e7f843cde6b
+                securityContext:
+                  privileged: false
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                volumeMounts:
+                  - (name): container-engine-socket-0
+                    mountPath: /host/run/k3s/containerd/containerd.sock
+                    readOnly: true
+                  - (name): proc-fs
+                    mountPath: /host/proc
+                    readOnly: true
+                  - (name): sys-fs
+                    mountPath: /sys/kernel
+                    readOnly: true
+    - name: restrict-falco-added-capabilities
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - falco
+              names:
+                - falco-*
+      validate:
+        allowExistingViolations: false
+        message: Falco may add only the four capabilities required by the modern eBPF sensor.
+        foreach:
+          - list: "request.object.spec.containers[?name == 'falco']"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.capabilities.add || `[]` }}"
+                    operator: AnyNotIn
+                    value:
+                      - BPF
+                      - PERFMON
+                      - SYS_RESOURCE
+                      - SYS_PTRACE
+                  - key:
+                      - BPF
+                      - PERFMON
+                      - SYS_RESOURCE
+                      - SYS_PTRACE
+                    operator: AnyNotIn
+                    value: "{{ element.securityContext.capabilities.add || `[]` }}"
+                  - key:
+                      - ALL
+                    operator: AnyNotIn
+                    value: "{{ element.securityContext.capabilities.drop || `[]` }}"
+    - name: restrict-falco-host-paths
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - falco
+              names:
+                - falco-*
+      validate:
+        allowExistingViolations: false
+        message: Falco may mount only the k3s CRI socket, proc, and sys kernel host paths.
+        foreach:
+          - list: "request.object.spec.volumes[?hostPath]"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.hostPath.path }}"
+                    operator: AnyNotIn
+                    value:
+                      - /run/k3s/containerd/containerd.sock
+                      - /proc
+                      - /sys/kernel
