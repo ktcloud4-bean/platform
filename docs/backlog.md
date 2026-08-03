@@ -845,7 +845,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 |---|---|---|---|---|---|
 | `CAP-02 DONE` | 핵심 서비스 후 남은 CPU·RAM·disk 재예산 | `BKP-05`, `HEADLAMP-02` | 없음 | 아래 전체 | Proxmox·VM·Pod 실측과 stop/go 기준 |
 | `CAP-03 DONE` | `k3s-01` RAM을 24 GiB에서 28 GiB로 증설해 Wazuh 재진입 용량 확보 | `CAP-02` | `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP` | `WAZUH-01` | OpenTofu가 VMID 120 memory `24576→28672`만 `0 add, 1 change, 0 destroy`로 계획, state 사본·rollback 확보, 정상 재부팅 뒤 boot ID 변경·guest RAM 증가·swap 0·Node Ready·Argo 전체 `Synced/Healthy`, host/guest/PVC 정지선 통과와 Wazuh 재진입 available 11 GiB 이상, 최종 plan 무변경 |
-| `CAP-04 READY` | Shuffle 진입 용량 판정과 필요할 때만 `k3s-01` RAM 증설 | `CAP-03`, `WAZUH-01` | `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP` | `SOAR-01` | Shuffle 공식 최소 요구량과 자체 OpenSearch 분리 배포를 전제로 계산한 진입선과 현재 실측 대조, 미달일 때만 OpenTofu가 VMID 120 memory `28672→32768`만 `0 add, 1 change, 0 destroy`로 계획하고 state 사본·rollback 확보, 재부팅 뒤 boot ID 변경·guest RAM 증가·swap 0·Node Ready·Vault 재unseal·Argo 전체 `Synced/Healthy`, 배정 합계 52 GiB 경고선 미만 유지, PVC 선언 합계를 96 GiB 경고와 120 GiB 정지로 구분해 재판정하고 Shuffle 몫 배정, 증설이 불필요하면 근거와 `SOAR-01` 진입선만 기록하고 라이브 변경 0, 최종 plan 무변경 |
+| `CAP-04 DONE` | Shuffle 진입 용량 판정과 필요할 때만 `k3s-01` RAM 증설 | `CAP-03`, `WAZUH-01` | `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP` | `SOAR-01` | Shuffle 공식 최소 요구량과 자체 OpenSearch 분리 배포를 전제로 계산한 진입선과 현재 실측 대조, 미달일 때만 OpenTofu가 VMID 120 memory `28672→32768`만 `0 add, 1 change, 0 destroy`로 계획하고 state 사본·rollback 확보, 재부팅 뒤 boot ID 변경·guest RAM 증가·swap 0·Node Ready·Vault 재unseal·Argo 전체 `Synced/Healthy`, 배정 합계 52 GiB 경고선 미만 유지, PVC 선언 합계를 96 GiB 경고와 120 GiB 정지로 구분해 재판정하고 Shuffle 몫 배정, 증설이 불필요하면 근거와 `SOAR-01` 진입선만 기록하고 라이브 변경 0, 최종 plan 무변경 |
 | `SCM-01 DONE` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
 | `REG-01 DONE` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
 | `CI-01 DONE` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
@@ -922,6 +922,25 @@ Shuffle 최소)을 계산해 실측과 대조하고, 미달일 때만 `k3s-01`�
 `SOAR-01`의 완료 증거에는 용량 gate가 없었다. `WAZUH-01`이 gate에서 STOP한 뒤 `CAP-03`을
 신설한 순서를 반복하지 않도록 `CAP-04`를 선행으로 걸고 배포 직전 gate와 OpenSearch 분리를
 완료 증거에 넣는다. 따라서 `SOAR-01`은 `READY`에서 `BLOCKED`로 되돌린다.
+
+2026-08-03 `CAP-04`에서 [Shuffle 공식 self-hosted 설치 최소](https://github.com/Shuffle/Shuffle/blob/main/.github/install-guide.md)인
+available RAM 4 GB를 4 GiB로 보수 적용해 `SOAR-01` 진입선을 12 GiB(8 GiB 정지선 + 4 GiB)로
+고정했다. 현재 `k3s-01` available은 14,481,977,344 bytes(13.487 GiB), swap 0, root 여유
+82%로 진입선보다 1.487 GiB 높다. Proxmox available은 27,532,869,632 bytes(25.642 GiB),
+swap 0, thin data/metadata 6.23%/0.44%, `/` 사용률 5%, load15 0.70이고 VM RAM 회계는 45 GiB로
+52 GiB 경고선보다 7 GiB 낮다.
+
+PVC 선언 합계 91.125 GiB에 Wazuh indexer와 분리한 Shuffle 전용 OpenSearch 16 GiB와 file data
+4 GiB를 배정하면 111.125 GiB다. 이는 96 GiB 경고선을 15.125 GiB 넘지만 120 GiB 정지선보다
+8.875 GiB 낮으므로 **경고·GO**다. `SOAR-01`은 이 20 GiB 상한과 배포 직전 120 GiB 미만 gate를
+지키며, Wazuh 원본 event를 자기 OpenSearch에 중복 보존하지 않는다.
+
+증설 조건이 성립하지 않아 OpenTofu 선언·state, VM 전원, Kubernetes와 Vault를 바꾸지 않았고
+live 변경은 0이다. 최종 plan SHA
+`31a59bdd3c3e5363b0e2d0ced701afbc3a47b35dd84d86e6022db2aa4f28a59b`은 resource 5개 모두
+`no-op`, 변경·비통과 check 0건이며 plan 전후 state SHA
+`b6275be5d8ea2ffcdc5cb327c2a31857ea219f445581d0eaffb9828f2cbf68ea`가 불변이다. 따라서
+`CAP-04`를 `DONE`으로 닫고 모든 선행이 충족된 직접 후속 `SOAR-01`만 `READY`로 연다.
 
 2026-08-02 `SCM-01`에서 Gitea `v1.27.1` 공식 rootless image index digest와 Vault Agent를
 고정해 전용 AppProject·child Application·namespace에 배포했다. 관계형 데이터는
@@ -1444,7 +1463,7 @@ ingest pipeline에서 제외했다. OPNsense 룰셋은 `NIDS-01` 소유라 이 �
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `SOAR-01 BLOCKED` | Shuffle read-only·사람 승인형 SOAR PoC | `OBS-01`, `WAZUH-01`, `FALCO-01`, `CAP-04` | `K3S-HEAVY` | 사고대응 | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch, 경보 수신→정보 보강→통지→승인 흐름, 최소권한 credential |
+| `SOAR-01 READY` | Shuffle read-only·사람 승인형 SOAR PoC | `OBS-01`, `WAZUH-01`, `FALCO-01`, `CAP-04` | `K3S-HEAVY` | 사고대응 | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch, 경보 수신→정보 보강→통지→승인 흐름, 최소권한 credential |
 | `SOAR-02 DEFERRED` | 되돌릴 수 있는 대응 한 가지 자동화 | `SOAR-01`, 검증된 incident runbook | 없음 | 접근 정책 | 반복 시험, 승인·감사·rollback; 방화벽·계정 무인 파괴 금지 |
 
 Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 보안 사건에 반응하는 흐름만 소유한다.

@@ -660,6 +660,46 @@ Suricata는 2.06 alert/s(약 177,826건/일, `eve.json` 225 MB/일)를 냈고 �
 `local-path`는 PVC 요청량을 강제하지 않는다. 16 GiB는 선언·회계 상한이고 실제 저장 상한은
 Wazuh indexer의 `D30`·`A90` ISM 보존 정책과 위 환산 판정이 지킨다.
 
+### `CAP-04` Shuffle 진입 capacity gate (2026-08-03)
+
+20:28 KST에 `SOAR-01` 배포 전 용량을 읽기 전용으로 측정했다. [Shuffle 공식 self-hosted
+설치 가이드](https://github.com/Shuffle/Shuffle/blob/main/.github/install-guide.md)는 자체
+OpenSearch를 포함한 기본 설치에 available RAM 최소 4 GB를 요구한다. 단위 혼용으로 최소값을
+낮추지 않도록 이를 4 GiB로 보수적으로 잡았으므로 `SOAR-01` 진입선은 `k3s-01`의 8 GiB
+available 정지선 + Shuffle 최소 4 GiB = **12 GiB**(12,884,901,888 bytes)다. Shuffle은
+Wazuh indexer를 공유하지 않고 자기 OpenSearch를 별도 Stateful workload로 배포한다.
+
+Proxmox 한 번의 strict SSH 호출 안에서 host 값과 QEMU guest agent 조회를 묶었지만 설치된
+정책이 `guest-exec`를 금지해 guest 구간만 실행 전 중단됐다. host를 다시 읽지 않고 52초 뒤
+`k3s-01` strict SSH 한 번으로 누락된 guest·PVC 값만 보완했다. 두 호출 모두 읽기 전용이며
+OpenTofu, VM 전원, Kubernetes object와 Vault에는 변경이 없다.
+
+| 지표 | 현재 실측·배정 | 경고·정지 또는 진입 기준 | 판정 |
+|---|---:|---:|---|
+| Proxmox RAM 총량 / available | 67,136,507,904 / 27,532,869,632 bytes (62.526 / 25.642 GiB) | available 12 GiB 미만 경고, 8 GiB 미만 정지 | 정상 |
+| Proxmox swap 사용 | 0 bytes | 0 초과 재검토, 지속 사용 정지 | 정상 |
+| VM RAM 회계 | 45 GiB (VM 44 + overhead 1) | 52 GiB 경고, 56.5 GiB 정지 | **GO**, 경고선까지 7 GiB |
+| host load15 / root 사용률 | 0.70 / 5% | 20·70% 경고, 30·80% 정지 | 정상 |
+| thin data / metadata | 6.23% / 0.44% | 60%·50% 경고, 각 70% 정지 | 정상 |
+| `k3s-01` 총 RAM / available | 29,154,533,376 / 14,481,977,344 bytes (27.152 / 13.487 GiB) | 진입선 12 GiB | **GO**, 진입선 위 1.487 GiB |
+| Shuffle 최소 4 GiB 반영 후 예상 available | 10,187,010,048 bytes (9.487 GiB) | 8 GiB 정지 | **GO**, 정지선 위 1.487 GiB |
+| guest swap / root 사용률 | 0 bytes / 18% | swap 사용 재검토, root 여유 20% 미만 정지 | 정상 |
+| PVC 요청 합계 | 91.125 GiB | 96 GiB 경고, 120 GiB 정지 | 정상, 경고선까지 4.875 GiB |
+| Shuffle PVC 배정 | OpenSearch 16 GiB + file data 4 GiB = 20 GiB | read-only PoC의 선언 합계 상한 | 배정 |
+| Shuffle 포함 예상 PVC 합계 | 111.125 GiB | 96 GiB 경고, 120 GiB 정지 | **경고·GO**, 정지선까지 8.875 GiB |
+
+Shuffle의 공식 최소값은 RAM만 명시하고 storage 최소값은 고정하지 않는다. 20 GiB는 공식값이
+아니라 Wazuh 원본 event를 중복 보존하지 않는 read-only PoC의 로컬 상한이다. `SOAR-01`은
+OpenSearch 16 GiB와 file data 4 GiB를 넘겨 선언하지 않고, 배포 직전 현재 PVC 합계 + 20 GiB가
+120 GiB 미만인지 다시 판정한다. 96 GiB 초과는 재예산 경고지만 배포 금지는 아니며, 120 GiB에
+닿으면 배포를 중단한다.
+
+현재 available이 12 GiB 진입선을 넘으므로 `k3s-01` 32 GiB 증설 조건은 성립하지 않았다.
+`locals.tf`, OpenTofu state, VM 전원과 Vault를 바꾸지 않았고 live 변경은 0이다. 최종 OpenTofu
+plan `31a59bdd3c3e5363b0e2d0ced701afbc3a47b35dd84d86e6022db2aa4f28a59b`은 state resource
+5개 모두 `no-op`, 변경·비통과 check 0건이다. plan 전후 state SHA-256은
+`b6275be5d8ea2ffcdc5cb327c2a31857ea219f445581d0eaffb9828f2cbf68ea`로 불변이다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.
