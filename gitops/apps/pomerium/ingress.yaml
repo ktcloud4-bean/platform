@@ -95,6 +95,16 @@ spec:
                 name: pomerium
                 port:
                   name: http
+    - host: argo.imcherry5778.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pomerium
+                port:
+                  name: http
   tls:
     - hosts:
         - access.imcherry5778.xyz
@@ -105,3 +115,4 @@ spec:
         - harbor.imcherry5778.xyz
         - sonar.imcherry5778.xyz
         - jenkins.imcherry5778.xyz
+        - argo.imcherry5778.xyz

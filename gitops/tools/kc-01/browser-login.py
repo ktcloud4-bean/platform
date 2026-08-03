@@ -180,6 +180,11 @@ def main():
     parser.add_argument("--totp-file", required=True)
     parser.add_argument("--header-file", required=True)
     parser.add_argument("--expect-realm-role", action="append", default=[])
+    parser.add_argument(
+        "--token-claim",
+        choices=("access_token", "id_token"),
+        default="access_token",
+    )
     parser.add_argument("--connect-ip")
     parser.add_argument("--allow-insecure-localhost", action="store_true")
     parser.add_argument("--capture-callback", action="store_true")
@@ -295,7 +300,7 @@ def main():
             "code_verifier": verifier,
         },
     ) as response:
-        token = json.loads(response.read())["access_token"]
+        token = json.loads(response.read())[args.token_claim]
 
     claims = decode_claims(token)
     expected_issuer = f"{args.issuer}/realms/{args.realm}"
@@ -308,6 +313,7 @@ def main():
     write_header(args.header_file, token)
     print(
         f"browser-login: issuer={expected_issuer}, "
+        f"token-claim={args.token_claim}, "
         f"expected-realm-roles={sorted(args.expect_realm_role)}"
     )
 

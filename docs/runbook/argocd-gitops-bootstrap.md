@@ -154,3 +154,118 @@ cluster reset, 노드 재부팅, VM·OpenTofu·OPNsense 변경은 금지다.
 새 fixed tag·manifest SHA-256·image digest·Kubernetes 호환성·upgrade 및 rollback
 검증을 갖춘 별도 작업으로 수행한다. deploy key의 장기 복구본은 Bitwarden에 있고,
 Vault 이관은 `VAULT-01` 이후 별도 credential migration으로 재검토한다.
+
+## GITOPS-02: 자체 OIDC·RBAC
+
+- 작업: `GITOPS-02`
+- 상태: 적용·검증 완료
+- 잠금: `OPNSENSE-LIVE`(merge 전 라이브 검증에서 `ARGO-ROOT` 추가)
+- Route: `https://argo.imcherry5778.xyz` (Pomerium, `gitops/apps/pomerium`가 소유)
+
+### 결정과 소유 경계
+
+Argo CD 본체(`argocd-cm`, `argocd-rbac-cm` 포함)는 `gitops/apps/*` child Application이
+아니라 이 문서와 `gitops/bootstrap/argocd/`가 계속 소유한다. vendored
+`install.yaml`의 `argocd-cm`은 Cilium·Kyverno·cert-manager 등 기본 UI clutter
+축소용 `resource.customizations.*`·`resource.exclusions` 키를 이미 채운 채
+SHA-256으로 고정되어 있다. 이 키를 보존하면서 `url`·`oidc.config`만 추가하려면
+전체 object apply(교체)가 아니라 JSON merge patch가 필요하다. 같은 이유로
+`argocd-rbac-cm`도 patch로 적용한다. 두 patch 파일
+([`argocd-cm.patch.yaml`](../../gitops/bootstrap/argocd/argocd-cm.patch.yaml),
+[`argocd-rbac-cm.patch.yaml`](../../gitops/bootstrap/argocd/argocd-rbac-cm.patch.yaml))은
+vendored manifest 밖에 두어 `ARGOCD_MANIFEST_SHA256` 무결성 검증 대상에서 제외했고,
+`bootstrap.sh`는 주 manifest 적용 뒤 이 두 patch를 `kubectl patch --type merge`로
+이어서 적용해 fresh bootstrap도 같은 최종 상태를 재현한다.
+
+Argo CD는 Dex를 거치지 않는 직접 `oidc.config`를 쓴다. Keycloak `argocd` client는
+`headlamp`와 같은 public Authorization Code + PKCE(`enablePKCEAuthentication: true`)이며
+`clientSecret`이 없다. ID token의 `aud`는 스펙상 항상 요청 client와 같으므로 Argo API의
+Bearer 검증이 이 값을 신뢰할 수 있지만, access token의 기본 `aud`(`account`)는 그렇지
+않아 반드시 **id_token**을 Bearer로 써야 한다. `groups` protocol mapper는 scope에
+묶이지 않고 client에 직접 붙어 있어 `requestedScopes`에 `groups`를 넣지 않아도 항상
+포함된다.
+
+`argocd-rbac-cm`은 내장 `role:readonly`를 재사용하지 않고 더 좁은 `role:gitops-viewer`를
+새로 정의한다. 내장 `role:readonly`는 `repositories, get`을 포함해 repository 연결
+목록을 볼 수 있게 하지만, `role:gitops-viewer`는 `applications, get`과 `projects, get`만
+허용해 repository·cluster·account·gpgkey 경로를 아예 부여하지 않는다. `policy.default`는
+빈 문자열로 고정해 어떤 group에도 매핑되지 않은 로그인은 role이 전혀 없다. `g, /platform-users,
+role:gitops-viewer` 한 줄만 두고 `/platform-privileged`는 매핑하지 않는다. `gitea`·`sonarqube`
+Route가 이미 `/platform-users`만 허용하는 것과 같은 이유로, 이 Route도 조회 전용 그룹
+하나에만 연다([Pomerium README](../../gitops/apps/pomerium/README.md)).
+
+### 적용 전 gate
+
+1. `GITOPS-01`·`POM-01 DONE`, `OPNSENSE-LIVE` 비점유.
+2. 최신 `origin/main` 전용 `gitops-02` branch/worktree.
+3. Argo root/child가 `Synced/Healthy`, `targetRevision=main`. Traefik Pod UID·restart
+   count·`HelmChartConfig/traefik` resourceVersion을 적용 전 기록(변경 대상이 아니므로
+   불변 확인용).
+4. `argocd-cm`·`argocd-rbac-cm` 라이브 `data`를 미리 백업해 rollback 시 정확히 되돌릴
+   키 집합을 안다.
+5. `pomerium` namespace의 `argocd` route·`argocd-egress` NetworkPolicy, Keycloak
+   `argocd` client가 없거나 이 선언과 정확히 일치한다.
+6. 내부 `argo` A/AAAA와 공개 resolver의 A/AAAA가 모두 없다.
+
+### 적용
+
+```bash
+export KC01_SECRET_DIR=/home/imcherry/secrets/ktcloud4-bean/keycloak
+gitops/tools/gitops-02/provision-keycloak-client.sh --check
+gitops/tools/gitops-02/provision-keycloak-client.sh --apply
+
+K3S_HOST=rocky@k3s-01.imcherry5778.xyz
+ssh "$K3S_HOST" 'sudo -n /usr/local/bin/k3s kubectl -n argocd patch configmap argocd-cm \
+  --type merge --patch-file=/dev/stdin' < gitops/bootstrap/argocd/argocd-cm.patch.yaml
+ssh "$K3S_HOST" 'sudo -n /usr/local/bin/k3s kubectl -n argocd patch configmap argocd-rbac-cm \
+  --type merge --patch-file=/dev/stdin' < gitops/bootstrap/argocd/argocd-rbac-cm.patch.yaml
+# oidc.config는 argocd-server 시작 시 초기화되는 provider라 hot-reload를 신뢰하지 않고
+# 단일 재기동으로 반영을 확정한다. RBAC(policy.csv)는 이미 hot-reload된다.
+ssh "$K3S_HOST" 'sudo -n /usr/local/bin/k3s kubectl -n argocd rollout restart deployment/argocd-server'
+ssh "$K3S_HOST" 'sudo -n /usr/local/bin/k3s kubectl -n argocd rollout status deployment/argocd-server --timeout=180s'
+```
+
+Pomerium Route·NetworkPolicy egress·`argo` alias는 merge 전 `ARGO-ROOT` 라이브 검증
+절차를 따라 `platform-root`를 설정 commit SHA로 전환한 뒤 적용한다
+([Pomerium 런북](pomerium-routes.md), `AGENTS.md`의 merge 전 라이브 검증 절차).
+
+### 라이브 검증
+
+```bash
+export OPN_ENV=/home/imcherry/secrets/ktcloud4-bean/opnsense/env
+gitops/tools/gitops-02/opnsense-alias.py --env-file "$OPN_ENV" check
+GITOPS02_ROOT_TARGET_REVISION=<pointer-SHA> GITOPS02_POMERIUM_TARGET_REVISION=<settings-SHA> \
+  gitops/tools/gitops-02/verify-live.sh
+```
+
+검증기는 다음을 같은 실행에서 순서대로 판정한다.
+
+1. Pomerium: `imcherry`(`/platform-users`) 브라우저 OIDC 로그인이
+   `https://argo.imcherry5778.xyz/`를 통과(200, upstream 응답)하고, `headlamp-no-group`
+   계정은 403으로 거부된다. 같은 통과 세션에서 별도 Argo Bearer 없이 `/api/v1/applications`를
+   호출하면 Argo CD 자신이 401을 반환해, Pomerium 통과가 Argo 인증을 대신하지 않음을
+   실증한다.
+2. Argo 자체 OIDC: Keycloak `argocd` client로 `imcherry`의 id_token을 PKCE로 직접
+   발급받아(Pomerium을 거치지 않고 k3s-01 loopback port-forward로 argocd-server에 직접
+   접속) 같은 token으로 연속 호출한다. `GET /api/v1/applications` 200과 `platform-root`
+   및 대표 child의 `Synced/Healthy`, `POST .../sync` 403, `DELETE
+   /api/v1/applications/<child>` 403, `GET /api/v1/repositories` 403(repo credential
+   조회 거부)을 모두 같은 세션에서 확인한다.
+3. `HelmChartConfig/traefik` resourceVersion과 Traefik Pod UID·restart count 불변,
+   `argo` 내부 A 1건·내부 AAAA 0건·공개 A/AAAA 0건, drift 없음.
+4. root·child `Synced/Healthy`.
+
+### Rollback
+
+```bash
+ssh "$K3S_HOST" "sudo -n /usr/local/bin/k3s kubectl -n argocd patch configmap argocd-cm \
+  --type merge -p '{\"data\":{\"url\":null,\"oidc.config\":null}}'"
+ssh "$K3S_HOST" "sudo -n /usr/local/bin/k3s kubectl -n argocd patch configmap argocd-rbac-cm \
+  --type merge -p '{\"data\":{\"policy.default\":null,\"policy.csv\":null,\"scopes\":null}}'"
+ssh "$K3S_HOST" 'sudo -n /usr/local/bin/k3s kubectl -n argocd rollout restart deployment/argocd-server'
+```
+
+merge 전에는 `platform-root`를 시작 시 기록한 main SHA로 되돌린다. Pomerium `argocd`
+route·`gitops-02-pomerium-to-argocd` NetworkPolicy·`argo` alias rollback은
+[Pomerium 런북](pomerium-routes.md)의 배포·DNS rollback 절차를 그대로 따른다. merge 뒤
+결함은 main을 재작성하지 않고 별도 FIX 작업에서 GITOPS-02 squash commit을 `git revert`한다.

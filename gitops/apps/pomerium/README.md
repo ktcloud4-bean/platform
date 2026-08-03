@@ -16,6 +16,7 @@ Client
        └─ headlamp.imcherry5778.xyz -> Service/headlamp:80
        └─ sonar.imcherry5778.xyz    -> Service/sonarqube:9000
        └─ harbor.imcherry5778.xyz / -> Service/harbor:80
+       └─ argo.imcherry5778.xyz    -> argocd-server.argocd.svc.cluster.local:443 (자체서명 TLS)
 ```
 
 기존 packaged Traefik이 유일한 ingress controller다. 이 앱은 동적 `Ingress` 객체만
@@ -49,6 +50,7 @@ OIDC claim을 직접 확인하는 `claim/groups`를 쓴다.
 | `https://git.imcherry5778.xyz` | `/platform-users` | 같은 그룹에만 Gitea 타일 표시 |
 | `https://sonar.imcherry5778.xyz` | `/platform-users` | 같은 group에만 SonarQube 타일 표시 |
 | `https://harbor.imcherry5778.xyz` UI | `/platform-users` 또는 `/platform-privileged` | 두 group에 Harbor 타일 표시 |
+| `https://argo.imcherry5778.xyz` | `/platform-users` | 같은 group에만 Argo CD 타일 표시; 실제 조회·변경 권한은 Argo 자체 부여 |
 
 로그인 성공, email 또는 `authenticated_user`만으로 허용하는 fallback은 없다.
 `/platform-privileged`만 가진 사용자는 Portal에는 들어가지만 검증 Route는 403이고 해당 타일도
@@ -77,6 +79,18 @@ NetworkPolicy로 제한한다.
 Ingress는 Harbor 자체 OCI 인증을 위해 Pomerium을 우회하며, 상세 경계는
 [`gitops/apps/harbor/README.md`](../harbor/README.md)가 소유한다.
 POL-01의 Pomerium default-deny 아래에서는 Harbor nginx Pod TCP 8080 한 egress만 허용한다.
+
+`GITOPS-02`의 Argo CD route는 조회 편의이며 필수 경로가 아니다. Argo CD 본체는
+`gitops/apps/*` child Application이 아니라 `gitops/bootstrap/argocd/`가 소유하므로,
+이 route의 upstream `argocd-server`는 이 디렉터리가 관리하지 않는 Deployment다.
+Pomerium의 `claim/groups`는 `argo.imcherry5778.xyz` 웹 route 진입만 판정하고, 로그인한
+사용자가 실제로 무엇을 볼 수 있는지는 Argo CD 자신의 OIDC(Keycloak `argocd` public PKCE
+client)와 RBAC(`role:gitops-viewer`, `/platform-users`만 매핑)가 별도로 판정한다.
+Pomerium은 자기 세션 cookie나 client token을 Argo CD Bearer 자격증명으로 전달하지
+않으므로, 이 route를 통과했다는 사실만으로 Argo API가 인증되지는 않는다. `argocd-server`는
+자체서명 TLS만 제공하므로 이 route에서만 `tls_skip_verify: true`를 둔다. 세부 OIDC·RBAC
+선언과 검증은 [Argo CD bootstrap 런북](../../../docs/runbook/argocd-gitops-bootstrap.md)이
+소유한다.
 
 ## Keycloak clients와 시크릿
 

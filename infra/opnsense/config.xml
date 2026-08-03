@@ -2592,7 +2592,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785670201.97" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785770563.86" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2851,6 +2851,13 @@
           <hostname>jenkins</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>Jenkins controller UI alias (CI-01)</description>
+        </alias>
+        <alias uuid="23e50b61-b7e0-4d57-9314-605ddef59252">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>argo</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>Argo CD Pomerium Route alias (GITOPS-02)</description>
         </alias>
       </aliases>
     </unboundplus>

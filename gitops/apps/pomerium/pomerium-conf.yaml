@@ -131,3 +131,18 @@ routes:
       - allow:
           or:
             - claim/groups: /platform-users
+
+  # GITOPS-02: browser UI만 Pomerium이 판정하며 이 claim은 argo.imcherry5778.xyz
+  # 웹 route 진입만 허용한다. Argo CD 자체 권한은 argocd-cm/argocd-rbac-cm의
+  # 자체 OIDC·RBAC(gitops/bootstrap/argocd/argocd-rbac-cm.patch.yaml)가 별도로
+  # 판정하며 이 Route policy가 대신하지 않는다. argocd-server는 자체서명 TLS로만
+  # 서비스하므로 이 Route에서만 tls_skip_verify를 둔다.
+  - name: argocd
+    description: GITOPS-02 Argo CD browser UI; 실제 권한은 Argo 자체 OIDC·RBAC가 판정
+    from: https://argo.imcherry5778.xyz
+    to: https://argocd-server.argocd.svc.cluster.local
+    tls_skip_verify: true
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users

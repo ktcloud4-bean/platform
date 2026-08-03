@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gitops-02-pomerium-to-argocd
+  namespace: pomerium
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: pomerium
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pomerium
+      app.kubernetes.io/component: server
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argocd-server
+      ports:
+        - port: 8080
+          protocol: TCP

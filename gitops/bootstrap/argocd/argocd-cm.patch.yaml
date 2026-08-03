@@ -1,0 +1,14 @@
+# GITOPS-02: Argo CD 자체 OIDC 설정. vendored install.yaml의 argocd-cm은
+# resource.customizations.*·resource.exclusions(Cilium·Kyverno·cert-manager 등
+# 기본 UI clutter 축소) 키를 이미 채워 두고 있다. 이 파일은 JSON merge patch로만
+# 적용해 그 기존 키를 건드리지 않고 url·oidc.config 두 키만 추가한다. install.yaml을
+# 직접 고치지 않아 vendored manifest SHA-256 무결성 검증(release-metadata.env)은
+# 그대로 유지된다.
+data:
+  url: https://argo.imcherry5778.xyz
+  oidc.config: |
+    name: Keycloak
+    issuer: https://sso.imcherry5778.xyz/realms/platform
+    clientID: argocd
+    enablePKCEAuthentication: true
+    requestedScopes: ["openid", "profile", "email"]

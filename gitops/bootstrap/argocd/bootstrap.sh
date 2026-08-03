@@ -7,6 +7,8 @@ manifest_file="$repo_root/gitops/bootstrap/argocd/install.yaml"
 namespace_file="$repo_root/gitops/bootstrap/argocd/namespace.yaml"
 project_file="$repo_root/gitops/root/app-project.yaml"
 application_template="$repo_root/gitops/bootstrap/argocd/root-application.yaml.tmpl"
+argocd_cm_patch="$repo_root/gitops/bootstrap/argocd/argocd-cm.patch.yaml"
+argocd_rbac_cm_patch="$repo_root/gitops/bootstrap/argocd/argocd-rbac-cm.patch.yaml"
 
 usage() {
   cat <<'USAGE'
@@ -92,6 +94,11 @@ remote_kubectl() {
   "${ssh_base[@]}" "sudo -n /usr/local/bin/k3s kubectl $*"
 }
 
+remote_kubectl_patch_file() {
+  local target=$1 file=$2
+  "${ssh_base[@]}" "sudo -n /usr/local/bin/k3s kubectl -n argocd patch configmap $target --type merge --patch-file=/dev/stdin" < "$file"
+}
+
 remote_kubectl_file "$namespace_file"
 remote_kubectl_namespaced_file "$manifest_file"
 remote_kubectl '-n argocd rollout status deployment/argocd-server --timeout=300s'
@@ -99,6 +106,13 @@ remote_kubectl '-n argocd rollout status deployment/argocd-repo-server --timeout
 remote_kubectl '-n argocd rollout status deployment/argocd-dex-server --timeout=300s'
 remote_kubectl '-n argocd rollout status deployment/argocd-redis --timeout=300s'
 remote_kubectl '-n argocd rollout status statefulset/argocd-application-controller --timeout=300s'
+
+# GITOPS-02: Argo CD 자체 OIDC·RBAC. 다른 작업이 argocd-cm에 이미 만든 UI clutter
+# 축소 키(resource.customizations.*, resource.exclusions)는 vendored manifest에
+# 없고 이 스크립트도 그 키를 선언하지 않는다. merge patch만 써서 두 키를 건드리지
+# 않고 url·oidc.config, policy.default·policy.csv·scopes만 추가한다.
+remote_kubectl_patch_file argocd-cm "$argocd_cm_patch"
+remote_kubectl_patch_file argocd-rbac-cm "$argocd_rbac_cm_patch"
 
 "${ssh_base[@]}" 'set -o pipefail; sudo -n /usr/local/bin/k3s kubectl -n argocd create secret generic argocd-repo-platform --from-file=sshPrivateKey=/dev/stdin --from-literal=type=git --from-literal=url=ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git --dry-run=client -o yaml | sudo -n /usr/local/bin/k3s kubectl apply --server-side -f -' < "$private_key"
 remote_kubectl '-n argocd label secret argocd-repo-platform argocd.argoproj.io/secret-type=repository --overwrite'

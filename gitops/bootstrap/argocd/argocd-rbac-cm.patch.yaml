@@ -1,0 +1,14 @@
+# GITOPS-02: Argo CD 자체 RBAC. JSON merge patch로만 적용한다.
+# policy.default가 빈 문자열이면 어떤 group에도 매핑되지 않은 로그인은 role이 없어
+# 조회조차 못 한다. role:gitops-viewer는 Argo 내장 role:readonly보다 좁아
+# repositories(=repo credential 조회 경로)·clusters·accounts·gpgkeys를 전혀
+# 부여하지 않고 applications get·projects get만 허용한다. sync·delete·override·
+# action은 이 role에 없으므로 기본 거부로 막힌다. Pomerium claim/groups는 웹
+# route 진입만 판정하고 이 파일이 Argo 자체 권한을 판정한다.
+data:
+  policy.default: ""
+  policy.csv: |
+    p, role:gitops-viewer, applications, get, */*, allow
+    p, role:gitops-viewer, projects, get, *, allow
+    g, /platform-users, role:gitops-viewer
+  scopes: '[groups]'

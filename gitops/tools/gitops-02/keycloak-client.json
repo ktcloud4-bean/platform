@@ -1,0 +1,48 @@
+{
+  "clientId": "argocd",
+  "name": "GITOPS-02 Argo CD OIDC",
+  "description": "GITOPS-02 browser Authorization Code + PKCE public client; Argo CD 자체 OIDC·RBAC 조회 계정",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": true,
+  "clientAuthenticatorType": "client-secret",
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "authorizationServicesEnabled": false,
+  "consentRequired": false,
+  "frontchannelLogout": false,
+  "fullScopeAllowed": false,
+  "rootUrl": "https://argo.imcherry5778.xyz",
+  "baseUrl": "https://argo.imcherry5778.xyz/",
+  "redirectUris": [
+    "https://argo.imcherry5778.xyz/auth/callback"
+  ],
+  "webOrigins": [
+    "https://argo.imcherry5778.xyz"
+  ],
+  "attributes": {
+    "pkce.code.challenge.method": "S256"
+  },
+  "defaultClientScopes": [
+    "profile",
+    "email"
+  ],
+  "optionalClientScopes": [],
+  "protocolMappers": [
+    {
+      "name": "groups",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "groups",
+        "full.path": "true",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }
+  ]
+}

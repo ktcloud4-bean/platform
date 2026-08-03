@@ -287,7 +287,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `WG-02 DONE` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | `OPNSENSE-LIVE`, `PUBLIC-DNS` | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
 | `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
 | `VAULT-03 READY` | Vault UI를 Pomerium 우회 표준 Ingress와 Vault OIDC auth method로 노출 (`gitops/apps/vault/`) | `VAULT-02`, `KC-01`, `INGRESS-01`, `KMS-01` | `VAULT-CONFIG`, `OPNSENSE-LIVE` | Vault 일상 운영·복구 독립성 | Vault OIDC auth method와 전용 Keycloak client 연결로 UI 사용자가 자기 policy 경로만 읽고 타 경로·`sys/mounts`는 403, Pomerium을 경유하지 않는 표준 Ingress와 자체서명 backend TLS 신뢰 설정, Pomerium Pod 정지 중 Vault UI 로그인 성공으로 복구 독립성 실증, root token·port-forward break-glass 보존 확인, audit device에 UI 로그인 event 기록과 token 원문 0건, `vault` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건과 `ip-plan.md` 노출 정의 갱신, Traefik 정적 설정·Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Vault Agent 소비자 회귀 없음 |
-| `GITOPS-02 READY` | Argo CD UI Pomerium Route와 최소권한 RBAC 연결 | `GITOPS-01`, `POM-01` | `OPNSENSE-LIVE` | GitOps 일상 조회 | Pomerium 통과만으로 Argo 권한이 생기지 않음을 Argo 자체 OIDC·RBAC의 allow/deny로 실증, 조회 계정의 `platform-root`·child `Synced/Healthy` 조회 성공과 수동 sync·삭제·repo credential 조회 거부, `pomerium`→`argocd` NetworkPolicy egress 명시, `argo` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig·Traefik Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Route와 root Application 회귀 없음 |
+| `GITOPS-02 DONE` | Argo CD UI Pomerium Route와 최소권한 RBAC 연결 | `GITOPS-01`, `POM-01` | `OPNSENSE-LIVE` | GitOps 일상 조회 | Pomerium 통과만으로 Argo 권한이 생기지 않음을 Argo 자체 OIDC·RBAC의 allow/deny로 실증, 조회 계정의 `platform-root`·child `Synced/Healthy` 조회 성공과 수동 sync·삭제·repo credential 조회 거부, `pomerium`→`argocd` NetworkPolicy egress 명시, `argo` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig·Traefik Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Route와 root Application 회귀 없음 |
 
 2026-08-03 `VAULT-03`과 `GITOPS-02`를 신설한다. 두 작업은 [`ip-plan.md`](ip-plan.md)가 이미
 목표 노출 방식을 적어 두었지만 이를 소유한 작업 ID가 없어 구현되지 않은 항목을 닫는다.
@@ -313,6 +313,34 @@ Argo 자체 RBAC가 소유한다.
 Vault는 OIDC auth method와 policy로 UI 사용자 권한을 스스로 판정하므로 Pomerium을 끼우면
 인증만 두 겹이 된다. 기존 Pomerium Route 여덟 건은 모두 평문 HTTP upstream인데 Vault
 listener는 자체서명 TLS이므로, Pomerium 계층을 빼면 신뢰 설정도 한 곳으로 줄어든다.
+
+2026-08-04 `GITOPS-02`에서 Argo CD UI를 Pomerium Route(`claim/groups=/platform-users`,
+`tls_skip_verify`)로 노출하고 Argo CD 자체 OIDC(Keycloak `argocd` public PKCE client,
+`enablePKCEAuthentication`)·RBAC(`role:gitops-viewer`)로 실제 권한을 판정했다. Argo CD
+본체는 `gitops/bootstrap/argocd/`가 계속 소유하므로 vendored `install.yaml`은 손대지 않고
+`argocd-cm`·`argocd-rbac-cm`을 JSON merge patch로만 확장해 기존 `resource.customizations.*`
+키와 SHA-256 무결성을 보존했다. `role:gitops-viewer`는 내장 `role:readonly`보다 좁아
+`applications get`·`projects get`만 허용하고 `policy.default`는 빈 문자열로 고정해
+`/platform-users` 밖의 로그인은 role이 전혀 없다.
+
+라이브 검증에서 `imcherry`(`/platform-users`)의 Pomerium 로그인은 `argo.imcherry5778.xyz`를
+통과(200)했지만 같은 세션에서 Argo Bearer 없이 REST API를 호출하면 Argo CD 자신이 401을
+반환해 Pomerium 통과가 Argo 인증을 대신하지 않음을 실증했다. Keycloak `argocd` client로
+직접 발급한 id_token 하나로 `GET /api/v1/applications` 200(`platform-root`·`pomerium`
+Synced/Healthy 포함)과 같은 세션의 `POST .../sync` 403, `DELETE .../<app>` 403을 확인했다.
+Argo CD의 `ListRepositories`는 RBAC 여부와 무관하게 항상 200을 반환하고 결과만 필터링하므로
+`GET /api/v1/repositories`는 200이지만 `items` 0건으로 repo credential 조회 거부를 판정했다
+(초기 시도에서 이 엔드포인트가 403을 반환하지 않는 것을 실제로 확인하고 완료 증거의 판정
+방식을 항목 개수 기준으로 보정했다). `pomerium`→`argocd-server` NetworkPolicy egress(TCP
+8080, containerPort 기준), `argo` 내부 A 1건·내부 AAAA·공개 A/AAAA 0건, `HelmChartConfig/
+traefik` resourceVersion과 Traefik Pod UID·restart count는 세션 시작 기준값과 끝까지
+동일했다. rollback 뒤 `argo` Ingress host·NetworkPolicy는 정확히 제거되고 기존 8개 Route와
+NetworkPolicy는 회귀 없이 유지됐다.
+
+merge 전 `ARGO-ROOT` 잠금 확보 과정에서 병렬 `PKI-01` 세션이 같은 시간대에 `platform-root`
+targetRevision을 반복 전환하는 것을 발견해 충돌 여부를 사용자에게 확인받은 뒤, `PKI-01`
+merge(`origin/main` → `01eaaf2`) 완료를 기다려 브랜치를 재rebase하고 진행했다. 검증 뒤
+`platform-root`는 기록해 둔 main SHA로 정확히 복귀했다.
 
 2026-08-03 `PKI-01`의 첫 mTLS consumer를 CrowdSec agent↔LAPI로 정하고 인증서 발급·갱신
 경로를 cert-manager + Vault Issuer로 결정했다. 따라서 `PKI-01`은 `DEFERRED`를 벗고 새 선행

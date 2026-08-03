@@ -36,4 +36,5 @@ resources:
   - awx-egress.yaml
   - sonarqube-egress.yaml
   - jenkins-egress.yaml
+  - argocd-egress.yaml
   - ingress.yaml
