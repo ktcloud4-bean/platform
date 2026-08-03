@@ -64,6 +64,7 @@ revert·rollback 스냅샷 커밋 세 개와 새 작업 ID·브랜치·worktree 
 | `ARGO-ROOT` | `platform-root`의 `targetRevision` 검증용 전환 |
 | `TRAEFIK-LIVE` | packaged Traefik HelmChartConfig·정적 plugin 등록·Pod 재기동 |
 | `VAULT-INIT` | Vault initialize·unseal·seal migration |
+| `VAULT-CONFIG` | Vault 내부 구성(secrets engine·auth role·policy·PKI role)의 변경 |
 | `PUBLIC-DNS` | Cloudflare DNS·공개 origin 변경 |
 | `K3S-HEAVY` | Wazuh·관측·SOAR처럼 큰 워크로드의 최초 적용 |
 
@@ -270,7 +271,8 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `INGRESS-01 DONE` | Traefik 단일 ingress·별도 DNS-01 인증서 | `GITOPS-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 모든 HTTP 앱 | 80→443, 내부·외부 split DNS, OPNsense 개인키 미복사, source IP 판정 |
 | `VAULT-01 DONE` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
 | `VAULT-02 DONE` | KV v2·Kubernetes auth·DB engine·PKI·audit policy ([runbook](runbook/vault-secrets-engines.md)) | `VAULT-01`, `PG-01`, `NET-03A` | 없음 | 모든 플랫폼 앱 | 바인딩 SA만 로그인·타 SA/role 403, policy allow/deny 403, 동적 DB credential의 TLSv1.3 verify-full 접속·타 DB 거부·revoke 후 인증 실패와 role 삭제, PKI 체인 검증·CRL 폐기·공인 이름 거부, audit 108건과 평문 시크릿 0건, vault ns Secret 0건 유지 |
-| `PKI-01 DEFERRED` | Vault PKI를 실제 내부 workload mTLS 인증서 lifecycle에 연결 | `VAULT-02` | `VAULT-CONFIG` | 내부 서비스 인증·인가 | 실제 mTLS consumer 한 곳, service별 최소권한 role, 자동 갱신·reload, revoke·CRL, Vault 장애 시 동작, private key 비노출, rollback |
+| `CERTMGR-01 BLOCKED` | cert-manager 도입과 Vault PKI를 CA로 쓰는 Issuer 연결 (`gitops/apps/cert-manager/`) | `VAULT-02`, `WAZUH-01` | `VAULT-CONFIG` | `PKI-01`, 내부 인증서 자동화 | 고정 version·image digest·CRD 선언과 Argo child `Synced/Healthy`, cert-manager 전용 Kubernetes auth role·policy가 자기 PKI role로만 발급하고 타 경로는 403, 시험 Certificate 한 장의 발급·Secret 생성·chain 검증과 즉시 제거, 단축 `renewBefore`로 자동 갱신 실증, Vault sealed 상태에서 기존 인증서 유효·신규 발급만 실패, 배포 전후 available RAM·PVC 정지선 통과, Argo revert rollback 뒤 기존 워크로드 회귀 없음 |
+| `PKI-01 BLOCKED` | Vault PKI를 첫 실제 consumer인 CrowdSec agent↔LAPI mTLS lifecycle에 연결 | `VAULT-02`, `CERTMGR-01` | `VAULT-CONFIG` | 내부 서비스 인증·인가 | CrowdSec 전용 최소권한 PKI role과 허용 밖 이름·OU 거부, agent↔LAPI mTLS 실제 연결 성공과 잘못된 CA·OU 거부, LAPI의 OU 기반 agent/bouncer 구분 보존, 자동 갱신·reload, revoke 뒤 CRL 등재와 해당 인증서 거부, Vault sealed 중 기존 인증서 유지·신규 발급만 실패, Git·로그의 private key 0건, `tls.enabled=false` rollback 뒤 `CROWDSEC-FIX-01` 기능(정상 200·공격 403·exact 예외) 회귀 없음 |
 | `KC-01 DONE` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `KC-01-FIX-01 DONE` | bootstrap 메모리 시크릿 정리를 fail-closed로 보정 | `KC-01` 배포 선언 | 없음 | Keycloak bootstrap | Agent/bootstrap 동일 UID, 렌더링 파일 정리 실패 시 Job 실패, v1 prune·v2 성공 |
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-PERF-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
@@ -284,6 +286,36 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `NB-02 DONE` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
 | `WG-02 DONE` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | `OPNSENSE-LIVE`, `PUBLIC-DNS` | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
 | `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
+
+2026-08-03 `PKI-01`의 첫 mTLS consumer를 CrowdSec agent↔LAPI로 정하고 인증서 발급·갱신
+경로를 cert-manager + Vault Issuer로 결정했다. 따라서 `PKI-01`은 `DEFERRED`를 벗고 새 선행
+`CERTMGR-01`이 남은 `BLOCKED`가 되며, 공유 잠금 표에 정의가 없던 `VAULT-CONFIG`도 함께
+채웠다.
+
+CrowdSec chart는 TLS 자료를 자체 self-signed CA로 만들 수 있지만 그 경로는 내부 CA를 하나
+더 만들고 CRL을 제공하지 않는다. `VAULT-02`가 이미 발급·체인 검증·CRL 폐기를 실증한
+`pki/`를 CA로 두면 신뢰 도메인이 하나로 유지된다. 어느 쪽이든 chart의 인증서 갱신은
+cert-manager를 전제하므로, `OBS-01`이 "새 CA controller를 설치하는 대신"으로 미뤄 둔
+cert-manager 도입 판단을 `CERTMGR-01`에서 다시 한다. 그 결과가 기존 인증서 소유 경계를
+바꾸면 ADR을 함께 남긴다.
+
+현재 `pki/roles/internal-workload`로는 CrowdSec 인증서를 발급할 수 없다. agent Certificate는
+SAN 없이 `CN=CrowdSec Agent`를 쓰는데 role이 `enforce_hostnames=true`이고, LAPI Certificate의
+`crowdsec-01-service.crowdsec-01`과 `localhost`는
+`allowed_domains=svc.cluster.local,cluster.local`·`allow_bare_domains=false` 밖이다. 게다가
+LAPI는 `agent-ou` 같은 OU 값으로 agent와 bouncer를 구분하므로 role이 OU를 보존해야 인가가
+성립한다. `PKI-01`은 role을 넓히는 대신 chart Certificate를 쓰지 않고 CN·SAN을 hostname
+규격으로 직접 선언하는 선택지를 함께 판정하고, 최소권한 경계를 완료 증거로 남긴다.
+
+`KMS-01`은 선행으로 걸지 않는다. cert-manager는 발급 결과를 Secret에 캐시하고 `renewBefore`
+시점에만 Vault를 호출하므로, role `max_ttl`인 720h와 `renewBefore` 240h를 쓰면 Vault가 열흘
+넘게 sealed일 때만 갱신이 멈춘다. 다만 이 성질을 가정으로 두지 않고 `CERTMGR-01`과 `PKI-01`
+양쪽에서 sealed 상태의 기존 인증서 유효성을 완료 증거로 확인한다. auto-unseal은 이 의존을
+더 줄이지만 `VAULT-INIT` 단독 창을 요구하므로 순서를 강제하지 않는다.
+
+`CERTMGR-01`이 `WAZUH-01`을 선행으로 갖는 것은 논리 의존이 아니라 용량 순서다. cert-manager는
+controller·webhook·cainjector Pod를 더하는데 `WAZUH-01`의 배포 직전 capacity gate가 아직
+판정되지 않았다. `WAZUH-01`이 실측을 끝낸 뒤 같은 기준으로 재측정한다.
 
 2026-08-01 `POM-01`에서 Pomerium Core `v0.33.0`과 Dashy `4.5.0`을 각 공식
 multi-arch image index digest로 고정하고 전용 AppProject·child Application·namespace에
@@ -1255,7 +1287,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `LOKI-01 DONE` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
 | `OBS-01 DONE` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
 | `OPN-METRICS-01 DONE` | OPNsense exporter와 최소 metric 방화벽 경로 | `OBS-01` | `OPNSENSE-LIVE` | 운영 경보 | exporter target `up=1`, CPU·memory·interface 대표 시계열, 최소 rule 한 건과 rollback·drift 없음 |
-| `WAZUH-01 DONE` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
+| `WAZUH-01 DONE` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle, `CERTMGR-01` | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
 [단일 분류·보존 표준](audit-event-standard.md)을 확정했다. 탐지 event는 Wazuh 30일,
