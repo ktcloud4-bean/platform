@@ -22,7 +22,7 @@ locals {
       vm_id         = 120
       role          = "platform"
       vcpu          = 8
-      memory_mib    = 28672 # 28 GiB; CAP-03
+      memory_mib    = 32768 # 32 GiB; CAP-05
       disk_gib      = 200
       vlan_id       = 20
       ipv4_cidr     = "10.10.20.10/24"

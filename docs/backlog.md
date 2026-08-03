@@ -959,7 +959,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `CAP-02 DONE` | 핵심 서비스 후 남은 CPU·RAM·disk 재예산 | `BKP-05`, `HEADLAMP-02` | 없음 | 아래 전체 | Proxmox·VM·Pod 실측과 stop/go 기준 |
 | `CAP-03 DONE` | `k3s-01` RAM을 24 GiB에서 28 GiB로 증설해 Wazuh 재진입 용량 확보 | `CAP-02` | `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP` | `WAZUH-01` | OpenTofu가 VMID 120 memory `24576→28672`만 `0 add, 1 change, 0 destroy`로 계획, state 사본·rollback 확보, 정상 재부팅 뒤 boot ID 변경·guest RAM 증가·swap 0·Node Ready·Argo 전체 `Synced/Healthy`, host/guest/PVC 정지선 통과와 Wazuh 재진입 available 11 GiB 이상, 최종 plan 무변경 |
 | `CAP-04 DONE` | Shuffle 진입 용량 판정과 필요할 때만 `k3s-01` RAM 증설 | `CAP-03`, `WAZUH-01` | `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP` | `SOAR-01` | Shuffle 공식 최소 요구량과 자체 OpenSearch 분리 배포를 전제로 계산한 진입선과 현재 실측 대조, 미달일 때만 OpenTofu가 VMID 120 memory `28672→32768`만 `0 add, 1 change, 0 destroy`로 계획하고 state 사본·rollback 확보, 재부팅 뒤 boot ID 변경·guest RAM 증가·swap 0·Node Ready·Vault 재unseal·Argo 전체 `Synced/Healthy`, 배정 합계 52 GiB 경고선 미만 유지, PVC 선언 합계를 96 GiB 경고와 120 GiB 정지로 구분해 재판정하고 Shuffle 몫 배정, 증설이 불필요하면 근거와 `SOAR-01` 진입선만 기록하고 라이브 변경 0, 최종 plan 무변경 |
-| `CAP-05 READY` | `WAZUH-02` 배포 후 미달로 확인된 `SOAR-01` 진입선을 충족하도록 `k3s-01` RAM을 28 GiB에서 32 GiB로 증설 | `CAP-04`, `WAZUH-02` | `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP` | `SOAR-01` | OpenTofu가 VMID 120 memory `28672→32768`만 `0 add, 1 change, 0 destroy`로 계획, state 사본·rollback 확보, 정상 재부팅 뒤 boot ID 변경·guest RAM 증가·swap 0·Node Ready·Vault 재unseal·Argo 전체 `Synced/Healthy`, VM RAM 배정 합계 52 GiB 경고선 미만 유지, PVC 선언·정지선 불변, 재부팅 뒤 `k3s-01` available이 `SOAR-01` 진입선 12 GiB 이상임을 재측정하고 충족 시에만 `SOAR-01`을 `READY`로 전환, 최종 plan 무변경 |
+| `CAP-05 DONE` | `WAZUH-02` 배포 후 미달로 확인된 `SOAR-01` 진입선을 충족하도록 `k3s-01` RAM을 28 GiB에서 32 GiB로 증설 | `CAP-04`, `WAZUH-02` | `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP` | `SOAR-01` | OpenTofu가 VMID 120 memory `28672→32768`만 `0 add, 1 change, 0 destroy`로 계획, state 사본·rollback 확보, 정상 재부팅 뒤 boot ID 변경·guest RAM 증가·swap 0·Node Ready·Vault 재unseal·Argo 전체 `Synced/Healthy`, VM RAM 배정 합계 52 GiB 경고선 미만 유지, PVC 선언·정지선 불변, 재부팅 뒤 `k3s-01` available이 `SOAR-01` 진입선 12 GiB 이상임을 재측정하고 충족 시에만 `SOAR-01`을 `READY`로 전환, 최종 plan 무변경 |
 | `SCM-01 DONE` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
 | `REG-01 DONE` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
 | `CI-01 DONE` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
@@ -1559,6 +1559,52 @@ OpenTofu apply와 `k3s-01` 단일 서버 재부팅을 수반해 AGENTS.md의 "k3
 `k3s-01` available을 재측정해 `SOAR-01` 진입선 12 GiB 충족 여부로 `SOAR-01`의 `READY` 전환을
 다시 판단한다.
 
+2026-08-04 `CAP-05`에서 승인된 plan으로 VMID 120의 `memory.dedicated`만 `28672→32768`로
+적용했다. 적용 직전 real state의 harmless refresh(게스트 agent가 보고하는
+`ipv4_addresses`·`mac_addresses` 배열 순서만 재정렬, 다른 속성 diff 0건)로 최초 plan
+`553a8fcebf5c53c7f200d6183c7baaa97f2c7d5a3fae5366447c6a8e3ecf4ba8`이 stale해져, 같은 state에서
+`dc5d2d9bb8f11908b3887fe871f66eefd7819c3c731cb51178f772ee2bcafaae`를 다시 만들어 승인 범위와
+동일한 `0 add, 1 change, 0 destroy`를 재확인한 뒤 적용했다. state SHA-256은
+`f91f85cb0dec985f5ac84ac32957a9328e9684ea0bfceb60467122f5bc8974a7`(serial 5, rollback
+지점)에서 `d42951947dc3c08d0295bda8614d943abbf09ff843bbdb4b27b6d65221634bc7`(serial 6)로
+바뀌었고, OpenTofu 자체 pre-apply backup(`c42ee0f95ea72ca431b3c5443e964aabd04fecf1a24e5b5739ca935d6f9d317f`)을
+저장소 밖 mode `0600` 사본으로 이중 보관했다.
+
+Proxmox `qm pending`이 `cur memory: 28672`·`new memory: 32768`로 나뉘어 있어 `CAP-03`과 같이
+정상 재부팅으로는 활성화되지 않음을 확인하고, guest `sudo shutdown -h now`로 정상 종료한 뒤
+VMID 120을 cold start했다. boot ID는 `4e745572-8cf3-4bd2-91c2-a572ad45a382`에서
+`5ebae80a-04a7-4765-a2c7-e8b9c037500d`로 바뀌었고 guest `MemTotal`은
+29,154,533,376→33,382,391,808 bytes로 늘었으며 swap은 재부팅 전후 모두 0이다. k3s는 재기동
+직후 `active`, Node `Ready`였다. Vault는 `KMS-01`이 도입한 AWS KMS auto-unseal(`Seal Type:
+awskms`)로 별도 키 입력 없이 `Sealed: false`·`HA Mode: active`가 됐다.
+
+재부팅이 모든 Pod를 한 번씩 재시작하며 `CAP-03`에서 이미 관측된 것과 같은 계열의 결함이
+재현됐다. `crowdsec-appsec` Deployment의 init container `extract-crowdsec-01-crs-snapshot`이
+새 sandbox에서 exit code 1로 실패해 `crowdsec` Application이 `Progressing`에 머물렀다
+(스크립트가 표준출력을 `/dev/null`로 버려 정확한 실패 지점은 로그에 남지 않았다). `CAP-03`과
+동일하게 정확한 Pod 한 건만 삭제해 ReplicaSet이 새 sandbox로 재생성하게 하자 다음 시도에서
+Ready가 됐고, 이후 Argo 22개 Application이 모두 `Synced/Healthy`로 돌아왔다. 이 초기화는 매
+`k3s-01` 전체 재부팅마다 재현될 수 있는 비멱등 결함이며 근본 수정은 이 작업 범위 밖이라
+별도 검토로 남긴다. `kube-system`의 `helper-pod-delete-pvc-*` 여러 개가 SELinux 권한 거부로
+반복 실패·재생성되는 현상도 관측했으나, 이는 `K3S-01` 완료 보고가 이미 남긴 local-path 삭제
+helper의 SELinux 환경 한계와 같은 계열이고 이번 재부팅이 새로 만든 결함이 아니다. 두 현상
+모두 PVC 선언·Argo 동기화 대상·capacity gate에는 영향이 없어 `CAP-05` 범위에서 고치지
+않았다.
+
+최종 실측: Proxmox available 32,170,692,608 bytes(29.960 GiB)·swap 0; VM RAM 회계는
+44→48 GiB(overhead 포함 45→49 GiB)로 52 GiB 경고선 아래 3 GiB; `k3s-01` available은
+12,710,690,816→18,511,921,152 bytes(11.837→17.244 GiB)로 `SOAR-01` 진입선 12 GiB
+(12,884,901,888 bytes)를 5,627,019,264 bytes(5.240 GiB) 웃돈다; guest swap 0·root
+사용률 20%로 불변; PVC 요청 합계는 91.125 GiB(11개)로 불변이다. 최종 refresh plan
+`02cb0bd3683c401596fa91ac7baacb7b4fa5da6ddbab54bca5ee87ff0865fd1d`은 state resource 5개
+모두 `no-op`, 변경·비통과 check 0건이며 plan 전후 state SHA-256은
+`d42951947dc3c08d0295bda8614d943abbf09ff843bbdb4b27b6d65221634bc7`로 불변이다.
+
+`SOAR-01` 진입선을 충족했으므로 `CAP-05`를 `DONE`으로 닫고, 선행이 모두 충족된 `SOAR-01`을
+`BLOCKED`에서 `READY`로 전환한다. 상세 값과 rollback은
+[`k3s-01 RAM 증설 runbook`](runbook/k3s-ram-expansion.md)과
+[`capacity-plan.md`](capacity-plan.md)의 `CAP-05` 절이 소유한다.
+
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
 [단일 분류·보존 표준](audit-event-standard.md)을 확정했다. 탐지 event는 Wazuh 30일,
 API·identity·접근 감사 metadata는 Wazuh 90일, 운영 로그는 Loki 7일로 분리하고 같은 event의
@@ -1718,7 +1764,7 @@ Wazuh service·PF·NAT·DNS·IDS 의미 설정은 작업 전후 불변이다. �
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `SOAR-01 BLOCKED` | Shuffle read-only·사람 승인형 SOAR PoC | `OBS-01`, `WAZUH-01`, `WAZUH-02`, `FALCO-01`, `CAP-04` | `K3S-HEAVY` | 사고대응 | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch, 경보 수신→정보 보강→통지→승인 흐름, 최소권한 credential |
+| `SOAR-01 READY` | Shuffle read-only·사람 승인형 SOAR PoC | `OBS-01`, `WAZUH-01`, `WAZUH-02`, `FALCO-01`, `CAP-04`, `CAP-05` | `K3S-HEAVY` | 사고대응 | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch, 경보 수신→정보 보강→통지→승인 흐름, 최소권한 credential |
 | `SOAR-02 DEFERRED` | 되돌릴 수 있는 대응 한 가지 자동화 | `SOAR-01`, 검증된 incident runbook | 없음 | 접근 정책 | 반복 시험, 승인·감사·rollback; 방화벽·계정 무인 파괴 금지 |
 
 Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 보안 사건에 반응하는 흐름만 소유한다.
