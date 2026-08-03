@@ -1466,7 +1466,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `OPN-METRICS-01 DONE` | OPNsense exporter와 최소 metric 방화벽 경로 | `OBS-01` | `OPNSENSE-LIVE` | 운영 경보 | exporter target `up=1`, CPU·memory·interface 대표 시계열, 최소 rule 한 건과 rollback·drift 없음 |
 | `WAZUH-01 DONE` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle, `CERTMGR-01` | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 | `WAZUH-01-FIX-01 DONE` | WAZUH-01의 OPNsense live 상태와 masked drift snapshot을 일치시키고, 성공 경로에서 snapshot 갱신이 다시 누락되지 않도록 절차를 보정 (`gitops/tools/wazuh-01/apply-opnsense.sh`, `infra/opnsense/config.xml`) | `WAZUH-01` | `OPNSENSE-LIVE` | `OBS-02` | 라이브 Wazuh Agent 설정이 WAZUH-01 선언과 exact match, IDS 차이가 `persisted_at` metadata뿐이며 의미 설정 차이 0건이거나 다르면 변경 없이 중단, 갱신 전 sanitized drift가 승인된 WAZUH Agent subtree와 판정된 metadata 차이뿐, `check-drift.sh --update` 뒤 일반 drift 없음, snapshot의 credential 원문 0건과 Wazuh password masking 유지, 향후 성공 절차가 exact drift 분류 → snapshot update → 일반 drift 확인 없이는 완료되지 않음, 작업 전후 OPNsense live revision·Wazuh service·PF·NAT·DNS·IDS 의미 설정 불변, 최신 main에서 `platform-root`·`wazuh`가 `Synced/Healthy` |
-| `OBS-02 READY` | Grafana·Prometheus·Alertmanager UI를 Pomerium Route로 노출하고 최소 대시보드 확보 (`gitops/apps/obs/`) | `OBS-01`, `POM-01` | `OPNSENSE-LIVE` | 운영 경보 silence·팀 온보딩 | Route 3건과 `pomerium`→`obs` NetworkPolicy egress 선언, Grafana 로그인 뒤 node·PVC·Loki 대표 패널 표시, Prometheus target `up=1`과 PromQL 실행, Alertmanager silence 생성·조회·만료 왕복, `/platform-users` 허용과 미소속 계정 403의 같은 시점 대조 및 Alertmanager 쓰기 경로의 `/platform-privileged` 한정, alias 3건 내부 A만·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig generation·Traefik Pod UID·restart 불변, 배포 전후 available RAM 정지선 통과와 신규 PVC 0개, Argo child `Synced/Healthy`와 OPNsense drift 없음, rollback 뒤 기존 Route·경보 전달 회귀 없음 |
+| `OBS-02 DONE` | Grafana·Prometheus·Alertmanager UI를 Pomerium Route로 노출하고 최소 대시보드 확보 (`gitops/apps/obs/`) | `OBS-01`, `POM-01` | `OPNSENSE-LIVE` | 운영 경보 silence·팀 온보딩 | Route 3건과 `pomerium`→`obs` NetworkPolicy egress 선언, Grafana 로그인 뒤 node·PVC·Loki 대표 패널 표시, Prometheus target `up=1`과 PromQL 실행, Alertmanager silence 생성·조회·만료 왕복, `/platform-users` 허용과 미소속 계정 403의 같은 시점 대조 및 Alertmanager 쓰기 경로의 `/platform-privileged` 한정, alias 3건 내부 A만·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig generation·Traefik Pod UID·restart 불변, 배포 전후 available RAM 정지선 통과와 신규 PVC 0개, Argo child `Synced/Healthy`와 OPNsense drift 없음, rollback 뒤 기존 Route·경보 전달 회귀 없음 |
 | `WAZUH-02 READY` | Wazuh Dashboard 배포와 보안 이벤트 조사 경로 확보 (`gitops/apps/wazuh/`) | `WAZUH-01`, `POM-01`, `CAP-04` | `K3S-HEAVY`, `OPNSENSE-LIVE` | 사고 조사·`SOAR-01` 용량 | 배포 직전 capacity gate 재측정으로 자기 8 GiB 정지선 통과를 판정하고 배포 후 available이 `SOAR-01` 진입선 12 GiB를 남기는지 기록(미달이면 `k3s-01` 32 GiB 증설이 `SOAR-01`의 선행임을 함께 기록), Dashboard를 `WAZUH-01`과 같은 4.14.7 계열 고정 version·image digest로 선언, Pomerium Route와 `pomerium`→`wazuh` NetworkPolicy egress, Dashboard 로그인 뒤 `D30`·`A90` index 검색과 `WAZUH-01`의 Suricata sid `2029054` 재현, indexer 자격증명을 Kubernetes Secret 원문 없이 Vault Agent로만 주입, `/platform-privileged` 허용과 일상 계정 거부, active response 비활성과 ISM 정책 두 건 불변, `wazuh` alias 내부 A 1건·공개 A/AAAA 0건, 배포 후 available·PVC 정지선 통과, Argo child `Synced/Healthy`, rollback 뒤 indexer·manager·retention 회귀 없음 |
 
 2026-08-03 `OBS-02`와 `WAZUH-02`를 신설한다. 두 작업은 결정된 목표와 실제 구현이 어긋난
@@ -1510,6 +1510,21 @@ namespace에 이미 배포돼 있어 Route 추가는 RAM을 늘리지 않으므�
 gate 없이 한 작업으로 묶는다. 다만 `pomerium` namespace는 default-deny이고 `POL-01-FIX-01`이
 Dashy→Keycloak egress 누락으로 이미 한 번 실패했으므로 대상 namespace egress를 Route와 함께
 선언한다.
+
+2026-08-04 `OBS-02`에서 immutable root `af98312b53bf99858312b5cf3fb274d7b4156d7b`와 child
+`8c32ae94aa1ccfd4e295041030cca413960fe8fc`로 Grafana·Prometheus·Alertmanager Route를 검증했다.
+Grafana의 `Platform` dashboard는 node·PVC·Loki 대표 query를 표시했고, Prometheus의 node-exporter
+target `up=1`과 PromQL, Alertmanager의 특권 session silence 생성·조회·만료를 확인했다. 일상
+`/platform-users` session은 세 UI를 연속 통과했고 group 없는 session은 모두 403이었으며,
+Alertmanager write는 `/platform-privileged`에만 허용됐다. 첫 backend 503은 Pomerium egress만
+있고 `obs-default-deny`의 cross-namespace ingress 허용이 없던 원인으로 확인해, 세 backend의
+Pomerium source·target Pod·port를 정확히 짝지은 ingress 정책을 추가했다. Loki는 datasource
+resource handler가 아닌 proxy endpoint로 원래 query API를 전달하도록 보정했다. 내부 DNS는 세
+alias 모두 A `10.10.20.10` 하나, 내부 AAAA와 공개 A/AAAA 0건이었고 OPNsense drift는 없었다.
+배포 전 available은 12,996,599,808 bytes·swap 0·PVC 요청 97,844,723,712 bytes로 정지선을
+통과했고 신규 PVC·HelmChartConfig generation·Traefik Pod UID/restart 변화는 없었다. rollback 뒤
+root·`obs`·`pomerium`은 literal `main`에서 `Synced/Healthy`였고 기존 Pomerium Route와
+Alertmanager Ready endpoint는 유지됐다. 직접 후속은 없다.
 
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
 [단일 분류·보존 표준](audit-event-standard.md)을 확정했다. 탐지 event는 Wazuh 30일,

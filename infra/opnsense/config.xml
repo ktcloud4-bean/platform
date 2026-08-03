@@ -2592,7 +2592,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785776229.92" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785779684.28" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2865,6 +2865,27 @@
           <hostname>vault</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>Vault standard Ingress alias (VAULT-03)</description>
+        </alias>
+        <alias uuid="16319429-7ef4-48cd-bdd7-732d589ab4d8">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>grafana</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>OBS-02 Grafana dashboard alias</description>
+        </alias>
+        <alias uuid="67b8e847-1f31-4d53-9605-5175b0f272fa">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>prometheus</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>OBS-02 Prometheus UI alias</description>
+        </alias>
+        <alias uuid="fadaef57-443b-4d11-8258-4700f5ae0c91">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>alertmanager</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>OBS-02 Alertmanager UI alias</description>
         </alias>
       </aliases>
     </unboundplus>

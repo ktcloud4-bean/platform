@@ -37,4 +37,5 @@ resources:
   - sonarqube-egress.yaml
   - jenkins-egress.yaml
   - argocd-egress.yaml
+  - obs-egress.yaml
   - ingress.yaml

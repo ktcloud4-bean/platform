@@ -41,6 +41,28 @@ Grafana는 ClusterIP만 만들며 Ingress와 공개 DNS가 없다. Grafana admin
 `kv/obs/grafana`에서 읽어 memory `emptyDir`에만 렌더링한다. Kubernetes Secret과 Git에는
 credential을 저장하지 않는다.
 
+## OBS-02 운영 UI와 대시보드
+
+Grafana·Prometheus·Alertmanager의 외부 진입은 모두 `pomerium` 앱이 소유하는 표준 Kubernetes
+`Ingress`와 선언형 Route다. 이 앱에는 별도 Ingress·공개 DNS·NAT·Traefik 정적 설정이 없다.
+
+| UI | 내부 upstream | Pomerium claim 경계 |
+|---|---|---|
+| `grafana.imcherry5778.xyz` | `obs-grafana:80` | `/platform-users` |
+| `prometheus.imcherry5778.xyz` | `obs-prometheus:9090` | `/platform-users` |
+| `alertmanager.imcherry5778.xyz` | `obs-alertmanager:9093` | 조회는 `/platform-users`, silence 변경은 `/platform-privileged` |
+
+Grafana native dashboard provider는 `dashboard.yaml`의 `obs-02-dashboard` ConfigMap을
+`Platform` folder로 read-only mount한다. `defaultDashboardsEnabled`는 계속 꺼져 있으며, 이
+대시보드는 Prometheus의 node·PVC 대표 query와 Loki의 5분 로그량 query 세 패널만 제공한다.
+Loki datasource가 `loki.loki.svc:3100`을 사용하므로 Grafana Pod에만 정확한 TCP 3100 egress를
+추가한다. Grafana native admin login은 Pomerium 로그인과 별개이며, password의 Vault Agent
+소비 경계는 바꾸지 않는다.
+
+`obs-default-deny`는 cross-namespace ingress도 막으므로 Pomerium egress만으로는 UI backend에
+도달하지 못한다. 세 `obs-02-*-pomerium-ingress` 정책은 Pomerium server Pod만 Grafana TCP 3000,
+Prometheus TCP 9090, Alertmanager TCP 9093에 도달하게 해 해당 egress와 정확히 짝을 이룬다.
+
 NetworkPolicy는 `obs`를 ingress·egress default deny로 시작한다. namespace 내부 통신, CoreDNS,
 Kubernetes API, node-exporter의 node IP TCP 9100, OPNsense 관리 주소 TCP 9100 한 건, 기존
 Velero·Loki·Alloy metric port, Grafana init→Vault TCP 8200, blackbox→Traefik TCP 8443과

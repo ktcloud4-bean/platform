@@ -25,6 +25,84 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: obs-02-grafana-pomerium-ingress
+  namespace: obs
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+      app.kubernetes.io/instance: obs
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pomerium
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pomerium
+              app.kubernetes.io/component: server
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: obs-02-prometheus-pomerium-ingress
+  namespace: obs
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+      operator.prometheus.io/name: obs-prometheus
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pomerium
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pomerium
+              app.kubernetes.io/component: server
+      ports:
+        - protocol: TCP
+          port: 9090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: obs-02-alertmanager-pomerium-ingress
+  namespace: obs
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+      alertmanager: obs-alertmanager
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pomerium
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pomerium
+              app.kubernetes.io/component: server
+      ports:
+        - protocol: TCP
+          port: 9093
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: obs-dns-egress
   namespace: obs
 spec:
@@ -151,6 +229,29 @@ spec:
       ports:
         - protocol: TCP
           port: 8200
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: obs-02-grafana-loki-egress
+  namespace: obs
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loki
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loki
+              app.kubernetes.io/component: single-binary
+      ports:
+        - protocol: TCP
+          port: 3100
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

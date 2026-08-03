@@ -93,6 +93,20 @@ grafana:
       enabled: false
     datasources:
       enabled: false
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: platform-observability
+          orgId: 1
+          folder: Platform
+          type: file
+          disableDeletion: true
+          editable: false
+          options:
+            path: /var/lib/grafana/dashboards/platform-observability
+  dashboardsConfigMaps:
+    platform-observability: obs-02-dashboard
   datasources:
     datasources.yaml:
       apiVersion: 1
@@ -112,6 +126,12 @@ grafana:
           editable: false
           jsonData:
             implementation: prometheus
+        - name: Loki
+          uid: loki
+          type: loki
+          access: proxy
+          url: http://loki.loki.svc:3100
+          editable: false
   env:
     GF_SECURITY_ADMIN_USER: admin
     GF_SECURITY_ADMIN_PASSWORD__FILE: /vault/secrets/admin-password

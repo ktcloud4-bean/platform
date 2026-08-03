@@ -146,3 +146,39 @@ routes:
       - allow:
           or:
             - claim/groups: /platform-users
+
+  # OBS-02: 세 UI는 Pomerium과 Keycloak OIDC를 먼저 통과한다. Grafana는
+  # 자체 admin login을 계속 사용하며 그 credential은 Vault Agent 경로만 소유한다.
+  - name: grafana
+    description: OBS-02 Grafana node PVC Loki 운영 대시보드
+    from: https://grafana.imcherry5778.xyz
+    to: http://obs-grafana.obs.svc.cluster.local:80
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users
+
+  - name: prometheus
+    description: OBS-02 Prometheus targets and PromQL UI
+    from: https://prometheus.imcherry5778.xyz
+    to: http://obs-prometheus.obs.svc.cluster.local:9090
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users
+
+  # Alertmanager UI의 조회는 platform-users에 열되, silence 생성·삭제 같은
+  # HTTP write는 platform-privileged claim만 통과시킨다.
+  - name: alertmanager
+    description: OBS-02 Alertmanager UI and privileged silence writes
+    from: https://alertmanager.imcherry5778.xyz
+    to: http://obs-alertmanager.obs.svc.cluster.local:9093
+    policy:
+      - allow:
+          and:
+            - claim/groups: /platform-users
+            - http_method:
+                in: [GET, HEAD]
+      - allow:
+          or:
+            - claim/groups: /platform-privileged

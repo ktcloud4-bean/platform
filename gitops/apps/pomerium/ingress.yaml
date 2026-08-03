@@ -105,6 +105,36 @@ spec:
                 name: pomerium
                 port:
                   name: http
+    - host: grafana.imcherry5778.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pomerium
+                port:
+                  name: http
+    - host: prometheus.imcherry5778.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pomerium
+                port:
+                  name: http
+    - host: alertmanager.imcherry5778.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pomerium
+                port:
+                  name: http
   tls:
     - hosts:
         - access.imcherry5778.xyz
@@ -116,3 +146,6 @@ spec:
         - sonar.imcherry5778.xyz
         - jenkins.imcherry5778.xyz
         - argo.imcherry5778.xyz
+        - grafana.imcherry5778.xyz
+        - prometheus.imcherry5778.xyz
+        - alertmanager.imcherry5778.xyz

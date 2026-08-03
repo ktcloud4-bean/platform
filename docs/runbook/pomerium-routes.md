@@ -242,6 +242,61 @@ Pomerium 자체가 유일한 관리 경로가 아니다. 전체 Keycloak이 기�
 Keycloak client/group/user를 우회 수정하지 않는다. drill 뒤 전체 `verify-live.sh`를 다시
 통과해야 한다.
 
+## OBS-02 운영 UI Route
+
+`OBS-02`는 Pomerium Core의 선언형 Route와 기존 단일 표준 `Ingress`에 Grafana·Prometheus·
+Alertmanager hostname을 추가한다. `HelmChartConfig`, Traefik static entrypoint/plugin, Traefik
+Pod는 수정하거나 재기동하지 않는다. `pomerium` namespace default-deny 아래에서 Route와 같은
+commit의 `obs-egress.yaml`은 Grafana Pod TCP 3000, Prometheus Pod TCP 9090, Alertmanager Pod
+TCP 9093만 연다. `obs-default-deny`의 반대편도 막혀 있으므로 `obs-02-*-pomerium-ingress`는
+같은 Pomerium source Pod와 세 대상 Pod·port만 다시 명시한다.
+
+Unbound alias 세 건은 `OPNSENSE-LIVE` 잠금에서 먼저 live host override를 exact match로 확인한
+뒤에만 적용한다. API credential은 출력하지 않는다.
+
+```bash
+OPN_ENV="$KTC_SECRET_ROOT/opnsense/env"
+gitops/tools/obs-02/opnsense-alias.py --env-file "$OPN_ENV" check
+gitops/tools/obs-02/opnsense-alias.py --env-file "$OPN_ENV" apply
+dig +short @10.10.20.1 grafana.imcherry5778.xyz A
+dig +short @10.10.20.1 prometheus.imcherry5778.xyz A
+dig +short @10.10.20.1 alertmanager.imcherry5778.xyz A
+infra/opnsense/scripts/check-drift.sh --env-file "$OPN_ENV" --update
+infra/opnsense/scripts/check-drift.sh --env-file "$OPN_ENV"
+```
+
+각 내부 A는 `10.10.20.10` 하나, 내부 AAAA와 공개 A/AAAA는 0건이어야 한다. Grafana는
+`Platform` folder의 node·PVC·Loki 세 패널을 native dashboard provider로 mount하고, Loki
+datasource egress만 추가한다. Grafana local admin password는 기존 Vault Agent file input을
+그대로 쓴다.
+
+merge 전 immutable 검증은 먼저 `capacity-pre`가 출력한 six values를 고정 입력으로 사용한다.
+`OBS02_DENY_*`는 `/platform-users`와 `/platform-privileged` 모두 없는 기존 검증 계정의
+0600 password/TOTP file을 명시한다. verifier는 허용·미소속 로그인 session pair로 세 UI를
+연속 확인하고, 별도 `/platform-privileged` session에서만 임시 silence를 생성·조회·만료한다.
+silence ID, cookie, token, password는 출력하지 않는다.
+
+```bash
+gitops/tools/obs-02/verify-live.sh capacity-pre
+OBS02_EXPECTED_ROOT_REVISION=<root-pointer-sha> \
+OBS02_EXPECTED_OBS_REVISION=<settings-sha> \
+OBS02_EXPECTED_POMERIUM_REVISION=<settings-sha> \
+OBS02_PRE_AVAILABLE_BYTES=<pre-available> \
+OBS02_PRE_PVC_REQUEST_BYTES=<pre-pvc> \
+OBS02_PRE_HELMCHARTCONFIG_GENERATION=<pre-generation> \
+OBS02_PRE_TRAEFIK_POD_UID=<pre-uid> \
+OBS02_PRE_TRAEFIK_RESTARTS=<pre-restarts> \
+OBS02_DENY_USERNAME=<unaffiliated-user> \
+OBS02_DENY_PASSWORD_FILE=<mode-0600-password-file> \
+OBS02_DENY_TOTP_FILE=<mode-0600-totp-file> \
+gitops/tools/obs-02/verify-live.sh
+```
+
+실패·성공 모두 `platform-root`를 기록한 literal `main` SHA로 복구한다. 실패 후 alias를
+삭제해야 하면 exact OBS-02 alias만 rollback하고 `check-drift.sh --update` 뒤 일반 drift 검사를
+다시 실행한다. 기존 Pomerium Route, Prometheus·Alertmanager PVC와 OBS-01의 경보 전달 설정은
+rollback 대상이 아니다.
+
 ## Rollback
 
 ### 배포 rollback

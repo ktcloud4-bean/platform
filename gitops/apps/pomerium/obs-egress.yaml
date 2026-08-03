@@ -1,0 +1,52 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: obs-02-pomerium-to-obs
+  namespace: pomerium
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: pomerium
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pomerium
+      app.kubernetes.io/component: server
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: obs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+              app.kubernetes.io/instance: obs
+      ports:
+        - port: 3000
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: obs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+              operator.prometheus.io/name: obs-prometheus
+      ports:
+        - port: 9090
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: obs
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alertmanager
+              alertmanager: obs-alertmanager
+      ports:
+        - port: 9093
+          protocol: TCP

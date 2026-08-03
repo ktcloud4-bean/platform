@@ -17,6 +17,9 @@ Client
        └─ sonar.imcherry5778.xyz    -> Service/sonarqube:9000
        └─ harbor.imcherry5778.xyz / -> Service/harbor:80
        └─ argo.imcherry5778.xyz    -> argocd-server.argocd.svc.cluster.local:443 (자체서명 TLS)
+       └─ grafana.imcherry5778.xyz  -> Service/obs-grafana:80
+       └─ prometheus.imcherry5778.xyz -> Service/obs-prometheus:9090
+       └─ alertmanager.imcherry5778.xyz -> Service/obs-alertmanager:9093
 ```
 
 기존 packaged Traefik이 유일한 ingress controller다. 이 앱은 동적 `Ingress` 객체만
@@ -51,6 +54,9 @@ OIDC claim을 직접 확인하는 `claim/groups`를 쓴다.
 | `https://sonar.imcherry5778.xyz` | `/platform-users` | 같은 group에만 SonarQube 타일 표시 |
 | `https://harbor.imcherry5778.xyz` UI | `/platform-users` 또는 `/platform-privileged` | 두 group에 Harbor 타일 표시 |
 | `https://argo.imcherry5778.xyz` | `/platform-users` | 같은 group에만 Argo CD 타일 표시; 실제 조회·변경 권한은 Argo 자체 부여 |
+| `https://grafana.imcherry5778.xyz` | `/platform-users` | OBS-02 Grafana UI |
+| `https://prometheus.imcherry5778.xyz` | `/platform-users` | OBS-02 Prometheus UI·PromQL |
+| `https://alertmanager.imcherry5778.xyz` | `/platform-users` 조회, `/platform-privileged` silence write | OBS-02 Alertmanager UI |
 
 로그인 성공, email 또는 `authenticated_user`만으로 허용하는 fallback은 없다.
 `/platform-privileged`만 가진 사용자는 Portal에는 들어가지만 검증 Route는 403이고 해당 타일도
@@ -91,6 +97,14 @@ Pomerium은 자기 세션 cookie나 client token을 Argo CD Bearer 자격증명�
 자체서명 TLS만 제공하므로 이 route에서만 `tls_skip_verify: true`를 둔다. 세부 OIDC·RBAC
 선언과 검증은 [Argo CD bootstrap 런북](../../../docs/runbook/argocd-gitops-bootstrap.md)이
 소유한다.
+
+`OBS-02`의 Grafana·Prometheus·Alertmanager Route는 browser UI와 각 서비스의 기존 HTTP API를
+함께 전달한다. 따라서 `pomerium` default-deny에는 Grafana Pod TCP 3000, Prometheus Pod TCP
+9090, Alertmanager Pod TCP 9093만 허용하는 `obs-egress.yaml`을 두고, `obs-default-deny`의
+반대편에는 같은 Pomerium Pod·대상 Pod·포트만 허용하는 ingress 정책을 둔다. Alertmanager policy의
+`http_method` 조건은 `/platform-users`의 GET/HEAD 조회만 통과시키고, POST·PUT·PATCH·DELETE는
+`/platform-privileged` claim만 통과시킨다. Pomerium Route가 Grafana admin credential이나
+Prometheus/Alertmanager 내부 API를 대체하지 않는다.
 
 ## Keycloak clients와 시크릿
 
