@@ -1,8 +1,9 @@
 # cert-manager와 Vault PKI 연결
 
 이 디렉터리는 `CERTMGR-01`의 cert-manager controller·webhook·cainjector, CRD 여섯 개와
-`ClusterIssuer/vault-internal` 선언을 소유한다. 실제 consumer Certificate와 CrowdSec mTLS 연결은
-`PKI-01` 범위이며 여기에 두지 않는다.
+`ClusterIssuer/vault-internal` 선언을 소유한다. `PKI-01`에서는 첫 consumer인 CrowdSec용
+`vault-crowdsec-agent`·`vault-crowdsec-lapi` ClusterIssuer와 각 Issuer 전용 ServiceAccount도
+소유한다. 실제 consumer Certificate와 TLS 활성화 선언은 `gitops/apps/crowdsec/`가 소유한다.
 
 ## 고정 release와 변경 경계
 
@@ -67,6 +68,20 @@ root token은 저장소 밖 mode `0600` 파일에서 stdin으로만 Vault Pod에
 root token·ServiceAccount JWT·Vault token을 출력하거나 명령 인자에 넣지 않는다. 이 구성은
 Vault init·seal migration·기존 `pki/roles/internal-workload`를 바꾸지 않는다. `KMS-01`의
 `VAULT-INIT` 창과 동시에 실행하지 않는다.
+
+### PKI-01 CrowdSec 경계
+
+CrowdSec는 혼합 role 하나를 쓰지 않는다. agent role은 정확한
+`crowdsec-agent.crowdsec-01.svc.cluster.local`, `clientAuth`, 고정 `agent-ou`만 발급하고 LAPI
+role은 정확한 `crowdsec-service.crowdsec-01.svc.cluster.local`, `serverAuth`만 발급한다. LAPI
+서버 인증서에 agent 권한을 함께 넣는 것보다 role·policy·Kubernetes auth audience를 둘로 나누는
+쪽이 더 좁다.
+
+[`gitops/tools/pki-01/provision.sh`](../../tools/pki-01/provision.sh)는 `VAULT-CONFIG` 잠금 아래
+두 PKI role, 각 signing endpoint 하나만 여는 policy 두 개와 Issuer별 Kubernetes auth role 두
+개만 `check`, `apply`, `rollback`한다. 공용 `internal-workload` role과 `CERTMGR-01` 리소스는
+바꾸지 않는다. Vault server의 공개 CA는 같은 `files/vault.crt` 단일 원본에서 CrowdSec
+namespace의 ConfigMap으로도 렌더하며 credential이나 private key를 포함하지 않는다.
 
 ## 검증과 commit 순서
 

@@ -281,8 +281,10 @@ spec:
           {{- if .Values.tls.enabled }}
           - name: crowdsec-appsec-client-tls
             mountPath: /etc/ssl/crowdsec-appsec-client
+          {{- if not .Values.tls.pki01.enabled }}
           - name: crowdsec-appsec-server-tls
             mountPath: /etc/ssl/crowdsec-appsec-server
+          {{- end }}
           {{- end }}
           {{- if .Values.appsec.extraVolumeMounts }}
           {{ toYaml .Values.appsec.extraVolumeMounts | nindent 10 }}
@@ -334,10 +336,19 @@ spec:
       {{- if .Values.tls.enabled }}
       - name: crowdsec-appsec-client-tls
         secret:
+          {{- if .Values.tls.pki01.enabled }}
+          secretName: {{ .Release.Name }}-lapi-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
+          {{- else }}
           secretName: {{ .Release.Name }}-appsec-client-tls
+          {{- end }}
+      {{- if not .Values.tls.pki01.enabled }}
       - name: crowdsec-appsec-server-tls
         secret:
           secretName: {{ .Release.Name }}-appsec-server-tls
+      {{- end }}
       {{- end }}
       {{- if .Values.appsec.extraVolumes }}
       {{ toYaml .Values.appsec.extraVolumes | nindent 6 }}

@@ -190,6 +190,18 @@ tls:
     # -- renewBefore for Certificate resources
     ## @param tls.certManager.renewBefore [string] duration before a certificate’s expiry when cert-manager should start renewing it.
     renewBefore: 720h # 30d
+  # PKI-01 uses repository-owned hostname Certificates instead of the chart's
+  # human-readable CN and self-signed CA path.
+  pki01:
+    enabled: false
+    agentIssuerRef: vault-crowdsec-agent
+    lapiIssuerRef: vault-crowdsec-lapi
+    duration: 720h
+    renewBefore: 240h
+    crlURL: https://vault.vault.svc.cluster.local:8200/v1/pki/crl/pem
+    crlRefreshSeconds: 10
+    crlCacheExpiration: 1s
+    reloadOnChange: true
   bouncer:
     ## @param tls.bouncer.secret [string] Name of the Kubernetes Secret containing TLS materials for the bouncer
     secret: "{{ .Release.Name }}-bouncer-tls"

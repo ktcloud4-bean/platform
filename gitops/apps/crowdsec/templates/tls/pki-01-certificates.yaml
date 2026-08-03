@@ -1,0 +1,58 @@
+{{- if and .Values.tls.enabled .Values.tls.pki01.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Release.Name }}-lapi
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/part-of: pki-01
+spec:
+  commonName: {{ .Release.Name }}-service.{{ .Release.Namespace }}.svc.cluster.local
+  dnsNames:
+    - {{ .Release.Name }}-service.{{ .Release.Namespace }}.svc.cluster.local
+    # LAPI process bootstraps its own local client before the Service has a Ready endpoint.
+    - localhost
+  secretName: {{ .Release.Name }}-lapi-tls
+  duration: {{ .Values.tls.pki01.duration }}
+  renewBefore: {{ .Values.tls.pki01.renewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - server auth
+  issuerRef:
+    name: {{ .Values.tls.pki01.lapiIssuerRef }}
+    kind: ClusterIssuer
+    group: cert-manager.io
+{{- if .Values.agent.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Release.Name }}-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/part-of: pki-01
+spec:
+  commonName: {{ .Release.Name }}-agent.{{ .Release.Namespace }}.svc.cluster.local
+  dnsNames:
+    - {{ .Release.Name }}-agent.{{ .Release.Namespace }}.svc.cluster.local
+  subject:
+    organizationalUnits:
+      - agent-ou
+  secretName: {{ .Release.Name }}-agent-tls
+  duration: {{ .Values.tls.pki01.duration }}
+  renewBefore: {{ .Values.tls.pki01.renewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - client auth
+  issuerRef:
+    name: {{ .Values.tls.pki01.agentIssuerRef }}
+    kind: ClusterIssuer
+    group: cert-manager.io
+{{- end }}
+{{- end }}

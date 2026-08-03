@@ -48,13 +48,85 @@ spec:
       imagePullSecrets:
 {{ toYaml .Values.image.pullSecrets | indent 8 }}
       {{- end }}
-      {{- if (.Values.lapi.extraInitContainers) }}
+      {{- if or (.Values.lapi.extraInitContainers) (and .Values.tls.enabled .Values.tls.pki01.enabled) }}
       initContainers:
+      {{- if and .Values.tls.enabled .Values.tls.pki01.enabled }}
+      - name: pki-01-fetch-crl
+        image: "{{ .Values.image.repository | default "crowdsecurity/crowdsec" }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/sh', '/pki-01/sync-crl.sh']
+        env:
+          - name: PKI01_MODE
+            value: once
+          - name: PKI01_CRL_URL
+            value: {{ .Values.tls.pki01.crlURL | quote }}
+          - name: PKI01_CRL_DEST
+            value: /crl/crl.pem
+          - name: SSL_CERT_FILE
+            value: /vault-server-ca/vault.crt
+        resources:
+          requests:
+            cpu: 1m
+            memory: 8Mi
+          limits:
+            memory: 32Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: pki-01-crl-sync
+            mountPath: /pki-01
+            readOnly: true
+          - name: vault-server-ca
+            mountPath: /vault-server-ca
+            readOnly: true
+          - name: pki-01-crl
+            mountPath: /crl
+      {{- end }}
       {{- if .Values.lapi.extraInitContainers }}
       {{- toYaml .Values.lapi.extraInitContainers | nindent 8 }}
       {{- end }}
       {{- end }}
       containers:
+      {{- if and .Values.tls.enabled .Values.tls.pki01.enabled }}
+      - name: pki-01-crl-sync
+        image: "{{ .Values.image.repository | default "crowdsecurity/crowdsec" }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/sh', '/pki-01/sync-crl.sh']
+        env:
+          - name: PKI01_MODE
+            value: loop
+          - name: PKI01_CRL_URL
+            value: {{ .Values.tls.pki01.crlURL | quote }}
+          - name: PKI01_CRL_DEST
+            value: /crl/crl.pem
+          - name: PKI01_REFRESH_SECONDS
+            value: {{ .Values.tls.pki01.crlRefreshSeconds | quote }}
+          - name: SSL_CERT_FILE
+            value: /vault-server-ca/vault.crt
+        resources:
+          requests:
+            cpu: 1m
+            memory: 8Mi
+          limits:
+            memory: 32Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: pki-01-crl-sync
+            mountPath: /pki-01
+            readOnly: true
+          - name: vault-server-ca
+            mountPath: /vault-server-ca
+            readOnly: true
+          - name: pki-01-crl
+            mountPath: /crl
+      {{- end }}
       - name: crowdsec-lapi
         image: "{{ .Values.image.repository | default "crowdsecurity/crowdsec" }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -89,6 +161,12 @@ spec:
           - name: CACERT_FILE
             value: /etc/ssl/crowdsec-lapi/ca.crt
           {{- end }}
+          {{- if .Values.tls.pki01.enabled }}
+          - name: CRL_FILE
+            value: /etc/ssl/crowdsec-crl/crl.pem
+          - name: CRL_CACHE_EXPIRATION
+            value: {{ .Values.tls.pki01.crlCacheExpiration | quote }}
+          {{- end }}
           {{- end }}
           - name: INSECURE_SKIP_VERIFY
             value: {{ quote .Values.tls.insecureSkipVerify }}
@@ -121,6 +199,13 @@ spec:
           periodSeconds: 10
           successThreshold: 1
           timeoutSeconds: 5
+          {{- if and .Values.tls.enabled .Values.tls.pki01.enabled .Values.tls.pki01.reloadOnChange }}
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - sha256sum -c /tmp/pki-01-tls.sha256 >/dev/null
+          {{- else }}
           httpGet:
             path: /health
             port: lapi
@@ -129,6 +214,7 @@ spec:
             {{- else }}
             scheme: HTTP
             {{- end }}
+          {{- end }}
         readinessProbe:
           failureThreshold: 3
           periodSeconds: 10
@@ -171,7 +257,15 @@ spec:
         {{ if .Values.lapi.persistentVolume.config.enabled }}
         command: ['sh', '-c', 'cp -nR /staging/etc/crowdsec/* /etc/crowdsec_data/ && ln -s /etc/crowdsec_data /etc/crowdsec && bash /docker_start.sh']
         {{ end }}
-        {{- if .Values.lapi.lifecycle }}
+        {{- if and .Values.tls.enabled .Values.tls.pki01.enabled .Values.tls.pki01.reloadOnChange }}
+        lifecycle:
+          postStart:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - sha256sum /etc/ssl/crowdsec-lapi/tls.crt /etc/ssl/crowdsec-agent/tls.crt > /tmp/pki-01-tls.sha256
+        {{- else if .Values.lapi.lifecycle }}
         lifecycle:
           {{- toYaml .Values.lapi.lifecycle | nindent 10 }}
         {{- end }}
@@ -197,6 +291,11 @@ spec:
             mountPath: /etc/ssl/crowdsec-lapi
           - name: crowdsec-agent-tls
             mountPath: /etc/ssl/crowdsec-agent
+          {{- if .Values.tls.pki01.enabled }}
+          - name: pki-01-crl
+            mountPath: /etc/ssl/crowdsec-crl
+            readOnly: true
+          {{- end }}
           {{- end }}
           {{ if (.Values.lapi.persistentVolume.data.enabled) }}
           - name: crowdsec-db
@@ -255,6 +354,17 @@ spec:
       - name: crowdsec-docker-start-script
         configMap:
           name: crowdsec-docker-start-script-configmap
+      {{- if and .Values.tls.enabled .Values.tls.pki01.enabled }}
+      - name: pki-01-crl-sync
+        configMap:
+          name: {{ .Release.Name }}-pki-01-crl-sync
+          defaultMode: 0555
+      - name: vault-server-ca
+        configMap:
+          name: vault-server-ca
+      - name: pki-01-crl
+        emptyDir: {}
+      {{- end }}
       {{- if not (eq (include "IsOnlineAPIDisabled" .) "true") }}
       {{- if eq (include "StoreCAPICredentialsInSecret" .) "true" }}
       - name: {{ .Release.Name }}-capi-credentials-volume

@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cert-manager-vault-crowdsec-agent
+  namespace: cert-manager
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: vault-crowdsec-issuer
+    app.kubernetes.io/part-of: platform-gitops
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cert-manager-vault-crowdsec-lapi
+  namespace: cert-manager
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: vault-crowdsec-issuer
+    app.kubernetes.io/part-of: platform-gitops
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cert-manager-vault-crowdsec-token
+  namespace: cert-manager
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: vault-crowdsec-issuer
+    app.kubernetes.io/part-of: platform-gitops
+rules:
+  - apiGroups: [""]
+    resources: ["serviceaccounts/token"]
+    resourceNames:
+      - cert-manager-vault-crowdsec-agent
+      - cert-manager-vault-crowdsec-lapi
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cert-manager-vault-crowdsec-token
+  namespace: cert-manager
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: vault-crowdsec-issuer
+    app.kubernetes.io/part-of: platform-gitops
+subjects:
+  - kind: ServiceAccount
+    name: cert-manager
+    namespace: cert-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cert-manager-vault-crowdsec-token

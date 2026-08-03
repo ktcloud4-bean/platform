@@ -1,4 +1,12 @@
 {{- if and (.Values.agent.enabled) (.Values.agent.isDeployment) }}
+{{- $releaseMetadata := .Files.Get "release-metadata.env" -}}
+{{- $dockerStartSHA256 := regexFind "CROWDSEC_DOCKER_START_SHA256=[a-f0-9]{64}" $releaseMetadata | trimPrefix "CROWDSEC_DOCKER_START_SHA256=" -}}
+{{- $offlineStartupSHA256 := regexFind "CROWDSEC_OFFLINE_STARTUP_SHA256=[a-f0-9]{64}" $releaseMetadata | trimPrefix "CROWDSEC_OFFLINE_STARTUP_SHA256=" -}}
+{{- $offlineStartupBuilderSHA256 := regexFind "CROWDSEC_OFFLINE_STARTUP_BUILDER_SHA256=[a-f0-9]{64}" $releaseMetadata | trimPrefix "CROWDSEC_OFFLINE_STARTUP_BUILDER_SHA256=" -}}
+{{- $agentConfigSnapshotSHA256 := regexFind "CROWDSEC_AGENT_CONFIG_SNAPSHOT_SHA256=[a-f0-9]{64}" $releaseMetadata | trimPrefix "CROWDSEC_AGENT_CONFIG_SNAPSHOT_SHA256=" -}}
+{{- if and .Values.tls.pki01.enabled (or (eq $dockerStartSHA256 "") (eq $offlineStartupSHA256 "") (eq $offlineStartupBuilderSHA256 "") (eq $agentConfigSnapshotSHA256 "")) -}}
+  {{- fail "PKI-01 agent offline startup SHA-256 metadata is missing" -}}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,6 +59,59 @@ spec:
 {{ toYaml .Values.image.pullSecrets | indent 8 }}
       {{- end }}
       initContainers:
+      {{- if and .Values.tls.enabled .Values.tls.pki01.enabled }}
+      - name: pki-01-prepare-agent-offline-startup
+        image: "{{ .Values.image.repository | default "crowdsecurity/crowdsec" }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['sh', '-c']
+        args:
+          - >-
+            set -eu;
+            test "$(sha256sum /builder/prepare-offline-startup.sh | cut -d ' ' -f 1)" = "{{ $offlineStartupBuilderSHA256 }}";
+            sh /builder/prepare-offline-startup.sh
+            /docker_start.sh
+            /offline-startup/docker_start.sh
+            "{{ $dockerStartSHA256 }}"
+            "{{ $offlineStartupSHA256 }}"
+        resources:
+          limits:
+            memory: 32Mi
+          requests:
+            cpu: 1m
+            memory: 8Mi
+        securityContext:
+          {{- toYaml .Values.agent.wait_for_lapi.securityContext | nindent 10 }}
+        volumeMounts:
+          - name: crowdsec-01-offline-startup-builder
+            mountPath: /builder
+            readOnly: true
+          - name: pki-01-agent-offline-startup
+            mountPath: /offline-startup
+      - name: pki-01-seed-agent-config
+        image: "{{ .Values.image.repository | default "crowdsecurity/crowdsec" }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ['/bin/sh', '-c']
+        args:
+          - >-
+            set -eu;
+            base64 -d /snapshot/agent-config-snapshot.tar.gz.b64 > /tmp/agent-config-snapshot.tar.gz;
+            test "$(sha256sum /tmp/agent-config-snapshot.tar.gz | cut -d ' ' -f 1)" = "{{ $agentConfigSnapshotSHA256 }}";
+            tar -xzf /tmp/agent-config-snapshot.tar.gz -C /seed --strip-components=1
+        resources:
+          limits:
+            memory: 32Mi
+          requests:
+            cpu: 1m
+            memory: 8Mi
+        securityContext:
+          {{- toYaml .Values.agent.wait_for_lapi.securityContext | nindent 10 }}
+        volumeMounts:
+          - name: pki-01-agent-config
+            mountPath: /seed
+          - name: pki-01-agent-config-snapshot
+            mountPath: /snapshot
+            readOnly: true
+      {{- end }}
       {{- if or (not .Values.tls.enabled) (not .Values.tls.agent.tlsClientAuth) }}
       - name: wait-for-lapi-and-register
         image: "{{ .Values.image.repository | default "crowdsecurity/crowdsec" }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -74,7 +135,13 @@ spec:
         volumeMounts:
           - name: crowdsec-config
             mountPath: /tmp_config
+        {{- end }}
         env:
+          - name: LAPI_HOST
+            value: "{{ .Values.agent.lapiHost | default (printf "%s-service.%s" .Release.Name .Release.Namespace) }}"
+          - name: LAPI_PORT
+            value: "{{ .Values.agent.lapiPort | default "8080" }}"
+        {{- if or (not .Values.tls.enabled) (not .Values.tls.agent.tlsClientAuth) }}
           - name: REGISTRATION_TOKEN
             valueFrom:
               secretKeyRef:
@@ -86,10 +153,6 @@ spec:
                 fieldPath: metadata.name
           - name: LAPI_URL
             value: "{{ .Values.agent.lapiURL | default (printf "http://%s-service.%s:8080" .Release.Name .Release.Namespace) }}"
-          - name: LAPI_HOST
-            value: "{{ .Values.agent.lapiHost | default (printf "%s-service.%s" .Release.Name .Release.Namespace) }}"
-          - name: LAPI_PORT
-            value: "{{ .Values.agent.lapiPort | default "8080" }}"
         {{- end }}
       {{- if .Values.agent.extraInitContainers }}
       {{- toYaml .Values.agent.extraInitContainers | nindent 6 }}
@@ -98,7 +161,9 @@ spec:
       - name: crowdsec-agent
         image: "{{ .Values.image.repository | default "crowdsecurity/crowdsec" }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-    {{- if or (not .Values.tls.enabled) (not .Values.tls.agent.tlsClientAuth) }}
+    {{- if and .Values.tls.enabled .Values.tls.pki01.enabled }}
+        command: ['/offline-startup/docker_start.sh']
+    {{- else if or (not .Values.tls.enabled) (not .Values.tls.agent.tlsClientAuth) }}
       {{- if .Values.agent.persistentVolume.config.enabled }}
         command: ['sh', '-c', 'cp /tmp_config/local_api_credentials.yaml /staging/etc/crowdsec/local_api_credentials.yaml && mv -n /staging/etc/crowdsec/* /etc/crowdsec_data/ && rm -rf /staging/etc/crowdsec && ln -s /etc/crowdsec_data /etc/crowdsec && ./docker_start.sh']
       {{- else }}
@@ -175,6 +240,27 @@ spec:
         {{ end }}
         {{ end }}
 
+        {{- if and .Values.tls.enabled .Values.tls.pki01.enabled .Values.tls.pki01.reloadOnChange }}
+        lifecycle:
+          postStart:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - sha256sum /etc/ssl/crowdsec-agent/tls.crt > /tmp/pki-01-tls.sha256
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - sha256sum -c /tmp/pki-01-tls.sha256 >/dev/null
+        {{- end }}
+
         securityContext:
           {{- toYaml .Values.agent.securityContext | nindent 10 }}
 
@@ -242,6 +328,11 @@ spec:
           {{- if .Values.tls.enabled }}
           - name: crowdsec-agent-tls
             mountPath: /etc/ssl/crowdsec-agent
+          {{- end }}
+          {{- if and .Values.tls.enabled .Values.tls.pki01.enabled }}
+          - name: pki-01-agent-offline-startup
+            mountPath: /offline-startup
+            readOnly: true
           {{- end }}
           {{- if .Values.agent.extraVolumeMounts }}
           {{ toYaml .Values.agent.extraVolumeMounts | nindent 10 }}
@@ -327,6 +418,16 @@ spec:
       - name: crowdsec-agent-tls
         secret:
           secretName: {{ .Release.Name }}-agent-tls
+      {{- end }}
+      {{- if and .Values.tls.enabled .Values.tls.pki01.enabled }}
+      - name: crowdsec-01-offline-startup-builder
+        configMap:
+          name: crowdsec-01-offline-startup-builder
+      - name: pki-01-agent-offline-startup
+        emptyDir: {}
+      - name: pki-01-agent-config-snapshot
+        configMap:
+          name: {{ .Release.Name }}-pki-01-crl-sync
       {{- end }}
       {{ if index .Values.config "agent_config.yaml.local" }}
       - name: crowdsec-agent-config-local-volume

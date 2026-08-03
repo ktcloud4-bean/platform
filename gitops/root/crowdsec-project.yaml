@@ -26,6 +26,8 @@ spec:
       kind: ServiceAccount
     - group: apps
       kind: Deployment
+    - group: cert-manager.io
+      kind: Certificate
     - group: networking.k8s.io
       kind: NetworkPolicy
     - group: traefik.io

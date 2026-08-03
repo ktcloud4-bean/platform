@@ -299,6 +299,8 @@ if istrue "$USE_TLS"; then
     conf_set_if "$LAPI_KEY_FILE" '.api.server.tls.key_file = strenv(LAPI_KEY_FILE)'
     conf_set_if "$BOUNCERS_ALLOWED_OU" '.api.server.tls.bouncers_allowed_ou = env(bouncers_allowed_yaml)'
     conf_set_if "$AGENTS_ALLOWED_OU" '.api.server.tls.agents_allowed_ou = env(agents_allowed_yaml)'
+    conf_set_if "$CRL_FILE" '.api.server.tls.crl_path = strenv(CRL_FILE)'
+    conf_set_if "$CRL_CACHE_EXPIRATION" '.api.server.tls.cache_expiration = strenv(CRL_CACHE_EXPIRATION)'
 else
     conf_set 'del(.api.server.tls)'
 fi

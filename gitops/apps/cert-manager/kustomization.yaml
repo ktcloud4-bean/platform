@@ -4,6 +4,8 @@ resources:
   - install.yaml
   - vault-issuer-rbac.yaml
   - vault-clusterissuer.yaml
+  - vault-crowdsec-issuer-rbac.yaml
+  - vault-crowdsec-clusterissuers.yaml
 secretGenerator:
   - name: vault-server-ca
     namespace: cert-manager
@@ -14,4 +16,15 @@ secretGenerator:
       labels:
         app.kubernetes.io/name: cert-manager
         app.kubernetes.io/component: vault-issuer
+        app.kubernetes.io/part-of: platform-gitops
+configMapGenerator:
+  - name: vault-server-ca
+    namespace: crowdsec-01
+    files:
+      - vault.crt=files/vault.crt
+    options:
+      disableNameSuffixHash: true
+      labels:
+        app.kubernetes.io/name: cert-manager
+        app.kubernetes.io/component: vault-crowdsec-issuer
         app.kubernetes.io/part-of: platform-gitops

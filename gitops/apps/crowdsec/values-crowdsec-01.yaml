@@ -26,7 +26,25 @@ secrets:
     registrationTokenKey: REGISTRATION_TOKEN
 
 tls:
-  enabled: false
+  enabled: true
+  caBundle: true
+  insecureSkipVerify: false
+  certManager:
+    enabled: false
+  pki01:
+    enabled: true
+    agentIssuerRef: vault-crowdsec-agent
+    lapiIssuerRef: vault-crowdsec-lapi
+    duration: 720h
+    renewBefore: 240h
+    crlURL: https://vault.vault.svc.cluster.local:8200/v1/pki/crl/pem
+    crlRefreshSeconds: 10
+    crlCacheExpiration: 1s
+    reloadOnChange: true
+  agent:
+    tlsClientAuth: true
+  appsec:
+    tlsClientAuth: false
 
 lapi:
   enabled: true
@@ -76,11 +94,76 @@ lapi:
       enabled: false
 
 agent:
-  enabled: false
+  enabled: true
+  isDeployment: true
+  replicas: 1
+  lapiURL: https://crowdsec-service.crowdsec-01.svc.cluster.local:8080
+  hostVarLog: false
+  acquisition: []
+  additionalAcquisition:
+    - source: file
+      filenames:
+        - /dev/null
+      labels:
+        type: syslog
+  wait_for_lapi:
+    image:
+      repository: docker.io/crowdsecurity/crowdsec
+      tag: v1.7.8@sha256:2f527c9bb8b367120eb08b82890aa912ce96bfa1ada93dda0721700e4b4e0dde
+      pullPolicy: IfNotPresent
+    securityContext:
+      allowPrivilegeEscalation: false
+      privileged: false
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+      capabilities:
+        drop:
+          - ALL
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  metrics:
+    enabled: false
+    serviceMonitor:
+      enabled: false
+    podMonitor:
+      enabled: false
+  securityContext:
+    allowPrivilegeEscalation: false
+    privileged: false
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    capabilities:
+      drop:
+        - ALL
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  extraVolumes:
+    - name: pki-01-agent-config
+      emptyDir: {}
+    - name: pki-01-agent-data
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: pki-01-agent-config
+      mountPath: /etc/crowdsec
+    - name: pki-01-agent-data
+      mountPath: /var/lib/crowdsec/data
 
 appsec:
   enabled: true
   replicas: 1
+  lapiURL: https://crowdsec-service.crowdsec-01.svc.cluster.local:8080
   acquisitions: []
   configs: {}
   rules: {}

@@ -1,0 +1,14 @@
+{{- if and .Values.tls.enabled .Values.tls.pki01.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-pki-01-crl-sync
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/part-of: pki-01
+data:
+  sync-crl.sh: |
+{{ .Files.Get "files/pki-01-sync-crl.sh" | indent 4 }}
+  agent-config-snapshot.tar.gz.b64: |-
+{{ .Files.Get "files/agent-config-snapshot.tar.gz.b64" | indent 4 }}
+{{- end }}

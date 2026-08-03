@@ -121,6 +121,36 @@ BOUNCER_KEY_CROWDSEC_01=
 Argo 검증 시점과 `targetRevision` 전환 경계는 `AGENTS.md`의 merge 전 라이브 검증 규칙을
 따른다. 이 문서는 그 규칙을 복제하지 않는다.
 
+## PKI-01 agent↔LAPI mTLS lifecycle
+
+chart가 만드는 `CN=CrowdSec Agent`, short name SAN과 self-signed CA는 사용하지 않는다.
+Helm의 실제 `releaseName: crowdsec`를 따라 agent와 LAPI Certificate의 CN·SAN을 각각
+`crowdsec-agent.crowdsec-01.svc.cluster.local`과
+`crowdsec-service.crowdsec-01.svc.cluster.local`로 직접 선언한다. LAPI가 Service에 Ready
+endpoint를 만들기 전 자기 client를 초기화하므로 LAPI leaf에만 `localhost` SAN을 더한다. 공용 role이나 허용 domain을
+넓히지 않고 agent `clientAuth`·고정 `agent-ou`와 LAPI `serverAuth`를 별도 Vault role·Issuer로
+닫는 쪽이 더 좁다.
+
+cert-manager는 private key와 CSR을 만들고 Vault는 CSR만 서명한다. 결과 Secret
+`crowdsec-agent-tls`·`crowdsec-lapi-tls`는 `crowdsec-01` namespace에만 존재하며 Git과 Vault에는
+private key를 보내지 않는다. 최종 수명은 `duration: 720h`, `renewBefore: 240h`다. merge 전에는
+`1h`·`55m`으로 한 갱신 주기만 만든 뒤 최종값으로 복구한다.
+
+LAPI는 Vault 공개 CRL을 10초마다 원자적으로 갱신하고 revocation cache를 1초로 둔다. 갱신 실패
+시 마지막 정상 CRL을 보존하므로 Vault sealed 중에도 기존 인증서 검증은 계속된다. Secret의
+인증서 hash가 바뀌면 liveness probe가 해당 CrowdSec container만 재시작해 새 인증서를 읽으며,
+Pod·PVC를 삭제하지 않는다. AppSec는 기존 등록 credential을 유지하고 LAPI Secret의 `ca.crt`
+하나만 읽어 HTTPS 서버를 검증하므로 agent client certificate 권한을 받지 않는다.
+Agent는 AppSec가 이미 쓰는 hash 검증된 offline-startup 생성기를 재사용해 시작 중 Hub 외부 조회를
+실행하지 않는다. digest 고정 이미지의 기본 설정은 credential 파일을 제외한 압축
+스냅샷으로 두고 init이 hash 검증 후 비루트 소유 `emptyDir`로 풀며, Agent 본체는
+권한 0개·UID 65532로 실행한다.
+
+정적 판정은 `gitops/tools/pki-01/verify-static.sh`, 라이브 여덟 증거는
+`gitops/tools/pki-01/verify-live.sh` 한 배치가 소유한다. rollback은 root를 시작 main SHA로
+돌려 `tls.enabled: false`와 `agent.enabled: false`를 복구한 뒤 정상 200·공격 403·exact 예외
+200만 확인한다.
+
 ## live gate
 
 기능 검증은 정상 WAF 200, `masscan` 403, exact 예외 200, 한 조건만 다른 세 요청 403,

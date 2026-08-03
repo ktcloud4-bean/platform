@@ -272,7 +272,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `VAULT-01 DONE` | Vault Raft 단일 replica·수동 Shamir 초기화 | `GITOPS-01`, `STOR-01` | `VAULT-INIT` | 모든 시크릿 소비자 | TLS, unseal·재시작, share/root token Git 부재, 로컬 복구 절차 |
 | `VAULT-02 DONE` | KV v2·Kubernetes auth·DB engine·PKI·audit policy ([runbook](runbook/vault-secrets-engines.md)) | `VAULT-01`, `PG-01`, `NET-03A` | 없음 | 모든 플랫폼 앱 | 바인딩 SA만 로그인·타 SA/role 403, policy allow/deny 403, 동적 DB credential의 TLSv1.3 verify-full 접속·타 DB 거부·revoke 후 인증 실패와 role 삭제, PKI 체인 검증·CRL 폐기·공인 이름 거부, audit 108건과 평문 시크릿 0건, vault ns Secret 0건 유지 |
 | `CERTMGR-01 DONE` | cert-manager 도입과 Vault PKI를 CA로 쓰는 Issuer 연결 (`gitops/apps/cert-manager/`) | `VAULT-02`, `WAZUH-01` | `VAULT-CONFIG` | `PKI-01`, 내부 인증서 자동화 | 고정 version·image digest·CRD 선언과 Argo child `Synced/Healthy`, cert-manager 전용 Kubernetes auth role·policy가 자기 PKI role로만 발급하고 타 경로는 403, 시험 Certificate 한 장의 발급·Secret 생성·chain 검증과 즉시 제거, 단축 `renewBefore`로 자동 갱신 실증, Vault sealed 상태에서 기존 인증서 유효·신규 발급만 실패, 배포 전후 available RAM·PVC 정지선 통과, Argo revert rollback 뒤 기존 워크로드 회귀 없음 |
-| `PKI-01 READY` | Vault PKI를 첫 실제 consumer인 CrowdSec agent↔LAPI mTLS lifecycle에 연결 | `VAULT-02`, `CERTMGR-01` | `VAULT-CONFIG` | 내부 서비스 인증·인가 | CrowdSec 전용 최소권한 PKI role과 허용 밖 이름·OU 거부, agent↔LAPI mTLS 실제 연결 성공과 잘못된 CA·OU 거부, LAPI의 OU 기반 agent/bouncer 구분 보존, 자동 갱신·reload, revoke 뒤 CRL 등재와 해당 인증서 거부, Vault sealed 중 기존 인증서 유지·신규 발급만 실패, Git·로그의 private key 0건, `tls.enabled=false` rollback 뒤 `CROWDSEC-FIX-01` 기능(정상 200·공격 403·exact 예외) 회귀 없음 |
+| `PKI-01 DONE` | Vault PKI를 첫 실제 consumer인 CrowdSec agent↔LAPI mTLS lifecycle에 연결 | `VAULT-02`, `CERTMGR-01` | `VAULT-CONFIG` | 내부 서비스 인증·인가 | CrowdSec 전용 최소권한 PKI role과 허용 밖 이름·OU 거부, agent↔LAPI mTLS 실제 연결 성공과 잘못된 CA·OU 거부, LAPI의 OU 기반 agent/bouncer 구분 보존, 자동 갱신·reload, revoke 뒤 CRL 등재와 해당 인증서 거부, Vault sealed 중 기존 인증서 유지·신규 발급만 실패, Git·로그의 private key 0건, `tls.enabled=false` rollback 뒤 `CROWDSEC-FIX-01` 기능(정상 200·공격 403·exact 예외) 회귀 없음 |
 | `KC-01 DONE` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `KC-01-FIX-01 DONE` | bootstrap 메모리 시크릿 정리를 fail-closed로 보정 | `KC-01` 배포 선언 | 없음 | Keycloak bootstrap | Agent/bootstrap 동일 UID, 렌더링 파일 정리 실패 시 Job 실패, v1 prune·v2 성공 |
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-PERF-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
@@ -328,7 +328,7 @@ cert-manager 도입 판단을 `CERTMGR-01`에서 다시 한다. 그 결과가 �
 
 현재 `pki/roles/internal-workload`로는 CrowdSec 인증서를 발급할 수 없다. agent Certificate는
 SAN 없이 `CN=CrowdSec Agent`를 쓰는데 role이 `enforce_hostnames=true`이고, LAPI Certificate의
-`crowdsec-01-service.crowdsec-01`과 `localhost`는
+실제 Helm release 단일 원본에 따른 `crowdsec-service.crowdsec-01.svc.cluster.local`과 `localhost`는
 `allowed_domains=svc.cluster.local,cluster.local`·`allow_bare_domains=false` 밖이다. 게다가
 LAPI는 `agent-ou` 같은 OU 값으로 agent와 bouncer를 구분하므로 role이 OU를 보존해야 인가가
 성립한다. `PKI-01`은 role을 넓히는 대신 chart Certificate를 쓰지 않고 CN·SAN을 hostname
@@ -353,6 +353,20 @@ controller·webhook·cainjector Pod를 더하므로 `WAZUH-01`의 capacity gate�
 확인했으며 AWS KMS auto-unseal 직후 시험 자원을 제거했다. 배포 전후 capacity 정지선과 Argo
 revert 뒤 기존 Application 21개의 무회귀도 통과했으므로 `CERTMGR-01`을 `DONE`으로 닫고, 모든
 선행이 끝난 직접 후속 `PKI-01`만 `READY`로 연다. 실제 CrowdSec consumer 연결은 하지 않았다.
+
+2026-08-03 `PKI-01`에서 chart Certificate를 쓰지 않고 실제 Helm release 이름의
+`crowdsec-service.crowdsec-01.svc.cluster.local`을 LAPI CN·SAN으로 고정했다. agent·LAPI를
+각각 exact name·EKU·OU에 닫힌 Vault role·policy·Issuer로 나눠 공용 role을 넓히지 않았고,
+허용 밖 이름은 발급 거부, 외부 OU는 leaf에 미발급, 타 signing path는 403임을 확인했다.
+
+최신 main `62271a2cb196c9d2045f8d0d8c201b2d20ea3519`에 rebase한 불변 구성
+`5a9b0b86cd50103688eb1a07705152baacb8f7fb`에서 실제 agent mTLS·wrong CA 거부와 agent/bouncer OU
+상호 거부(403/401), revoke→CRL 등재→TLS 거부를 통과했다. 단축 TTL에서 agent
+revision `13→14`, LAPI `14→15`, leaf 지문 변경과 같은 Pod UID의 container reload를 확인했다.
+Vault seal 중 기존 mTLS·Secret은 유지되고 신규 발급만 실패했으며 AWS KMS auto-unseal 복구,
+Git·관련 로그 private key PEM 0건을 통과했다. 시작 main으로 rollback한 뒤
+`tls.enabled=false`와 정상 200·공격 403·exact 예외 200이 복구됐다. `PKI-01`을 `DONE`으로
+닫으며 이 작업을 선행으로 가진 직접 후속 ID는 없다.
 
 2026-08-01 `POM-01`에서 Pomerium Core `v0.33.0`과 Dashy `4.5.0`을 각 공식
 multi-arch image index digest로 고정하고 전용 AppProject·child Application·namespace에
