@@ -1,0 +1,1152 @@
+---
+# Source: loki/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loki
+  namespace: loki
+  labels:
+    helm.sh/chart: loki-7.2.0
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/version: "3.6.11"
+automountServiceAccountToken: false
+
+---
+# Source: loki/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki
+  namespace: loki
+  labels:
+    helm.sh/chart: loki-7.2.0
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/version: "3.6.11"
+data:
+  config.yaml: |
+
+    analytics:
+      reporting_enabled: false
+    auth_enabled: false
+    bloom_build:
+      builder:
+        planner_address: ""
+      enabled: false
+    bloom_gateway:
+      client:
+        addresses: ""
+      enabled: false
+    common:
+      compactor_grpc_address: 'loki.loki.svc.cluster.local:9095'
+      path_prefix: /var/loki
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+      storage:
+        s3:
+          bucketnames: loki-chunks
+          endpoint: s3.imcherry5778.xyz:8333
+          http_config:
+            ca_file: /etc/loki/s3/s3.crt
+            idle_conn_timeout: 90s
+            insecure_skip_verify: false
+            response_header_timeout: 30s
+          insecure: false
+          region: us-east-1
+          s3forcepathstyle: true
+          signature_version: v4
+    compactor:
+      apply_retention_interval: 5m
+      compaction_interval: 5m
+      delete_request_store: s3
+      retention_delete_delay: 2h
+      retention_delete_worker_count: 1
+      retention_enabled: true
+      working_directory: /var/loki/compactor
+    frontend:
+      scheduler_address: ""
+      tail_proxy_url: ""
+    frontend_worker:
+      scheduler_address: ""
+    index_gateway:
+      mode: simple
+    ingester:
+      chunk_idle_period: 2m
+      chunk_retain_period: 30s
+      max_chunk_age: 5m
+    limits_config:
+      allow_structured_metadata: true
+      discover_log_levels: false
+      discover_service_name: []
+      ingestion_burst_size_mb: 2
+      ingestion_rate_mb: 1
+      max_cache_freshness_per_query: 10m
+      max_entries_limit_per_query: 5000
+      max_global_streams_per_user: 256
+      max_line_size: 2048
+      max_query_parallelism: 2
+      query_timeout: 60s
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h
+      retention_period: 168h
+      split_queries_by_interval: 1h
+      volume_enabled: false
+    memberlist:
+      join_members:
+      - loki-memberlist.loki.svc.cluster.local
+    pattern_ingester:
+      enabled: false
+    querier:
+      max_concurrent: 2
+    query_range:
+      align_queries_with_step: true
+    runtime_config:
+      file: /etc/loki/runtime-config/runtime-config.yaml
+    schema_config:
+      configs:
+      - from: "2024-01-01"
+        index:
+          period: 24h
+          prefix: loki_index_
+        object_store: s3
+        schema: v13
+        store: tsdb
+    server:
+      grpc_listen_port: 9095
+      http_listen_port: 3100
+      http_server_read_timeout: 60s
+      http_server_write_timeout: 60s
+    storage_config:
+      bloom_shipper:
+        working_directory: /var/loki/data/bloomshipper
+      boltdb_shipper:
+        index_gateway_client:
+          server_address: ""
+      hedging:
+        at: 250ms
+        max_per_second: 20
+        up_to: 3
+      tsdb_shipper:
+        index_gateway_client:
+          server_address: ""
+      use_thanos_objstore: false
+    tracing:
+      enabled: false
+
+---
+# Source: loki/templates/runtime-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-runtime
+  namespace: loki
+  labels:
+    helm.sh/chart: loki-7.2.0
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/version: "3.6.11"
+data:
+  runtime-config.yaml: |
+    {}
+
+---
+# Source: loki/templates/backend/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    helm.sh/chart: loki-7.2.0
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/version: "3.6.11"
+  name: loki-clusterrole
+rules: []
+
+---
+# Source: loki/templates/backend/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: loki-clusterrolebinding
+  labels:
+    helm.sh/chart: loki-7.2.0
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/version: "3.6.11"
+subjects:
+  - kind: ServiceAccount
+    name: loki
+    namespace: loki
+roleRef:
+  kind: ClusterRole
+  name: loki-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: loki/templates/service-memberlist.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-memberlist
+  namespace: loki
+  labels:
+    helm.sh/chart: loki-7.2.0
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/version: "3.6.11"
+  annotations:
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp
+      port: 7946
+      targetPort: http-memberlist
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/part-of: memberlist
+
+---
+# Source: loki/templates/single-binary/service-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-headless
+  namespace: loki
+  labels:
+    helm.sh/chart: loki-7.2.0
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/version: "3.6.11"
+    variant: headless
+    prometheus.io/service-monitor: "false"
+  annotations:
+spec:
+  clusterIP: None
+  ports:
+    - name: http-metrics
+      port: 3100
+      targetPort: http-metrics
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+
+---
+# Source: loki/templates/single-binary/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: loki
+  labels:
+    helm.sh/chart: loki-7.2.0
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/version: "3.6.11"
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - name: http-metrics
+      port: 3100
+      targetPort: http-metrics
+      protocol: TCP
+    - name: grpc
+      port: 9095
+      targetPort: grpc
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/component: single-binary
+
+---
+# Source: loki/templates/single-binary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: loki
+  namespace: loki
+  labels:
+    helm.sh/chart: loki-7.2.0
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/version: "3.6.11"
+    app.kubernetes.io/component: single-binary
+    app.kubernetes.io/part-of: memberlist
+spec:
+  replicas: 1
+  podManagementPolicy: Parallel
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+  serviceName: loki-headless
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+      app.kubernetes.io/instance: loki
+      app.kubernetes.io/component: single-binary
+  template:
+    metadata:
+      annotations:
+        checksum/config: 889120909a12a6a388427631959748d85a8d688a80baa6fc4ac939c2d8a26f99
+        kubectl.kubernetes.io/default-container: "loki"
+      labels:
+        app.kubernetes.io/name: loki
+        app.kubernetes.io/instance: loki
+        app.kubernetes.io/component: single-binary
+        app.kubernetes.io/part-of: memberlist
+    spec:
+      serviceAccountName: loki
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        - args:
+          - agent
+          - -config=/vault/config/vault-agent.hcl
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          name: vault-agent
+          resources:
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: false
+            runAsGroup: 10001
+            runAsUser: 100
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+          - mountPath: /vault/config
+            name: loki-runtime-config
+            readOnly: true
+          - mountPath: /vault/tls/vault.crt
+            name: loki-runtime-config
+            readOnly: true
+            subPath: vault.crt
+          - mountPath: /vault/secrets
+            name: loki-runtime-secrets
+          - mountPath: /tmp
+            name: vault-agent-tmp
+          - mountPath: /var/run/secrets/vault
+            name: vault-token
+            readOnly: true
+      containers:
+        - name: loki
+          image: docker.io/grafana/loki@sha256:44148ad243c07957113baea950ee5ba9b0c8eff8d7e38ff3cc1c0af705790945
+          imagePullPolicy: IfNotPresent
+          args:
+            - -config.file=/etc/loki/config/config.yaml
+            - -target=all
+            - -config.expand-env=true
+          ports:
+            - name: http-metrics
+              containerPort: 3100
+              protocol: TCP
+            - name: grpc
+              containerPort: 9095
+              protocol: TCP
+            - name: http-memberlist
+              containerPort: 7946
+              protocol: TCP
+          env:
+            - name: AWS_SHARED_CREDENTIALS_FILE
+              value: /vault/secrets/credentials
+            - name: AWS_REGION
+              value: us-east-1
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /ready
+              port: http-metrics
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: config
+              mountPath: /etc/loki/config
+            - name: runtime-config
+              mountPath: /etc/loki/runtime-config
+            - mountPath: /var/loki
+              name: loki-runtime
+            - mountPath: /vault/secrets
+              name: loki-runtime-secrets
+              readOnly: true
+            - mountPath: /etc/loki/s3/s3.crt
+              name: loki-runtime-config
+              readOnly: true
+              subPath: s3.crt
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 512Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: single-binary
+                app.kubernetes.io/instance: 'loki'
+                app.kubernetes.io/name: 'loki'
+            topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: loki
+            items:
+              - key: "config.yaml"
+                path: "config.yaml"
+        - name: runtime-config
+          configMap:
+            name: loki-runtime
+        - emptyDir:
+            sizeLimit: 2Gi
+          name: loki-runtime
+        - emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+          name: loki-runtime-secrets
+        - emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+          name: vault-agent-tmp
+        - configMap:
+            name: loki-runtime-config
+          name: loki-runtime-config
+        - name: vault-token
+          projected:
+            defaultMode: 288
+            sources:
+            - serviceAccountToken:
+                audience: vault
+                expirationSeconds: 600
+                path: token
+
+---
+---
+# Source: alloy/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+metadata:
+  name: alloy
+  namespace: loki
+  labels:
+    helm.sh/chart: alloy-1.11.0
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/instance: alloy
+    app.kubernetes.io/version: "491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b30"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alloy
+    app.kubernetes.io/component: rbac
+
+---
+# Source: alloy/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy
+  namespace: loki
+  labels:
+    helm.sh/chart: alloy-1.11.0
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/instance: alloy
+    app.kubernetes.io/version: "491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b30"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alloy
+    app.kubernetes.io/component: config
+data:
+  config.alloy: |-
+    logging {
+      level  = "info"
+      format = "logfmt"
+    }
+
+    discovery.kubernetes "pods" {
+      role = "pod"
+    }
+
+    discovery.relabel "falco" {
+      targets = discovery.kubernetes.pods.targets
+      rule {
+        action        = "keep"
+        source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+        separator     = "/"
+        regex         = "falco/falco"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod_name"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_uid"]
+        target_label  = "pod_uid"
+      }
+      rule {
+        target_label = "app"
+        replacement  = "falco"
+      }
+      rule {
+        target_label = "cluster"
+        replacement  = "k3s-01"
+      }
+    }
+
+    discovery.relabel "pomerium" {
+      targets = discovery.kubernetes.pods.targets
+      rule {
+        action        = "keep"
+        source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+        separator     = "/"
+        regex         = "pomerium/pomerium"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod_name"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_uid"]
+        target_label  = "pod_uid"
+      }
+      rule {
+        target_label = "app"
+        replacement  = "pomerium"
+      }
+      rule {
+        target_label = "cluster"
+        replacement  = "k3s-01"
+      }
+    }
+
+    discovery.relabel "vault" {
+      targets = discovery.kubernetes.pods.targets
+      rule {
+        action        = "keep"
+        source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+        separator     = "/"
+        regex         = "vault/vault"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod_name"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_uid"]
+        target_label  = "pod_uid"
+      }
+      rule {
+        target_label = "app"
+        replacement  = "vault"
+      }
+      rule {
+        target_label = "cluster"
+        replacement  = "k3s-01"
+      }
+    }
+
+    discovery.relabel "keycloak" {
+      targets = discovery.kubernetes.pods.targets
+      rule {
+        action        = "keep"
+        source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+        separator     = "/"
+        regex         = "keycloak/keycloak"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod_name"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_uid"]
+        target_label  = "pod_uid"
+      }
+      rule {
+        target_label = "app"
+        replacement  = "keycloak"
+      }
+      rule {
+        target_label = "cluster"
+        replacement  = "k3s-01"
+      }
+    }
+
+    discovery.relabel "kubernetes_events" {
+      targets = discovery.kubernetes.pods.targets
+      rule {
+        action        = "keep"
+        source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+        separator     = "/"
+        regex         = "loki/kubernetes-events"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod_name"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_uid"]
+        target_label  = "pod_uid"
+      }
+      rule {
+        target_label = "app"
+        replacement  = "kubernetes"
+      }
+      rule {
+        target_label = "cluster"
+        replacement  = "k3s-01"
+      }
+    }
+
+    loki.source.kubernetes "falco" {
+      targets    = discovery.relabel.falco.output
+      forward_to = [loki.process.falco.receiver]
+    }
+    loki.process "falco" {
+      forward_to = [loki.write.local.receiver]
+      stage.drop {
+        expression          = "^\\{"
+        drop_counter_reason = "falco_security_json"
+      }
+      stage.template {
+        source   = "source_level"
+        template = "info"
+      }
+      stage.template {
+        source   = "event_ingested"
+        template = `{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}`
+      }
+      stage.template {
+        source   = "safe_line"
+        template = `{"event.class":"operation","event.action":"lifecycle","event.outcome":"unknown","event.source":"falco","event.dataset":"engine","observer.name":"falco","observer.type":"service","actor.kind":"none","correlation.kind":"none"}`
+      }
+      stage.output { source = "safe_line" }
+      stage.static_labels { values = { event_class = "operation", retention = "O7" } }
+      stage.labels { values = { level = "source_level" } }
+      stage.structured_metadata { values = { pod_name = "", pod_uid = "", event_ingested = "" } }
+      stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+    }
+
+    loki.source.kubernetes "pomerium" {
+      targets    = discovery.relabel.pomerium.output
+      forward_to = [loki.process.pomerium.receiver]
+    }
+    loki.process "pomerium" {
+      forward_to = [loki.write.local.receiver]
+      stage.drop {
+        expression          = `"service"\s*:\s*"(authorize|authenticate|envoy|identity_manager)"`
+        drop_counter_reason = "pomerium_security_or_access"
+      }
+      stage.drop {
+        expression          = `"component"\s*:\s*"idp-token-session-creator"`
+        drop_counter_reason = "pomerium_session"
+      }
+      stage.drop {
+        expression          = `"(allow|deny|email|user|user-id|session-id|request-id|check-request-id|method|path|host|ip)"\s*:`
+        drop_counter_reason = "pomerium_sensitive_context"
+      }
+      stage.json {
+        expressions    = { source_level = "level" }
+        drop_malformed = true
+      }
+      stage.regex {
+        source     = "source_level"
+        expression = "(?i)^(?P<allowed_level>warn|warning|error|fatal)$"
+      }
+      stage.drop {
+        source              = "allowed_level"
+        expression          = "^$"
+        drop_counter_reason = "pomerium_not_allowlisted"
+      }
+      stage.template {
+        source   = "allowed_level"
+        template = `{{ .Value | ToLower }}`
+      }
+      stage.template {
+        source   = "event_ingested"
+        template = `{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}`
+      }
+      stage.template {
+        source   = "safe_line"
+        template = `{"event.class":"operation","event.action":"error","event.outcome":"unknown","event.source":"pomerium","event.dataset":"lifecycle","observer.name":"pomerium","observer.type":"service","actor.kind":"none","correlation.kind":"none"}`
+      }
+      stage.output { source = "safe_line" }
+      stage.static_labels { values = { event_class = "operation", retention = "O7" } }
+      stage.labels { values = { level = "allowed_level" } }
+      stage.structured_metadata { values = { pod_name = "", pod_uid = "", event_ingested = "" } }
+      stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+    }
+
+    loki.source.kubernetes "vault" {
+      targets    = discovery.relabel.vault.output
+      forward_to = [loki.process.vault.receiver]
+    }
+    loki.process "vault" {
+      forward_to = [loki.write.local.receiver]
+      stage.drop {
+        expression          = "^\\{"
+        drop_counter_reason = "vault_audit_json"
+      }
+      stage.regex { expression = "\\[(?P<allowed_level>TRACE|DEBUG|INFO|WARN|ERROR)\\]" }
+      stage.drop {
+        source              = "allowed_level"
+        expression          = "^$"
+        drop_counter_reason = "vault_not_allowlisted"
+      }
+      stage.template {
+        source   = "allowed_level"
+        template = `{{ .Value | ToLower }}`
+      }
+      stage.template {
+        source   = "event_ingested"
+        template = `{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}`
+      }
+      stage.template {
+        source   = "safe_line"
+        template = `{"event.class":"operation","event.action":"lifecycle","event.outcome":"unknown","event.source":"vault","event.dataset":"server","observer.name":"vault","observer.type":"service","actor.kind":"none","correlation.kind":"none"}`
+      }
+      stage.output { source = "safe_line" }
+      stage.static_labels { values = { event_class = "operation", retention = "O7" } }
+      stage.labels { values = { level = "allowed_level" } }
+      stage.structured_metadata { values = { pod_name = "", pod_uid = "", event_ingested = "" } }
+      stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+    }
+
+    loki.source.kubernetes "keycloak" {
+      targets    = discovery.relabel.keycloak.output
+      forward_to = [loki.process.keycloak.receiver]
+    }
+    loki.process "keycloak" {
+      forward_to = [loki.write.local.receiver]
+      stage.drop {
+        expression          = "org\\.keycloak\\.events"
+        drop_counter_reason = "keycloak_security_event"
+      }
+      stage.regex { expression = "[[:space:]](?P<allowed_level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)[[:space:]]" }
+      stage.drop {
+        source              = "allowed_level"
+        expression          = "^$"
+        drop_counter_reason = "keycloak_not_allowlisted"
+      }
+      stage.template {
+        source   = "allowed_level"
+        template = `{{ .Value | ToLower }}`
+      }
+      stage.template {
+        source   = "event_ingested"
+        template = `{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}`
+      }
+      stage.template {
+        source   = "safe_line"
+        template = `{"event.class":"operation","event.action":"lifecycle","event.outcome":"unknown","event.source":"keycloak","event.dataset":"server","observer.name":"keycloak","observer.type":"service","actor.kind":"none","correlation.kind":"none"}`
+      }
+      stage.output { source = "safe_line" }
+      stage.static_labels { values = { event_class = "operation", retention = "O7" } }
+      stage.labels { values = { level = "allowed_level" } }
+      stage.structured_metadata { values = { pod_name = "", pod_uid = "", event_ingested = "" } }
+      stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+    }
+
+    loki.source.kubernetes "kubernetes_events" {
+      targets    = discovery.relabel.kubernetes_events.output
+      forward_to = [loki.process.kubernetes_events.receiver]
+    }
+    loki.process "kubernetes_events" {
+      forward_to = [loki.write.local.receiver]
+      stage.json {
+        drop_malformed = true
+        expressions = {
+          event_time         = "event_time",
+          event_action       = "event_action",
+          event_outcome      = "event_outcome",
+          observer_name      = "observer_name",
+          resource_namespace = "resource_namespace",
+          resource_kind      = "resource_kind",
+          resource_name      = "resource_name",
+          resource_uid       = "resource_uid",
+          reason             = "reason",
+          event_type         = "event_type",
+          count              = "count",
+        }
+      }
+      stage.regex {
+        source     = "event_type"
+        expression = "^(?P<allowed_type>Normal|Warning)$"
+      }
+      stage.drop {
+        source              = "allowed_type"
+        expression          = "^$"
+        drop_counter_reason = "kubernetes_event_not_allowlisted"
+      }
+      stage.template {
+        source   = "allowed_type"
+        template = `{{ if eq .Value "Normal" }}info{{ else }}warning{{ end }}`
+      }
+      stage.template {
+        source   = "event_ingested"
+        template = `{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}`
+      }
+      stage.template {
+        source   = "safe_line"
+        template = `{"event.class":"operation","event.action":"lifecycle","event.outcome":"unknown","event.source":"kubernetes","event.dataset":"core_v1_event","observer.name":"kubernetes","observer.type":"service","actor.kind":"none","correlation.kind":"none"}`
+      }
+      stage.output { source = "safe_line" }
+      stage.static_labels { values = { event_class = "operation", retention = "O7" } }
+      stage.labels { values = { level = "allowed_type" } }
+      stage.structured_metadata {
+        values = {
+          collector_pod_name = "pod_name",
+          collector_pod_uid  = "pod_uid",
+          event_time         = "",
+          event_ingested     = "",
+          event_action       = "",
+          event_outcome      = "",
+          observer_name      = "",
+          resource_namespace = "",
+          resource_kind      = "",
+          resource_name      = "",
+          resource_uid       = "",
+          reason             = "",
+          count              = "",
+        }
+      }
+      stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+    }
+
+    loki.write "local" {
+      endpoint {
+        url = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+        batch_size = "256KiB"
+        batch_wait = "1s"
+      }
+      wal {
+        enabled = false
+      }
+    }
+
+---
+# Source: alloy/templates/extra-manifests.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: platform-gitops
+  name: alloy-loki-01
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - pods/log
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Source: alloy/templates/extra-manifests.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: platform-gitops
+  name: alloy-loki-01
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: alloy-loki-01
+subjects:
+- kind: ServiceAccount
+  name: alloy
+  namespace: loki
+
+
+---
+# Source: alloy/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: alloy
+  namespace: loki
+  labels:
+    helm.sh/chart: alloy-1.11.0
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/instance: alloy
+    app.kubernetes.io/version: "491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b30"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alloy
+    app.kubernetes.io/component: networking
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/instance: alloy
+  internalTrafficPolicy: Cluster
+  ports:
+    - name: http-metrics
+      port: 12345
+      targetPort: 12345
+      protocol: "TCP"
+
+---
+# Source: alloy/templates/controllers/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alloy
+  namespace: loki
+  labels:
+    helm.sh/chart: alloy-1.11.0
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/instance: alloy
+    app.kubernetes.io/version: "491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b30"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alloy
+spec:
+  replicas: 1
+  minReadySeconds: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+      app.kubernetes.io/instance: alloy
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: alloy
+        checksum/config: 64d256503ed4422647551d64647617e2a8df030e94abd4c2ea799e88e321f3e
+      labels:
+        app.kubernetes.io/name: alloy
+        app.kubernetes.io/instance: alloy
+        app.kubernetes.io/part-of: platform-gitops
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: alloy
+      containers:
+        - name: alloy
+          image: docker.io/grafana/alloy@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --storage.path=/var/lib/alloy
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --server.http.ui-path-prefix=/
+            - --disable-reporting
+            - --stability.level=generally-available
+          env:
+            - name: ALLOY_DEPLOY_MODE
+              value: "helm"
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - containerPort: 12345
+              name: http-metrics
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 12345
+              scheme: HTTP
+            initialDelaySeconds: 10
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 192Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 473
+            runAsNonRoot: true
+            runAsUser: 473
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+            - mountPath: /var/lib/alloy
+              name: alloy-storage
+
+        - args:
+          - |-
+            import json
+            from pathlib import Path
+            import ssl
+            import time
+            import urllib.request
+
+            api = "https://kubernetes.default.svc/api/v1/events?watch=true&allowWatchBookmarks=false&timeoutSeconds=600"
+            token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+            ca_path = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+            context = ssl.create_default_context(cafile=ca_path)
+
+            while True:
+                try:
+                    token = token_path.read_text(encoding="utf-8").strip()
+                    request = urllib.request.Request(api, headers={"Authorization": "Bearer " + token})
+                    with urllib.request.urlopen(request, context=context, timeout=620) as response:
+                        for raw in response:
+                            envelope = json.loads(raw)
+                            if envelope.get("type") not in ("ADDED", "MODIFIED"):
+                                continue
+                            event = envelope.get("object") or {}
+                            metadata = event.get("metadata") or {}
+                            involved = event.get("involvedObject") or {}
+                            source = event.get("source") or {}
+                            record = {
+                                "event_time": event.get("eventTime") or event.get("lastTimestamp") or metadata.get("creationTimestamp") or "",
+                                "event_action": event.get("reason") or "",
+                                "event_outcome": "unknown",
+                                "observer_name": event.get("reportingController") or source.get("component") or "",
+                                "resource_namespace": involved.get("namespace") or "",
+                                "resource_kind": involved.get("kind") or "",
+                                "resource_name": involved.get("name") or "",
+                                "resource_uid": involved.get("uid") or "",
+                                "reason": event.get("reason") or "",
+                                "event_type": event.get("type") or "",
+                                "count": event.get("count") or 0,
+                            }
+                            print(json.dumps(record, separators=(",", ":")), flush=True)
+                except Exception:
+                    time.sleep(2)
+          command:
+          - python3
+          - -u
+          - -c
+          env:
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          image: docker.io/library/python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844
+          imagePullPolicy: IfNotPresent
+          name: kubernetes-events
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile:
+              type: RuntimeDefault
+      dnsPolicy: ClusterFirst
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: config
+          configMap:
+            name: alloy
+        - emptyDir:
+            medium: Memory
+            sizeLimit: 32Mi
+          name: alloy-storage

@@ -1,0 +1,227 @@
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  image:
+    registry: docker.io
+    repository: grafana/loki
+    tag: "3.6.11"
+    digest: sha256:44148ad243c07957113baea950ee5ba9b0c8eff8d7e38ff3cc1c0af705790945
+    pullPolicy: IfNotPresent
+  enableServiceLinks: false
+  podSecurityContext:
+    fsGroup: 10001
+    fsGroupChangePolicy: OnRootMismatch
+    runAsGroup: 10001
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+  commonConfig:
+    path_prefix: /var/loki
+    replication_factor: 1
+    ring:
+      kvstore:
+        store: inmemory
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  storage:
+    type: s3
+    bucketNames:
+      chunks: loki-chunks
+      ruler: loki-chunks
+      admin: loki-chunks
+    s3:
+      endpoint: s3.imcherry5778.xyz:8333
+      region: us-east-1
+      signatureVersion: v4
+      s3ForcePathStyle: true
+      insecure: false
+      http_config:
+        ca_file: /etc/loki/s3/s3.crt
+        idle_conn_timeout: 90s
+        response_header_timeout: 30s
+        insecure_skip_verify: false
+  limits_config:
+    allow_structured_metadata: true
+    discover_log_levels: false
+    discover_service_name: []
+    ingestion_rate_mb: 1
+    ingestion_burst_size_mb: 2
+    max_entries_limit_per_query: 5000
+    max_global_streams_per_user: 256
+    max_line_size: 2048
+    max_query_parallelism: 2
+    query_timeout: 60s
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h
+    retention_period: 168h
+    split_queries_by_interval: 1h
+    volume_enabled: false
+  compactor:
+    working_directory: /var/loki/compactor
+    compaction_interval: 5m
+    apply_retention_interval: 5m
+    retention_enabled: true
+    retention_delete_delay: 2h
+    retention_delete_worker_count: 1
+    delete_request_store: s3
+  analytics:
+    reporting_enabled: false
+  tracing:
+    enabled: false
+  querier:
+    max_concurrent: 2
+  ingester:
+    chunk_idle_period: 2m
+    max_chunk_age: 5m
+    chunk_retain_period: 30s
+  server:
+    http_listen_port: 3100
+    grpc_listen_port: 9095
+    http_server_read_timeout: 60s
+    http_server_write_timeout: 60s
+
+serviceAccount:
+  create: true
+  name: loki
+  automountServiceAccountToken: false
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: false
+  affinity: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  extraArgs:
+    - -config.expand-env=true
+  extraEnv:
+    - name: AWS_SHARED_CREDENTIALS_FILE
+      value: /vault/secrets/credentials
+    - name: AWS_REGION
+      value: us-east-1
+    - name: AWS_EC2_METADATA_DISABLED
+      value: "true"
+  initContainers:
+    - name: vault-agent
+      image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+      imagePullPolicy: IfNotPresent
+      args:
+        - agent
+        - -config=/vault/config/vault-agent.hcl
+      securityContext:
+        runAsUser: 100
+        runAsGroup: 10001
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop: [ALL]
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+      volumeMounts:
+        - name: loki-runtime-config
+          mountPath: /vault/config
+          readOnly: true
+        - name: loki-runtime-config
+          mountPath: /vault/tls/vault.crt
+          subPath: vault.crt
+          readOnly: true
+        - name: loki-runtime-secrets
+          mountPath: /vault/secrets
+        - name: vault-agent-tmp
+          mountPath: /tmp
+        - name: vault-token
+          mountPath: /var/run/secrets/vault
+          readOnly: true
+  extraVolumeMounts:
+    - name: loki-runtime
+      mountPath: /var/loki
+    - name: loki-runtime-secrets
+      mountPath: /vault/secrets
+      readOnly: true
+    - name: loki-runtime-config
+      mountPath: /etc/loki/s3/s3.crt
+      subPath: s3.crt
+      readOnly: true
+  extraVolumes:
+    - name: loki-runtime
+      emptyDir:
+        sizeLimit: 2Gi
+    - name: loki-runtime-secrets
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Mi
+    - name: vault-agent-tmp
+      emptyDir:
+        medium: Memory
+        sizeLimit: 16Mi
+    - name: loki-runtime-config
+      configMap:
+        name: loki-runtime-config
+    - name: vault-token
+      projected:
+        defaultMode: 0440
+        sources:
+          - serviceAccountToken:
+              path: token
+              audience: vault
+              expirationSeconds: 600
+
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+gateway:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
+resultsCache:
+  enabled: false
+chunksCache:
+  enabled: false
+minio:
+  enabled: false
+ruler:
+  enabled: false
+monitoring:
+  selfMonitoring:
+    enabled: false
+  serviceMonitor:
+    enabled: false
+  rules:
+    enabled: false
+sidecar:
+  rules:
+    enabled: false

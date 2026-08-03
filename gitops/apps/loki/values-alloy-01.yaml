@@ -1,0 +1,582 @@
+crds:
+  create: false
+
+global:
+  podSecurityContext:
+    runAsNonRoot: true
+
+image:
+  registry: docker.io
+  repository: grafana/alloy
+  tag: v1.18.0
+  digest: sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308
+  pullPolicy: IfNotPresent
+
+configReloader:
+  enabled: false
+
+serviceAccount:
+  create: true
+  name: alloy
+  automountServiceAccountToken: true
+
+rbac:
+  create: false
+
+extraObjects:
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: alloy-loki-01
+      labels:
+        app.kubernetes.io/name: alloy
+        app.kubernetes.io/part-of: platform-gitops
+    rules:
+      - apiGroups: [""]
+        resources: ["pods", "pods/log"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: [""]
+        resources: ["events"]
+        verbs: ["get", "list", "watch"]
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: alloy-loki-01
+      labels:
+        app.kubernetes.io/name: alloy
+        app.kubernetes.io/part-of: platform-gitops
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: alloy-loki-01
+    subjects:
+      - kind: ServiceAccount
+        name: alloy
+        namespace: loki
+
+controller:
+  type: deployment
+  replicas: 1
+  minReadySeconds: 5
+  terminationGracePeriodSeconds: 30
+  podLabels:
+    app.kubernetes.io/part-of: platform-gitops
+  volumes:
+    extra:
+      - name: alloy-storage
+        emptyDir:
+          medium: Memory
+          sizeLimit: 32Mi
+  extraContainers:
+    - name: kubernetes-events
+      image: docker.io/library/python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844
+      imagePullPolicy: IfNotPresent
+      command: ["python3", "-u", "-c"]
+      args:
+        - |-
+          import json
+          from pathlib import Path
+          import ssl
+          import time
+          import urllib.request
+
+          api = "https://kubernetes.default.svc/api/v1/events?watch=true&allowWatchBookmarks=false&timeoutSeconds=600"
+          token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+          ca_path = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+          context = ssl.create_default_context(cafile=ca_path)
+
+          while True:
+              try:
+                  token = token_path.read_text(encoding="utf-8").strip()
+                  request = urllib.request.Request(api, headers={"Authorization": "Bearer " + token})
+                  with urllib.request.urlopen(request, context=context, timeout=620) as response:
+                      for raw in response:
+                          envelope = json.loads(raw)
+                          if envelope.get("type") not in ("ADDED", "MODIFIED"):
+                              continue
+                          event = envelope.get("object") or {}
+                          metadata = event.get("metadata") or {}
+                          involved = event.get("involvedObject") or {}
+                          source = event.get("source") or {}
+                          record = {
+                              "event_time": event.get("eventTime") or event.get("lastTimestamp") or metadata.get("creationTimestamp") or "",
+                              "event_action": event.get("reason") or "",
+                              "event_outcome": "unknown",
+                              "observer_name": event.get("reportingController") or source.get("component") or "",
+                              "resource_namespace": involved.get("namespace") or "",
+                              "resource_kind": involved.get("kind") or "",
+                              "resource_name": involved.get("name") or "",
+                              "resource_uid": involved.get("uid") or "",
+                              "reason": event.get("reason") or "",
+                              "event_type": event.get("type") or "",
+                              "count": event.get("count") or 0,
+                          }
+                          print(json.dumps(record, separators=(",", ":")), flush=True)
+              except Exception:
+                  time.sleep(2)
+      env:
+        - name: PYTHONDONTWRITEBYTECODE
+          value: "1"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi
+
+alloy:
+  storagePath: /var/lib/alloy
+  enableReporting: false
+  enableHttpServerPort: true
+  listenAddr: 0.0.0.0
+  listenPort: 12345
+  mounts:
+    varlog: false
+    dockercontainers: false
+    extra:
+      - name: alloy-storage
+        mountPath: /var/lib/alloy
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 473
+    runAsGroup: 473
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  configMap:
+    create: true
+    content: |-
+      logging {
+        level  = "info"
+        format = "logfmt"
+      }
+
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      discovery.relabel "falco" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          action        = "keep"
+          source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          regex         = "falco/falco"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod_name"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid"]
+          target_label  = "pod_uid"
+        }
+        rule {
+          target_label = "app"
+          replacement  = "falco"
+        }
+        rule {
+          target_label = "cluster"
+          replacement  = "k3s-01"
+        }
+      }
+
+      discovery.relabel "pomerium" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          action        = "keep"
+          source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          regex         = "pomerium/pomerium"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod_name"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid"]
+          target_label  = "pod_uid"
+        }
+        rule {
+          target_label = "app"
+          replacement  = "pomerium"
+        }
+        rule {
+          target_label = "cluster"
+          replacement  = "k3s-01"
+        }
+      }
+
+      discovery.relabel "vault" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          action        = "keep"
+          source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          regex         = "vault/vault"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod_name"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid"]
+          target_label  = "pod_uid"
+        }
+        rule {
+          target_label = "app"
+          replacement  = "vault"
+        }
+        rule {
+          target_label = "cluster"
+          replacement  = "k3s-01"
+        }
+      }
+
+      discovery.relabel "keycloak" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          action        = "keep"
+          source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          regex         = "keycloak/keycloak"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod_name"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid"]
+          target_label  = "pod_uid"
+        }
+        rule {
+          target_label = "app"
+          replacement  = "keycloak"
+        }
+        rule {
+          target_label = "cluster"
+          replacement  = "k3s-01"
+        }
+      }
+
+      discovery.relabel "kubernetes_events" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          action        = "keep"
+          source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          regex         = "loki/kubernetes-events"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod_name"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid"]
+          target_label  = "pod_uid"
+        }
+        rule {
+          target_label = "app"
+          replacement  = "kubernetes"
+        }
+        rule {
+          target_label = "cluster"
+          replacement  = "k3s-01"
+        }
+      }
+
+      loki.source.kubernetes "falco" {
+        targets    = discovery.relabel.falco.output
+        forward_to = [loki.process.falco.receiver]
+      }
+      loki.process "falco" {
+        forward_to = [loki.write.local.receiver]
+        stage.drop {
+          expression          = "^\\{"
+          drop_counter_reason = "falco_security_json"
+        }
+        stage.template {
+          source   = "source_level"
+          template = "info"
+        }
+        stage.template {
+          source   = "event_ingested"
+          template = `{{ "{{" }} now | date "2006-01-02T15:04:05.999999999Z07:00" {{ "}}" }}`
+        }
+        stage.template {
+          source   = "safe_line"
+          template = `{"event.class":"operation","event.action":"lifecycle","event.outcome":"unknown","event.source":"falco","event.dataset":"engine","observer.name":"falco","observer.type":"service","actor.kind":"none","correlation.kind":"none"}`
+        }
+        stage.output { source = "safe_line" }
+        stage.static_labels { values = { event_class = "operation", retention = "O7" } }
+        stage.labels { values = { level = "source_level" } }
+        stage.structured_metadata { values = { pod_name = "", pod_uid = "", event_ingested = "" } }
+        stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+      }
+
+      loki.source.kubernetes "pomerium" {
+        targets    = discovery.relabel.pomerium.output
+        forward_to = [loki.process.pomerium.receiver]
+      }
+      loki.process "pomerium" {
+        forward_to = [loki.write.local.receiver]
+        stage.drop {
+          expression          = `"service"\s*:\s*"(authorize|authenticate|envoy|identity_manager)"`
+          drop_counter_reason = "pomerium_security_or_access"
+        }
+        stage.drop {
+          expression          = `"component"\s*:\s*"idp-token-session-creator"`
+          drop_counter_reason = "pomerium_session"
+        }
+        stage.drop {
+          expression          = `"(allow|deny|email|user|user-id|session-id|request-id|check-request-id|method|path|host|ip)"\s*:`
+          drop_counter_reason = "pomerium_sensitive_context"
+        }
+        stage.json {
+          expressions    = { source_level = "level" }
+          drop_malformed = true
+        }
+        stage.regex {
+          source     = "source_level"
+          expression = "(?i)^(?P<allowed_level>warn|warning|error|fatal)$"
+        }
+        stage.drop {
+          source              = "allowed_level"
+          expression          = "^$"
+          drop_counter_reason = "pomerium_not_allowlisted"
+        }
+        stage.template {
+          source   = "allowed_level"
+          template = `{{ "{{" }} .Value | ToLower {{ "}}" }}`
+        }
+        stage.template {
+          source   = "event_ingested"
+          template = `{{ "{{" }} now | date "2006-01-02T15:04:05.999999999Z07:00" {{ "}}" }}`
+        }
+        stage.template {
+          source   = "safe_line"
+          template = `{"event.class":"operation","event.action":"error","event.outcome":"unknown","event.source":"pomerium","event.dataset":"lifecycle","observer.name":"pomerium","observer.type":"service","actor.kind":"none","correlation.kind":"none"}`
+        }
+        stage.output { source = "safe_line" }
+        stage.static_labels { values = { event_class = "operation", retention = "O7" } }
+        stage.labels { values = { level = "allowed_level" } }
+        stage.structured_metadata { values = { pod_name = "", pod_uid = "", event_ingested = "" } }
+        stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+      }
+
+      loki.source.kubernetes "vault" {
+        targets    = discovery.relabel.vault.output
+        forward_to = [loki.process.vault.receiver]
+      }
+      loki.process "vault" {
+        forward_to = [loki.write.local.receiver]
+        stage.drop {
+          expression          = "^\\{"
+          drop_counter_reason = "vault_audit_json"
+        }
+        stage.regex { expression = "\\[(?P<allowed_level>TRACE|DEBUG|INFO|WARN|ERROR)\\]" }
+        stage.drop {
+          source              = "allowed_level"
+          expression          = "^$"
+          drop_counter_reason = "vault_not_allowlisted"
+        }
+        stage.template {
+          source   = "allowed_level"
+          template = `{{ "{{" }} .Value | ToLower {{ "}}" }}`
+        }
+        stage.template {
+          source   = "event_ingested"
+          template = `{{ "{{" }} now | date "2006-01-02T15:04:05.999999999Z07:00" {{ "}}" }}`
+        }
+        stage.template {
+          source   = "safe_line"
+          template = `{"event.class":"operation","event.action":"lifecycle","event.outcome":"unknown","event.source":"vault","event.dataset":"server","observer.name":"vault","observer.type":"service","actor.kind":"none","correlation.kind":"none"}`
+        }
+        stage.output { source = "safe_line" }
+        stage.static_labels { values = { event_class = "operation", retention = "O7" } }
+        stage.labels { values = { level = "allowed_level" } }
+        stage.structured_metadata { values = { pod_name = "", pod_uid = "", event_ingested = "" } }
+        stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+      }
+
+      loki.source.kubernetes "keycloak" {
+        targets    = discovery.relabel.keycloak.output
+        forward_to = [loki.process.keycloak.receiver]
+      }
+      loki.process "keycloak" {
+        forward_to = [loki.write.local.receiver]
+        stage.drop {
+          expression          = "org\\.keycloak\\.events"
+          drop_counter_reason = "keycloak_security_event"
+        }
+        stage.regex { expression = "[[:space:]](?P<allowed_level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)[[:space:]]" }
+        stage.drop {
+          source              = "allowed_level"
+          expression          = "^$"
+          drop_counter_reason = "keycloak_not_allowlisted"
+        }
+        stage.template {
+          source   = "allowed_level"
+          template = `{{ "{{" }} .Value | ToLower {{ "}}" }}`
+        }
+        stage.template {
+          source   = "event_ingested"
+          template = `{{ "{{" }} now | date "2006-01-02T15:04:05.999999999Z07:00" {{ "}}" }}`
+        }
+        stage.template {
+          source   = "safe_line"
+          template = `{"event.class":"operation","event.action":"lifecycle","event.outcome":"unknown","event.source":"keycloak","event.dataset":"server","observer.name":"keycloak","observer.type":"service","actor.kind":"none","correlation.kind":"none"}`
+        }
+        stage.output { source = "safe_line" }
+        stage.static_labels { values = { event_class = "operation", retention = "O7" } }
+        stage.labels { values = { level = "allowed_level" } }
+        stage.structured_metadata { values = { pod_name = "", pod_uid = "", event_ingested = "" } }
+        stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+      }
+
+      loki.source.kubernetes "kubernetes_events" {
+        targets    = discovery.relabel.kubernetes_events.output
+        forward_to = [loki.process.kubernetes_events.receiver]
+      }
+      loki.process "kubernetes_events" {
+        forward_to = [loki.write.local.receiver]
+        stage.json {
+          drop_malformed = true
+          expressions = {
+            event_time         = "event_time",
+            event_action       = "event_action",
+            event_outcome      = "event_outcome",
+            observer_name      = "observer_name",
+            resource_namespace = "resource_namespace",
+            resource_kind      = "resource_kind",
+            resource_name      = "resource_name",
+            resource_uid       = "resource_uid",
+            reason             = "reason",
+            event_type         = "event_type",
+            count              = "count",
+          }
+        }
+        stage.regex {
+          source     = "event_type"
+          expression = "^(?P<allowed_type>Normal|Warning)$"
+        }
+        stage.drop {
+          source              = "allowed_type"
+          expression          = "^$"
+          drop_counter_reason = "kubernetes_event_not_allowlisted"
+        }
+        stage.template {
+          source   = "allowed_type"
+          template = `{{ "{{" }} if eq .Value "Normal" {{ "}}" }}info{{ "{{" }} else {{ "}}" }}warning{{ "{{" }} end {{ "}}" }}`
+        }
+        stage.template {
+          source   = "event_ingested"
+          template = `{{ "{{" }} now | date "2006-01-02T15:04:05.999999999Z07:00" {{ "}}" }}`
+        }
+        stage.template {
+          source   = "safe_line"
+          template = `{"event.class":"operation","event.action":"lifecycle","event.outcome":"unknown","event.source":"kubernetes","event.dataset":"core_v1_event","observer.name":"kubernetes","observer.type":"service","actor.kind":"none","correlation.kind":"none"}`
+        }
+        stage.output { source = "safe_line" }
+        stage.static_labels { values = { event_class = "operation", retention = "O7" } }
+        stage.labels { values = { level = "allowed_type" } }
+        stage.structured_metadata {
+          values = {
+            collector_pod_name = "pod_name",
+            collector_pod_uid  = "pod_uid",
+            event_time         = "",
+            event_ingested     = "",
+            event_action       = "",
+            event_outcome      = "",
+            observer_name      = "",
+            resource_namespace = "",
+            resource_kind      = "",
+            resource_name      = "",
+            resource_uid       = "",
+            reason             = "",
+            count              = "",
+          }
+        }
+        stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+      }
+
+      loki.write "local" {
+        endpoint {
+          url = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+          batch_size = "256KiB"
+          batch_wait = "1s"
+        }
+        wal {
+          enabled = false
+        }
+      }
+
+service:
+  enabled: true
+  type: ClusterIP
+
+serviceMonitor:
+  enabled: false

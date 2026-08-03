@@ -37,3 +37,5 @@ resources:
   - e2e-01-application.yaml
   - falco-project.yaml
   - falco-application.yaml
+  - loki-project.yaml
+  - loki-application.yaml

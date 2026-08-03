@@ -1215,8 +1215,8 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `AUDIT-01 DONE` | Suricata·CrowdSec AppSec(Coraza/CRS)·Falco·Kubernetes·Vault·Keycloak·Pomerium·접근 서비스 이벤트 분류 | `EDGE-01`, `POL-02`, `FALCO-01` | 없음 | Loki·Wazuh | 보안/운영 경계, 시각·사용자·요청 ID, 마스킹, 보존 기준 |
-| `LOKI-01 READY` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
-| `OBS-01 BLOCKED` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·OPNsense·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
+| `LOKI-01 DONE` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
+| `OBS-01 READY` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·OPNsense·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
 | `WAZUH-01 BLOCKED` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
@@ -1228,6 +1228,17 @@ command argument·파일/세션 내용은 수집 전에 제거하며, 저장 후
 16 GiB·Loki 14 GiB hard cap을 후속 capacity gate로 넘긴다. GitOps와 라이브 구성은 바꾸지
 않았다. 따라서 직접 후속 중 선행이 모두 충족된 `LOKI-01`만 `READY`로 열고, `WAZUH-01`은
 `OBS-01`이 남아 `BLOCKED`를 유지한다.
+
+2026-08-03 `LOKI-01`에서 Grafana Alloy와 Loki를 digest·chart SHA로 고정해 `k3s-01`에
+배포하고 O7 운영 로그만 Kubernetes API에서 allowlist 수집했다. 30분 고정창의 5,000건은
+모두 O7이었고 Falco rule match, Pomerium authz, Vault audit, Keycloak event는 각각 0건이었다.
+index label은 일곱 저cardinality field뿐이며 Pod·resource UID는 structured metadata로 남았다.
+원문은 local spool에 기록하지 않고 Event `message`는 생성 단계부터 제외했다. S3 저장량은
+1,805초 동안 154,695 bytes 증가해 7,404,792 bytes/일로 환산됐고 retained 272,996 bytes와
+함께 14 GiB·2 GiB/일 hard cap 이하였다. running config의 7일 retention과 compactor 성공,
+immutable root·child의 `Synced/Healthy`를 확인했다. 신규 PVC는 0개이며 배포 직후 available은
+8 GiB 정지선보다 2,119.895 MiB 높았다. 따라서 `LOKI-01`을 완료하고 직접 후속 `OBS-01`만
+`READY`로 연다. `WAZUH-01`은 `OBS-01`이 남아 `BLOCKED`를 유지한다.
 
 ## 10. 마지막 단계: Shuffle
 
