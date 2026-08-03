@@ -15,7 +15,7 @@ spec:
   project: wazuh
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: main
+    targetRevision: b7a36d8d1ad2ed2f71085a593b90d322d6c63ab0
     path: gitops/apps/wazuh
   destination:
     server: https://kubernetes.default.svc
