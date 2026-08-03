@@ -1,0 +1,46 @@
+<!--
+  WAZUH-01 사용자 ruleset. Suricata alert를 D30으로 분류하고, 중앙 저장 대상이 아닌
+  event class를 소스 단계에서 걸러낸다.
+
+  근거: docs/audit-event-standard.md 4절은 고정 관측창의 실제 저장 크기가 상한을 넘으면
+  "허용 event class를 줄인다"고 규정한다. 2026-08-03 실측에서 OPNsense Suricata는
+  2.06 alert/s(약 177,826건/일)를 냈고 그중 99.87%가 NIDS-01이 fingerprint 없이 any->any로
+  등록한 사용자 정의 테스트 시그니처 3건이었다. 이 3건은 모든 패킷에 매치하므로 탐지가
+  아니며, 그대로 저장하면 D30 일일 256 MiB와 30일 7.5 GiB 상한을 넘는다.
+  OPNsense 룰셋은 NIDS-01이 소유하므로 여기서 바꾸지 않고 중앙 저장에서만 제외한다.
+
+  event_type이 http/dns/tls인 record는 upstream 86602~86604가 이미 level 0이고,
+  그 밖의 non-alert record는 86600에서 멈춘다. 따라서 alert만 D30으로 들어간다.
+-->
+<group name="wazuh_d30,ids,suricata,">
+
+  <rule id="100120" level="3">
+    <if_sid>86601</if_sid>
+    <description>WAZUH-01 D30: Suricata alert - $(alert.signature)</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <!-- NIDS-01 all-traffic 테스트 시그니처 제외는 여기서 하지 않는다.
+       2026-08-03 실측에서 `<field name="alert.signature_id">`(숫자), 소수부를 허용한
+       pcre2, `<field name="alert.signature">`(문자열), `<match>` 네 조건 모두
+       `<if_sid>100120</if_sid>` 자식 룰로는 이 event를 걸러내지 못했다. 룰 적재 오류는
+       없었고 같은 필드의 `$(alert.signature)` 치환은 정상 렌더됐다.
+       그래서 제외는 저장 직전 ingest pipeline의 `drop` processor가 소유하며 그 선언은
+       `files/3-wazuh-01-index-routing`에 있다. `_ingest/pipeline/_simulate`로 노이즈
+       drop과 정상 event 통과를 각각 확인한다. -->
+
+</group>
+
+<!--
+  Wazuh manager 자신의 기동·종료·연결 상태 message는 audit-event-standard.md에서 O7
+  운영 로그이며 Loki가 소유한다. 같은 event를 Wazuh index에 중복 저장하지 않는다.
+-->
+<group name="wazuh_o7_local,">
+
+  <rule id="100130" level="0">
+    <if_group>ossec</if_group>
+    <description>WAZUH-01: manager 자체 운영 event는 O7이므로 중앙 보안 저장소에 넣지 않는다.</description>
+    <options>no_full_log</options>
+  </rule>
+
+</group>

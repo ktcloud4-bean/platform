@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - serviceaccounts.yaml
+  - indexer.yaml
+  - bootstrap-job.yaml
+  - manager.yaml
+  - network-policies.yaml
+configMapGenerator:
+  - name: wazuh-vault-agent
+    namespace: wazuh
+    files:
+      - vault-agent-indexer.hcl=files/vault-agent-indexer.hcl
+      - vault-agent-manager.hcl=files/vault-agent-manager.hcl
+      - vault-agent-bootstrap.hcl=files/vault-agent-bootstrap.hcl
+      - vault.crt=files/vault.crt
+  - name: wazuh-indexer-conf
+    namespace: wazuh
+    files:
+      - opensearch.yml=files/opensearch.yml
+  - name: wazuh-manager-conf
+    namespace: wazuh
+    files:
+      - ossec.conf=files/ossec.conf
+  - name: wazuh-manager-rules
+    namespace: wazuh
+    files:
+      - wazuh-01-a90-k8s-audit.xml=files/wazuh-01-a90-k8s-audit.xml
+      - wazuh-01-d30-suricata.xml=files/wazuh-01-d30-suricata.xml
+  - name: wazuh-manager-cont-init
+    namespace: wazuh
+    files:
+      - 3-wazuh-01-index-routing=files/3-wazuh-01-index-routing
+  - name: wazuh-bootstrap-script
+    namespace: wazuh
+    files:
+      - bootstrap-retention.py=files/bootstrap-retention.py
+generatorOptions:
+  disableNameSuffixHash: true

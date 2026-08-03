@@ -621,6 +621,45 @@ apply하지 않는다. 상세 승인 영향과 rollback은
 `b6275be5d8ea2ffcdc5cb327c2a31857ea219f445581d0eaffb9828f2cbf68ea`로 불변이다. RAM·swap·disk·
 PVC gate가 모두 정지선 안이므로 `WAZUH-01` 재진입 판정은 **GO**다.
 
+### `WAZUH-01` 배포 전·후 실측 (2026-08-03)
+
+`CAP-03` RAM 증설 뒤 같은 배포 전 gate부터 다시 시작해 **GO**로 판정하고 배포했다. 배포 전
+값은 Argo 동기화 직전, 배포 후 값은 고정 관측창 907초가 끝난 완료 증거 실행이다. 두 값 모두
+[`verify-live.sh`](../gitops/tools/wazuh-01/verify-live.sh)가 같은 방법으로 읽었다.
+
+| 지표 | 배포 전 실측 | 배포 후 실측 | 경고·정지 기준 | 판정 |
+|---|---:|---:|---:|---|
+| `k3s-01` available | 17,130,917,888 bytes (15.955 GiB) | 14,584,446,976 bytes (13.583 GiB) | 12 GiB 경고, 8 GiB 정지 | **GO**, 정지선 위 5.583 GiB |
+| Wazuh 배포로 인한 available 감소 | — | 2,546,470,912 bytes (2.372 GiB) | 공식 최소 3 GiB 이내 | 정상 |
+| guest swap 사용 | 0 bytes | 0 bytes | 0 초과 재검토 | 정상 |
+| guest root 여유 | 84% | 82% | 20% 미만 정지 | 정상 |
+| PVC 요청 합계 | 80,664,854,528 bytes (75.125 GiB) | 97,844,723,712 bytes (91.125 GiB) | 96 GiB 경고, 120 GiB 정지 | 정상, 경고선까지 4.875 GiB |
+| Wazuh PVC 선언 | — | indexer 15 GiB + manager 1 GiB = 16 GiB | 합계 16 GiB 상한 | 정상, 상한 일치 |
+
+고정 관측창 907초의 실제 index 저장 증가량과 보존 기간 환산은 다음과 같다. 환산은
+증가량을 일 단위로 늘린 뒤 각 코드의 보존 기간을 곱한 값이며 상한 판정에만 쓴다.
+
+| 코드 | 창 증가량 | 일 환산 | 일일 상한 | 기간 환산 | 기간 상한 | 판정 |
+|---|---:|---:|---:|---:|---:|---|
+| `D30` | 63,386 bytes | 6,038,093 bytes (5.758 MiB) | 256 MiB | 181,142,790 bytes (0.169 GiB) | 7.5 GiB | 정상, 상한의 2.25% |
+| `A90` | 231,392 bytes | 22,042,192 bytes (21.021 MiB) | 96 MiB | 1,983,797,280 bytes (1.848 GiB) | 8.4375 GiB | 정상, 상한의 21.90% |
+| 전체 | 294,778 bytes | — | — | 2,164,940,070 bytes (2.016 GiB) | 16 GiB | 정상, 상한의 12.60% |
+
+`D30`이 상한의 2.25%에 머무는 것은 `NIDS-01`이 fingerprint 없이 `any -> any`로 등록한
+사용자 정의 테스트 시그니처 3건을 중앙 저장에서 제외했기 때문이다. 제외 전 OPNsense
+Suricata는 2.06 alert/s(약 177,826건/일, `eve.json` 225 MB/일)를 냈고 그중 99.87%가 이 3건이라
+그대로 저장하면 `D30` 상한을 넘는다. 경계와 근거는
+[`gitops/apps/wazuh/README.md`](../gitops/apps/wazuh/README.md)가 소유한다.
+
+`A90`은 Kubernetes API audit이며 `level: Metadata` 전량 수집은 raw 135.6 MiB/일로 상한의
+141%였다. control plane 내부 주체의 조정 트래픽을 제외하고 credential·권한 경계 쓰기와
+비-system 주체의 모든 요청만 남겨 raw 8.33 MiB/일로 줄인 뒤 배포했다. 정책 본문은
+[`infra/ansible/roles/k3s_baseline/files/audit-policy.yaml`](../infra/ansible/roles/k3s_baseline/files/audit-policy.yaml)가
+소유한다.
+
+`local-path`는 PVC 요청량을 강제하지 않는다. 16 GiB는 선언·회계 상한이고 실제 저장 상한은
+Wazuh indexer의 `D30`·`A90` ISM 보존 정책과 위 환산 판정이 지킨다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.

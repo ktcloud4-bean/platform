@@ -380,6 +380,39 @@
     group: root
     mode: '0755'
 
+- name: API audit 로그 디렉터리 SELinux 문맥 선언
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/semanage
+      - fcontext
+      - '-a'
+      - '-t'
+      - "{{ k3s_audit_log_selinux_type }}"
+      - "{{ k3s_audit_log_dir }}(/.*)?"
+  register: k3s_audit_fcontext
+  changed_when: k3s_audit_fcontext.rc == 0
+  failed_when:
+    - k3s_audit_fcontext.rc != 0
+    - "'already defined' not in (k3s_audit_fcontext.stderr | default(''))"
+
+- name: API audit 로그 디렉터리 선언
+  ansible.builtin.file:
+    path: "{{ k3s_audit_log_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+    setype: "{{ k3s_audit_log_selinux_type }}"
+
+- name: Kubernetes API audit 정책 배치
+  ansible.builtin.copy:
+    src: audit-policy.yaml
+    dest: "{{ k3s_audit_policy_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  register: k3s_audit_policy_result
+
 - name: 단일 server 기본 구성 배치
   ansible.builtin.template:
     src: config.yaml.j2
@@ -432,7 +465,7 @@
   when:
     - not ansible_check_mode
     - k3s_service_pre.stat.exists
-    - k3s_config_result.changed
+    - k3s_config_result.changed or k3s_audit_policy_result.changed
 
 - name: kubeconfig 생성 대기
   ansible.builtin.wait_for:

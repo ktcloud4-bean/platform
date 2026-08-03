@@ -1,0 +1,117 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pol-02-wazuh-root-manager-baseline
+  annotations:
+    policies.kyverno.io/title: Wazuh manager root compensating controls
+    policies.kyverno.io/category: Security Monitoring
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    pod-policies.kyverno.io/autogen-controllers: StatefulSet
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  validationFailureAction: Enforce
+  admission: true
+  background: true
+  emitWarning: false
+  rules:
+    - name: require-wazuh-manager-baseline
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - wazuh
+              names:
+                - wazuh-manager-master-*
+      validate:
+        allowExistingViolations: false
+        message: Wazuh manager must keep the pinned image and least-privileged security baseline.
+        pattern:
+          metadata:
+            labels:
+              app.kubernetes.io/name: wazuh
+              app.kubernetes.io/component: manager
+          spec:
+            serviceAccountName: wazuh-manager
+            automountServiceAccountToken: false
+            =(hostNetwork): false
+            =(hostPID): false
+            =(hostIPC): false
+            containers:
+              - name: wazuh-manager
+                image: docker.io/wazuh/wazuh-manager:4.14.7@sha256:a65dcdb61e48b7064bd7250c5cbd6aceeb9b8043a1a413931a8868793146f06d
+                securityContext:
+                  privileged: false
+                  allowPrivilegeEscalation: false
+                  seccompProfile:
+                    type: RuntimeDefault
+    - name: restrict-wazuh-manager-added-capabilities
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - wazuh
+              names:
+                - wazuh-manager-master-*
+      validate:
+        allowExistingViolations: false
+        message: Wazuh manager may add only the seven capabilities the upstream image needs and must drop ALL others.
+        foreach:
+          - list: "request.object.spec.containers[?name == 'wazuh-manager']"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.capabilities.add || `[]` }}"
+                    operator: AnyNotIn
+                    value:
+                      - CHOWN
+                      - DAC_OVERRIDE
+                      - FOWNER
+                      - KILL
+                      - SETGID
+                      - SETUID
+                      - SYS_CHROOT
+                  - key:
+                      - CHOWN
+                      - DAC_OVERRIDE
+                      - FOWNER
+                      - KILL
+                      - SETGID
+                      - SETUID
+                      - SYS_CHROOT
+                    operator: AnyNotIn
+                    value: "{{ element.securityContext.capabilities.add || `[]` }}"
+                  - key:
+                      - ALL
+                    operator: AnyNotIn
+                    value: "{{ element.securityContext.capabilities.drop || `[]` }}"
+    - name: restrict-wazuh-manager-host-paths
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - wazuh
+              names:
+                - wazuh-manager-master-*
+      validate:
+        allowExistingViolations: false
+        message: Wazuh manager may mount only the k3s API audit log directory from the host.
+        foreach:
+          - list: "request.object.spec.volumes[?hostPath]"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.hostPath.path }}"
+                    operator: AnyNotIn
+                    value:
+                      - /var/log/k3s-audit

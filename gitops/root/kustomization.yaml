@@ -41,3 +41,5 @@ resources:
   - loki-application.yaml
   - obs-project.yaml
   - obs-application.yaml
+  - wazuh-project.yaml
+  - wazuh-application.yaml

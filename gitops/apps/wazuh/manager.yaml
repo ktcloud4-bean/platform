@@ -1,0 +1,296 @@
+# WAZUH-01 manager. wazuh-kubernetes v4.14.7의 wazuh_managers에서 파생했다.
+#
+# 변경점과 이유:
+# - worker StatefulSet과 cluster Service 제거. 단일 manager PoC라 cluster key도 만들지 않는다.
+# - Secret/authd password/API credential은 Git에 두지 않고 Vault Agent init이 memory
+#   emptyDir에만 렌더한다. upstream의 5개 평문 Secret은 사용하지 않는다.
+# - Service type LoadBalancer -> API는 ClusterIP, agent 수집·등록만 NodePort로 노출한다.
+# - Kubernetes API audit 파일을 read-only hostPath로 붙여 소스에서 직접 수집한다.
+# - manager container는 upstream과 같이 UID 0으로 동작한다. 이 예외는 policies/의
+#   `pol-02-wazuh-*` PolicyException과 보상 Enforce 정책이 좁게 소유한다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: wazuh
+  namespace: wazuh
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: manager
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: manager
+  ports:
+    - name: api
+      port: 55000
+      targetPort: api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wazuh-agents
+  namespace: wazuh
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: manager
+spec:
+  type: NodePort
+  # NetworkPolicy가 OPNsense source IP로 판정할 수 있게 SNAT를 끈다.
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: manager
+  ports:
+    - name: events
+      port: 1514
+      targetPort: events
+      nodePort: 31514
+      protocol: TCP
+    - name: registration
+      port: 1515
+      targetPort: registration
+      nodePort: 31515
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: wazuh-manager-master
+  namespace: wazuh
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: manager
+spec:
+  replicas: 1
+  serviceName: wazuh-agents
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh
+      app.kubernetes.io/component: manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wazuh
+        app.kubernetes.io/component: manager
+    spec:
+      serviceAccountName: wazuh-manager
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/vault-agent.hcl
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 100
+            runAsGroup: 101
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config/vault-agent.hcl
+              subPath: vault-agent-manager.hcl
+              readOnly: true
+            - name: vault-agent-config
+              mountPath: /vault/tls/vault.crt
+              subPath: vault.crt
+              readOnly: true
+            - name: manager-secrets
+              mountPath: /vault/secrets
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+      containers:
+        - name: wazuh-manager
+          image: docker.io/wazuh/wazuh-manager:4.14.7@sha256:a65dcdb61e48b7064bd7250c5cbd6aceeb9b8043a1a413931a8868793146f06d
+          imagePullPolicy: IfNotPresent
+          # authd password만 upstream이 기대하는 경로로 옮기고 indexer/API credential을
+          # 환경으로 올린 뒤 upstream entrypoint를 PID 1로 exec한다.
+          command: [/bin/bash, -ec]
+          args:
+            - |
+              install -d -m 0750 /wazuh-config-mount/etc
+              install -m 0640 /wazuh/runtime/authd.pass /wazuh-config-mount/etc/authd.pass
+              set -a
+              . /wazuh/runtime/wazuh.env
+              set +a
+              exec /init
+          env:
+            - name: INDEXER_URL
+              value: https://indexer.wazuh.svc.cluster.local:9200
+            - name: FILEBEAT_SSL_VERIFICATION_MODE
+              value: full
+            - name: SSL_CERTIFICATE_AUTHORITIES
+              value: /wazuh/runtime/certs/root-ca.pem
+            - name: SSL_CERTIFICATE
+              value: /wazuh/runtime/certs/filebeat.pem
+            - name: SSL_KEY
+              value: /wazuh/runtime/certs/filebeat-key.pem
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              # upstream image는 UID 0으로 permanent data를 복원하고(cp -a: CHOWN·FOWNER),
+              # s6가 wazuh 사용자로 daemon을 내려 실행하며(SETUID·SETGID·KILL),
+              # ossec daemon이 chroot한다(SYS_CHROOT). root가 자기 소유가 아닌 파일을
+              # 읽어야 해서 DAC_OVERRIDE도 필요하다. 기본 Docker 집합에서 NET_RAW,
+              # NET_BIND_SERVICE, MKNOD, SETPCAP, SETFCAP, AUDIT_WRITE, FSETID는 뺀다.
+              add: [CHOWN, DAC_OVERRIDE, FOWNER, KILL, SETGID, SETUID, SYS_CHROOT]
+            privileged: false
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 500m
+              memory: 768Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+          ports:
+            - name: events
+              containerPort: 1514
+            - name: registration
+              containerPort: 1515
+            - name: api
+              containerPort: 55000
+          startupProbe:
+            tcpSocket:
+              port: events
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: events
+            periodSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - name: wazuh-conf
+              mountPath: /wazuh-config-mount/etc/ossec.conf
+              subPath: ossec.conf
+              readOnly: true
+            - name: wazuh-rules
+              mountPath: /wazuh-config-mount/etc/rules/wazuh-01-a90-k8s-audit.xml
+              subPath: wazuh-01-a90-k8s-audit.xml
+              readOnly: true
+            - name: wazuh-rules
+              mountPath: /wazuh-config-mount/etc/rules/wazuh-01-d30-suricata.xml
+              subPath: wazuh-01-d30-suricata.xml
+              readOnly: true
+            - name: wazuh-cont-init
+              mountPath: /etc/cont-init.d/3-wazuh-01-index-routing
+              subPath: 3-wazuh-01-index-routing
+              readOnly: true
+            - name: manager-secrets
+              mountPath: /wazuh/runtime
+              readOnly: true
+            - name: k3s-audit
+              mountPath: /var/log/k3s-audit
+              readOnly: true
+            - name: wazuh-manager-master
+              mountPath: /var/ossec/api/configuration
+              subPath: wazuh/var/ossec/api/configuration
+            - name: wazuh-manager-master
+              mountPath: /var/ossec/etc
+              subPath: wazuh/var/ossec/etc
+            - name: wazuh-manager-master
+              mountPath: /var/ossec/logs
+              subPath: wazuh/var/ossec/logs
+            - name: wazuh-manager-master
+              mountPath: /var/ossec/queue
+              subPath: wazuh/var/ossec/queue
+            - name: wazuh-manager-master
+              mountPath: /var/ossec/var/multigroups
+              subPath: wazuh/var/ossec/var/multigroups
+            - name: wazuh-manager-master
+              mountPath: /var/ossec/integrations
+              subPath: wazuh/var/ossec/integrations
+            - name: wazuh-manager-master
+              mountPath: /var/ossec/active-response/bin
+              subPath: wazuh/var/ossec/active-response/bin
+            - name: wazuh-manager-master
+              mountPath: /var/ossec/agentless
+              subPath: wazuh/var/ossec/agentless
+            - name: wazuh-manager-master
+              mountPath: /var/ossec/wodles
+              subPath: wazuh/var/ossec/wodles
+            - name: wazuh-manager-master
+              mountPath: /etc/filebeat
+              subPath: filebeat/etc/filebeat
+            - name: wazuh-manager-master
+              mountPath: /var/lib/filebeat
+              subPath: filebeat/var/lib/filebeat
+      volumes:
+        - name: vault-agent-config
+          configMap:
+            name: wazuh-vault-agent
+            defaultMode: 0444
+        - name: wazuh-conf
+          configMap:
+            name: wazuh-manager-conf
+            defaultMode: 0444
+        - name: wazuh-rules
+          configMap:
+            name: wazuh-manager-rules
+            defaultMode: 0444
+        - name: wazuh-cont-init
+          configMap:
+            name: wazuh-manager-cont-init
+            defaultMode: 0555
+        - name: manager-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: k3s-audit
+          hostPath:
+            path: /var/log/k3s-audit
+            type: DirectoryOrCreate
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: vault
+                  expirationSeconds: 600
+  volumeClaimTemplates:
+    - metadata:
+        name: wazuh-manager-master
+        namespace: wazuh
+        labels:
+          app.kubernetes.io/name: wazuh
+          app.kubernetes.io/component: manager
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        # API server 기본값을 명시해 Argo 영구 diff를 없앤다.
+        volumeMode: Filesystem
+        resources:
+          requests:
+            storage: 1Gi

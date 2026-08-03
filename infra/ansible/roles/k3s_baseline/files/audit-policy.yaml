@@ -1,0 +1,76 @@
+# WAZUH-01 Kubernetes API audit 정책.
+#
+# docs/audit-event-standard.md의 A90 계약만 구현한다.
+# - `audit.k8s.io/v1` `Metadata` level만 쓴다. Request/RequestResponse는 쓰지 않는다.
+# - terminal stage만 남긴다. `RequestReceived`와 `ResponseStarted`는 omitStages로 제외한다.
+#   `ResponseComplete`와 `Panic`만 파일에 기록된다.
+# - request/response object와 Secret·token body는 Metadata level이 애초에 만들지 않는다.
+# - managed field는 metadata에서 제거한다.
+#
+# 범위 결정 근거(2026-08-03 실측): `level: Metadata` 전량 수집은 raw 135.6 MiB/일로
+# A90 일일 상한 96 MiB의 141%였다. 상위 기여자는 kyverno reports-controller의
+# policyreports update, kyverno admission-controller의 subjectaccessreviews create와
+# webhook 설정 update, k3s cloud-controller-manager의 services get, kubelet의 pod
+# status patch 같은 클러스터 내부 조정 트래픽이었다. 이들은 사람·권한 판단이 아니라
+# 운영 상태이며 audit-event-standard.md에서 O7(Loki) 경계다.
+#
+# 그래서 A90은 다음 두 축만 남긴다.
+#   1. 주체와 무관하게 credential·권한 경계를 바꾸는 쓰기
+#   2. 내부 system 주체가 아닌 모든 주체(OIDC 사용자, anonymous, 외부 client)의 모든 요청
+# 이 경계를 넓히거나 좁히는 변경은 같은 실측을 다시 하고 결정한다.
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages:
+  - RequestReceived
+  - ResponseStarted
+omitManagedFields: true
+rules:
+  # 1. credential 발급과 권한 경계 변경은 주체와 무관하게 남긴다.
+  - level: Metadata
+    verbs: [create, update, patch, delete, deletecollection]
+    resources:
+      - group: ""
+        resources: [secrets, serviceaccounts, serviceaccounts/token]
+      - group: rbac.authorization.k8s.io
+        resources: ["*"]
+      - group: certificates.k8s.io
+        resources: ["*"]
+
+  # 2. control plane 내부 주체의 나머지 조정 트래픽은 제외한다.
+  - level: None
+    users:
+      - system:apiserver
+      - system:kube-scheduler
+      - system:kube-controller-manager
+      - system:kube-proxy
+      - k3s-cloud-controller-manager
+      - system:k3s-supervisor
+
+  - level: None
+    userGroups:
+      - system:nodes
+      - system:serviceaccounts
+
+  # 3. 상태 object와 잡음 endpoint.
+  - level: None
+    resources:
+      - group: ""
+        resources: [events]
+      - group: coordination.k8s.io
+        resources: [leases]
+
+  - level: None
+    nonResourceURLs:
+      - /healthz*
+      - /livez*
+      - /readyz*
+      - /version
+      - /metrics
+      - /openapi/*
+      - /apis
+      - /apis/*
+      - /api
+      - /api/*
+
+  # 4. 나머지 주체(OIDC 사용자, anonymous, 외부 client)는 모든 요청을 Metadata로 남긴다.
+  - level: Metadata

@@ -1,0 +1,86 @@
+#!/usr/bin/with-contenv bash
+# WAZUH-01. upstream cont-init.d 스크립트 뒤에 실행해 A90 record만 별도 index로 보낸다.
+#
+# 판정 위치가 filebeat이 아니라 ingest pipeline인 이유(2026-08-03 실측):
+# wazuh filebeat 모듈은 `input: log`로 alerts.json을 raw 한 줄씩 읽고, JSON 파싱과 최종
+# index 결정은 서버측 `filebeat-7.10.2-wazuh-alerts-pipeline`이 한다. 그 pipeline의
+# `date_index_name` processor가 `{{fields.index_prefix}}`로 `_index`를 다시 쓰므로
+# filebeat `output.elasticsearch.indices` 조건은 결과에 영향을 주지 못한다.
+# `rule.groups`(배열), `rule.id`, `message` 조건을 차례로 실측했고 셋 다 A90 record를
+# D30 index로 보냈다. 그래서 pipeline이 prefix를 정하기 직전에 `fields.index_prefix`만
+# 조건부로 바꾼다.
+#
+# 이 스크립트는 credential을 읽거나 출력하지 않는다.
+set -e
+
+readonly filebeat_config=/etc/filebeat/filebeat.yml
+readonly pipeline_path=/usr/share/filebeat/module/wazuh/alerts/ingest/pipeline.json
+readonly a90_prefix='wazuh-alerts-4.x-audit-'
+readonly a90_rule_pattern='^10010[0-9]$'
+readonly nids_test_signature_prefix='NIDS-01 DMZ '
+
+for required in "${filebeat_config}" "${pipeline_path}"; do
+  if [ ! -f "${required}" ]; then
+    echo "WAZUH-01 index routing 실패: ${required}가 없다." >&2
+    exit 1
+  fi
+done
+
+# 패치한 pipeline이 매 기동마다 반영되도록 덮어쓰기를 켠다. 기본값 false에서는 이미
+# 등록된 pipeline이 남아 패치가 적용되지 않는다.
+if ! grep -q '^filebeat.overwrite_pipelines:' "${filebeat_config}"; then
+  printf 'filebeat.overwrite_pipelines: true\n' >>"${filebeat_config}"
+fi
+
+python3 - "${pipeline_path}" "${a90_prefix}" "${a90_rule_pattern}" "${nids_test_signature_prefix}" <<'PYTHON'
+import json
+import sys
+
+pipeline_path, a90_prefix, a90_rule_pattern, nids_prefix = sys.argv[1:5]
+marker = "wazuh-01-a90-index-prefix"
+drop_marker = "wazuh-01-drop-nids-test-signature"
+
+with open(pipeline_path, encoding="utf-8") as handle:
+    pipeline = json.load(handle)
+
+processors = pipeline.get("processors", [])
+for processor in processors:
+    body = processor[next(iter(processor))]
+    if isinstance(body, dict) and body.get("tag") == marker:
+        print("WAZUH-01 index routing: 이미 적용됨")
+        raise SystemExit(0)
+
+target = next((i for i, p in enumerate(processors) if "date_index_name" in p), None)
+if target is None:
+    sys.exit("WAZUH-01 index routing 실패: date_index_name processor를 찾지 못했다.")
+
+# 저장 직전 drop. NIDS-01 all-traffic 테스트 시그니처는 탐지가 아니므로 중앙에 넣지 않는다.
+# manager rule의 `<field>`·`<match>` 조건은 실측에서 이 event를 걸러내지 못했다.
+processors.insert(
+    1,
+    {
+        "drop": {
+            "tag": drop_marker,
+            "if": (
+                "ctx.data?.alert?.signature != null && "
+                f"ctx.data.alert.signature.startsWith('{nids_prefix}')"
+            ),
+        }
+    },
+)
+processors.insert(
+    target + 1,
+    {
+        "set": {
+            "tag": marker,
+            "if": f"ctx.rule?.id != null && ctx.rule.id ==~ /{a90_rule_pattern}/",
+            "field": "fields.index_prefix",
+            "value": a90_prefix,
+            "ignore_failure": False,
+        }
+    },
+)
+with open(pipeline_path, "w", encoding="utf-8") as handle:
+    json.dump(pipeline, handle)
+print("WAZUH-01 index routing: 적용 완료")
+PYTHON

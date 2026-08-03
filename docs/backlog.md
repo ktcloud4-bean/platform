@@ -1255,7 +1255,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `LOKI-01 DONE` | Alloy·Loki와 제한된 운영 로그 수집 | `AUDIT-01` | `K3S-HEAVY` | Grafana | 보안 이벤트의 Wazuh 중복 저장 없음, label cardinality·retention·disk 상한 |
 | `OBS-01 DONE` | kube-prometheus-stack·Alertmanager·Grafana | `LOKI-01` | `K3S-HEAVY` | 운영 경보·Wazuh·Shuffle | node/PVC/backup/cert·수집 파이프라인 지표, 실제 경보 전달, disk 상한 |
 | `OPN-METRICS-01 DONE` | OPNsense exporter와 최소 metric 방화벽 경로 | `OBS-01` | `OPNSENSE-LIVE` | 운영 경보 | exporter target `up=1`, CPU·memory·interface 대표 시계열, 최소 rule 한 건과 rollback·drift 없음 |
-| `WAZUH-01 READY` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
+| `WAZUH-01 DONE` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 
 2026-08-03 `AUDIT-01`에서 대상 아홉 소스의 기존 event 한 건씩을 read-only 구조로 확인하고
 [단일 분류·보존 표준](audit-event-standard.md)을 확정했다. 탐지 event는 Wazuh 30일,
@@ -1319,11 +1319,65 @@ drift 검사는 무변경이었다. rollback은 생성 UUID만 disable·apply·d
 설치한 exporter를 disable·remove하는 경로로 고정했다. 직접 후속 ID가 없어 새로 `READY`로
 여는 작업은 없으며 `WAZUH-01`과 `SOAR-01`은 기존 `BLOCKED`를 유지한다.
 
+2026-08-03 `WAZUH-01`에서 `CAP-03` 뒤 다시 측정한 capacity gate가 **GO**여서 배포했다.
+배포 전 `k3s-01` available은 17,130,917,888 bytes, swap 0, guest root 여유 84%,
+PVC 요청 80,664,854,528 bytes(75.125 GiB)로 Wazuh 16 GiB를 더한 91.125 GiB가 96 GiB
+경고선 안이었다. 공식 Wazuh Helm chart가 없어 공식 Kubernetes 원본 `wazuh-kubernetes`
+v4.14.7(tag commit `41871e55c21f048ec652acd74666c365b04febb9`, tarball SHA-256
+`928dc1e46d4f9db5a3c4f358f13b6eea03fccdb1f0a036567deabcc5528567c1`)에서 파생한 선언을
+직접 작성하고 manager·indexer image를 index digest로 고정했다. indexer는 single-node,
+heap 1 GiB, PVC 15 GiB이고 manager PVC 1 GiB로 Wazuh PVC 합계는 정확히 16 GiB다.
+Dashboard는 배포하지 않고 indexer REST API로만 완료 증거를 만들었다.
+
+고정 관측창은 `2026-08-03T10:00:19Z`부터 907초 한 번이고 그 안에서 다섯 증거를 모두
+판정했다. 대표 Suricata event는 `HOME_NET` 밖 `10.10.60.2`에서 감시 대상 `vlan02`를 지나는
+cleartext HTTP 한 건으로 만들었고 `emerging-scan.rules` sid `2029054`가 정확히 한 건 발생해
+`rule.groups:suricata AND data.src_ip:"10.10.60.2" AND data.alert.signature_id:2029054*`로
+1건 검색됐다. running 설정은 `D30=30d`(`wazuh-alerts-4.x-*`)와 `A90=90d`
+(`wazuh-alerts-4.x-audit-*`)이고 두 ISM 정책이 실제 index에 `enabled`로 붙었다. 같은 창의
+index 증가량은 `D30` 63,386 bytes, `A90` 231,392 bytes로 일 환산 5.758·21.021 MiB,
+기간 환산 0.169·1.848 GiB이며 전체 2.016 GiB로 16 GiB 상한의 12.60%다. 오탐 gate는
+`NIDS-01` 테스트 시그니처 0건, D30/A90 밖 record 0건이었고 실제 인터넷發 탐지 2건은
+참양성으로 보고만 했다. 같은 창의 Loki 보안 event 복제본은 0건이고 Loki 수집 설정의 Wazuh
+endpoint, Wazuh 설정의 Loki endpoint, Wazuh NetworkPolicy의 Loki egress가 모두 0이다.
+active response는 running `ossec.conf`의 `<disabled>yes</disabled>`, `<command>` 정의 0건,
+`ar.conf`의 차단·계정 계열 응답 0건으로 비활성이며 agent 쪽도 `disabled=yes`다.
+배포 후 available은 14,584,446,976 bytes로 8 GiB 정지선 위 5.583 GiB, swap 0, root 여유 82%,
+PVC 합계 97,844,723,712 bytes(91.125 GiB)였다. immutable root
+`b5466b727615191af712dcb076532dc63c63fc0e`와 child
+`c11ac14c346a8e80cdaca6fe1a62fa87e71aed34`가 `Synced/Healthy`였다.
+
+승인받은 라이브 변경은 두 가지다. Kubernetes API audit은 `k3s_baseline`이 `audit.k8s.io/v1`
+`Metadata` 정책과 apiserver 인자를 선언하고 k3s를 재시작해 켰다. `Metadata` 전량 수집은 raw
+135.6 MiB/일로 `A90` 상한의 141%여서 control plane 내부 조정 트래픽을 제외하고 raw
+8.33 MiB/일로 줄인 뒤 배포했다. OPNsense에는 공식 `os-wazuh-agent` 1.3_1만 설치해
+Suricata `eve.json` 한 소스만 켜고 active response·remote command·rootcheck·syscollector·
+syscheck·syslog 수집은 모두 껐다. 방화벽 rule·NAT·DNS·Suricata 룰셋·인터페이스는 바꾸지
+않았고 복구 지점은 `/home/imcherry/.local/state-backups/wazuh-01-opnsense-pJUvbjIt`다.
+
+merge 전 실패는 모두 상태와 로그가 가리킨 지점만 고쳤다. `policy-baseline` child가 `main`을
+읽어 PolicyException이 라이브에 없던 문제, root CA의 `keyUsage` 누락, `drop: [ALL]`로 사라진
+`CAP_DAC_OVERRIDE`·`CAP_CHOWN`, `container_var_lib_t`를 읽지 못하는 SELinux 경계,
+`date_index_name`이 `_index`를 덮어써 무력화된 filebeat 라우팅 조건, 그리고 Wazuh rule의
+`<field>`·`<match>`로 걸러지지 않던 테스트 시그니처를 차례로 특정해 고쳤다. 마지막 세
+검증 실패는 대상이 아니라 검증기 결함이었다. XML 주석 안의 `<command>`, 정상 상태에서도
+1을 반환하는 `wazuh-control status`, 설명 문구의 "Loki"를 각각 실제 선언·출력 유무·endpoint
+기준으로 바꿨다.
+
+라이브 상태가 전제와 달랐던 점 하나를 보고한다. `NIDS-01`이 등록한 사용자 정의 테스트 룰
+3건(sid `4294967292`·`4294967293`·`4294967294`)이 fingerprint 없이 `any -> any`라 모든 패킷마다
+경보를 만든다. 실측 2.06 alert/s(약 177,826건/일)의 99.87%가 이 3건이고 `eve.json`은
+225 MB/일이다. 그대로 저장하면 `D30` 일일 256 MiB와 30일 7.5 GiB 상한을 넘으므로
+[분류·보존 표준](audit-event-standard.md) 4절의 "허용 event class를 줄인다"에 따라 저장 직전
+ingest pipeline에서 제외했다. OPNsense 룰셋은 `NIDS-01` 소유라 이 작업에서 바꾸지 않았고
+소스에서 이 룰을 정리하는 일은 후속 작업으로 남는다. 따라서 `WAZUH-01`을 완료하고 선행이
+모두 충족된 직접 후속 `SOAR-01`만 `READY`로 연다.
+
 ## 10. 마지막 단계: Shuffle
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `SOAR-01 BLOCKED` | Shuffle read-only·사람 승인형 SOAR PoC | `OBS-01`, `WAZUH-01`, `FALCO-01` | `K3S-HEAVY` | 사고대응 | 경보 수신→정보 보강→통지→승인 흐름, 최소권한 credential |
+| `SOAR-01 READY` | Shuffle read-only·사람 승인형 SOAR PoC | `OBS-01`, `WAZUH-01`, `FALCO-01` | `K3S-HEAVY` | 사고대응 | 경보 수신→정보 보강→통지→승인 흐름, 최소권한 credential |
 | `SOAR-02 DEFERRED` | 되돌릴 수 있는 대응 한 가지 자동화 | `SOAR-01`, 검증된 incident runbook | 없음 | 접근 정책 | 반복 시험, 승인·감사·rollback; 방화벽·계정 무인 파괴 금지 |
 
 Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 보안 사건에 반응하는 흐름만 소유한다.

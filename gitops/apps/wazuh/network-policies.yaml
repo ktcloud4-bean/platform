@@ -1,0 +1,92 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-default-deny
+  namespace: wazuh
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-internal
+  namespace: wazuh
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-dns-egress
+  namespace: wazuh
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Vault Agent init만 Vault로 나간다. manager·indexer·bootstrap Pod가 모두 같은 경로를 쓴다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-vault-egress
+  namespace: wazuh
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
+        - protocol: TCP
+          port: 8200
+---
+# Suricata alert를 보내는 OPNsense Wazuh Agent만 manager의 등록·수집 port로 들어온다.
+# NodePort Service는 externalTrafficPolicy=Local이라 source IP가 보존된다. OPNsense는
+# 자기 인터페이스 주소로 발신하므로 MGMT(10.10.10.1)와 PLATFORM(10.10.20.1) 두 주소만 연다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-manager-agent-ingress
+  namespace: wazuh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh
+      app.kubernetes.io/component: manager
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.10.10.1/32
+        - ipBlock:
+            cidr: 10.10.20.1/32
+      ports:
+        - protocol: TCP
+          port: 1514
+        - protocol: TCP
+          port: 1515

@@ -1,0 +1,227 @@
+# WAZUH-01 indexer. wazuh-kubernetes v4.14.7의 indexer_stack/wazuh-indexer에서 파생했다.
+#
+# 변경점과 이유:
+# - replicas 3 -> 1, discovery.type single-node. 단일 노드 k3s PoC다.
+# - upstream `volume-mount-hack`(root chown) 제거: fsGroup 1000이 PVC 소유권을 준다.
+# - upstream `increase-the-vm-max-map-count`(privileged) 제거: 노드 vm.max_map_count는 524288이다.
+# - Secret/인증서·계정은 Git에 두지 않고 Vault Agent init이 memory emptyDir에만 렌더한다.
+# - Service type LoadBalancer -> ClusterIP. 외부 노출은 이 작업 범위가 아니다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: wazuh-indexer
+  namespace: wazuh
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: indexer
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: indexer
+  ports:
+    - name: indexer-nodes
+      port: 9300
+      targetPort: indexer-nodes
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: indexer
+  namespace: wazuh
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: indexer
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: indexer
+  ports:
+    - name: indexer-rest
+      port: 9200
+      targetPort: indexer-rest
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: wazuh-indexer
+  namespace: wazuh
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: indexer
+spec:
+  replicas: 1
+  serviceName: wazuh-indexer
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh
+      app.kubernetes.io/component: indexer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wazuh
+        app.kubernetes.io/component: indexer
+    spec:
+      serviceAccountName: wazuh-indexer
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/vault-agent.hcl
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config/vault-agent.hcl
+              subPath: vault-agent-indexer.hcl
+              readOnly: true
+            - name: vault-agent-config
+              mountPath: /vault/tls/vault.crt
+              subPath: vault.crt
+              readOnly: true
+            - name: indexer-certs
+              mountPath: /vault/secrets/certs
+            - name: indexer-security
+              mountPath: /vault/secrets/security
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+      containers:
+        - name: wazuh-indexer
+          image: docker.io/wazuh/wazuh-indexer:4.14.7@sha256:853230e332b3b171ee9c30db91186830d5d66461e8ee0173abb57ede5c4b5d37
+          imagePullPolicy: IfNotPresent
+          # Vault Agent가 렌더한 internal_users.yml만 security config 디렉터리에 넣고
+          # upstream entrypoint를 그대로 exec한다. 다른 security 파일은 image 기본값이다.
+          command: [/bin/bash, -ec]
+          args:
+            - |
+              install -m 0600 /wazuh/runtime/internal_users.yml \
+                /usr/share/wazuh-indexer/config/opensearch-security/internal_users.yml
+              exec /entrypoint.sh opensearchwrapper
+          env:
+            - name: CLUSTER_NAME
+              value: wazuh
+            - name: NETWORK_HOST
+              value: "0.0.0.0"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: DISABLE_INSTALL_DEMO_CONFIG
+              value: "true"
+            - name: OPENSEARCH_JAVA_OPTS
+              value: -Xms1g -Xmx1g -Dlog4j2.formatMsgNoLookups=true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            privileged: false
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          ports:
+            - name: indexer-rest
+              containerPort: 9200
+            - name: indexer-nodes
+              containerPort: 9300
+          startupProbe:
+            tcpSocket:
+              port: indexer-rest
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: indexer-rest
+            periodSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - name: wazuh-indexer
+              mountPath: /var/lib/wazuh-indexer
+            - name: indexer-certs
+              mountPath: /usr/share/wazuh-indexer/config/certs
+              readOnly: true
+            - name: indexer-security
+              mountPath: /wazuh/runtime
+              readOnly: true
+            - name: indexer-conf
+              mountPath: /usr/share/wazuh-indexer/config/opensearch.yml
+              subPath: opensearch.yml
+              readOnly: true
+      volumes:
+        - name: vault-agent-config
+          configMap:
+            name: wazuh-vault-agent
+            defaultMode: 0444
+        - name: indexer-conf
+          configMap:
+            name: wazuh-indexer-conf
+            defaultMode: 0444
+        - name: indexer-certs
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: indexer-security
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: vault
+                  expirationSeconds: 600
+  volumeClaimTemplates:
+    - metadata:
+        name: wazuh-indexer
+        namespace: wazuh
+        labels:
+          app.kubernetes.io/name: wazuh
+          app.kubernetes.io/component: indexer
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        # API server 기본값을 명시해 Argo 영구 diff를 없앤다.
+        volumeMode: Filesystem
+        resources:
+          requests:
+            storage: 15Gi

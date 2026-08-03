@@ -266,3 +266,57 @@ spec:
             - falco
           names:
             - falco
+---
+apiVersion: kyverno.io/v2
+kind: PolicyException
+metadata:
+  name: pol-02-wazuh-pod-run-as-non-root
+  namespace: kyverno
+  annotations:
+    pol-02.imcherry5778.xyz/owner: platform-operations
+    pol-02.imcherry5778.xyz/reason: Wazuh manager image runs as UID 0 under a dedicated compensating Enforce policy.
+    pol-02.imcherry5778.xyz/review-trigger: Wazuh manager image digest, Linux capabilities, hostPath, or ServiceAccount change.
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  background: false
+  exceptions:
+    - policyName: pol-01-require-pod-run-as-non-root
+      ruleNames:
+        - require-pod-run-as-non-root
+  match:
+    any:
+      - resources:
+          kinds:
+            - Pod
+          namespaces:
+            - wazuh
+          names:
+            - wazuh-manager-master-*
+---
+apiVersion: kyverno.io/v2
+kind: PolicyException
+metadata:
+  name: pol-02-wazuh-statefulset-run-as-non-root
+  namespace: kyverno
+  annotations:
+    pol-02.imcherry5778.xyz/owner: platform-operations
+    pol-02.imcherry5778.xyz/reason: Wazuh manager image runs as UID 0 under a dedicated compensating Enforce policy.
+    pol-02.imcherry5778.xyz/review-trigger: Wazuh manager image digest, Linux capabilities, hostPath, or ServiceAccount change.
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  background: false
+  exceptions:
+    - policyName: pol-01-require-pod-run-as-non-root
+      ruleNames:
+        - autogen-require-pod-run-as-non-root
+  match:
+    any:
+      - resources:
+          kinds:
+            - StatefulSet
+          namespaces:
+            - wazuh
+          names:
+            - wazuh-manager-master
