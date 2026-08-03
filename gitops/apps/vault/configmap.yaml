@@ -26,6 +26,14 @@ data:
       node_id = "vault-0"
     }
 
+    # KMS-01: credential은 ConfigMap/Git에 두지 않고 vault-awskms Secret의
+    # AWS SDK 표준 환경변수로만 주입한다. endpoint를 생략해 서울 region의
+    # 공인 AWS KMS API를 사용하며 Site-to-Site VPN에 의존하지 않는다.
+    seal "awskms" {
+      region     = "ap-northeast-2"
+      kms_key_id = "alias/ktcloud4-bean-vault-auto-unseal"
+    }
+
     cluster_addr = "https://vault-0.vault-internal.vault.svc.cluster.local:8201"
     api_addr     = "https://vault.vault.svc.cluster.local:8200"
 

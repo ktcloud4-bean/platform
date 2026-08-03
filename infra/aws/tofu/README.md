@@ -21,6 +21,11 @@ bucket과 그 보호 설정, 전송 전용 IAM identity, 경보 채널을 선언
 내릴 수 있어야 한다. 오프사이트 전송은 계속 공인 AWS API endpoint로 나가며 그 VPN을
 경유하지 않는다.
 
+`KMS-01`의 Vault auto-unseal key와 service identity는 `infra/aws/tofu-kms`의 별도 state가
+소유한다. Vault seal은 부팅 경계이고 이 root의 bucket은 최종 복구 자산이므로 수명주기와
+rollback을 섞지 않는다. bucket의 SSE-S3 `AES256`도 유지한다. 같은 KMS key로 SSE-KMS까지
+묶으면 KMS 장애가 Vault 부팅과 오프사이트 사본 복호화를 동시에 막기 때문이다.
+
 ## 실행
 
 실제 변수값은 저장소 밖 파일에 둔다. 계정 ID와 경보 이메일은 커밋하지 않는다.
@@ -46,7 +51,7 @@ tofu apply -var-file=<저장소 밖 tfvars>
 | OpenTofu | `~> 1.12` (1.12.5로 검증) | `versions.tf` |
 | AWS provider | `hashicorp/aws` 6.56.0 | 정확히 고정. 루트 `.gitignore`가 lock 파일을 제외하므로 재현성의 근거가 이 줄뿐이다 |
 | region | `ap-northeast-2` | 변수 기본값 |
-| 암호화 | SSE-S3 `AES256` | KMS는 `KMS-01`의 Vault auto-unseal 후보와 얽히고 요청당 비용이 붙는다. 복구 자격증명이 복구 대상에 의존하는 순환을 만들지 않는다 |
+| 암호화 | SSE-S3 `AES256` | Vault auto-unseal KMS와 state·key를 공유하지 않아 seal 장애가 최종 복구 사본까지 번지지 않는다 |
 
 6.57.x는 릴리스 당일 패치가 나온 계열이라 후속 패치 없이 일주일을 넘긴 6.56.0을 골랐다.
 갱신은 자동으로 오지 않는다. 사람이 릴리스 노트를 읽고 plan을 본 뒤 올린다.

@@ -19,7 +19,7 @@ ADR(Architecture Decision Record)은 목표 구조를 선택한 이유, 검토�
 | [ADR-0003](0003-service-vm-boundaries.md) | 서비스 VM 경계 | `Accepted` | 물리 노드·전용 NAS·제품 요구사항 변화 |
 | [ADR-0004](0004-zero-trust-identity-and-management-access.md) | 통합인증과 관리 접근 | `Accepted` | 관리 클러스터 증가·운영자 역할 확대 |
 | [ADR-0005](0005-backup-and-offsite-recovery.md) | 계층별 백업과 S3 오프사이트 | `Accepted` | 외부 NAS·PBS·두 번째 물리 사이트 확보 |
-| [ADR-0006](0006-vault-seal-and-bootstrap-boundary.md) | Vault Shamir Day 1과 bootstrap 경계 | `Accepted` | 복구 drill 완료 후 AWS KMS 적용 |
+| [ADR-0006](0006-vault-seal-and-bootstrap-boundary.md) | Vault Shamir Day 1과 bootstrap 경계 | `Superseded` | ADR-0015에서 AWS KMS로 전환 |
 | [ADR-0007](0007-detection-and-observability-staging.md) | 탐지·관측의 역할과 배포 순서 | `Accepted` | 자원 gate 통과·경보 품질과 대응 절차 검증 |
 | [ADR-0008](0008-opentofu-provider-and-state-boundary.md) | OpenTofu provider와 state 경계 | `Accepted` | 원격 state 착지점 확보·provider 1.0·NetBox 전환 |
 | [ADR-0009](0009-proxmox-native-acme-management-tls.md) | Proxmox 네이티브 ACME DNS-01 관리 TLS | `Accepted` | CT 비공개 요구·사설 CA trust 자동화·다중 cluster |
@@ -28,6 +28,7 @@ ADR(Architecture Decision Record)은 목표 구조를 선택한 이유, 검토�
 | [ADR-0012](0012-crowdsec-appsec-origin-waf.md) | 오리진 WAF를 CrowdSec AppSec 경로로 전환 | `Accepted` | bouncer 유지 중단·Traefik plugin 정책 변화·격리 PoC 실패 |
 | [ADR-0013](0013-keycloak-secret-consumption.md) | Keycloak 시크릿을 명시적 Vault Agent init으로 소비 | `Accepted` | 소비 앱 증가·무중단 DB 자격증명 회전 |
 | [ADR-0014](0014-dashy-access-portal.md) | 애플리케이션 포털을 Dashy로 분리 | `Accepted` | groups/OIDC 지원 중단·동적 카탈로그 요구 |
+| [ADR-0015](0015-vault-aws-kms-auto-unseal.md) | Vault seal을 AWS KMS auto-unseal로 전환 | `Accepted` | access key·KMS 장애시간·replica 증가 |
 
 ## 형식
 

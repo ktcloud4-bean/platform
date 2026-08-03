@@ -1,0 +1,5 @@
+# 실제 계정 ID는 $KTC_SECRET_ROOT/kms-01/kms.tfvars mode 0600 파일에만 둔다.
+aws_account_id = "000000000000"
+
+# KMS 장애 시험에서만 false인 별도 plan을 만들고, 시험 직후 true plan으로 되돌린다.
+enable_vault_kms_access = true

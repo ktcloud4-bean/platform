@@ -1,6 +1,6 @@
 # ADR-0006: Vault Shamir Day 1과 bootstrap 경계
 
-- 상태: `Accepted`
+- 상태: `Superseded` ([ADR-0015](0015-vault-aws-kms-auto-unseal.md))
 - 날짜: 2026-07-30
 - 관련 작업: `VAULT-01`, `VAULT-02`, `BKP-03`, `BKP-05`, `KMS-01`
 
@@ -34,3 +34,11 @@ AWS KMS auto-unseal은 Vault 백업·복구와 수동 unseal 운영을 검증한
 - Vault와 S3 복구 drill을 완료한다.
 - AWS IAM·KMS 최소권한과 비용·감사 기준을 검증한다.
 - 수동 unseal이 허용 가능한 운영시간을 반복해서 초과한다.
+
+## 2026-08-03 재검토 결과
+
+`BKP-03`·`BKP-05`가 첫 조건을, `KMS-01`의 exact-key 3-action IAM policy·고정비/API 단가
+계산·CloudTrail 성공/거부 event가 둘째 조건을 충족했다. 셋째 조건은 반복 초과 전이라도
+`CAP-03` cold start의 실제 3/3 입력과 Vault Agent·Issuer 의존 증가를 근거로 전환 비용이
+이미 고정 병목이라고 판정했다. 사전 snapshot, KMS 장애, Shamir rollback과 무인 재기동을
+실증했으므로 Day 1 결정을 [ADR-0015](0015-vault-aws-kms-auto-unseal.md)가 대체한다.

@@ -1,0 +1,15 @@
+# KMS-01의 실제 변수·plan·state와 access key는 저장소 밖
+# $KTC_SECRET_ROOT/kms-01/에만 둔다.
+*.tfplan
+*.tfplan.*
+plan.out
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.env
+credentials
+*.secret

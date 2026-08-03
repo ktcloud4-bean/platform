@@ -215,7 +215,10 @@ Headlamp는 k3s의 일상 조회·로그·exec·장애 분석을 위한 관리 U
 
 ## Vault
 
-Day 1은 Community Edition, Integrated Storage(Raft), 수동 Shamir unseal을 사용한다. share와 초기 root token은 사용자가 저장소 밖에서 보관한다. AWS KMS auto-unseal은 기반 안정화 후 별도 마이그레이션으로 적용하며 Site-to-Site VPN의 선행조건으로 만들지 않는다.
+Day 1의 수동 Shamir 기준선과 복구 drill을 마친 뒤 `KMS-01`에서 Community Edition의 AWS KMS
+auto-unseal로 전환했다. KMS는 서울 region 공인 API endpoint를 사용하며 Site-to-Site VPN에
+의존하지 않는다. KMS 장애 중 재기동하면 Vault는 sealed로 남으므로, recovery share와 root token은
+Git·클러스터 밖에 보관하고 검증된 seal migration으로 Shamir에 복귀한다.
 
 Vault PKI는 내부 workload 인증서용이며 Proxmox·OPNsense·ingress의 공인 관리 인증서를 자동으로 대체하지 않는다. 사설 CA로 옮기려면 모든 관리 client의 trust 배포와 Vault 장애 시 복구 독립성을 먼저 별도 결정으로 검증한다.
 
@@ -259,7 +262,7 @@ ServiceAccount token을 주지 않는다. 상세 선택과 회전 조건은 [ADR
 
 Velero는 K3s SQLite를 백업하지 않는다. CSI snapshot을 지원하지 않는 local storage에서는 snapshot 완료를 가정하지 않고 파일 백업과 실제 restore를 검증한다. 로그는 백업 자산이 아니라 보존기간을 가진 운영 데이터로 취급한다.
 
-S3 복구 자격증명, K3s server token과 Shamir share처럼 전체 장애 때 필요한 값은 Vault에만 두지 않는다. 암호화한 break-glass 사본을 클러스터 밖에서 보관해 복구의 순환 의존을 끊는다.
+S3 복구 자격증명, K3s server token과 Vault recovery share처럼 전체 장애 때 필요한 값은 Vault에만 두지 않는다. 암호화한 break-glass 사본을 클러스터 밖에서 보관해 복구의 순환 의존을 끊는다.
 
 ## AWS 연동
 
@@ -267,7 +270,7 @@ S3 복구 자격증명, K3s server token과 Shamir share처럼 전체 장애 때
 - S3·STS·KMS의 공인 AWS API endpoint 사용은 금지하지 않는다.
 - Keycloak은 AWS 콘솔 임시 권한을 위한 SAML IdP다.
 - AWS S3는 온프레미스 장애와 분리된 최종 백업 사본이다.
-- AWS KMS auto-unseal은 Day 1 범위가 아니다.
+- Vault는 AWS KMS auto-unseal을 사용하되, recovery share로 Shamir seal에 복귀하는 경로를 보존한다.
 
 ## 의도적으로 유보한 것
 
@@ -276,7 +279,6 @@ S3 복구 자격증명, K3s server token과 Shamir share처럼 전체 장애 때
 | NetBox | 두 번째 물리 노드, 관리형 스위치, 공통 인벤토리 수요 |
 | 관리형 스위치 | Proxmox 외 프로젝트 물리 장비 추가 |
 | 두 번째 k3s 노드·Longhorn·Ceph | 서로 다른 물리 장애 도메인 확보 |
-| AWS KMS auto-unseal | Vault 백업·복구와 Shamir 운영 검증 완료 |
 | Shuffle 자동 대응 | 경보 품질과 수동 incident runbook 검증 완료 |
 
 ## 결정 기록

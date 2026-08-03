@@ -1284,7 +1284,7 @@ SHA에서 Dashy Keycloak 도달 양성, `token verification failed` 신규 0건,
 | `EDGE-01 DONE` | NetBird 단독 공개 DNS·NAT allowlist, 이전 프로젝트 공개 DNS 잔여 정리, Warpgate direct recovery peer와 최소 NetBird policy ([runbook](runbook/netbird-public-edge.md)) | `CROWDSEC-FIX-01`, `POM-01`, `NB-02`, `NIDS-01`, `NET-04` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 사용자 | 공개 권위 DNS는 DNS-only `netbird` A 1건·그 밖의 record 0건, WAN NAT는 NetBird TCP 80/443·UDP 3478만 존재, IDS 관측과 Warpgate TCP 8888 direct-peer 복구 경로가 Cloudflare proxy와 독립 |
 | `EDGE-02 DEFERRED` | Cloudflare proxied HTTP WAF·origin 제한·`sso`/Portal 공개 DNS·NAT | `EDGE-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | clientless Portal·외부 OIDC 셀프서비스 | 허용 hostname만 proxied 공개, origin 직접 우회 차단, IDS 경보·NetBird/Warpgate 복구 경로 독립 |
 | `NIPS-01 DEFERRED` | 검증된 Suricata rule만 선택적 IPS로 승격 | `NIDS-01`, `NET-04` | `OPNSENSE-LIVE` | 전체 프로젝트 통신 | 정상 트래픽·오탐·부모 인터페이스·offloading·처리량·장애·즉시 rollback 검증; 공개의 필수 gate 아님 |
-| `KMS-01 READY` | Vault Shamir→AWS KMS auto-unseal migration | `BKP-05` | `VAULT-INIT` | Vault 부팅·복구 | 사전 snapshot, KMS 장애 시험, seal rollback drill, [ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md) 재검토 조건 2의 AWS IAM·KMS 최소권한과 비용·감사 기준 검증, migration 뒤 재부팅에서 사람 개입 없는 unseal과 Shamir 복귀 경로 보존; VPN은 선행 아님 |
+| `KMS-01 DONE` | Vault Shamir→AWS KMS auto-unseal migration ([증거](evidence/kms-01/README.md)) | `BKP-05` | `VAULT-INIT` | Vault 부팅·복구 | 사전 snapshot, KMS 장애 시험, seal rollback drill, [ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md) 재검토 조건 2의 AWS IAM·KMS 최소권한과 비용·감사 기준 검증, migration 뒤 재부팅에서 사람 개입 없는 unseal과 Shamir 복귀 경로 보존; VPN은 선행 아님 |
 
 `EDGE-02`는 NetBird에 먼저 가입하지 않은 외부 기기의 Keycloak 대화형 로그인 또는
 NetBird 없이 쓰는 clientless Pomerium Portal이 실제 요구될 때만 재검토한다. 같은 WAN
@@ -1303,6 +1303,16 @@ Vault 가용성에 의존하기 시작하므로 재부팅 비용은 계속 늘�
 `KMS-01`은 `VAULT-INIT`을 단독으로 잡고 Vault를 내렸다 올린다. Vault Agent init을 쓰는 앱의
 Pod 재생성이나 `CERTMGR-01`의 Issuer 검증과 같은 창에서 실행하면 실패 원인을 분리할 수 없으므로
 겹치지 않게 잡는다. auto-unseal로 바꾼 뒤에도 Shamir 복귀 경로는 보존한다.
+
+2026-08-03 `KMS-01`에서 migration 전 Raft snapshot을 확보하고 별도 AWS state의 대칭
+single-Region KMS key와 exact-key `Encrypt`·`Decrypt`·`DescribeKey` IAM policy를 적용했다.
+IAM policy 한 개만 회수한 장애 시험은 service credential 거부 전파 뒤 Vault가 KMS
+`AccessDenied`로 NotReady가 되고, 같은 Pod가 policy 복구 뒤 share 없이 auto-unseal됨을
+확인했다. `auto-unseal → Shamir → auto-unseal` rollback drill, migration 뒤 무인 재기동,
+새 recovery share 5/3 verification을 마쳤다. 월 USD 1 고정비와 request 단가를 계산했고
+CloudTrail에서 성공·거부 event를 확인했다. 공인 KMS endpoint를 써 VPN은 선행으로 추가하지
+않았다. 따라서 `KMS-01`을 `DONE`으로 닫는다. `KMS-01`을 직접 선행으로 둔 후속은 없어 새로
+`READY`로 여는 작업은 없다.
 
 2026-08-03 `EDGE-01`에서 공개 권위 DNS를 DNS-only `netbird` A 한 건으로 정리하고 현재
 OPNsense WAN IPv4로 교정했다. 두 authoritative NS에서 그 밖의 A·AAAA·CNAME 0건과 일본

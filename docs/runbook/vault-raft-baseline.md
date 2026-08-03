@@ -1,6 +1,6 @@
 # Vault 단일 replica Raft 기준선 (`docs/runbook/vault-raft-baseline.md`)
 
-- 검증일: 2026-07-31 (`VAULT-01` 라이브 검증)
+- 검증일: 2026-08-03 (`VAULT-01` 기준선 + `KMS-01` seal migration)
 - 대상: k3s-01 `vault` namespace (Argo CD `platform-root` → child Application `vault`)
 - seal/bootstrap 경계: [ADR-0006](../adr/0006-vault-seal-and-bootstrap-boundary.md)
 
@@ -76,11 +76,29 @@ Vault 컨테이너가 최초 기동 시 TLS 파일이 없으면 즉시 crash하�
 발생한다. 라이브에서 재현·확인했다. `statefulset.yaml`의 `args`는 `["server"]`만 남긴다
 (디렉터리에 파일이 하나뿐이므로 결과적으로 같은 `vault.hcl`이 로드된다).
 
-## 5. Shamir 구성과 초기화
+## 5. seal 구성과 KMS-01 migration
 
-- shares: 5, threshold: 3 (HashiCorp 기본값)
-- `KMS-01`(AWS KMS auto-unseal, `DEFERRED`) 전환 전까지만 유효한 운영 값. 전환 시 recovery key로 재생성됨
-- 초기화 명령(출력은 즉시 파일로 리다이렉트, 터미널에 출력하지 않음):
+Day 1 초기화는 Shamir shares 5, threshold 3이었다. `KMS-01` 이후에는 같은 5/3 구조의
+**recovery key**를 쓴다. recovery key는 root token 재생성, recovery rekey와 Shamir seal로의
+migration을 승인하지만 KMS가 unavailable인 Vault를 직접 unseal하지는 못한다.
+
+Vault 선언은 다음 비밀이 아닌 값만 Git에 둔다.
+
+```hcl
+seal "awskms" {
+  region     = "ap-northeast-2"
+  kms_key_id = "alias/ktcloud4-bean-vault-auto-unseal"
+}
+```
+
+endpoint를 지정하지 않아 공인 AWS KMS API를 사용한다. IAM access key 원본은 저장소 밖
+`$KTC_SECRET_ROOT/kms-01/env`, runtime copy는 `vault/vault-awskms` Secret이다. ConfigMap,
+StatefulSet manifest, Pod log와 명령 인자에는 credential 원문을 넣지 않는다. AWS resource와
+state 경계는 [`infra/aws/tofu-kms/README.md`](../../infra/aws/tofu-kms/README.md)가 소유한다.
+
+### Day 1 초기화 기록
+
+초기화 때 쓴 명령은 다음과 같다. 이 명령을 migration된 live Vault에 다시 실행하지 않는다.
 
 ```bash
 kubectl exec -n vault vault-0 -- vault operator init \
@@ -88,14 +106,52 @@ kubectl exec -n vault vault-0 -- vault operator init \
 chmod 600 vault-init-output.json
 ```
 
-### unseal — CLI 대화형 프롬프트가 TTY 없이는 동작하지 않는 이유
+### secret-safe migration
 
 `vault operator unseal`을 인자 없이 파이프로 값을 흘려 넣으면
 `file descriptor 0 is not a terminal` 오류로 실패한다(라이브 확인). key를 **첫 번째 위치 인자**로
 주는 방법은 공식적으로는 되지만 원격 호스트의 `ps`에 순간적으로 노출될 수 있어 "shell 인자로
-남기지 않는다" 요구와 충돌한다. 대신 HTTP API를 TLS로 직접 호출해 key를 **요청 본문**으로만
-전달한다(`PUT /v1/sys/unseal {"key": "..."}`). 이 방식은 인자·프롬프트·로그 어디에도 key가
-노출되지 않는다.
+남기지 않는다" 요구와 충돌한다. 대신 sealed Pod에 직접 `kubectl exec -i`하고 Vault CLI의
+`vault write sys/unseal -`가 stdin의 JSON을 HTTPS request body로 보내게 한다. Service는 sealed
+Pod를 Ready endpoint에서 제외하므로 migration 중 호출 경로로 쓰지 않는다. 이 방식은 key를
+인자·프롬프트·로그에 남기지 않는다.
+
+[`kms-01-seal-migrate.sh`](../../infra/vault/scripts/kms-01-seal-migrate.sh)는 strict SSH와
+Pod 내부 loopback TLS를 사용하며 key를 stdin→HTTPS body로만 전달한다. Shamir→KMS에서는 현재
+Shamir key 파일, KMS→Shamir에서는 현재 recovery key 파일을 준다. 세 번의 요청 모두
+`migrate=true`다.
+
+```bash
+export KTC_SECRET_ROOT=${KTC_SECRET_ROOT:-$HOME/secrets/ktcloud4-bean}
+
+# Shamir → AWS KMS
+infra/vault/scripts/kms-01-seal-migrate.sh migrate \
+  "$KTC_SECRET_ROOT/vault-unseal-keys.b64"
+
+# AWS KMS → Shamir rollback drill
+infra/vault/scripts/kms-01-seal-migrate.sh migrate \
+  "$KTC_SECRET_ROOT/vault-recovery-keys.b64"
+
+# Shamir 선언에서 재기동한 뒤의 일반 unseal(migration 아님)
+infra/vault/scripts/kms-01-seal-migrate.sh unseal \
+  "$KTC_SECRET_ROOT/vault-recovery-keys.b64"
+```
+
+KMS→Shamir 전에는 KMS seal block에 `disabled = "true"`를 넣은 immutable transient SHA를
+root와 child가 읽어야 한다. 정상 auto-unseal 선언으로 돌아갈 때는 `disabled`를 제거한 새 SHA를
+적용하고, Shamir key가 된 현재 3개 share로 다시 migrate한다.
+
+최종 auto-unseal 뒤 recovery key는 verification을 켜서 5/3으로 재생성한다. 새 파일이 이미
+있으면 script는 덮어쓰지 않는다.
+
+```bash
+infra/vault/scripts/kms-01-seal-migrate.sh rekey-recovery \
+  "$KTC_SECRET_ROOT/vault-unseal-keys.b64" \
+  "$KTC_SECRET_ROOT/vault-recovery-keys.b64"
+```
+
+verification 완료 전에는 기존 Shamir share가 유효하다. 완료 뒤에는 새 recovery share만
+유효하므로 기존 `vault-unseal-keys.b64`를 폐기하고 이름을 바꿔 재사용하지 않는다.
 
 ## 6. 라이브 검증 결과
 
@@ -118,33 +174,56 @@ chmod 600 vault-init-output.json
 | 재시작 후 비인증 요청 | `sys/mounts` → `503 Vault is sealed` |
 | 재시작 후 동일 3 key unseal | 성공, `sealed:false` |
 | 재시작 전후 안전한 최소 상태 비교 | `cluster_id`, `cluster_name`, `n`, `t`, `storage_type`, seal `type` 모두 동일 → 같은 Raft 데이터가 영속됨 확인 |
-| `kubectl get secret -n vault` | 0건 (TLS key도 Secret 미사용) |
+| `kubectl get secret -n vault` | `VAULT-01` 당시 0건. `KMS-01` 이후 TLS key는 계속 Secret을 쓰지 않고, AWS SDK credential용 `vault-awskms` 한 개만 저장소 밖 원본에서 runtime reconcile |
 | Pod 로그·`vault-init-output.json` 대조 | unseal key/root token 문자열이 Pod 로그에 0건 |
 | Node/DiskPressure/SELinux/swap/failed unit | Ready / False / Enforcing / 0 / 0 |
 | `vault-0` `restartCount` | 0 (재시작은 Pod 재생성, crash loop 아님) |
 | 임시 자원 정리 | helper Pod 2개, port-forward, 로컬 검증 스크립트·파일 정리 완료 |
 
+### KMS-01 seal 경계 결과
+
+KV·auth·PKI는 `VAULT-02` 결과를 재검증하지 않았다. 상세 실행과 실패 판정은
+[`docs/evidence/kms-01`](../evidence/kms-01/README.md)이 소유한다.
+
+| 완료 증거 | 결과 |
+|---|---|
+| 사전 Raft snapshot | migration 전 175,605 bytes snapshot, SHA-256 `1edd1ae64a28787069e53656a7691e5ee8580647a5315c70ea4f616242e7d7b7` |
+| KMS 장애 시험 | IAM inline policy만 회수하고 service credential `AccessDenied` 전파 뒤 Pod 한 번 재생성; KMS `AccessDenied`·NotReady, policy 복구 뒤 같은 Pod가 share 없이 auto-unseal |
+| seal rollback drill | `awskms → disabled awskms → shamir → awskms`, 각 migration 완료 뒤 `migration=false`, 5/3 확인 |
+| IAM·KMS 최소권한 | exact key의 `Encrypt`·`Decrypt`·`DescribeKey`만 허용; 대칭 single-Region key, rotation off, `prevent_destroy` |
+| 비용·감사 | 월 USD 1 key + free tier 초과분 10,000 request당 USD 0.03; CloudTrail에서 성공 `Encrypt`·`Decrypt`와 거부 `DescribeKey`·`Encrypt` 확인 |
+| 무인 재기동·Shamir 복귀 | migration 뒤 새 Pod가 share 입력 없이 unseal; 새 recovery key 5/3을 verification 완료해 클러스터 밖에 보존 |
+
 ## 7. 로컬 복구 절차
 
-1. `k3s-01`에 SSH 후 `sudo /usr/local/bin/k3s kubectl get pod vault-0 -n vault`로 상태 확인.
-2. `sealed:true`면 저장소 밖 암호화 보관소에서 unseal key(threshold 3개 이상)를 꺼낸다.
-3. `kubectl port-forward -n vault svc/vault <local>:8200`로 로컬 접근을 연다.
-4. `PUT https://vault.vault.svc.cluster.local:<local>/v1/sys/unseal` 본문 `{"key": "<key>"}`를
-   서로 다른 key로 3회 호출(`--resolve`와 신뢰 CA 지정, `-k` 금지).
-5. `sys/seal-status`에서 `sealed:false`, `initialized:true`를 확인.
-6. root token은 초기화·복구 검증에만 사용하고 일상 작업에 쓰지 않는다(`VAULT-02`가 앱별 policy/auth를 구성).
+1. `k3s-01`에 strict SSH 후 `vault status`에서 `initialized`, `sealed`, `seal_type`만 확인한다.
+2. `seal_type=awskms`, `sealed=true`면 recovery share를 unseal API에 넣지 않는다. IAM inline policy,
+   access key active 상태와 공인 KMS API egress를 복구한다. Vault의 auto-unseal retry가 성공하면
+   `sealed=false`가 된다.
+3. KMS에서 독립해야 하는 유지보수·폐기라면 KMS가 다시 가용한 상태에서 사전 snapshot을 만들고,
+   `disabled=true` KMS seal 선언으로 기동한 뒤 recovery share 3개를 `migrate=true`로 제출한다.
+   `seal_type=shamir`, `sealed=false`를 확인한 뒤 KMS 선언과 credential runtime copy를 제거한다.
+4. Shamir 상태의 다음 재부팅부터는 기존의 TLS HTTP API 방식으로 현재 share 3개를 제출한다.
+5. root token은 초기화·복구 검증에만 사용한다. KV·auth·PKI 기능은 이 runbook의 seal 복구에서
+   다시 판정하지 않는다.
 
 ## 8. rollback 경계
 
-실패 시 되돌릴 대상은 다음으로 한정한다.
+KMS-01 실패 시 되돌림은 seal 상태에 따라 순서를 지킨다.
 
-- k3s-01의 `vault` namespace 전체(Pod/StatefulSet/Service/ConfigMap/PVC/ServiceAccount) 삭제
-- `argocd` namespace의 AppProject `vault`, Application `vault` 삭제
-- `platform-root` Application의 `targetRevision`을 `main`으로 복귀
-- `task/vault-01` 브랜치는 병합 전이면 삭제하지 않고 보존, 병합 후 실패가 드러나면 revert 커밋으로 처리
+- Shamir→KMS migration이 완료되기 전이면 시작 main SHA의 Shamir 선언으로 root/child를 되돌리고
+  기존 Shamir share 3개로 unseal한다.
+- migration 완료 뒤 Shamir로 되돌릴 때는 먼저 `disabled=true` KMS seal로 recovery share 3개를
+  migrate한다. 이 성공 없이 KMS block을 삭제하지 않는다.
+- 장애 시험의 IAM policy 회수는 `enable_vault_kms_access=true` plan 재적용으로 즉시 복구한다.
+- 검증 종료 뒤 `platform-root`를 기록한 시작 main SHA로 되돌리고 child 선언이 literal `main`인지
+  확인한다.
+- PVC·Raft data, KMS key, backup bucket, 다른 namespace와 Vault Agent workload는 삭제하거나
+  재생성하지 않는다.
 
-다음은 이 작업의 rollback 대상이 **아니다**: 다른 namespace, GITOPS-01이 만든 `argocd` 핵심 리소스,
-OPNsense·Proxmox·OpenTofu state, k3s 자체, Keycloak, INGRESS-01/BKP-04 등 병렬 작업의 변경분.
+KMS key의 `prevent_destroy`는 일상 rollback에서 해제하지 않는다. KMS key를 영구히 잃으면
+recovery share만으로 auto-sealed storage를 열 수 없으므로, key 폐기는 Shamir migration과
+재부팅을 끝낸 별도 작업만 소유한다.
 
 ## 9. 이 문서가 다루지 않는 것
 
@@ -152,4 +231,4 @@ OPNsense·Proxmox·OpenTofu state, k3s 자체, Keycloak, INGRESS-01/BKP-04 등 �
 |---|---|
 | KV v2, Kubernetes auth, DB secrets engine, PKI, audit device, 앱별 policy | `VAULT-02` |
 | PostgreSQL native backup·Vault Raft snapshot | `BKP-03` |
-| AWS KMS auto-unseal 전환 | `KMS-01`(`DEFERRED`) |
+| AWS KMS key·IAM·비용·CloudTrail 기준 | `infra/aws/tofu-kms/README.md`와 `KMS-01` 증거 |

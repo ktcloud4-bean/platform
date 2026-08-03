@@ -54,6 +54,20 @@ spec:
               value: https://vault-0.vault-internal.vault.svc.cluster.local:8201
             - name: VAULT_CACERT
               value: /vault/data/tls/vault.crt
+            # 온프레미스 Pod에는 instance profile이 없다. 저장소 밖 원본을
+            # KMS-01 절차로 주입한 전용 Secret의 두 key만 사용한다.
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vault-awskms
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vault-awskms
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
           ports:
             - name: https
               containerPort: 8200
