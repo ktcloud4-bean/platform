@@ -700,6 +700,61 @@ plan `31a59bdd3c3e5363b0e2d0ced701afbc3a47b35dd84d86e6022db2aa4f28a59b`은 state
 5개 모두 `no-op`, 변경·비통과 check 0건이다. plan 전후 state SHA-256은
 `b6275be5d8ea2ffcdc5cb327c2a31857ea219f445581d0eaffb9828f2cbf68ea`로 불변이다.
 
+### `CAP-05` RAM 증설 적용 전·후 실측 (2026-08-04)
+
+`WAZUH-02`가 `SOAR-01` 진입선 12 GiB에 169,750,528 bytes 미달로 확인한 뒤, 같은 조건을
+재확인하고 `k3s-01`을 28 GiB에서 32 GiB로 올렸다. 적용 전 값은 OpenTofu plan 생성 직전,
+적용 후 값은 cold start·Vault·CrowdSec 복구와 최종 refresh plan까지 끝난 완료 증거
+실행이다.
+
+| 지표 | 적용 전 실측 | 적용 후 실측 | 경고·정지 또는 진입 기준 | 판정 |
+|---|---:|---:|---:|---|
+| Proxmox available / swap | 25,124,044,800 bytes (23.394 GiB) / 0 bytes | 32,170,692,608 bytes (29.960 GiB) / 0 bytes | available 12 GiB 미만 경고, 8 GiB 미만 정지 | **GO** |
+| host load15 / root 사용률 | 0.86 / 5% | 1.12 / 5% | 20·70% 경고, 30·80% 정지 | 정상 |
+| thin data / metadata | 6.89% / 0.47% | 6.93% / 0.47% | 60%·50% 경고, 각 70% 정지 | 정상 |
+| VM RAM 회계 | 45 GiB (VM 44 + overhead 1) | 49 GiB (VM 48 + overhead 1) | 52 GiB 경고, 56.5 GiB 정지 | **GO**, 경고선까지 3 GiB |
+| VMID 120 memory / balloon | 28,672 / 0 MiB | 32,768 / 0 MiB | `k3s-01` 상한 36 GiB, balloon 금지 | **GO** |
+| `k3s-01` 총 RAM / available | 29,154,533,376 / 12,710,690,816 bytes (27.152 / 11.837 GiB) | 33,382,391,808 / 18,511,921,152 bytes (31.089 / 17.244 GiB) | `SOAR-01` 진입선 12 GiB(12,884,901,888 bytes) | 적용 전 **미달**(174,211,072 bytes 부족) → 적용 후 **GO**, 진입선 위 5,627,019,264 bytes(5.240 GiB) |
+| guest swap / root 사용률 | 0 bytes / 20% | 0 bytes / 20% | swap 사용 재검토, root 여유 20% 미만 정지 | 정상 |
+| PVC 요청 합계(11개) | 97,844,723,712 bytes (91.125 GiB) | 97,844,723,712 bytes (91.125 GiB) | 96 GiB 경고, 120 GiB 정지 | 불변, 경고선까지 4.875 GiB |
+
+적용 직전 real state의 harmless refresh(게스트 agent가 보고하는 `ipv4_addresses`·
+`mac_addresses` 배열 순서만 재정렬, 다른 속성 diff 0건)로 최초 승인 plan
+`553a8fcebf5c53c7f200d6183c7baaa97f2c7d5a3fae5366447c6a8e3ecf4ba8`이 stale해졌다. 같은
+state에서 다시 만든 plan `dc5d2d9bb8f11908b3887fe871f66eefd7819c3c731cb51178f772ee2bcafaae`은
+승인 범위와 동일하게 VMID 120의 `memory.dedicated 28672→32768` 한 건만 `0 add, 1 change,
+0 destroy`였다. state SHA-256은 `f91f85cb0dec985f5ac84ac32957a9328e9684ea0bfceb60467122f5bc8974a7`
+(serial 5, rollback 지점)에서 `d42951947dc3c08d0295bda8614d943abbf09ff843bbdb4b27b6d65221634bc7`
+(serial 6)로 바뀌었고, OpenTofu 자체 pre-apply backup(`c42ee0f95ea72ca431b3c5443e964aabd04fecf1a24e5b5739ca935d6f9d317f`,
+serial 5)을 저장소 밖 mode `0600` 사본으로 이중 보관했다.
+
+Proxmox `qm pending`이 `cur memory: 28672`·`new memory: 32768`로 나뉘어 있어 `CAP-03`과
+같이 정상 재부팅으로는 활성화되지 않음을 먼저 확인했다. guest `sudo shutdown -h now`로
+정상 종료한 뒤 VMID 120을 cold start했다. boot ID는
+`4e745572-8cf3-4bd2-91c2-a572ad45a382`에서 `5ebae80a-04a7-4765-a2c7-e8b9c037500d`로
+바뀌었고, k3s는 재기동 직후 `active`, Node `Ready`였다. Vault는 `KMS-01`이 도입한 AWS KMS
+auto-unseal(`Seal Type: awskms`)로 별도 키 입력 없이 `Sealed: false`·`HA Mode: active`가
+됐다.
+
+재부팅이 모든 Pod를 한 번씩 재시작하며 `CAP-03`에서 이미 관측된 것과 같은 계열의 결함이
+재현됐다. `crowdsec-appsec` Deployment의 init container
+`extract-crowdsec-01-crs-snapshot`이 새 sandbox에서 exit code 1로 실패해 `crowdsec`
+Application이 `Progressing`에 머물렀다(스크립트가 표준출력을 `/dev/null`로 버려 정확한
+실패 지점은 로그에 남지 않았다). `CAP-03`과 동일하게 정확한 Pod 한 건만 삭제해
+ReplicaSet이 새 sandbox로 재생성하게 하자 다음 시도에서 Ready가 됐다. `kube-system`의
+`helper-pod-delete-pvc-*` 여러 개가 SELinux 권한 거부로 반복 실패·재생성되는 현상도
+관측했으나, 이는 `K3S-01` 완료 보고가 이미 남긴 local-path 삭제 helper의 SELinux 환경
+한계와 같은 계열이며 이번 재부팅이 새로 만든 결함이 아니다. 두 현상 모두 PVC 선언·Argo
+동기화 대상·capacity gate에는 영향이 없어 `CAP-05` 범위에서 고치지 않았다.
+
+최종 refresh plan `02cb0bd3683c401596fa91ac7baacb7b4fa5da6ddbab54bca5ee87ff0865fd1d`은
+state resource 5개 모두 `no-op`, 변경·비통과 check 0건이며 plan 전후 state SHA-256은
+`d42951947dc3c08d0295bda8614d943abbf09ff843bbdb4b27b6d65221634bc7`로 불변이다. Argo
+Application 22개는 모두 `Synced/Healthy`(commit `dfdd2c29091d40de146a1ba725af69a7fb42f69d`)로
+돌아왔다. `k3s-01` available이 `SOAR-01` 진입선 12 GiB를 5.240 GiB 웃도므로 `SOAR-01` 진입
+판정은 **GO**다. 상세 절차와 rollback은
+[`k3s-01 RAM 증설 runbook`](runbook/k3s-ram-expansion.md)이 소유한다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.

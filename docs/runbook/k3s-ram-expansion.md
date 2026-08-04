@@ -1,9 +1,13 @@
 # k3s-01 RAM 증설
 
-- 작업: `CAP-03`
+- 작업: `CAP-03`, `CAP-05`
 - 상태: 완료
 - 잠금: `PVE-LIVE`, `TOFU-STATE`, `K3S-BOOTSTRAP`
-- 대상: Proxmox VMID 120 `k3s-01`, RAM 24 GiB → 28 GiB
+- 대상: Proxmox VMID 120 `k3s-01`, RAM 24 GiB → 28 GiB(`CAP-03`), 28 GiB → 32 GiB(`CAP-05`)
+
+이 문서는 같은 VM·같은 절차를 두 번 적용한 이력을 함께 소유한다. `CAP-03`(24→28 GiB) 절차와
+결과는 아래 원문 그대로 두고, `CAP-05`(28→32 GiB)는 맨 끝의 전용 절을 따른다. 목적·경계·
+승인 원칙은 두 작업이 같다.
 
 ## 목적과 경계
 
@@ -166,3 +170,66 @@ state SHA-256은 `b6275be5d8ea2ffcdc5cb327c2a31857ea219f445581d0eaffb9828f2cbf68
 rollback 뒤 VMID 120의 24,576 MiB·balloon 0, guest boot, k3s Ready, Argo 전체
 `Synced/Healthy`, OpenTofu no-op을 확인한다. 실패한 작업은 merge하지 않고 같은 `CAP-03`
 브랜치에서 원인을 고친다.
+
+## `CAP-05`: 28 GiB → 32 GiB (2026-08-04)
+
+`WAZUH-02`가 `SOAR-01` 진입선 12 GiB에 169,750,528 bytes 미달로 확인한 뒤 같은 절차를
+반복했다. `CAP-04`가 이미 계산해 둔 값(`28672→32768`, `0 add, 1 change, 0 destroy`, VM RAM
+회계 45→49 GiB, 52 GiB 경고선 미만)을 그대로 쓰고 새로 계산하지 않았다. 상세 실측 표는
+[`capacity-plan.md`](../capacity-plan.md)의 `CAP-05` 절이 소유하며, 아래는 적용 절차와
+이번에 새로 관측된 결함만 기록한다.
+
+### plan staleness와 재생성
+
+승인된 plan `553a8fcebf5c53c7f200d6183c7baaa97f2c7d5a3fae5366447c6a8e3ecf4ba8`을 명시적
+`-state`·`-backup` 인자로 적용하려 하자 `Saved plan is stale`로 중단됐다. 원인은 직전
+provider 인증 실패 시도가 이미 refresh를 한 번 수행해 state serial을 4에서 5로 올린
+것이었다. 실제 diff는 게스트 agent가 보고하는 `ipv4_addresses`·`mac_addresses` 배열
+순서뿐이었고 다른 리소스 속성 변화는 없었다(`lineage`는 `c27e90cb-1476-7a9c-9dc2-fbc97ebbda25`로
+불변). 같은 real state에서 plan
+`dc5d2d9bb8f11908b3887fe871f66eefd7819c3c731cb51178f772ee2bcafaae`을 다시 만들어 승인
+내용과 동일한 단일 변경(`memory.dedicated 28672→32768`)임을 재확인한 뒤 그 plan을
+적용했다. state SHA-256은 `f91f85cb0dec985f5ac84ac32957a9328e9684ea0bfceb60467122f5bc8974a7`
+(serial 5)에서 `d42951947dc3c08d0295bda8614d943abbf09ff843bbdb4b27b6d65221634bc7`
+(serial 6)로 바뀌었다. OpenTofu가 `-backup`에 쓴 pre-apply 사본
+(`c42ee0f95ea72ca431b3c5443e964aabd04fecf1a24e5b5739ca935d6f9d317f`, serial 5)과 별도로 만든
+수동 사본을 모두 저장소 밖 mode `0600`으로 보관해 rollback 지점을 이중화했다.
+
+### 적용과 cold start
+
+Proxmox `qm pending`이 `cur memory: 28672`·`new memory: 32768`로 나뉜 것을 확인해 `CAP-03`과
+같이 정상 재부팅으로는 활성화되지 않음을 먼저 판정했다. guest에서 `sudo shutdown -h now`로
+정상 종료한 뒤 `qm status 120`이 `stopped`가 될 때까지 기다리고, `qm start 120`으로
+cold start했다. boot ID는 `4e745572-8cf3-4bd2-91c2-a572ad45a382`에서
+`5ebae80a-04a7-4765-a2c7-e8b9c037500d`로 바뀌었고 guest `MemTotal`은
+29,154,533,376→33,382,391,808 bytes로 늘었다.
+
+### 재부팅 복구에서 발견한 결함
+
+Vault는 `KMS-01`이 도입한 AWS KMS auto-unseal(`Seal Type: awskms`)로 별도 키 입력 없이
+`Sealed: false`가 됐다. `CAP-03` 시점의 수동 Shamir 입력 절차는 더 이상 적용되지 않는다.
+
+`crowdsec-appsec` Deployment는 `CAP-03`과 같은 계열의 결함을 다시 보였다. init container
+`extract-crowdsec-01-crs-snapshot`이 새 sandbox에서 exit code 1로 실패해 Deployment가
+`0/1 Available`에 머물렀고 `crowdsec` Application이 `Progressing`이었다(스크립트가
+표준출력을 `/dev/null`로 버려 정확한 실패 지점은 로그로 남지 않았다). 정확한 그 Pod 한 건만
+`kubectl delete pod`로 제거하자 ReplicaSet이 새 sandbox로 재생성했고 다음 시도에서 Ready가
+됐다. 이 결함은 `k3s-01` 전체 재부팅마다 재현될 수 있는 비멱등 init이며, 근본 수정(예:
+idempotent 추출 스크립트)은 이 작업 범위 밖이라 별도 검토로 남긴다.
+
+`kube-system`의 `helper-pod-delete-pvc-*` 여러 개가 SELinux 권한 거부(`Permission denied`)로
+반복 실패·재생성됐다. 대상은 `sonarqube-restore-data`·`gitea/scm01-restore`처럼 과거 검증에서
+쓰고 남은 PV이며, `local-path-provisioner` 로그의 `create process timeout after 120 seconds`가
+반복 원인이다. 이는 `K3S-01` 완료 보고가 이미 남긴 "SELinux 환경에서 local-path 삭제 helper의
+timeout" 한계와 같은 계열이고 이번 재부팅이 새로 만든 결함이 아니다. Argo 동기화 대상도 PVC
+선언도 아니라서 `CAP-05` 범위에서 고치지 않았다.
+
+### 완료 판정
+
+최종 refresh plan `02cb0bd3683c401596fa91ac7baacb7b4fa5da6ddbab54bca5ee87ff0865fd1d`은 state
+resource 5개 모두 `no-op`, 변경·비통과 check 0건이며 plan 전후 state SHA-256은
+`d42951947dc3c08d0295bda8614d943abbf09ff843bbdb4b27b6d65221634bc7`로 불변이다. Argo
+Application 22개 전체가 `Synced/Healthy`(commit `dfdd2c29091d40de146a1ba725af69a7fb42f69d`)로
+돌아왔고, `k3s-01` available 18,511,921,152 bytes(17.244 GiB)는 `SOAR-01` 진입선
+12,884,901,888 bytes를 5,627,019,264 bytes(5.240 GiB) 웃돈다. rollback 절차는 위 `CAP-03`
+절과 같되 대상값만 `28,672 MiB`로 되돌린다.
