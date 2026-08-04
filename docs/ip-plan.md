@@ -169,7 +169,7 @@ traffic selector는 유지하지만 새 DATA→VPC 연결은 기본 차단한다
 | `DMZ` | `PLATFORM` | Keycloak·필수 control API만 허용 |
 | `DMZ` | `DATA` | 기본 차단; 제품 요구가 검증된 경우만 예외 |
 | `DATA` | 인터넷 | 업데이트·AWS S3 등 필요한 egress만 허용 |
-| 외부 | 내부 | 현재 NetBird TCP 80/443·UDP 3478만 허용; `EDGE-02` TARGET은 Cloudflare source의 `sso` origin TCP 8443만 k3s HTTPS로 추가 |
+| 외부 | 내부 | NetBird TCP 80/443·UDP 3478와 Cloudflare source(`EDGE02_CF_EDGE_SOURCES`)의 `sso` origin TCP 8443 → k3s HTTPS만 허용 |
 | 각 VLAN | OPNsense | DNS·NTP·DHCP 등 기반 포트만 허용; 관리 UI는 차단 |
 
 2026-08-03 `NET-04`가 공개 진입을 제외한 배포 서비스 경계를 구현하고 실제 source별
@@ -192,7 +192,7 @@ NetBird 단독 외부 공개 정책은 `EDGE-01`, 조건부 Cloudflare HTTP 공�
 | `object-01.imcherry5778.xyz` | canonical host | SeaweedFS 로컬 S3 VM | 내부 | Unbound 등록; A/PTR `10.10.50.20` |
 | `warpgate-01.imcherry5778.xyz` | canonical host | Warpgate VM | 내부 | Unbound 등록 |
 | `netbird-01.imcherry5778.xyz` | canonical host | NetBird VM | 내부 | Unbound 등록 |
-| `sso.imcherry5778.xyz` | service alias | Keycloak | 현재 내부·NetBird 경유; `EDGE-02` TARGET은 `platform` realm 사용자 프런트엔드만 Cloudflare proxied 공개 | Unbound alias → `k3s-01` (`10.10.20.10`) |
+| `sso.imcherry5778.xyz` | service alias | Keycloak | 내부 split DNS·NetBird 경유 불변; `platform` realm 사용자 프런트엔드(`/realms/platform`·`/resources`)만 `EDGE-02`로 Cloudflare proxied 공개, 그 밖은 내부 source만 | Unbound alias → `k3s-01` (`10.10.20.10`) |
 | `access.imcherry5778.xyz` | service alias | Pomerium 보호 Dashy 포털 | 내부·NetBird 경유; clientless 공개 미채택 | Unbound alias → `k3s-01` (`10.10.20.10`); POM-01 등록 |
 | `argo.imcherry5778.xyz` | service alias | Argo CD | Pomerium; 실제 권한은 Argo 자체 OIDC·RBAC가 판정 | Unbound alias → `k3s-01` (`10.10.20.10`); GITOPS-02 등록, 내부 AAAA·공개 A/AAAA 0건 |
 | `headlamp.imcherry5778.xyz` | service alias | Headlamp | Pomerium | `TARGET`; HEADLAMP-02 `OPNSENSE-LIVE` 승인 뒤 Unbound alias → `k3s-01` (`10.10.20.10`), 내부 AAAA·공개 A/AAAA 0건 |
@@ -216,23 +216,31 @@ canonical host의 주소는 이 문서의 고정 배정 표를 참조한다. `Un
 
 Keycloak issuer는 `https://sso.imcherry5778.xyz`로 고정한다. k3s 웹 서비스의 내부 레코드는 Traefik 진입 주소를 가리키고, 공개 서비스는 공인 DNS와 Unbound override를 함께 검증한다.
 
-`EDGE-01`의 현재 공개 권위 DNS allowlist는 DNS-only `netbird.imcherry5778.xyz` A 한 건이며
-그 밖의 A·AAAA·CNAME은 0건이다. 이전 `ktcloud4-acer` 프로젝트가 Tailscale CGNAT 주소에
-만들었던 DNS-only A 26건과 중단된 Cloudflare Tunnel을 가리키는 proxied CNAME 5건은 더
-이상 사용하지 않는 잔여로 확인해 제거했다. 보존한 `netbird` A는 작업 시작 시 현재 WAN과
-달랐던 값을 교정했으며 DNS-only와 TTL 120초를 유지한다. `access`·`sso` 공개 A와 Traefik 대상
-WAN NAT는 아직 없으며 `EDGE-02 DONE` 전에는 이 현재 경계를 완료 상태로 사용한다.
+`EDGE-01`의 공개 권위 DNS allowlist는 DNS-only `netbird.imcherry5778.xyz` A 한 건이다.
+이전 `ktcloud4-acer` 프로젝트가 Tailscale CGNAT 주소에 만들었던 DNS-only A 26건과 중단된
+Cloudflare Tunnel을 가리키는 proxied CNAME 5건은 더 이상 사용하지 않는 잔여로 확인해
+제거했다. 보존한 `netbird` A는 작업 시작 시 현재 WAN과 달랐던 값을 교정했으며 DNS-only와
+TTL 120초를 유지한다. `access` 공개 A와 애플리케이션 alias 공개 A/AAAA는 계속 0건이다.
 
-`EDGE-02`의 목표 공개 경계는 다음과 같다. 이 표는 target이며 아직 live 값이 아니다.
+2026-08-04 `EDGE-02`에서 아래 공개 경계를 라이브로 적용하고 검증했다. `sso` 하나만
+proxied로 추가됐고 그 밖의 항목은 `EDGE-01` 기준선과 동일하다.
 
-| 계층 | `EDGE-02` TARGET |
+| 계층 | `EDGE-02` LIVE |
 |---|---|
-| Cloudflare DNS | `sso.imcherry5778.xyz` proxied record 한 건을 추가하고 `netbird` DNS-only record는 그대로 유지 |
+| Cloudflare DNS | `sso.imcherry5778.xyz` proxied record 한 건 추가; `netbird` DNS-only record는 그대로 유지 |
 | Cloudflare Origin Rule | `sso` hostname의 destination port를 TCP 8443으로 override |
-| OPNsense PF/NAT | Cloudflare origin source TCP 8443만 `k3s-01` HTTPS TCP 443으로 전달; 임의 인터넷 source 거부 |
-| Keycloak 공개 path | 현재 NetBird가 쓰는 `platform` realm OIDC 사용자·login action, 정적 resource와 discovery만 허용 |
-| 외부 차단 | `/admin/`, `master` realm, root·health·metrics와 origin 직접 접속 |
+| Cloudflare WAF Custom Rule | `sso` host에서 `/realms/platform`·`/resources` 밖 path block (zone 5개 한도 중 1개 사용) |
+| Cloudflare Rate Limit | `sso` host의 token·device authorization path만 IP당 10초 30회 초과 시 10초 mitigation (zone 1개 한도 사용) |
+| OPNsense Alias | `EDGE02_CF_IPV4`·`EDGE02_CF_IPV6`(urltable, 일일 자동 갱신)와 이 둘을 묶은 `EDGE02_CF_EDGE_SOURCES` |
+| OPNsense NAT | WAN TCP 8443(source `EDGE02_CF_EDGE_SOURCES`만) → `k3s-01`(`10.10.20.10`) HTTPS TCP 443; 그 외 인터넷 source 거부 |
+| Traefik(keycloak) | `/realms/platform`·`/resources`는 source 무관 허용; 그 밖의 path는 새 Middleware `sso-internal-only`(IPAllowList `10.10.0.0/16`)로 내부 source만 허용 |
+| 외부 차단 확인 | `/admin/`, `/admin/master/console/`, `/realms/master`, root index, WAN origin 직접 접속(TCP 8443) 전부 외부에서 차단, 내부는 불변 |
 | 계속 비공개 | `access`, k3s canonical host, 애플리케이션 alias, Warpgate |
+
+`sso`의 Cloudflare WAF Custom Rule·Rate Limit 슬롯은 2026-07-13에 폐기된 `ktcloud4-acer`
+프로젝트가 남긴 `acer-waf-custom`(4개)·`acer-waf-ratelimit`(1개) ruleset을 삭제해 확보했다.
+`acer-waf-managed`(Cloudflare Free Managed Ruleset 실행 wrapper)는 project-neutral이라
+유지했다.
 
 Cloudflare client가 보는 서비스 port는 HTTPS 443이고 origin 연결만 TCP 8443을 쓴다. 같은 WAN
 IPv4의 TCP 443은 계속 NetBird가 소유한다. 내부 `sso` split DNS와 Keycloak issuer는 바꾸지

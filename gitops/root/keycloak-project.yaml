@@ -30,3 +30,5 @@ spec:
       kind: Job
     - group: networking.k8s.io
       kind: Ingress
+    - group: traefik.io
+      kind: Middleware

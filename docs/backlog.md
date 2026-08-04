@@ -293,7 +293,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `NB-02 DONE` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
 | `NB-02-FIX-01 DONE` | NetBird dashboard `AUTH_REDIRECT_URI`·`AUTH_SILENT_REDIRECT_URI`가 절대 URL로 선언되어 dashboard origin과 중복 결합(`Invalid parameter: redirect_uri`)되던 결함을 경로 전용 값으로 보정 | `NB-02` | 없음 | NetBird 로그인 화면 진입 | `EDGE-02` 외부 검증 중 실제 재현·원인 특정(`netbird-01`의 dashboard가 자기 origin과 env 값을 이어붙임); 템플릿 소스만 경로(`/nb-auth`, `/nb-silent-auth`)로 수정, 라이브 `netbird-01` 컨테이너 재적용은 다음 `netbird_server` role 적용 때 반영 |
 | `NB-02-FIX-02 DONE` | NetBird dashboard가 `netbird-client`에 없는 `groups` scope를 `AUTH_SUPPORTED_SCOPES`에 요청해 Keycloak이 `invalid_scope`로 거부하던 결함을 보정 | `NB-02-FIX-01` | 없음 | NetBird 로그인 화면 진입 | Keycloak Admin API로 `netbird-client`가 `groups`를 default/optional scope 어디에도 갖지 않고 dedicated `oidc-group-membership-mapper`로 scope 요청과 무관하게 groups claim을 이미 전달함을 확인; `AUTH_SUPPORTED_SCOPES`에서 `groups` 제거해 템플릿·라이브 `netbird-01` 컨테이너 모두 반영, 재로그인으로 통과 확인 |
-| `NB-ENROLL-01 BLOCKED` | 기존 Keycloak 일상 ID의 외부 NetBird interactive onboarding과 일반 사용자 device group·split DNS·exact ingress route·offboarding | `EDGE-02`, `IAM-01`, `NB-02`, `NET-04`, `POM-01` | `NETBIRD-LIVE` | `IAM-ENROLL-01` | 랩 밖 신규 client가 `/platform-users` ID·MFA로 사용자 소유 peer를 만들고 내부 DNS와 ingress HTTPS exact route로 `access`에 도달, 미소속·특권 전용 ID와 허용 밖 목적지·port 거부, 사람용 setup key 0건, session revoke·사용자 차단·peer 삭제 뒤 재접근 거부와 임시 자원 0건 |
+| `NB-ENROLL-01 READY` | 기존 Keycloak 일상 ID의 외부 NetBird interactive onboarding과 일반 사용자 device group·split DNS·exact ingress route·offboarding | `EDGE-02`, `IAM-01`, `NB-02`, `NET-04`, `POM-01` | `NETBIRD-LIVE` | `IAM-ENROLL-01` | 랩 밖 신규 client가 `/platform-users` ID·MFA로 사용자 소유 peer를 만들고 내부 DNS와 ingress HTTPS exact route로 `access`에 도달, 미소속·특권 전용 ID와 허용 밖 목적지·port 거부, 사람용 setup key 0건, session revoke·사용자 차단·peer 삭제 뒤 재접근 거부와 임시 자원 0건 |
 | `WG-02 DONE` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | `OPNSENSE-LIVE`, `PUBLIC-DNS` | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
 | `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
 | `VAULT-03 DONE` | Vault UI를 Pomerium 우회 표준 Ingress와 Vault OIDC auth method로 노출 (`gitops/apps/vault/`) | `VAULT-02`, `KC-01`, `INGRESS-01`, `KMS-01` | `VAULT-CONFIG`, `OPNSENSE-LIVE` | Vault 일상 운영·복구 독립성 | Vault OIDC auth method와 전용 Keycloak client 연결로 UI 사용자가 자기 policy 경로만 읽고 타 경로·`sys/mounts`는 403, Pomerium을 경유하지 않는 표준 Ingress와 자체서명 backend TLS 신뢰 설정, Pomerium Pod 정지 중 Vault UI 로그인 성공으로 복구 독립성 실증, root token·port-forward break-glass 보존 확인, audit device에 UI 로그인 event 기록과 token 원문 0건, `vault` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건과 `ip-plan.md` 노출 정의 갱신, Traefik 정적 설정·Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Vault Agent 소비자 회귀 없음 |
@@ -1462,7 +1462,7 @@ SHA에서 Dashy Keycloak 도달 양성, `token verification failed` 신규 0건,
 | `NET-04 DONE` | 실제 통신표로 VLAN 규칙 최소화·hardened 검증 ([runbook](runbook/opnsense-vlan-firewall-hardening.md)) | `NB-02`, `WG-02`, `POM-01`, `BKP-05`, `E2E-01` | `OPNSENSE-LIVE` | 외부 공개·운영 통신 | 임시 rule 제거, `vlan-verify hardened`, drift 없음 |
 | `EDGE-01 DONE` | NetBird 단독 공개 DNS·NAT allowlist, 이전 프로젝트 공개 DNS 잔여 정리, Warpgate direct recovery peer와 최소 NetBird policy ([runbook](runbook/netbird-public-edge.md)) | `CROWDSEC-FIX-01`, `POM-01`, `NB-02`, `NIDS-01`, `NET-04` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 사용자 | 공개 권위 DNS는 DNS-only `netbird` A 1건·그 밖의 record 0건, WAN NAT는 NetBird TCP 80/443·UDP 3478만 존재, IDS 관측과 Warpgate TCP 8888 direct-peer 복구 경로가 Cloudflare proxy와 독립 |
 | `EDGE-DESIGN-02 DONE` | 외부 NetBird OIDC bootstrap 순환을 해소할 Keycloak 사용자 프런트엔드 공개 경계 결정 ([ADR](adr/0018-public-keycloak-frontchannel.md)) | `EDGE-01`, `KC-01`, `NB-02`, `IAM-01` | 없음 | `EDGE-02`, `NB-ENROLL-01`, `IAM-ENROLL-01` | `sso` 사용자 프런트엔드만 공개하고 관리면·Portal·리소스·self-registration은 비공개로 둔 ADR, Cloudflare origin port 분리·OPNsense source 제한·rollback·후속 device/data-plane 소유권을 아키텍처·주소·런북·백로그에 일치시킴, 라이브 변경 0 |
-| `EDGE-02 READY` | Keycloak `platform` realm 사용자 OIDC 프런트엔드의 Cloudflare proxy/WAF·origin port 분리·OPNsense source 제한 적용 ([runbook](runbook/keycloak-public-frontchannel.md)) | `EDGE-01`, `EDGE-DESIGN-02` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 NetBird 로그인·`NB-ENROLL-01` | 공개 DNS·origin allowlist, 랩 밖 기존 `/platform-users` ID의 PKCE/device authorization·MFA, Admin·master·management와 origin 직접 우회 차단, NetBird/Warpgate 복구·내부 issuer 불변, `sso` 객체만 제거한 EDGE-01 rollback |
+| `EDGE-02 DONE` | Keycloak `platform` realm 사용자 OIDC 프런트엔드의 Cloudflare proxy/WAF·origin port 분리·OPNsense source 제한 적용 ([runbook](runbook/keycloak-public-frontchannel.md)) | `EDGE-01`, `EDGE-DESIGN-02` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 NetBird 로그인·`NB-ENROLL-01` | 공개 DNS·origin allowlist, 랩 밖 기존 `/platform-users` ID의 PKCE/device authorization·MFA, Admin·master·management와 origin 직접 우회 차단, NetBird/Warpgate 복구·내부 issuer 불변, `sso` 객체만 제거한 EDGE-01 rollback |
 | `NIPS-01 DEFERRED` | 검증된 Suricata rule만 선택적 IPS로 승격 | `NIDS-01`, `NET-04` | `OPNSENSE-LIVE` | 전체 프로젝트 통신 | 정상 트래픽·오탐·부모 인터페이스·offloading·처리량·장애·즉시 rollback 검증; 공개의 필수 gate 아님 |
 | `KMS-01 DONE` | Vault Shamir→AWS KMS auto-unseal migration ([증거](evidence/kms-01/README.md)) | `BKP-05` | `VAULT-INIT` | Vault 부팅·복구 | 사전 snapshot, KMS 장애 시험, seal rollback drill, [ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md) 재검토 조건 2의 AWS IAM·KMS 최소권한과 비용·감사 기준 검증, migration 뒤 재부팅에서 사람 개입 없는 unseal과 Shamir 복귀 경로 보존; VPN은 선행 아님 |
 
@@ -1480,6 +1480,35 @@ Cloudflare-source-only origin port를 사용한다. exact port와 DNS 노출 상
 `EDGE-02`가 외부 인증면을 증명할 때까지, `IAM-ENROLL-01`은 `NB-ENROLL-01`이 device group·
 split DNS·exact route·offboarding을 증명할 때까지 `BLOCKED`다. clientless Portal 공개는
 이번 결정을 확장하지 않고 별도 재검토한다.
+
+2026-08-04 `EDGE-02`에서 ADR-0018의 목표 경계를 라이브로 적용했다. preflight에서 발견한
+`WAZUH-02`·`SOAR-DASH-01`의 OPNsense drift 스냅샷 누락은 live 변경 없이 스냅샷만 별도
+커밋으로 보정했고, Cloudflare zone에 남아 있던 폐기 `ktcloud4-acer` 프로젝트의
+`acer-waf-custom`·`acer-waf-ratelimit` ruleset은 사용자 확인 뒤 삭제해 Free plan의 WAF
+Custom Rule·Rate Limit 슬롯을 확보했다. Cloudflare `sso` proxied record·hostname Origin
+Rule(destination port 8443)·WAF·Rate Limit과 OPNsense alias 3개·NAT(REST API가 없어 GUI로
+disabled 생성 후 readback 대조)를 stage했고, `keycloak` AppProject에 `traefik.io/Middleware`
+whitelist가 없어 막힌 것을 crowdsec AppProject와 같은 패턴으로 고친 뒤 immutable SHA에서
+`platform-root`·`keycloak` child Application을 라이브 검증했다.
+
+완료 증거 5개를 모두 실행했다. 공개 DNS·origin allowlist는 `netbird` DNS-only·`sso`
+proxied 2건과 OPNsense WAN NAT(NB-01 세 건 + EDGE-02 8443 source 제한 한 건)로 일치했다.
+외부 사용자 프런트엔드는 Cloudflare edge IP로 강제한 실제 PKCE 요청이 로그인 폼까지
+도달했고 기존 `/platform-users` ID로 비밀번호 변경·TOTP MFA 등록·콜백까지 완료했다.
+관리면·우회는 `/admin/`·`/realms/master`·root·WAN 직접 접속이 같은 외부 시점에 모두
+거부됐고 허용 discovery는 성공했다. NetBird API 401과 Warpgate TCP 8888 recovery는
+불변이었고 `access`·애플리케이션 공개 record는 0건이었다. rollback은 Cloudflare 4개
+객체와 GitOps 변경을 제거해 EDGE-01 기준선(단일 Ingress, Middleware 0개)으로 복귀함을
+확인한 뒤 같은 값으로 재적용해 최종 상태를 검증했다.
+
+부수적으로 `netbird.imcherry5778.xyz` 대시보드의 사전 존재 결함 두 건(`NB-02-FIX-01`:
+절대 URL로 선언된 `AUTH_REDIRECT_URI`/`AUTH_SILENT_REDIRECT_URI`의 origin 중복 결합,
+그리고 `netbird-client`에 없는 `groups` scope 요청)을 발견해 git 템플릿과 `netbird-01`
+라이브 컨테이너에 함께 반영했다. 외부 접속 시 대시보드 최초 로드에서 나타나는
+"Unauthenticated" 화면(내부 경로에서는 재현 안 됨)은 원인 미특정으로 남겨 `NB-ENROLL-01`
+또는 후속 FIX가 조사한다. `platform-root`는 검증 뒤 `main`으로 복귀했고 `ARGO-ROOT` 잠금을
+해제했다. 선행이 모두 충족된 `NB-ENROLL-01`만 `READY`로 열고 `IAM-ENROLL-01`은 `BLOCKED`를
+유지한다.
 
 2026-08-03 `KMS-01`의 `DEFERRED`를 해제하고 `READY`로 연다.
 [ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md)의 재검토 조건 중 "Vault와 S3 복구

@@ -1,13 +1,14 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: keycloak
+  name: keycloak-restricted
   namespace: keycloak
   annotations:
     argocd.argoproj.io/sync-wave: "1"
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
     traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt-production
+    traefik.ingress.kubernetes.io/router.middlewares: keycloak-sso-internal-only@kubernetescrd
   labels:
     app.kubernetes.io/name: keycloak
     app.kubernetes.io/component: ingress
@@ -16,19 +17,13 @@ spec:
   ingressClassName: traefik
   rules:
     # issuer/hostname의 단일 원본은 docs/ip-plan.md다.
-    # EDGE-02: 외부(Cloudflare) source도 도달해야 하는 platform realm OIDC·정적 resource 경로만 남긴다.
-    # 그 밖의 경로(/admin, /realms/master, root 등)는 ingress-restricted.yaml이 내부 source로만 제한한다.
+    # EDGE-02: ingress.yaml의 두 path(/realms/platform, /resources)를 뺀 나머지
+    # 전부(/admin, /realms/master, root, health 등)를 내부 source로만 제한한다.
+    # Traefik은 더 구체적인 path prefix를 우선하므로 ingress.yaml의 두 route가 먼저 매칭된다.
     - host: sso.imcherry5778.xyz
       http:
         paths:
-          - path: /realms/platform
-            pathType: Prefix
-            backend:
-              service:
-                name: keycloak
-                port:
-                  name: http
-          - path: /resources
+          - path: /
             pathType: Prefix
             backend:
               service:

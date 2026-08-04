@@ -119,7 +119,7 @@ NetBox는 채택하지 않았다. 물리 장비 증가, 포트·케이블 관리
 Client → OPNsense의 명시적 공개 port → netbird-01
                     └→ Suricata IDS 관찰
 
-목표 외부 OIDC bootstrap (`EDGE-02 READY`, 아직 미적용)
+외부 OIDC bootstrap (`EDGE-02 DONE`)
 NetBird client/browser → Cloudflare WAF → OPNsense의 Cloudflare-source-only origin port
                                        → Traefik → Keycloak platform realm 사용자 프런트엔드
 
@@ -134,9 +134,9 @@ Cloudflare와 분리된 복구 경로
 Service → Kubernetes Service DNS → Service
 ```
 
-`EDGE-01`의 공개 진입은 DNS-only `netbird` 한 이름과 TCP 80/443·UDP 3478뿐이다.
-`EDGE-02`가 완료되기 전까지 `access`·`sso`를 포함한 웹 이름은 내부 DNS에서만 쓰며 외부
-peer는 통제된 일회용 setup key 또는 내부망 등록으로 NetBird에 먼저 가입한다. Warpgate는
+`EDGE-01`의 공개 진입은 DNS-only `netbird` 한 이름과 TCP 80/443·UDP 3478다. `EDGE-02`가
+`sso`의 Keycloak `platform` realm 사용자 프런트엔드만 Cloudflare proxied로 추가했다.
+`access`를 포함한 나머지 웹 이름은 계속 내부 DNS에서만 쓴다. Warpgate는
 subnet route가 아니라 NetBird direct peer로 등록하고, recovery client group에서 Warpgate
 TCP 8888로 향하는 단방향 정책만 둔다. 기본 All↔All 정책은 비활성화하므로 이 복구 경로가 다른 내부 서비스
 접근권한으로 확대되지 않는다.

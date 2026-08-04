@@ -1,0 +1,18 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-internal-only
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  # EDGE-02: 랩 내부 VLAN(docs/ip-plan.md의 10.10.0.0/16) 밖의 source는 거부한다.
+  # OPNsense는 Cloudflare source만 WAN TCP 8443을 통과시키므로, 이 범위 밖 source는
+  # 항상 그 경로로 들어온 외부 요청이다. Cloudflare IP 목록을 여기서 따로 유지하지 않는다.
+  ipAllowList:
+    sourceRange:
+      - 10.10.0.0/16
