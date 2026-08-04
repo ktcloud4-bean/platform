@@ -122,7 +122,7 @@ def client_payload(client_id, dashboard_url, public):
                 "attributes": {
                     "pkce.code.challenge.method": "S256",
                     "oauth2.device.authorization.grant.enabled": "true",
-                    "post.logout.redirect.uris": f"{dashboard_url}/+",
+                    "post.logout.redirect.uris": f"{dashboard_url}/*",
                 },
             }
         )
