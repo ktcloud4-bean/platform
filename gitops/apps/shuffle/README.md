@@ -56,9 +56,27 @@ Shuffle PVC 합계는 정확히 20 GiB로 `CAP-04`가 잡은 상한과 같다. o
 - **워크플로·앱 연동은 0건이다.** Orborus를 배포하지 않았으므로 Shuffle이 임의 컨테이너를
   실행할 방법이 이 단계에는 없다. 로그인 후 org를 만들고 화면을 볼 수는 있지만 어떤
   workflow도 실행되지 않는다.
-- **접근 등급은 Wazuh와 동일하게 privileged-only다.** SOAR PoC는 대시보드만 있어도
-  사고대응 도구로 취급하고 `/platform-users`는 통과시키지 않는다
-  (`gitops/apps/pomerium/pomerium-conf.yaml`의 `shuffle` route).
+- **Route와 내부 role을 분리한다.** IAM-01 이후 Pomerium은 `/soar-readers`,
+  `/soar-operators`, `/platform-privileged`만 Route에 들이고 일반 `/platform-users`는
+  거부한다. Shuffle은 Keycloak 전용 client role을 다시 읽어 reader·user·admin 동작을
+  판정한다. Route 통과만으로 Shuffle 권한을 얻지 않는다.
+
+## IAM-01 OIDC 경계
+
+Shuffle `2.2.1`은 OIDC userinfo의 `email` claim을 내부 username으로 쓰고 소문자로
+정규화한다. 실제 검증 email을 서비스로 복제하지 않도록 Keycloak `shuffle` client만
+`email` claim을 canonical username으로 매핑한다. 따라서 Keycloak의 `Jaeeyun`은 Shuffle
+내부에서 `jaeeyun`으로 비교하며, 나머지도 같은 소문자 정규화를 적용한다.
+
+backend의 `SSO_REDIRECT_URL=https://shuffle.imcherry5778.xyz`는 public Authorization Code +
+PKCE callback을 고정한다. 이 값이 없으면 upstream이 내부 `BASE_URL`을 redirect URI로 만들어
+browser login이 실패한다. backend는 token 교환과 userinfo 조회 때 TLS hostname을 유지하되
+노드 외부 443 hairpin 대신 app manifest에 고정한 in-cluster Traefik Service만 사용하고,
+그 endpoint만 egress로 허용한다. 조직은
+`Platform Security` 하나만 사용하고 하위 조직은 만들지
+않는다. `role_required=true`, `SSORequired=false`이며 upstream의 역의미 필드
+`auto_provision=true`가 자동 프로비저닝 **off** 최종 상태다. 등록 창 전환과 local recovery
+MFA는 `gitops/tools/iam-01/provision.py`가 소유한다.
 
 ## 알려진 Kubernetes 함정 두 가지
 

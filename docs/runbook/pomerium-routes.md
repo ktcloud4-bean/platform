@@ -145,6 +145,70 @@ node --check gitops/tools/pom-01/dashy-browser.js
 git diff --check
 ```
 
+## IAM-01 Shuffle Route와 독립 복구
+
+IAM-01 이후 `shuffle` Route는 `/soar-readers`, `/soar-operators`,
+`/platform-privileged` 세 groups claim만 허용한다. `/platform-users`만 가진 계정은 계속
+403이며 Pomerium 허용 뒤에도 Shuffle이 top-level `roles` claim으로 내부 권한을 다시
+판정한다. email 또는 로그인 성공 fallback은 없다.
+
+같은 시점 allow/deny 한 쌍과 local recovery MFA는 한 번만 판정한다. 기존 legacy ID는 Route
+control에만 사용하며 rename·disable하지 않는다.
+
+```bash
+python3 gitops/tools/soar-dash-01/verify-routes.py \
+  --repo-root "$PWD" \
+  --connect-ip 10.10.20.10 \
+  --privileged-username imcherry-admin \
+  --privileged-password-file "$KTC_SECRET_ROOT/keycloak/privileged-password" \
+  --privileged-totp-file "$KTC_SECRET_ROOT/keycloak/privileged-totp" \
+  --deny-username imcherry \
+  --deny-password-file "$KTC_SECRET_ROOT/keycloak/daily-password" \
+  --deny-totp-file "$KTC_SECRET_ROOT/keycloak/daily-totp" \
+  --shuffle-admin-username soar-dash-01-admin \
+  --shuffle-admin-password-file "$KTC_SECRET_ROOT/shuffle/default-admin-password" \
+  --shuffle-admin-totp-file "$KTC_SECRET_ROOT/iam-01/shuffle-admin-totp"
+```
+
+Keycloak 장애와 독립된 Shuffle 복구는 Pomerium session도 사용하지 않는다. verifier는
+authenticated SSH port-forward로 backend에 직접 연결하고, root self-heal과 Keycloak child의
+automated sync 전체를 잠시 끈 뒤 두 상태가 안정된 것을 확인한다. 이어 server component
+Deployment replica를 0으로 확인한다.
+완료된 bootstrap Job Pod는 정지 판정에 포함하지 않는다. local 비밀번호+MFA 로그인과 API key
+0건을 판정하고 EXIT 경로에서 replica 1 Ready, child `prune=true,selfHeal=true`, root
+`selfHeal=true`를 복구한다. `ARGO-ROOT`와
+`IDENTITY-LIVE` 잠금 안에서 한 번만 실행한다.
+
+```bash
+python3 gitops/tools/iam-01/verify-recovery.py
+```
+
+팀 직접 등록 창이 없을 때도 정책 경계는 `gitops/tools/iam-01/verify-rbac.py`가 기존 검증 ID를
+임시 `/soar-readers`에 넣었다가 원복해 판정한다. 대상 여섯 ID의 credential·MFA에는 접근하지
+않는다. 대상 ID의 MFA `6/6`과 최초 Shuffle OIDC 등록 `6/6`은 `IAM-ENROLL-01`이 소유하며,
+그 전에는 IAM-MIG-01·SOAR-01을 READY로 열지 않는다.
+
+### 2026-08-04 IAM-01 완료 검증 결과
+
+- immutable settings `c51d9bef90e5a682e72c76fb4d443c67a1891767`, root pointer
+  `7e63398becc08b6097a6a53027e3e5858a8c1f2d`에서 root와 `keycloak`·`shuffle`·`pomerium`
+  child가 `Synced/Healthy`였다.
+- 기존 privileged control은 Shuffle Route 허용, `/platform-users`만 가진 control은 같은 시점
+  403이었고 MFA를 켠 `soar-dash-01-admin`의 외부 경로 local 로그인도 성공했다.
+- Keycloak server Pod 0건 중 trusted SSH direct path로 local 비밀번호+MFA 로그인에 성공했고
+  API key는 0건이었다. replica 1 Ready, child automated sync와 root self-heal을 복구했다.
+- Shuffle은 `Platform Security` 단일 조직, 하위 조직 0건, `role_required=true`, 자동
+  프로비저닝 off였다.
+- immutable settings `a85d19278a847d7aa201a70e2634563c2f7c030c`, root pointer
+  `d15081eb8361a23b764bc1b87cb20d7fd191901a`에서 기존 검증 ID로 role 없는 OIDC 로그인을
+  거부하고 reader Route·조회 허용, reader 쓰기·실행 거부, privileged admin 동작 허용을
+  판정했다. 대조 직후 자동 프로비저닝을 off로 닫고 검증용 group·조직 membership을 제거했다.
+- 검증 뒤 root와 세 child를 literal `main`의 시작 SHA로 복구해 다시 `Synced/Healthy`를
+  확인했다.
+
+여섯 사용자의 직접 비밀번호 변경·MFA 등록과 같은 세션의 최초 Shuffle OIDC 로그인은
+`IAM-ENROLL-01`로 이관했다. 이 등록 완료 전에는 두 후속 작업을 열지 않는다.
+
 ## 라이브 검증
 
 기본 검증기는 같은 실행에서 일상 ID allow와 특권 ID deny를 대조하고, token·cookie 원문을

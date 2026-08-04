@@ -57,6 +57,7 @@ OIDC claim을 직접 확인하는 `claim/groups`를 쓴다.
 | `https://grafana.imcherry5778.xyz` | `/platform-users` | OBS-02 Grafana UI |
 | `https://prometheus.imcherry5778.xyz` | `/platform-users` | OBS-02 Prometheus UI·PromQL |
 | `https://alertmanager.imcherry5778.xyz` | `/platform-users` 조회, `/platform-privileged` silence write | OBS-02 Alertmanager UI |
+| `https://shuffle.imcherry5778.xyz` | `/soar-readers`, `/soar-operators`, `/platform-privileged` | IAM-01 Route 진입만 판정; 내부 role은 Shuffle이 별도 판정 |
 
 로그인 성공, email 또는 `authenticated_user`만으로 허용하는 fallback은 없다.
 `/platform-privileged`만 가진 사용자는 Portal에는 들어가지만 검증 Route는 403이고 해당 타일도

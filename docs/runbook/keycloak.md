@@ -74,6 +74,95 @@ startup import는 이미 존재하는 realm을 덮어쓰지 않는다. realm 변
 Git 선언의 차이를 먼저 분류한 별도 작업으로 수행한다. Job을 단순 재실행해 기존 realm을
 교정하지 않는다.
 
+## IAM-01 팀 계정과 Shuffle OIDC
+
+IAM-01은 bootstrap Job을 재실행하지 않고 master 복구 ID의 Authorization Code + PKCE 세션으로
+`platform` realm의 현재 상태를 먼저 읽는다. 보호 입력은 mode `0600`
+`$KTC_SECRET_ROOT/iam-01/env`의 다음 key 다섯 개만 허용한다. 값은 출력하지 않는다.
+
+```text
+IAM01_EMAIL_IMCHERRY5778
+IAM01_EMAIL_FOXGEUN
+IAM01_EMAIL_CERBEROS2022
+IAM01_EMAIL_JAEEYUN
+IAM01_EMAIL_SNSD_HYBIRDINFRA
+```
+
+일상 ID 다섯 개는 검증 email, `/platform-users`, `/soar-readers`, 임시 비밀번호와
+`UPDATE_PASSWORD`·`CONFIGURE_TOTP` required action으로 만든다. `imcherry5778-admin`은 email을
+복제하지 않고 `/platform-privileged`만 가진다. 초기 비밀번호는 서로 다른 28자 값이며
+`$KTC_SECRET_ROOT/iam-01/initial-password-*` mode `0600` 파일에만 남는다. 기존 realm의 최소
+20자·대문자·소문자·숫자 정책은 낮추지 않고 특수문자 1자 요구만 추가한다.
+
+legacy `imcherry`와 새 `imcherry5778`은 IAM-MIG-01 전까지 같은 검증 email을 보존해야 한다.
+따라서 realm은 `duplicateEmailsAllowed=true`로 두되 기존 `loginWithEmailAllowed=false`와
+`registrationEmailAsUsername=false`를 precondition으로 고정한다. 사람 인증 식별자는 계속
+canonical username 하나이며 legacy ID를 rename·disable·delete하지 않는다.
+
+`shuffle` client는 public Authorization Code + PKCE `S256`이고 implicit, password grant,
+service account, authorization service가 없다. client role은 `shuffle-org-reader`,
+`shuffle-user`, `shuffle-admin` 세 개뿐이며 각각 `/soar-readers`, `/soar-operators`,
+`/platform-privileged`에 하나씩 매핑한다. 사용자에게 client role을 직접 주지 않는다. pinned
+Shuffle이 `email` claim을 username으로 소비하므로 이 client에서만 Keycloak username을
+`email` claim으로 내보내며 실제 email은 Shuffle로 보내지 않는다.
+
+```bash
+export KTC_SECRET_ROOT=/home/imcherry/secrets/ktcloud4-bean
+python3 gitops/tools/iam-01/provision.py check
+python3 gitops/tools/iam-01/provision.py apply
+```
+
+`apply`는 자동 프로비저닝 off를 최종값으로 유지하고 `soar-dash-01-admin`의 Shuffle MFA seed를
+`$KTC_SECRET_ROOT/iam-01/shuffle-admin-totp` mode `0600`으로 저장한다. 이 계정은 rename·공유하지
+않고 API key를 만들지 않는다.
+
+### 팀 등록 창
+
+팀원 다섯 명과 특권 ID 소유자가 직접 로그인할 수 있는 같은 시간 창에서만 아래 순서를 쓴다.
+사람이 준비되지 않았으면 `registration-open`을 실행하지 않고 off 상태를 유지한다.
+
+1. `python3 gitops/tools/iam-01/provision.py registration-open`
+2. 각 사용자가 임시 비밀번호를 변경하고 Keycloak TOTP를 직접 등록한다.
+3. 같은 세션으로 Shuffle OIDC에 로그인한다. 일상 ID는 reader, 특권 ID는 admin이어야 한다.
+4. `python3 gitops/tools/iam-01/provision.py registration-close`
+
+`registration-close`는 Keycloak MFA 6/6과 Shuffle OIDC 사용자 6/6, canonical 소문자 username,
+일상 `org-reader` 다섯 개와 특권 `admin` 한 개가 정확할 때만 성공한다. 성공한 호출이
+upstream의 `auto_provision=true`(off)를 즉시 복구한다. 실패하면 원인을 고치기 전에도
+`provision.py apply`를 실행해 off를 먼저 복구한다.
+
+### 2026-08-04 실행 상태
+
+보호 입력 5건을 mode `0600`으로 확인하고 사람 ID 6개, 관련 그룹 4개, public PKCE client와
+세 client role·group mapping을 적용했다. 일상 ID는 모두 `/platform-users`와
+`/soar-readers`, 특권 ID는 `/platform-privileged` 하나이며 사용자 직접 client role은 0건이다.
+realm의 20자 최소 길이를 유지한 채 특수문자 요구와 legacy 공존용 duplicate email을 적용했고
+email 로그인은 계속 꺼져 있다. 원문 email·초기 비밀번호·TOTP seed는 Git과 검증 출력에
+남기지 않았다.
+
+개인정보 delta 스캔에서 새 팀원 네 명의 email은 `origin/main`·IAM-01 branch history 모두
+0건이고 관련 Keycloak·Shuffle backend·Pomerium Pod 로그도 전체 입력에 대해 0건이었다.
+총괄 운영자 email은 IAM-01 이전 `origin/main`의 인증서·ACME 등 여섯 파일에 합계 7건이 이미
+있고 branch도 같은 7건이라 IAM-01 추가분은 0건이다. 따라서 이 작업은 branch-added 0건만
+증명하며 저장소 전체 absolute 0건은 주장하지 않는다.
+
+팀 등록 시간이 없어 Keycloak MFA는 `0/6`이고 여섯 ID 모두 required action 대기 상태다.
+따라서 등록 창을 열지 않았고 Shuffle 자동 프로비저닝은 off다. server-side 선언과 정책 경계는
+`IAM-01`에서 완료했고, 여섯 사용자의 직접 비밀번호 변경·MFA 등록과 같은 세션의 최초 Shuffle
+OIDC 로그인은 `IAM-ENROLL-01`이 `registration-open`부터 이어서 소유한다. 정책 경계는 대상
+ID의 credential을 대신 등록하지 않고 기존 검증 ID를 임시 group에 넣었다가 원복하는 다음
+verifier로 별도 판정한다.
+
+```bash
+python3 gitops/tools/iam-01/verify-rbac.py
+```
+
+2026-08-04 immutable settings `a85d19278a847d7aa201a70e2634563c2f7c030c`, root pointer
+`d15081eb8361a23b764bc1b87cb20d7fd191901a`에서 role 없는 OIDC 로그인 거부, reader 조회
+허용과 쓰기·실행 거부, privileged admin 동작 허용을 한 번 판정했다. username과 한 role을
+대조한 직후 자동 프로비저닝을 off로 닫았고 검증용 Keycloak group·Shuffle 조직 membership은
+0건으로 정리했다. 대상 여섯 ID의 password credential·MFA 상태는 변경하지 않았다.
+
 ## 완료 검증
 
 라이브 검증은 토큰이나 비밀 원문을 출력하지 않는다.

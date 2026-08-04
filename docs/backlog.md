@@ -276,8 +276,9 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `PKI-01 DONE` | Vault PKI를 첫 실제 consumer인 CrowdSec agent↔LAPI mTLS lifecycle에 연결 | `VAULT-02`, `CERTMGR-01` | `VAULT-CONFIG` | 내부 서비스 인증·인가 | CrowdSec 전용 최소권한 PKI role과 허용 밖 이름·OU 거부, agent↔LAPI mTLS 실제 연결 성공과 잘못된 CA·OU 거부, LAPI의 OU 기반 agent/bouncer 구분 보존, 자동 갱신·reload, revoke 뒤 CRL 등재와 해당 인증서 거부, Vault sealed 중 기존 인증서 유지·신규 발급만 실패, Git·로그의 private key 0건, `tls.enabled=false` rollback 뒤 `CROWDSEC-FIX-01` 기능(정상 200·공격 403·exact 예외) 회귀 없음 |
 | `KC-01 DONE` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `KC-01-FIX-01 DONE` | bootstrap 메모리 시크릿 정리를 fail-closed로 보정 | `KC-01` 배포 선언 | 없음 | Keycloak bootstrap | Agent/bootstrap 동일 UID, 렌더링 파일 정리 실패 시 Job 실패, v1 prune·v2 성공 |
-| `IAM-01 READY` | GitHub username 기준 팀 Keycloak 계정과 Shuffle OIDC·조직·RBAC, Pomerium Route 최소권한 전환 | `KC-01`, `POM-01`, `SOAR-DASH-01` | `IDENTITY-LIVE` | `IAM-MIG-01`, `SOAR-01` | 팀 일상 ID 5개와 분리 특권 ID 1개의 MFA, 보호 입력으로만 받은 검증 email과 Git·로그 원문 0건, 그룹→Shuffle client role 정확 매핑과 한 세션 한 role, 단일 조직의 reader 쓰기·실행 거부와 admin 허용, Pomerium 그룹 allow/deny, MFA를 갖춘 `soar-dash-01-admin`의 IdP 독립 복구와 API key 0개, 임시 자동 프로비저닝 종료, 관련 Argo child `Synced/Healthy` |
-| `IAM-MIG-01 BLOCKED` | 기존 `imcherry`·`imcherry-admin`의 서비스별 OIDC 연결·소유권을 새 ID로 이전하고 legacy ID를 단계적으로 비활성화 | `IAM-01` | `IDENTITY-LIVE` | legacy identity 정리 | Keycloak client와 각 서비스의 영속 사용자·소유권 전수표, 새 ID allow와 기존 ID deny의 같은 시점 대조, NetBird 등 유일 Owner 선이전, legacy session revoke·계정 disable, 최소 90일 감사 보존 동안 hard delete 0건과 rollback 절차 |
+| `IAM-01 DONE` | GitHub username 기준 팀 Keycloak 계정과 Shuffle OIDC·조직·RBAC, Pomerium Route 최소권한 전환 | `KC-01`, `POM-01`, `SOAR-DASH-01` | `IDENTITY-LIVE` | `IAM-ENROLL-01` | 팀 일상 ID 5개와 분리 특권 ID 1개 생성·MFA required action, 보호 입력으로만 받은 검증 email과 Git·로그 추가 원문 0건, 그룹→Shuffle client role 정확 매핑과 대표 세션 한 role, 단일 조직의 reader 쓰기·실행 거부와 admin 허용, role 없는 OIDC 거부, Pomerium 그룹 allow/deny, MFA를 갖춘 `soar-dash-01-admin`의 IdP 독립 복구와 API key 0개, 임시 자동 프로비저닝 종료, 관련 Argo child `Synced/Healthy` |
+| `IAM-ENROLL-01 READY` | 팀 일상 ID 5개와 분리 특권 ID 1개의 사용자 직접 초기 비밀번호 변경·MFA·Shuffle 최초 OIDC 등록 | `IAM-01` | `IDENTITY-LIVE` | `IAM-MIG-01`, `SOAR-01` | Keycloak MFA `6/6`, required action 0건, Shuffle canonical username `6/6`, 일상 `org-reader` 5개와 특권 `admin` 1개가 계정별 정확히 한 role, 등록 직후 자동 프로비저닝 off, 대상 계정·보호 입력 원문 Git·로그 추가 0건 |
+| `IAM-MIG-01 BLOCKED` | 기존 `imcherry`·`imcherry-admin`의 서비스별 OIDC 연결·소유권을 새 ID로 이전하고 legacy ID를 단계적으로 비활성화 | `IAM-ENROLL-01` | `IDENTITY-LIVE` | legacy identity 정리 | Keycloak client와 각 서비스의 영속 사용자·소유권 전수표, 새 ID allow와 기존 ID deny의 같은 시점 대조, NetBird 등 유일 Owner 선이전, legacy session revoke·계정 disable, 최소 90일 감사 보존 동안 hard delete 0건과 rollback 절차 |
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-PERF-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
 | `CORAZA-01 DEFERRED` | Traefik HTTP-WASM Coraza + CRS 직접 PoC; 호환 실패로 폐기하고 `CROWDSEC-01`이 대체 | `INGRESS-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)의 재검토 조건이 생기면 새 결정·새 작업으로만 검토 |
 | `CROWDSEC-01 DEFERRED` | CrowdSec AppSec(Coraza + OWASP CRS) route-scoped PoC 최초 시도; CRS ConfigMap 바이트 훼손과 AppProject prune 순서 결함으로 revert | `INGRESS-01`, `WAF-DESIGN-01` | 없음 | `CROWDSEC-FIX-01` | 공개 main enablement와 rollback 이력을 재작성하지 않음; [실패 증거](evidence/crowdsec-fix-01/README.md)를 기준으로 FIX에서만 보정 |
@@ -324,7 +325,12 @@ OIDC subject와 서비스 내부 사용자·소유권이 username보다 오래 �
 판정 전에는 hard delete하지 않는다. 이번 백로그·ADR 변경은 계정이나 라이브 설정을 변경하지
 않는다.
 
-| 경계 | 현재 `SOAR-DASH-01` 기준선 | `IAM-01` 목표 | 후속 |
+2026-08-04 실행에서는 사람이 직접 소유해야 하는 초기 비밀번호 변경·MFA 등록·최초 Shuffle
+OIDC 로그인을 `IAM-ENROLL-01`로 분리했다. `IAM-01`은 server-side 계정·MFA 강제·client와
+role mapping·Route·복구 계정·대표 정책 경계까지 완료한다. 목표 보안 상태는 바뀌지 않으며
+`IAM-MIG-01`과 `SOAR-01`은 실제 대상 ID 등록 `6/6` 전까지 열지 않는다.
+
+| 경계 | 현재 `SOAR-DASH-01` 기준선 | `IAM-01`·`IAM-ENROLL-01` 목표 | 후속 |
 |---|---|---|---|
 | Keycloak 사람 ID | `imcherry`, `imcherry-admin` | GitHub username 일상 ID 5개와 `imcherry5778-admin`; 모두 MFA | `IAM-MIG-01`에서 기존 ID disable·보존 |
 | 팀원용 local ID | 없음 | 만들지 않음 | 없음 |
@@ -1811,7 +1817,7 @@ Wazuh service·PF·NAT·DNS·IDS 의미 설정은 작업 전후 불변이다. �
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `SOAR-DASH-01 DONE` | Shuffle 엔진·대시보드만 배포(자체 OpenSearch 백엔드 포함, 워크플로·앱 연동 없음) | `OBS-01`, `WAZUH-01`, `WAZUH-02`, `FALCO-01`, `CAP-04`, `CAP-05` | `K3S-HEAVY` | `SOAR-01` | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch 단일 노드, 고정 version·image digest, 내부 전용 노출(Pomerium Route)과 관리자 로그인 확인, 워크플로·앱·webhook 연동 0건, 재부팅 후 유지, PVC·available 정지선 통과, Argo child `Synced/Healthy` |
-| `SOAR-01 BLOCKED` | 이미 배포된 Shuffle 위에 경보 수신→정보 보강→통지→승인 흐름을 연동(사람 승인형, read-only) | `IAM-01` | 없음 | 사고대응 | `imcherry5778`을 reader에서 제거한 뒤 operator로 이동해 Shuffle role 하나만 발급, 나머지 팀 reader의 조회 성공과 쓰기·실행 거부, 대표 Wazuh 경보의 수신·정보 보강·통지·승인 각 단계 실동작, 자동 대응(격리·차단·계정 변경 등) 0건, 최소권한 credential, rollback 뒤 dashboard 기존 상태 회귀 없음 |
+| `SOAR-01 BLOCKED` | 이미 배포된 Shuffle 위에 경보 수신→정보 보강→통지→승인 흐름을 연동(사람 승인형, read-only) | `IAM-ENROLL-01` | 없음 | 사고대응 | `imcherry5778`을 reader에서 제거한 뒤 operator로 이동해 Shuffle role 하나만 발급, 나머지 팀 reader의 조회 성공과 쓰기·실행 거부, 대표 Wazuh 경보의 수신·정보 보강·통지·승인 각 단계 실동작, 자동 대응(격리·차단·계정 변경 등) 0건, 최소권한 credential, rollback 뒤 dashboard 기존 상태 회귀 없음 |
 | `SOAR-02 DEFERRED` | 되돌릴 수 있는 대응 한 가지 자동화 | `SOAR-01`, 검증된 incident runbook | 없음 | 접근 정책 | 반복 시험, 승인·감사·rollback; 방화벽·계정 무인 파괴 금지 |
 
 2026-08-04 `CAP-05` 완료로 `SOAR-01`(원래 범위: Shuffle 배포 + 자체 OpenSearch + 경보 수신→
@@ -1861,8 +1867,9 @@ Orborus는 배포하지 않아 backend가 시도한 `shuffler.io`·`github.com/s
 시작할 수 있으므로 `BLOCKED`에서 `READY`로 연다.
 
 2026-08-04 팀 identity와 Shuffle RBAC를 워크플로보다 먼저 닫도록 `SOAR-01`의 직접 선행을
-`IAM-01`로 바꾸고 `READY`에서 `BLOCKED`로 되돌린다. `SOAR-DASH-01`의 배포 상태와 완료
-판정은 바꾸지 않는다. 운영자 role은 워크플로를 실제로 만들고 실행해야 하는 `SOAR-01`에서만
-승격하며, 그 전까지 모든 팀 일상 계정은 동일한 reader 권한을 가진다.
+`IAM-01`로 바꾸고 `READY`에서 `BLOCKED`로 되돌렸다. 같은 날 사용자 직접 등록을
+`IAM-ENROLL-01`로 분리하면서 직접 선행도 그 작업으로 옮겼다. `SOAR-DASH-01`의 배포 상태와
+완료 판정은 바꾸지 않는다. 운영자 role은 워크플로를 실제로 만들고 실행해야 하는
+`SOAR-01`에서만 승격하며, 그 전까지 모든 팀 일상 계정은 동일한 reader 권한을 가진다.
 
 Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 보안 사건에 반응하는 흐름만 소유한다.

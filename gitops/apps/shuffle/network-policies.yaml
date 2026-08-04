@@ -71,6 +71,38 @@ spec:
         - protocol: TCP
           port: 8200
 ---
+# IAM-01: backend만 canonical Keycloak HTTPS endpoint로 token 교환과 userinfo 조회를
+# 수행한다. hostAliases의 in-cluster Traefik Service 하나만 허용한다. kube-router의
+# Service DNAT 전후 판정 차이를 위해 같은 endpoint의 ClusterIP:443과 Pod:8443을 적는다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shuffle-backend-keycloak-egress
+  namespace: shuffle
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: shuffle
+      app.kubernetes.io/component: backend
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.43.255.250/32
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8443
+---
 # SOAR-DASH-01: Pomerium server Pod만 frontend의 8080으로 들어온다. shuffle-default-deny가
 # cross-namespace ingress를 막으므로 pomerium 쪽 egress(gitops/apps/pomerium/shuffle-egress.yaml)와
 # 정확히 짝을 이뤄야 한다(OBS-02가 이 짝을 빼먹어 503을 겪은 전례).

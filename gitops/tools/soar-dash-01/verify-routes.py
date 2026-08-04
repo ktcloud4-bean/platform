@@ -2,10 +2,15 @@
 """SOAR-DASH-01 Pomerium 브라우저 세션과 Shuffle 자체 admin 로그인을 비밀 없이 검증한다."""
 
 import argparse
+import base64
+import hashlib
+import hmac
 import importlib.util
 import json
 from pathlib import Path
+import struct
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -92,7 +97,24 @@ def login(
     return opener
 
 
-def shuffle_admin_login(opener, username: str, password_file: Path):
+def shuffle_totp(seed_file: Path) -> str:
+    require_secret_file(seed_file)
+    seed_text = seed_file.read_text(encoding="utf-8").strip().upper()
+    seed_text += "=" * (-len(seed_text) % 8)
+    seed = base64.b32decode(seed_text, casefold=True)
+    remaining = 30 - int(time.time()) % 30
+    if remaining < 4:
+        time.sleep(remaining + 1)
+    counter = int(time.time()) // 30
+    digest = hmac.new(seed, struct.pack(">Q", counter), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    value = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
+    return f"{value % 1_000_000:06d}"
+
+
+def shuffle_admin_login(
+    opener, username: str, password_file: Path, totp_file: Path | None = None
+):
     """Pomerium 통과 뒤 Shuffle 자체 REST API(SHUFFLE_DEFAULT_USERNAME 부트스트랩 계정)에 로그인한다."""
     require_secret_file(password_file)
     password = password_file.read_text(encoding="utf-8").strip()
@@ -102,7 +124,11 @@ def shuffle_admin_login(opener, username: str, password_file: Path):
         opener,
         f"{SHUFFLE_URL}/api/v1/login",
         method="POST",
-        payload={"username": username, "password": password},
+        payload={
+            "username": username,
+            "password": password,
+            **({"mfa_code": shuffle_totp(totp_file)} if totp_file else {}),
+        },
     )
     if status != 200:
         raise VerificationHTTPError(
@@ -126,6 +152,7 @@ def main():
     parser.add_argument("--deny-totp-file", required=True)
     parser.add_argument("--shuffle-admin-username", required=True)
     parser.add_argument("--shuffle-admin-password-file", required=True, type=Path)
+    parser.add_argument("--shuffle-admin-totp-file", required=True, type=Path)
     args = parser.parse_args()
     browser = load_pomerium_browser(args.repo_root)
     for secret_file in (
@@ -158,7 +185,12 @@ def main():
     )
     expect_status(deny_opener, f"{SHUFFLE_URL}/", 403, "Shuffle frontend unaffiliated")
 
-    shuffle_admin_login(privileged_opener, args.shuffle_admin_username, args.shuffle_admin_password_file)
+    shuffle_admin_login(
+        privileged_opener,
+        args.shuffle_admin_username,
+        args.shuffle_admin_password_file,
+        args.shuffle_admin_totp_file,
+    )
 
     CURRENT_STAGE = "complete"
     print(
