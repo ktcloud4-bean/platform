@@ -45,3 +45,5 @@ resources:
   - wazuh-application.yaml
   - cert-manager-project.yaml
   - cert-manager-application.yaml
+  - shuffle-project.yaml
+  - shuffle-application.yaml

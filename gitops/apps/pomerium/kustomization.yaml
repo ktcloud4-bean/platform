@@ -39,4 +39,5 @@ resources:
   - argocd-egress.yaml
   - obs-egress.yaml
   - wazuh-egress.yaml
+  - shuffle-egress.yaml
   - ingress.yaml

@@ -755,6 +755,28 @@ Application 22개는 모두 `Synced/Healthy`(commit `dfdd2c29091d40de146a1ba725a
 판정은 **GO**다. 상세 절차와 rollback은
 [`k3s-01 RAM 증설 runbook`](runbook/k3s-ram-expansion.md)이 소유한다.
 
+### `SOAR-DASH-01` 배포 직전 capacity gate (2026-08-04)
+
+`CAP-05` 완료로 `SOAR-01`(현 `SOAR-DASH-01`) 진입선을 충족한 직후, 실제 Shuffle 배포 직전에
+읽기 전용으로 재측정했다. 전용 SSH known_hosts와 Proxmox root 계정으로 확인했으며 이 호출은
+아무 상태도 바꾸지 않는다.
+
+| 지표 | 실측 | 경고·정지 또는 진입 기준 | 판정 |
+|---|---:|---:|---|
+| Proxmox available / swap | 29,789,491,200 bytes (27.746 GiB) / 0 bytes(8 GiB 중) | available 12 GiB 미만 경고, 8 GiB 미만 정지 | 정상 |
+| host load15 / thin data·metadata | 0.58 / 6.94%·—(local dir 4.44%) | 20·70% 경고, 30·80% 정지 / 60%·50% 경고, 각 70% 정지 | 정상 |
+| `k3s-01` available | 17,841,184,768 bytes (16.617 GiB) | `SOAR-DASH-01` 진입선 12 GiB(12,884,901,888 bytes) | **GO**, 진입선 위 4.937 GiB |
+| guest swap / root 사용률 | 0 bytes / 20%(161G/199G avail) | swap 사용 재검토, root 여유 20% 미만 정지 | 정상 |
+| PVC 요청 합계(11개, 실측) | 97,844,723,712 bytes (91.125 GiB) | 96 GiB 경고, 120 GiB 정지 | 불변 |
+| Shuffle PVC 배정(opensearch 16Gi + backend-files 4Gi) | 20 GiB | dashboard-only PoC 선언 합계 상한(`CAP-04`가 잡은 값 그대로 재사용) | 배정 |
+| Shuffle 배포 후 예상 PVC 합계 | 111.125 GiB | 96 GiB 경고, 120 GiB 정지 | **경고·GO**, 정지선까지 8.875 GiB |
+| Argo Application(22개) | 전량 `Synced/Healthy` | — | 정상 |
+
+`CAP-04`가 계산한 진입선(available 12 GiB)과 PVC 20 GiB 상한은 Shuffle 엔진(backend·frontend)과
+전용 OpenSearch를 배포할 때 실제로 소비되는 값이므로 그대로 재사용한다. orborus·worker는 이
+배포에 포함하지 않아(SOAR-01 워크플로 단계 범위) 추가 RAM·PVC를 소비하지 않는다. 어느 지표도
+경고선을 새로 넘기지 않아 배포를 진행한다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.

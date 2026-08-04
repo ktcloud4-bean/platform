@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - serviceaccounts.yaml
+  - opensearch.yaml
+  - backend.yaml
+  - frontend.yaml
+  - network-policies.yaml
+configMapGenerator:
+  - name: shuffle-vault-agent
+    namespace: shuffle
+    files:
+      - vault-agent-opensearch.hcl=files/vault-agent-opensearch.hcl
+      - vault-agent-backend.hcl=files/vault-agent-backend.hcl
+      - vault.crt=files/vault.crt
+  - name: shuffle-frontend-conf
+    namespace: shuffle
+    files:
+      - nginx.conf.tmpl=files/nginx.conf.tmpl
+generatorOptions:
+  disableNameSuffixHash: true

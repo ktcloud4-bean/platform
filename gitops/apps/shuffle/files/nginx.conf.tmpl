@@ -1,0 +1,59 @@
+# SOAR-DASH-01: upstream ghcr.io/shuffle/shuffle-frontend:2.2.1 ships nginx.conf.tmpl
+# with `listen 80` and a second TLS `server` block on 443, both of which need root to
+# bind. Pomerium already terminates edge TLS for every app in this cluster, so this
+# override drops the TLS server block entirely and moves the plain listener to 8080 so
+# the container can run as a non-root UID with no added capabilities. Everything else
+# (gzip, security headers, SPA fallback, /api/v(1|2) proxy_pass) is unchanged from
+# upstream. entrypoint.sh envsubst's only ${BACKEND_HOSTNAME}.
+worker_processes auto;
+pid /tmp/nginx.pid;
+
+events {
+	worker_connections 512;
+}
+
+http {
+	client_max_body_size 250M;
+
+	include mime.types;
+
+	gzip  on;
+	gzip_http_version 1.1;
+	gzip_vary on;
+	gzip_comp_level 6;
+	gzip_proxied any;
+	gzip_types text/plain text/css application/json application/javascript application/x-javascript text/javascript text/xml application/xml application/rss+xml application/atom+xml application/rdf+xml;
+	gzip_buffers 16 8k;
+	gzip_disable "MSIE [1-6].(?!.*SV1)";
+
+	server {
+		listen         8080;
+		server_name    "localhost";
+
+		location / {
+			add_header X-Frame-Options DENY;
+			add_header X-Content-Type-Options nosniff;
+			add_header X-XSS-Protection "1; mode=block";
+			add_header Referrer-Policy "no-referrer";
+			server_tokens off;
+
+			root /usr/share/nginx/html;
+			gzip_static on;
+			expires 1y;
+			add_header Cache-Control public;
+			add_header ETag "";
+			try_files $uri /index.html;
+		}
+
+		location ~ /api/v(1|2) {
+			proxy_pass http://${BACKEND_HOSTNAME}:5001;
+			proxy_buffering off;
+			proxy_http_version 1.1;
+
+			proxy_connect_timeout 900;
+			proxy_send_timeout 900;
+			proxy_read_timeout 900;
+			send_timeout 900;
+		}
+	}
+}

@@ -1,0 +1,185 @@
+# SOAR-DASH-01 dedicated OpenSearch backend for Shuffle. Deliberately separate from
+# wazuh-indexer (CAP-04 capacity gate premise): a shared cluster would couple Wazuh's
+# pinned indexer version and ISM retention to Shuffle's own storage growth, and an
+# OpenSearch outage here must never affect Wazuh's SIEM availability.
+apiVersion: v1
+kind: Service
+metadata:
+  name: shuffle-opensearch
+  namespace: shuffle
+  labels:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: opensearch
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: opensearch
+  ports:
+    - name: opensearch-rest
+      port: 9200
+      targetPort: opensearch-rest
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: shuffle-opensearch
+  namespace: shuffle
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: opensearch
+spec:
+  replicas: 1
+  serviceName: shuffle-opensearch
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shuffle
+      app.kubernetes.io/component: opensearch
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shuffle
+        app.kubernetes.io/component: opensearch
+    spec:
+      serviceAccountName: shuffle-opensearch
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/vault-agent.hcl
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config/vault-agent.hcl
+              subPath: vault-agent-opensearch.hcl
+              readOnly: true
+            - name: vault-agent-config
+              mountPath: /vault/tls/vault.crt
+              subPath: vault.crt
+              readOnly: true
+            - name: opensearch-secrets
+              mountPath: /vault/secrets
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+      containers:
+        - name: opensearch
+          image: opensearchproject/opensearch:3.2.0@sha256:23297b8d8545e129dd58c254ed08d786dc552410ba772983ad2af31048d2f04b
+          imagePullPolicy: IfNotPresent
+          workingDir: /usr/share/opensearch
+          command: [/bin/bash, -ec]
+          args:
+            - |
+              export OPENSEARCH_INITIAL_ADMIN_PASSWORD="$(cat /vault/secrets/admin-password)"
+              exec ./opensearch-docker-entrypoint.sh opensearch
+          env:
+            - name: cluster.name
+              value: shuffle
+            - name: discovery.type
+              value: single-node
+            - name: network.host
+              value: "0.0.0.0"
+            - name: node.name
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPENSEARCH_JAVA_OPTS
+              value: -Xms1g -Xmx1g -Dlog4j2.formatMsgNoLookups=true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            privileged: false
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          ports:
+            - name: opensearch-rest
+              containerPort: 9200
+            - name: os-transport
+              containerPort: 9300
+          startupProbe:
+            tcpSocket:
+              port: opensearch-rest
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: opensearch-rest
+            periodSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - name: shuffle-opensearch-data
+              mountPath: /usr/share/opensearch/data
+            - name: opensearch-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+      volumes:
+        - name: vault-agent-config
+          configMap:
+            name: shuffle-vault-agent
+            defaultMode: 0444
+        - name: opensearch-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: vault
+                  expirationSeconds: 600
+  volumeClaimTemplates:
+    - metadata:
+        name: shuffle-opensearch-data
+        namespace: shuffle
+        labels:
+          app.kubernetes.io/name: shuffle
+          app.kubernetes.io/component: opensearch
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        volumeMode: Filesystem
+        resources:
+          requests:
+            storage: 16Gi
