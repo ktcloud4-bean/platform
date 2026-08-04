@@ -2,7 +2,7 @@
 
 - 상태: `Accepted`
 - 날짜: 2026-07-30
-- 관련 작업: `NIDS-01`, `CORAZA-01`, `POL-01`, `FALCO-01`, `AUDIT-01`, `LOKI-01`, `OBS-01`, `WAZUH-01`, `SOAR-01`, `NIPS-01`
+- 관련 작업: `NIDS-01`, `CORAZA-01`, `POL-01`, `FALCO-01`, `AUDIT-01`, `LOKI-01`, `OBS-01`, `WAZUH-01`, `SOAR-DASH-01`, `SOAR-01`, `NIPS-01`
 
 ## 배경
 

@@ -1764,7 +1764,19 @@ Wazuh service·PF·NAT·DNS·IDS 의미 설정은 작업 전후 불변이다. �
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `SOAR-01 READY` | Shuffle read-only·사람 승인형 SOAR PoC | `OBS-01`, `WAZUH-01`, `WAZUH-02`, `FALCO-01`, `CAP-04`, `CAP-05` | `K3S-HEAVY` | 사고대응 | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch, 경보 수신→정보 보강→통지→승인 흐름, 최소권한 credential |
+| `SOAR-DASH-01 READY` | Shuffle 엔진·대시보드만 배포(자체 OpenSearch 백엔드 포함, 워크플로·앱 연동 없음) | `OBS-01`, `WAZUH-01`, `WAZUH-02`, `FALCO-01`, `CAP-04`, `CAP-05` | `K3S-HEAVY` | `SOAR-01` | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch 단일 노드, 고정 version·image digest, 내부 전용 노출(Pomerium Route)과 관리자 로그인 확인, 워크플로·앱·webhook 연동 0건, 재부팅 후 유지, PVC·available 정지선 통과, Argo child `Synced/Healthy` |
+| `SOAR-01 BLOCKED` | 이미 배포된 Shuffle 위에 경보 수신→정보 보강→통지→승인 흐름을 연동(사람 승인형, read-only) | `SOAR-DASH-01` | 없음 | 사고대응 | 대표 Wazuh 경보의 수신·정보 보강·통지·승인 각 단계 실동작, 자동 대응(격리·차단·계정 변경 등) 0건, 최소권한 credential, rollback 뒤 dashboard 기존 상태 회귀 없음 |
 | `SOAR-02 DEFERRED` | 되돌릴 수 있는 대응 한 가지 자동화 | `SOAR-01`, 검증된 incident runbook | 없음 | 접근 정책 | 반복 시험, 승인·감사·rollback; 방화벽·계정 무인 파괴 금지 |
+
+2026-08-04 `CAP-05` 완료로 `SOAR-01`(원래 범위: Shuffle 배포 + 자체 OpenSearch + 경보 수신→
+정보 보강→통지→승인 흐름)이 `READY`로 열리자마자, 그 범위를 배포와 기능으로 나눈다.
+`SOAR-DASH-01`을 신설해 Shuffle 엔진·대시보드와 전용 OpenSearch 배포만 먼저 맡기고
+워크플로 연동은 붙이지 않는다. 선행이 이미 모두 `DONE`이므로 `SOAR-DASH-01`은 곧바로
+`READY`다. 기존 `SOAR-01`은 그 위에서 경보 흐름을 연동하는 후속 작업으로 범위를 좁히고
+선행을 `SOAR-DASH-01` 하나로 바꿔 `BLOCKED`로 되돌린다. 배포 자체를 맡는
+`SOAR-DASH-01`이 `K3S-HEAVY` 잠금(큰 워크로드 최초 적용)을 갖고, 이미 뜬 Shuffle 위에서
+앱·커넥터를 구성하는 좁아진 `SOAR-01`에는 걸지 않는다. `CAP-04`·`CAP-05`가 검증한
+"`SOAR-01` 진입선"(available 12 GiB)은 이 분리 이전 완료 기록이라 다시 쓰지 않으며, 그
+게이트가 실제로 지키는 대상은 지금부터 `SOAR-DASH-01`의 배포 capacity gate다.
 
 Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 보안 사건에 반응하는 흐름만 소유한다.
