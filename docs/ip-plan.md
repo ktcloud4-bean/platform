@@ -206,6 +206,7 @@ NetBird 단독 외부 공개 정책은 `EDGE-01`, 조건부 Cloudflare HTTP 공�
 | `prometheus.imcherry5778.xyz` | service alias | Prometheus | Pomerium | Unbound alias → `k3s-01` (`10.10.20.10`); OBS-02 등록, 내부 AAAA·공개 A/AAAA 0건 |
 | `alertmanager.imcherry5778.xyz` | service alias | Alertmanager | Pomerium | Unbound alias → `k3s-01` (`10.10.20.10`); OBS-02 등록, 내부 AAAA·공개 A/AAAA 0건 |
 | `wazuh.imcherry5778.xyz` | service alias | Wazuh Dashboard | Pomerium; `/platform-privileged`만 허용 | Unbound alias → `k3s-01` (`10.10.20.10`); WAZUH-02 등록, 내부 AAAA·공개 A/AAAA 0건 |
+| `shuffle.imcherry5778.xyz` | service alias | Shuffle(SOAR) 대시보드 | Pomerium; `/platform-privileged`만 허용 | Unbound alias → `k3s-01` (`10.10.20.10`); SOAR-DASH-01 등록, 내부 AAAA·공개 A/AAAA 0건 |
 | `netbird.imcherry5778.xyz` | service alias | NetBird control plane | 외부 DNS-only A; 공개 AAAA 없음 | 미등록 |
 | `warpgate.imcherry5778.xyz` | service alias | Warpgate 서비스 | 내부·NetBird 경유 | Unbound alias → `warpgate-01` (`10.10.30.10`); WG-02 등록 |
 | `postgres.imcherry5778.xyz` | service alias | PostgreSQL | 내부, 비 HTTP | 미등록 |

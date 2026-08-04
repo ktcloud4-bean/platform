@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shuffle
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  project: shuffle
+  source:
+    repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
+    targetRevision: main
+    path: gitops/apps/shuffle
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: shuffle
+  # volumeClaimTemplates에는 API server가 apiVersion/kind/status를 채운다. wazuh와
+  # 동일하게 이 세 항목만 무시하고 storage 요청은 계속 Argo diff 대상으로 둔다.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jqPathExpressions:
+        - '.spec.volumeClaimTemplates[]?.status'
+        - '.spec.volumeClaimTemplates[]?.apiVersion'
+        - '.spec.volumeClaimTemplates[]?.kind'
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - ApplyOutOfSyncOnly=true
+      - PruneLast=true
+      - PrunePropagationPolicy=foreground

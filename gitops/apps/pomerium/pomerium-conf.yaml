@@ -194,3 +194,14 @@ routes:
       - allow:
           or:
             - claim/groups: /platform-privileged
+
+  # SOAR-DASH-01: 대시보드·엔진만 배포한 단계다. 워크플로/앱 연동이 없어도 SOAR PoC라
+  # Wazuh와 같은 접근 등급(사고대응 도구)으로 취급하고 platform-users는 통과시키지 않는다.
+  - name: shuffle
+    description: SOAR-DASH-01 Shuffle SOAR engine/dashboard; privileged accounts only, no workflow connectors yet
+    from: https://shuffle.imcherry5778.xyz
+    to: http://shuffle-frontend.shuffle.svc.cluster.local:8080
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-privileged

@@ -1,0 +1,202 @@
+# SOAR-DASH-01 Shuffle backend (Golang REST API). Orborus (workflow execution engine)
+# is deliberately not deployed in this phase: SOAR-DASH-01 is dashboard/engine-only,
+# no workflow or app connector runs until SOAR-01 wires it up with its own scoped
+# least-privilege credentials.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shuffle-backend-files
+  namespace: shuffle
+  annotations:
+    # local-path storageClass는 volumeBindingMode: WaitForFirstConsumer다. wave가
+    # backend Deployment(wave 1)보다 앞서면(기본값 0) PVC health-wait가 그 Deployment의
+    # Pod를 영원히 기다리는 데드락이 된다. 같은 wave로 묶어 함께 적용한다.
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: backend
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 4Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shuffle-backend
+  namespace: shuffle
+  labels:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: backend
+  ports:
+    - name: backend-api
+      port: 5001
+      targetPort: backend-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shuffle-backend
+  namespace: shuffle
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shuffle
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shuffle
+        app.kubernetes.io/component: backend
+    spec:
+      serviceAccountName: shuffle-backend
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/vault-agent.hcl
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config/vault-agent.hcl
+              subPath: vault-agent-backend.hcl
+              readOnly: true
+            - name: vault-agent-config
+              mountPath: /vault/tls/vault.crt
+              subPath: vault.crt
+              readOnly: true
+            - name: backend-secrets
+              mountPath: /vault/secrets
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+      containers:
+        - name: shuffle-backend
+          image: ghcr.io/shuffle/shuffle-backend:2.2.1@sha256:0cc1775e48b7d94b7f16d0be713aa274ced52be24ad521beaaf58c67023fd2e5
+          imagePullPolicy: IfNotPresent
+          workingDir: /app
+          command: [/bin/sh, -ec]
+          args:
+            - |
+              export SHUFFLE_OPENSEARCH_PASSWORD="$(cat /vault/secrets/opensearch-password)"
+              export SHUFFLE_ENCRYPTION_MODIFIER="$(cat /vault/secrets/encryption-modifier)"
+              export SHUFFLE_DEFAULT_PASSWORD="$(cat /vault/secrets/default-admin-password)"
+              exec ./shufflebackend
+          env:
+            - name: SHUFFLE_DEFAULT_USERNAME
+              value: soar-dash-01-admin
+            - name: SHUFFLE_OPENSEARCH_URL
+              value: https://shuffle-opensearch.shuffle.svc.cluster.local:9200
+            - name: SHUFFLE_OPENSEARCH_USERNAME
+              value: admin
+            - name: SHUFFLE_OPENSEARCH_SKIPSSL_VERIFY
+              value: "true"
+            - name: SHUFFLE_APP_HOTLOAD_FOLDER
+              value: /shuffle-apps
+            - name: SHUFFLE_FILE_LOCATION
+              value: /shuffle-files
+            - name: BASE_URL
+              value: http://shuffle-backend.shuffle.svc.cluster.local:5001
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            privileged: false
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          ports:
+            - name: backend-api
+              containerPort: 5001
+          startupProbe:
+            tcpSocket:
+              port: backend-api
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: backend-api
+            periodSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - name: shuffle-files
+              mountPath: /shuffle-files
+            - name: shuffle-apps
+              mountPath: /shuffle-apps
+            - name: backend-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+      volumes:
+        - name: vault-agent-config
+          configMap:
+            name: shuffle-vault-agent
+            defaultMode: 0444
+        - name: backend-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: vault
+                  expirationSeconds: 600
+        - name: shuffle-files
+          persistentVolumeClaim:
+            claimName: shuffle-backend-files
+        - name: shuffle-apps
+          emptyDir:
+            sizeLimit: 256Mi

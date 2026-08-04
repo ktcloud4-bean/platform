@@ -1764,7 +1764,54 @@ Wazuh service·PF·NAT·DNS·IDS 의미 설정은 작업 전후 불변이다. �
 
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
-| `SOAR-01 READY` | Shuffle read-only·사람 승인형 SOAR PoC | `OBS-01`, `WAZUH-01`, `WAZUH-02`, `FALCO-01`, `CAP-04`, `CAP-05` | `K3S-HEAVY` | 사고대응 | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch, 경보 수신→정보 보강→통지→승인 흐름, 최소권한 credential |
+| `SOAR-DASH-01 DONE` | Shuffle 엔진·대시보드만 배포(자체 OpenSearch 백엔드 포함, 워크플로·앱 연동 없음) | `OBS-01`, `WAZUH-01`, `WAZUH-02`, `FALCO-01`, `CAP-04`, `CAP-05` | `K3S-HEAVY` | `SOAR-01` | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch 단일 노드, 고정 version·image digest, 내부 전용 노출(Pomerium Route)과 관리자 로그인 확인, 워크플로·앱·webhook 연동 0건, 재부팅 후 유지, PVC·available 정지선 통과, Argo child `Synced/Healthy` |
+| `SOAR-01 READY` | 이미 배포된 Shuffle 위에 경보 수신→정보 보강→통지→승인 흐름을 연동(사람 승인형, read-only) | `SOAR-DASH-01` | 없음 | 사고대응 | 대표 Wazuh 경보의 수신·정보 보강·통지·승인 각 단계 실동작, 자동 대응(격리·차단·계정 변경 등) 0건, 최소권한 credential, rollback 뒤 dashboard 기존 상태 회귀 없음 |
 | `SOAR-02 DEFERRED` | 되돌릴 수 있는 대응 한 가지 자동화 | `SOAR-01`, 검증된 incident runbook | 없음 | 접근 정책 | 반복 시험, 승인·감사·rollback; 방화벽·계정 무인 파괴 금지 |
+
+2026-08-04 `CAP-05` 완료로 `SOAR-01`(원래 범위: Shuffle 배포 + 자체 OpenSearch + 경보 수신→
+정보 보강→통지→승인 흐름)이 `READY`로 열리자마자, 그 범위를 배포와 기능으로 나눈다.
+`SOAR-DASH-01`을 신설해 Shuffle 엔진·대시보드와 전용 OpenSearch 배포만 먼저 맡기고
+워크플로 연동은 붙이지 않는다. 선행이 이미 모두 `DONE`이므로 `SOAR-DASH-01`은 곧바로
+`READY`다. 기존 `SOAR-01`은 그 위에서 경보 흐름을 연동하는 후속 작업으로 범위를 좁히고
+선행을 `SOAR-DASH-01` 하나로 바꿔 `BLOCKED`로 되돌린다. 배포 자체를 맡는
+`SOAR-DASH-01`이 `K3S-HEAVY` 잠금(큰 워크로드 최초 적용)을 갖고, 이미 뜬 Shuffle 위에서
+앱·커넥터를 구성하는 좁아진 `SOAR-01`에는 걸지 않는다. `CAP-04`·`CAP-05`가 검증한
+"`SOAR-01` 진입선"(available 12 GiB)은 이 분리 이전 완료 기록이라 다시 쓰지 않으며, 그
+게이트가 실제로 지키는 대상은 지금부터 `SOAR-DASH-01`의 배포 capacity gate다.
+
+2026-08-04 `SOAR-DASH-01`에서 Shuffle v2.2.1(tag commit `a106f27312bbb81791a33dfee585a6b8d0ad3289`,
+GitHub Security Advisories 0건)의 backend·frontend와 Wazuh indexer와 분리한 전용
+OpenSearch 3.2.0을 모두 image digest로 고정해 배포했다. 공식 Helm chart·Kubernetes manifest가
+없어 upstream `docker-compose.yml`을 검토해 선언을 직접 파생했다. 배포 직전 `k3s-01`
+available은 16.617 GiB로 진입선(12 GiB) 위 4.937 GiB였다.
+
+merge 전 `ARGO-ROOT` 라이브 검증에서 실패 두 종류를 원인 특정 뒤 같은 브랜치에서 고쳤다.
+`shuffle-backend-files` PVC(`local-path`, `WaitForFirstConsumer`)가 backend Deployment보다
+이른 sync-wave에 있어 PVC health-wait와 Pod 생성이 서로를 기다리는 데드락이었던 것을 같은
+wave로 옮겨 없앴고, upstream frontend 이미지의 `nginx.conf.tmpl`이 80/443을 바인딩해 root가
+필요했던 문제는 자체 template으로 TLS block을 없애고 평문 8080으로 옮겨 PolicyException 없이
+해결했다(빈 emptyDir subPath가 대상 파일 경로를 디렉터리로 잘못 만드는 별도 함정은
+initContainer로 빈 파일을 먼저 만들어 피했다). `gitops/apps/pomerium/ingress.yaml`의 Traefik
+host·TLS 목록에 `shuffle.imcherry5778.xyz`를 추가하지 않아 Traefik이 SNI를 몰라 self-signed
+cert로 응답하던 것도 이 목록에 등록해 Let's Encrypt DNS-01 인증서를 새로 발급받아 고쳤다
+(Traefik Pod UID·재시작 0건, hot reload만 확인).
+
+라이브 검증에서 `gitops/tools/soar-dash-01/verify-routes.py`가 같은 실행에서
+`/platform-privileged`(`imcherry-admin`)의 Pomerium 통과와 `/platform-users`만 가진
+`imcherry`의 403을 대조했고, Vault가 발급한 bootstrap 계정(`soar-dash-01-admin`)의 Shuffle
+자체 `/api/v1/login`이 Pomerium→Traefik TLS→frontend→backend 전체 외부 경로로 성공했다.
+`shuffle-opensearch-0`를 삭제해 StatefulSet이 재생성한 뒤에도 같은 로그인이 성공해 PVC 데이터
+지속을 확인했다. `shuffle` namespace의 Kubernetes Secret은 0건이고, 워크플로 실행 엔진인
+Orborus는 배포하지 않아 backend가 시도한 `shuffler.io`·`github.com/shuffle/python-apps` 외부
+호출은 NetworkPolicy egress 부재로 모두 connection refused였다(워크플로·앱 연동 0건의 실증).
+
+배포 후 실측은 `k3s-01` available 14.961 GiB(정지선 8 GiB 위 6.961 GiB), Proxmox available
+24.421 GiB, swap 0, PVC 합계 111.125 GiB(사전 예측과 정확히 일치, 120 GiB 정지선까지
+8.875 GiB)였다. Argo `shuffle` Application과 함께 기존 22개 Application 전체가
+`Synced/Healthy`로 남았다. 상세 값은 [`capacity-plan.md`](capacity-plan.md)의
+`SOAR-DASH-01` 절, 배포 선언과 알려진 함정은
+[`gitops/apps/shuffle/README.md`](../gitops/apps/shuffle/README.md)가 소유한다.
+`SOAR-DASH-01`을 `DONE`으로 닫고, 선행이 충족된 직접 후속 `SOAR-01`은 워크플로 연동을
+시작할 수 있으므로 `BLOCKED`에서 `READY`로 연다.
 
 Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 보안 사건에 반응하는 흐름만 소유한다.

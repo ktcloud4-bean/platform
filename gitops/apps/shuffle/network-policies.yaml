@@ -1,0 +1,99 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shuffle-default-deny
+  namespace: shuffle
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shuffle-internal
+  namespace: shuffle
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shuffle-dns-egress
+  namespace: shuffle
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# opensearch·backend의 Vault Agent init만 Vault로 나간다. frontend는 Vault Agent가
+# 없으므로 podSelector로 두 컴포넌트만 좁힌다(wazuh-vault-egress는 namespace 전체를
+# 열지만 이 namespace는 root credential 없는 컴포넌트도 있어 더 좁힌다).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shuffle-vault-egress
+  namespace: shuffle
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [opensearch, backend]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
+        - protocol: TCP
+          port: 8200
+---
+# SOAR-DASH-01: Pomerium server Pod만 frontend의 8080으로 들어온다. shuffle-default-deny가
+# cross-namespace ingress를 막으므로 pomerium 쪽 egress(gitops/apps/pomerium/shuffle-egress.yaml)와
+# 정확히 짝을 이뤄야 한다(OBS-02가 이 짝을 빼먹어 503을 겪은 전례).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shuffle-frontend-pomerium-ingress
+  namespace: shuffle
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: shuffle
+      app.kubernetes.io/component: frontend
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pomerium
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pomerium
+              app.kubernetes.io/component: server
+      ports:
+        - protocol: TCP
+          port: 8080

@@ -1,0 +1,143 @@
+# SOAR-DASH-01 Shuffle frontend (nginx SPA + reverse proxy to backend /api/v1,/api/v2).
+# No Vault secret: it only proxies, it never sees OpenSearch or backend credentials.
+apiVersion: v1
+kind: Service
+metadata:
+  name: shuffle-frontend
+  namespace: shuffle
+  labels:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: frontend
+  ports:
+    - name: frontend-http
+      port: 8080
+      targetPort: frontend-http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shuffle-frontend
+  namespace: shuffle
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shuffle
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shuffle
+        app.kubernetes.io/component: frontend
+    spec:
+      serviceAccountName: shuffle-frontend
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Kubernetes subPath 제약: 대상 emptyDir이 비어 있으면 kubelet이 subPath 항목을
+        # 디렉터리로 만들어, upstream 이미지에 이미 파일로 존재하는 /etc/nginx/nginx.conf
+        # 위 bind mount가 "not a directory"로 실패한다. 같은 볼륨을 subPath 없이 마운트해
+        # 먼저 빈 파일을 만들어 두면 이후 subPath가 파일 대 파일로 mount된다.
+        - name: nginx-conf-init
+          image: ghcr.io/shuffle/shuffle-frontend:2.2.1@sha256:0561dd421382f70d15cada11a324b40762f0930522fcc1b51edcce9c87cc0f00
+          imagePullPolicy: IfNotPresent
+          command: [/bin/sh, -ec, 'touch /nginx-conf-writable/nginx.conf']
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            privileged: false
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 8Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+          volumeMounts:
+            - name: nginx-conf-writable
+              mountPath: /nginx-conf-writable
+      containers:
+        - name: shuffle-frontend
+          image: ghcr.io/shuffle/shuffle-frontend:2.2.1@sha256:0561dd421382f70d15cada11a324b40762f0930522fcc1b51edcce9c87cc0f00
+          imagePullPolicy: IfNotPresent
+          command: [/entrypoint.sh]
+          args: [nginx, -g, "daemon off;"]
+          env:
+            - name: BACKEND_HOSTNAME
+              value: shuffle-backend.shuffle.svc.cluster.local
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            privileged: false
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          ports:
+            - name: frontend-http
+              containerPort: 8080
+          startupProbe:
+            tcpSocket:
+              port: frontend-http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: frontend-http
+            periodSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - name: nginx-conf-tmpl
+              mountPath: /etc/nginx/nginx.conf.tmpl
+              subPath: nginx.conf.tmpl
+              readOnly: true
+            - name: nginx-conf-writable
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: nginx-conf-tmpl
+          configMap:
+            name: shuffle-frontend-conf
+            defaultMode: 0444
+        - name: nginx-conf-writable
+          emptyDir:
+            sizeLimit: 1Mi
+        - name: nginx-cache
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi

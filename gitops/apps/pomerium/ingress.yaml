@@ -145,6 +145,16 @@ spec:
                 name: pomerium
                 port:
                   name: http
+    - host: shuffle.imcherry5778.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pomerium
+                port:
+                  name: http
   tls:
     - hosts:
         - access.imcherry5778.xyz
@@ -160,3 +170,4 @@ spec:
         - prometheus.imcherry5778.xyz
         - alertmanager.imcherry5778.xyz
         - wazuh.imcherry5778.xyz
+        - shuffle.imcherry5778.xyz
