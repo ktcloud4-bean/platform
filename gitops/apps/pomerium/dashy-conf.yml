@@ -31,7 +31,8 @@ sections:
             - /platform-privileged
       - title: Gitea
         description: Pomerium groups claim과 Gitea OIDC로 보호된 소스 저장소 UI
-        icon: fab fa-git-alt
+        icon: si-gitea
+        color: "#609926"
         url: https://git.imcherry5778.xyz
         target: sametab
         displayData:
@@ -48,7 +49,8 @@ sections:
             - /platform-privileged
       - title: Harbor
         description: 내부 OCI registry와 project 관리 UI
-        icon: fas fa-box
+        icon: si-harbor
+        color: "#60B932"
         url: https://harbor.imcherry5778.xyz
         target: sametab
         displayData:
@@ -57,7 +59,8 @@ sections:
             - /platform-privileged
       - title: SonarQube
         description: 정적 분석과 quality gate UI
-        icon: fas fa-search
+        icon: si-sonarqubeserver
+        color: "#126ED3"
         url: https://sonar.imcherry5778.xyz
         target: sametab
         displayData:
@@ -65,7 +68,8 @@ sections:
             - /platform-users
       - title: Jenkins
         description: CI-01 Jenkins controller browser UI
-        icon: fab fa-jenkins
+        icon: si-jenkins
+        color: "#D24939"
         url: https://jenkins.imcherry5778.xyz
         target: sametab
         displayData:
@@ -73,7 +77,8 @@ sections:
             - /platform-users
       - title: Argo CD
         description: GITOPS-02 Argo CD browser UI; 실제 권한은 Argo 자체 OIDC·RBAC가 판정
-        icon: fas fa-dharmachakra
+        icon: si-argo
+        color: "#EF7B4D"
         url: https://argo.imcherry5778.xyz
         target: sametab
         displayData:
@@ -81,7 +86,8 @@ sections:
             - /platform-users
       - title: Grafana
         description: OBS-02 Grafana node·PVC·Loki 운영 대시보드
-        icon: fas fa-chart-line
+        icon: si-grafana
+        color: "#F46800"
         url: https://grafana.imcherry5778.xyz
         target: sametab
         displayData:
@@ -89,7 +95,8 @@ sections:
             - /platform-users
       - title: Prometheus
         description: OBS-02 Prometheus targets와 PromQL UI
-        icon: fas fa-fire
+        icon: si-prometheus
+        color: "#E6522C"
         url: https://prometheus.imcherry5778.xyz
         target: sametab
         displayData:
