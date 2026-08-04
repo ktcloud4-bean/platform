@@ -1557,6 +1557,17 @@ Unbound 디버그 설정은 모두 제거했다. OPNsense config.xml 정규화 �
 [NetBird 등록 runbook](runbook/netbird-enrollment.md)이 소유한다. 선행이 모두 충족된
 `IAM-ENROLL-01`만 `READY`로 연다.
 
+2026-08-05 `IAM-ENROLL-01`의 대상 계정 6개 중 3개(`imcherry5778`, `imcherry5778-admin`,
+`snsd-hybirdinfra`)가 실제로 초기 비밀번호 변경과 TOTP 등록을 마쳤다(Keycloak
+`requiredActions` 0건, `password`·`otp` credential 실존 확인). `foxgeun`, `cerberos2022`,
+`Jaeeyun`은 아직 자기 계정으로 로그인한 적이 없어 `requiredActions`에 `CONFIGURE_TOTP`,
+`UPDATE_PASSWORD`가 남아 있다. 6개 계정 모두의 Shuffle 최초 OIDC 로그인은 아직 하나도
+확인하지 않았다. 완료 증거가 `6/6`을 명시하므로 이 부분 완료 상태로는 `DONE`으로
+전환하지 않고 `READY`를 유지한다 — 특히 `IAM-MIG-01`은 legacy `imcherry`·`imcherry-admin`
+비활성화를 다루므로, 새 ID 전체가 실사용 가능함을 확인하기 전에는 열지 않는다. 나머지
+세 계정은 각 팀원이 직접 로그인·MFA·Shuffle 등록을 완료해야 하며, `6/6`이 채워지는
+시점에 이어서 판정한다.
+
 2026-08-03 `KMS-01`의 `DEFERRED`를 해제하고 `READY`로 연다.
 [ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md)의 재검토 조건 중 "Vault와 S3 복구
 drill을 완료한다"는 `BKP-03`의 Raft snapshot restore와 `BKP-05`의 통합 재해복구 drill로
