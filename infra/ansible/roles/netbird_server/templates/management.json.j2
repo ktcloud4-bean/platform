@@ -65,7 +65,7 @@
       "ClientSecret": "",
       "TokenEndpoint": "{{ netbird_keycloak_issuer }}/protocol/openid-connect/token",
       "DeviceAuthEndpoint": "{{ netbird_keycloak_issuer }}/protocol/openid-connect/auth/device",
-      "Scope": "openid profile email groups",
+      "Scope": "openid profile email",
       "UseIDToken": false,
       "RedirectURLs": null
     }
@@ -78,7 +78,7 @@
       "Domain": "",
       "AuthorizationEndpoint": "{{ netbird_keycloak_issuer }}/protocol/openid-connect/auth",
       "TokenEndpoint": "{{ netbird_keycloak_issuer }}/protocol/openid-connect/token",
-      "Scope": "openid profile email groups",
+      "Scope": "openid profile email",
       "RedirectURLs": ["http://localhost:53000/"],
       "UseIDToken": false,
       "DisablePromptLogin": false,
