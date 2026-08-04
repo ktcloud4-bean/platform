@@ -22,7 +22,7 @@ sections:
     items:
       - title: Headlamp
         description: 사용자 OIDC token과 Kubernetes RBAC 기반 클러스터 콘솔
-        icon: fas fa-compass
+        icon: favicon-local
         url: https://headlamp.imcherry5778.xyz
         target: sametab
         displayData:
@@ -31,8 +31,7 @@ sections:
             - /platform-privileged
       - title: Gitea
         description: Pomerium groups claim과 Gitea OIDC로 보호된 소스 저장소 UI
-        icon: si-gitea
-        color: "#609926"
+        icon: favicon-local
         url: https://git.imcherry5778.xyz
         target: sametab
         displayData:
@@ -40,7 +39,7 @@ sections:
             - /platform-users
       - title: AWX
         description: check 기본값과 사람 승인 apply 경계의 자동화 UI
-        icon: fas fa-robot
+        icon: favicon-local
         url: https://awx.imcherry5778.xyz
         target: sametab
         displayData:
@@ -49,8 +48,7 @@ sections:
             - /platform-privileged
       - title: Harbor
         description: 내부 OCI registry와 project 관리 UI
-        icon: si-harbor
-        color: "#60B932"
+        icon: favicon-local
         url: https://harbor.imcherry5778.xyz
         target: sametab
         displayData:
@@ -59,8 +57,7 @@ sections:
             - /platform-privileged
       - title: SonarQube
         description: 정적 분석과 quality gate UI
-        icon: si-sonarqubeserver
-        color: "#126ED3"
+        icon: favicon-local
         url: https://sonar.imcherry5778.xyz
         target: sametab
         displayData:
@@ -68,8 +65,7 @@ sections:
             - /platform-users
       - title: Jenkins
         description: CI-01 Jenkins controller browser UI
-        icon: si-jenkins
-        color: "#D24939"
+        icon: favicon-local
         url: https://jenkins.imcherry5778.xyz
         target: sametab
         displayData:
@@ -77,8 +73,7 @@ sections:
             - /platform-users
       - title: Argo CD
         description: GITOPS-02 Argo CD browser UI; 실제 권한은 Argo 자체 OIDC·RBAC가 판정
-        icon: si-argo
-        color: "#EF7B4D"
+        icon: favicon-local
         url: https://argo.imcherry5778.xyz
         target: sametab
         displayData:
@@ -86,8 +81,7 @@ sections:
             - /platform-users
       - title: Grafana
         description: OBS-02 Grafana node·PVC·Loki 운영 대시보드
-        icon: si-grafana
-        color: "#F46800"
+        icon: favicon-local
         url: https://grafana.imcherry5778.xyz
         target: sametab
         displayData:
@@ -95,8 +89,7 @@ sections:
             - /platform-users
       - title: Prometheus
         description: OBS-02 Prometheus targets와 PromQL UI
-        icon: si-prometheus
-        color: "#E6522C"
+        icon: favicon-local
         url: https://prometheus.imcherry5778.xyz
         target: sametab
         displayData:
@@ -104,7 +97,7 @@ sections:
             - /platform-users
       - title: Alertmanager
         description: OBS-02 Alertmanager UI; silence 생성·삭제는 /platform-privileged만
-        icon: fas fa-bell
+        icon: favicon-local
         url: https://alertmanager.imcherry5778.xyz
         target: sametab
         displayData:
@@ -113,7 +106,7 @@ sections:
             - /platform-privileged
       - title: Wazuh
         description: WAZUH-02 Wazuh Dashboard 사고 조사 UI; /platform-privileged만 허용
-        icon: fas fa-binoculars
+        icon: favicon-local
         url: https://wazuh.imcherry5778.xyz
         target: sametab
         displayData:
@@ -121,7 +114,7 @@ sections:
             - /platform-privileged
       - title: Shuffle
         description: IAM-01 Shuffle SOAR route; reader·operator·특권 그룹만 허용
-        icon: fas fa-random
+        icon: favicon-local
         url: https://shuffle.imcherry5778.xyz
         target: sametab
         displayData:
