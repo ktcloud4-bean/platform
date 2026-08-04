@@ -36,3 +36,12 @@ template {
 {{- with secret "kv/data/shuffle/backend" -}}{{ .Data.data.encryption_modifier }}{{- end -}}
 EOT
 }
+
+template {
+  destination          = "/vault/secrets/default-admin-password"
+  perms                = "0440"
+  error_on_missing_key = true
+  contents             = <<EOT
+{{- with secret "kv/data/shuffle/backend" -}}{{ .Data.data.default_admin_password }}{{- end -}}
+EOT
+}

@@ -121,8 +121,11 @@ spec:
             - |
               export SHUFFLE_OPENSEARCH_PASSWORD="$(cat /vault/secrets/opensearch-password)"
               export SHUFFLE_ENCRYPTION_MODIFIER="$(cat /vault/secrets/encryption-modifier)"
+              export SHUFFLE_DEFAULT_PASSWORD="$(cat /vault/secrets/default-admin-password)"
               exec ./shufflebackend
           env:
+            - name: SHUFFLE_DEFAULT_USERNAME
+              value: soar-dash-01-admin
             - name: SHUFFLE_OPENSEARCH_URL
               value: https://shuffle-opensearch.shuffle.svc.cluster.local:9200
             - name: SHUFFLE_OPENSEARCH_USERNAME

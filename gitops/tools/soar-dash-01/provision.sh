@@ -92,6 +92,7 @@ ensure_strong_password() {
 
 ensure_strong_password opensearch-admin-password
 ensure_strong_password encryption-modifier
+ensure_strong_password default-admin-password
 
 json_field() {
   local path=$1
@@ -134,9 +135,10 @@ opensearch_payload=$(printf '{"admin_password":%s}' \
 # 허용하지 않고, 대신 opensearch admin_password를 backend용 KV에도 복사해 둔다(같은 값,
 # 두 KV path). backend policy가 kv/shuffle/opensearch를 직접 읽게 하면 opensearch ServiceAccount
 # 전용 경로 분리 원칙이 깨진다.
-backend_payload=$(printf '{"opensearch_admin_password":%s,"encryption_modifier":%s}' \
+backend_payload=$(printf '{"opensearch_admin_password":%s,"encryption_modifier":%s,"default_admin_password":%s}' \
   "$(json_field "${secret_dir}/opensearch-admin-password")" \
-  "$(json_field "${secret_dir}/encryption-modifier")")
+  "$(json_field "${secret_dir}/encryption-modifier")" \
+  "$(json_field "${secret_dir}/default-admin-password")")
 
 write_policy opensearch
 write_policy backend
