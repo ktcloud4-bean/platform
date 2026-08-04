@@ -20,14 +20,6 @@ sections:
   - name: Platform
     icon: fas fa-shield-halved
     items:
-      - title: POM-01 보호 Route
-        description: /platform-users groups claim 검증
-        icon: fas fa-user-shield
-        url: https://access.imcherry5778.xyz/pom01-platform-user-check
-        target: sametab
-        displayData:
-          showForGroups:
-            - /platform-users
       - title: Headlamp
         description: 사용자 OIDC token과 Kubernetes RBAC 기반 클러스터 콘솔
         icon: fas fa-compass
@@ -56,7 +48,7 @@ sections:
             - /platform-privileged
       - title: Harbor
         description: 내부 OCI registry와 project 관리 UI
-        icon: fas fa-boxes-stacked
+        icon: fas fa-box
         url: https://harbor.imcherry5778.xyz
         target: sametab
         displayData:
@@ -65,7 +57,7 @@ sections:
             - /platform-privileged
       - title: SonarQube
         description: 정적 분석과 quality gate UI
-        icon: fas fa-magnifying-glass-chart
+        icon: fas fa-search
         url: https://sonar.imcherry5778.xyz
         target: sametab
         displayData:
@@ -122,7 +114,7 @@ sections:
             - /platform-privileged
       - title: Shuffle
         description: IAM-01 Shuffle SOAR route; reader·operator·특권 그룹만 허용
-        icon: fas fa-shuffle
+        icon: fas fa-random
         url: https://shuffle.imcherry5778.xyz
         target: sametab
         displayData:
