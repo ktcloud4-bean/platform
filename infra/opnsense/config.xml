@@ -2592,7 +2592,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785779684.28" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785804497.87" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2886,6 +2886,20 @@
           <hostname>alertmanager</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>OBS-02 Alertmanager UI alias</description>
+        </alias>
+        <alias uuid="ebefb807-c1e1-4137-b54d-cd1b29301586">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>wazuh</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>WAZUH-02 Wazuh Dashboard alias</description>
+        </alias>
+        <alias uuid="7d3e5498-a3b2-405b-ab72-67e2501f8d1f">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>shuffle</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>SOAR-DASH-01 Shuffle dashboard alias</description>
         </alias>
       </aliases>
     </unboundplus>
