@@ -13,7 +13,7 @@ spec:
   project: shuffle
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: d2061af4f416788e6e250e3a2d554532b4836e6f
+    targetRevision: a433249bfcf96e385f51cea0b8ef02b5f16e23d3
     path: gitops/apps/shuffle
   destination:
     server: https://kubernetes.default.svc
