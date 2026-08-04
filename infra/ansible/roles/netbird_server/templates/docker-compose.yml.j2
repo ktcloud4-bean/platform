@@ -120,8 +120,8 @@ services:
       - AUTH_CLIENT_ID={{ netbird_keycloak_client_id }}
       - AUTH_AUTHORITY={{ netbird_keycloak_issuer }}
       - AUTH_SUPPORTED_SCOPES=openid profile email groups
-      - AUTH_REDIRECT_URI=https://{{ netbird_domain }}/nb-auth
-      - AUTH_SILENT_REDIRECT_URI=https://{{ netbird_domain }}/nb-silent-auth
+      - AUTH_REDIRECT_URI=/nb-auth
+      - AUTH_SILENT_REDIRECT_URI=/nb-silent-auth
       - NETBIRD_TOKEN_SOURCE=accessToken
       - USE_AUTH0=false
     labels:
