@@ -189,7 +189,7 @@ Wazuh는 Loki를 입력으로 삼지 않고 각 보안 소스에서 직접 이�
 
 ## 인증·권한
 
-Keycloak은 팀 사용자, MFA, OIDC/SAML의 중앙 IdP다. 프로젝트 realm과 Keycloak 관리용 realm을 분리한다.
+Keycloak은 팀 사용자, MFA, OIDC/SAML의 중앙 IdP다. 프로젝트 realm과 Keycloak 관리용 realm을 분리한다. 팀 username과 Shuffle 역할·계정 수명주기는 [ADR-0017](adr/0017-team-identity-and-shuffle-rbac.md)을 따른다.
 
 - 그룹은 팀·직무 소속을 나타낸다.
 - Keycloak client role은 애플리케이션 권한을 나타낸다.

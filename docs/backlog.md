@@ -67,6 +67,7 @@ revert·rollback 스냅샷 커밋 세 개와 새 작업 ID·브랜치·worktree 
 | `VAULT-CONFIG` | Vault 내부 구성(secrets engine·auth role·policy·PKI role)의 변경 |
 | `PUBLIC-DNS` | Cloudflare DNS·공개 origin 변경 |
 | `K3S-HEAVY` | Wazuh·관측·SOAR처럼 큰 워크로드의 최초 적용 |
+| `IDENTITY-LIVE` | Keycloak 사용자·그룹·client role과 서비스 OIDC 사용자·조직·role의 전환 |
 
 ## 주 경로
 
@@ -275,6 +276,8 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `PKI-01 DONE` | Vault PKI를 첫 실제 consumer인 CrowdSec agent↔LAPI mTLS lifecycle에 연결 | `VAULT-02`, `CERTMGR-01` | `VAULT-CONFIG` | 내부 서비스 인증·인가 | CrowdSec 전용 최소권한 PKI role과 허용 밖 이름·OU 거부, agent↔LAPI mTLS 실제 연결 성공과 잘못된 CA·OU 거부, LAPI의 OU 기반 agent/bouncer 구분 보존, 자동 갱신·reload, revoke 뒤 CRL 등재와 해당 인증서 거부, Vault sealed 중 기존 인증서 유지·신규 발급만 실패, Git·로그의 private key 0건, `tls.enabled=false` rollback 뒤 `CROWDSEC-FIX-01` 기능(정상 200·공격 403·exact 예외) 회귀 없음 |
 | `KC-01 DONE` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `KC-01-FIX-01 DONE` | bootstrap 메모리 시크릿 정리를 fail-closed로 보정 | `KC-01` 배포 선언 | 없음 | Keycloak bootstrap | Agent/bootstrap 동일 UID, 렌더링 파일 정리 실패 시 Job 실패, v1 prune·v2 성공 |
+| `IAM-01 READY` | GitHub username 기준 팀 Keycloak 계정과 Shuffle OIDC·조직·RBAC, Pomerium Route 최소권한 전환 | `KC-01`, `POM-01`, `SOAR-DASH-01` | `IDENTITY-LIVE` | `IAM-MIG-01`, `SOAR-01` | 팀 일상 ID 5개와 분리 특권 ID 1개의 MFA, 보호 입력으로만 받은 검증 email과 Git·로그 원문 0건, 그룹→Shuffle client role 정확 매핑과 한 세션 한 role, 단일 조직의 reader 쓰기·실행 거부와 admin 허용, Pomerium 그룹 allow/deny, MFA를 갖춘 `soar-dash-01-admin`의 IdP 독립 복구와 API key 0개, 임시 자동 프로비저닝 종료, 관련 Argo child `Synced/Healthy` |
+| `IAM-MIG-01 BLOCKED` | 기존 `imcherry`·`imcherry-admin`의 서비스별 OIDC 연결·소유권을 새 ID로 이전하고 legacy ID를 단계적으로 비활성화 | `IAM-01` | `IDENTITY-LIVE` | legacy identity 정리 | Keycloak client와 각 서비스의 영속 사용자·소유권 전수표, 새 ID allow와 기존 ID deny의 같은 시점 대조, NetBird 등 유일 Owner 선이전, legacy session revoke·계정 disable, 최소 90일 감사 보존 동안 hard delete 0건과 rollback 절차 |
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-PERF-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
 | `CORAZA-01 DEFERRED` | Traefik HTTP-WASM Coraza + CRS 직접 PoC; 호환 실패로 폐기하고 `CROWDSEC-01`이 대체 | `INGRESS-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)의 재검토 조건이 생기면 새 결정·새 작업으로만 검토 |
 | `CROWDSEC-01 DEFERRED` | CrowdSec AppSec(Coraza + OWASP CRS) route-scoped PoC 최초 시도; CRS ConfigMap 바이트 훼손과 AppProject prune 순서 결함으로 revert | `INGRESS-01`, `WAF-DESIGN-01` | 없음 | `CROWDSEC-FIX-01` | 공개 main enablement와 rollback 이력을 재작성하지 않음; [실패 증거](evidence/crowdsec-fix-01/README.md)를 기준으로 FIX에서만 보정 |
@@ -288,6 +291,49 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
 | `VAULT-03 DONE` | Vault UI를 Pomerium 우회 표준 Ingress와 Vault OIDC auth method로 노출 (`gitops/apps/vault/`) | `VAULT-02`, `KC-01`, `INGRESS-01`, `KMS-01` | `VAULT-CONFIG`, `OPNSENSE-LIVE` | Vault 일상 운영·복구 독립성 | Vault OIDC auth method와 전용 Keycloak client 연결로 UI 사용자가 자기 policy 경로만 읽고 타 경로·`sys/mounts`는 403, Pomerium을 경유하지 않는 표준 Ingress와 자체서명 backend TLS 신뢰 설정, Pomerium Pod 정지 중 Vault UI 로그인 성공으로 복구 독립성 실증, root token·port-forward break-glass 보존 확인, audit device에 UI 로그인 event 기록과 token 원문 0건, `vault` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건과 `ip-plan.md` 노출 정의 갱신, Traefik 정적 설정·Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Vault Agent 소비자 회귀 없음 |
 | `GITOPS-02 DONE` | Argo CD UI Pomerium Route와 최소권한 RBAC 연결 | `GITOPS-01`, `POM-01` | `OPNSENSE-LIVE` | GitOps 일상 조회 | Pomerium 통과만으로 Argo 권한이 생기지 않음을 Argo 자체 OIDC·RBAC의 allow/deny로 실증, 조회 계정의 `platform-root`·child `Synced/Healthy` 조회 성공과 수동 sync·삭제·repo credential 조회 거부, `pomerium`→`argocd` NetworkPolicy egress 명시, `argo` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig·Traefik Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Route와 root Application 회귀 없음 |
+
+2026-08-04 팀 인터뷰 결과를 [ADR-0017](adr/0017-team-identity-and-shuffle-rbac.md)로 확정하고
+`IAM-01`과 `IAM-MIG-01`을 신설한다. GitHub는 인증 공급자로 추가하지 않고 username의 단일
+명명 원본으로만 쓴다. 일상 ID는 `imcherry5778`, `foxgeun`, `cerberos2022`, `Jaeeyun`,
+`snsd-hybirdinfra`이며 직무 표시는 권한 부여 근거로 사용하지 않는다. 다섯 계정 모두
+`/platform-users`와 `/soar-readers`에서 시작한다. 실제 email은 실행 시 검증된 값을 보호된
+`$KTC_SECRET_ROOT` 입력으로만 받아 Git·채팅·로그에 남기지 않는다. 총괄 운영자의 특권 작업은
+별도 `imcherry5778-admin`만 사용하고 일상 계정에 admin role을 겹쳐 주지 않는다.
+
+Shuffle은 `Platform Security` 단일 조직을 사용하고 하위 조직은 만들지 않는다.
+`/soar-readers`→`shuffle-org-reader`, `/soar-operators`→`shuffle-user`,
+`/platform-privileged`→`shuffle-admin`을 전용 OIDC client role로 매핑하며 한 계정에는 이 세
+role 중 하나만 발급한다. `IAM-01`에서는 팀 일상 계정 다섯 개를 모두 reader로 시작하고,
+`SOAR-01`에서만 `imcherry5778`을 reader에서 제거한 뒤 operator로 이동한다. Pomerium은 세
+Shuffle 그룹만 Route에 허용하고 일반 `/platform-users`만 가진 계정은 통과시키지 않는다.
+이는 Route 진입과 Shuffle 내부 인가를 서로 독립해서 판정하려는 경계다.
+
+Shuffle OIDC는 public Authorization Code + PKCE client로 두고 role claim이 없는 로그인을
+거부한다. 팀원 동시 등록 창에서만 자동 프로비저닝을 켜 각 사용자가 직접 MFA 로그인을 끝낸
+뒤 username을 위 canonical 값과 대조하고 곧바로 자동 프로비저닝을 끈다. SSO 전용 강제는
+하지 않는다. 현재 local `soar-dash-01-admin`은 이름을 바꾸거나 팀과 공유하지 않고 MFA를
+추가한 break-glass 계정으로 남기며 API key는 발급하지 않는다. 기존 기본 계정명과 배포 입력이
+다른 상태에서 rename하면 재시작 때 중복 bootstrap 계정이 생길 수 있으므로, 이 계정의 rename은
+`IAM-01` 범위가 아니다.
+
+기존 Keycloak `imcherry`·`imcherry-admin`도 `IAM-01`에서 rename·disable·delete하지 않는다.
+OIDC subject와 서비스 내부 사용자·소유권이 username보다 오래 남을 수 있으므로
+`IAM-MIG-01`이 Keycloak client와 실제 서비스별 연결을 전수 조사하고 새 ID의 positive proof를
+확보한 뒤 기존 session revoke와 disable을 수행한다. 유일 Owner는 새 특권 ID에 먼저 넘긴다.
+비활성 계정은 최소 90일 감사 보존 동안 삭제하지 않으며, 참조와 rollback 필요가 없다는 별도
+판정 전에는 hard delete하지 않는다. 이번 백로그·ADR 변경은 계정이나 라이브 설정을 변경하지
+않는다.
+
+| 경계 | 현재 `SOAR-DASH-01` 기준선 | `IAM-01` 목표 | 후속 |
+|---|---|---|---|
+| Keycloak 사람 ID | `imcherry`, `imcherry-admin` | GitHub username 일상 ID 5개와 `imcherry5778-admin`; 모두 MFA | `IAM-MIG-01`에서 기존 ID disable·보존 |
+| 팀원용 local ID | 없음 | 만들지 않음 | 없음 |
+| Shuffle local recovery | `soar-dash-01-admin` 한 개 | 같은 ID 유지, MFA 추가, 공유·rename·API key 발급 금지 | 정기 복구 검증 |
+| Shuffle 조직 | `default` | `Platform Security` 단일 조직, 하위 조직 없음 | 다중 팀이 생길 때 재검토 |
+| Shuffle OIDC | 없음 | Keycloak public Authorization Code + PKCE, role claim 필수, 통제된 최초 등록 뒤 자동 프로비저닝 off | 없음 |
+| Shuffle 일상 권한 | 팀 OIDC user 없음 | 다섯 일상 ID 모두 `shuffle-org-reader` 하나 | `SOAR-01`에서 `imcherry5778`만 `shuffle-user`로 교체 |
+| Shuffle 특권 권한 | local bootstrap admin | `imcherry5778-admin`에 `shuffle-admin` 하나, local admin은 recovery 전용 | 없음 |
+| Pomerium Route | `/platform-privileged`만 허용 | `/soar-readers`, `/soar-operators`, `/platform-privileged`만 허용 | 일반 `/platform-users`만 가진 계정은 계속 거부 |
 
 2026-08-03 `VAULT-03`과 `GITOPS-02`를 신설한다. 두 작업은 [`ip-plan.md`](ip-plan.md)가 이미
 목표 노출 방식을 적어 두었지만 이를 소유한 작업 ID가 없어 구현되지 않은 항목을 닫는다.
@@ -1765,7 +1811,7 @@ Wazuh service·PF·NAT·DNS·IDS 의미 설정은 작업 전후 불변이다. �
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `SOAR-DASH-01 DONE` | Shuffle 엔진·대시보드만 배포(자체 OpenSearch 백엔드 포함, 워크플로·앱 연동 없음) | `OBS-01`, `WAZUH-01`, `WAZUH-02`, `FALCO-01`, `CAP-04`, `CAP-05` | `K3S-HEAVY` | `SOAR-01` | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch 단일 노드, 고정 version·image digest, 내부 전용 노출(Pomerium Route)과 관리자 로그인 확인, 워크플로·앱·webhook 연동 0건, 재부팅 후 유지, PVC·available 정지선 통과, Argo child `Synced/Healthy` |
-| `SOAR-01 READY` | 이미 배포된 Shuffle 위에 경보 수신→정보 보강→통지→승인 흐름을 연동(사람 승인형, read-only) | `SOAR-DASH-01` | 없음 | 사고대응 | 대표 Wazuh 경보의 수신·정보 보강·통지·승인 각 단계 실동작, 자동 대응(격리·차단·계정 변경 등) 0건, 최소권한 credential, rollback 뒤 dashboard 기존 상태 회귀 없음 |
+| `SOAR-01 BLOCKED` | 이미 배포된 Shuffle 위에 경보 수신→정보 보강→통지→승인 흐름을 연동(사람 승인형, read-only) | `IAM-01` | 없음 | 사고대응 | `imcherry5778`을 reader에서 제거한 뒤 operator로 이동해 Shuffle role 하나만 발급, 나머지 팀 reader의 조회 성공과 쓰기·실행 거부, 대표 Wazuh 경보의 수신·정보 보강·통지·승인 각 단계 실동작, 자동 대응(격리·차단·계정 변경 등) 0건, 최소권한 credential, rollback 뒤 dashboard 기존 상태 회귀 없음 |
 | `SOAR-02 DEFERRED` | 되돌릴 수 있는 대응 한 가지 자동화 | `SOAR-01`, 검증된 incident runbook | 없음 | 접근 정책 | 반복 시험, 승인·감사·rollback; 방화벽·계정 무인 파괴 금지 |
 
 2026-08-04 `CAP-05` 완료로 `SOAR-01`(원래 범위: Shuffle 배포 + 자체 OpenSearch + 경보 수신→
@@ -1813,5 +1859,10 @@ Orborus는 배포하지 않아 backend가 시도한 `shuffler.io`·`github.com/s
 [`gitops/apps/shuffle/README.md`](../gitops/apps/shuffle/README.md)가 소유한다.
 `SOAR-DASH-01`을 `DONE`으로 닫고, 선행이 충족된 직접 후속 `SOAR-01`은 워크플로 연동을
 시작할 수 있으므로 `BLOCKED`에서 `READY`로 연다.
+
+2026-08-04 팀 identity와 Shuffle RBAC를 워크플로보다 먼저 닫도록 `SOAR-01`의 직접 선행을
+`IAM-01`로 바꾸고 `READY`에서 `BLOCKED`로 되돌린다. `SOAR-DASH-01`의 배포 상태와 완료
+판정은 바꾸지 않는다. 운영자 role은 워크플로를 실제로 만들고 실행해야 하는 `SOAR-01`에서만
+승격하며, 그 전까지 모든 팀 일상 계정은 동일한 reader 권한을 가진다.
 
 Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 보안 사건에 반응하는 흐름만 소유한다.

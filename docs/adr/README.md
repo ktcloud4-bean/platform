@@ -30,6 +30,7 @@ ADR(Architecture Decision Record)은 목표 구조를 선택한 이유, 검토�
 | [ADR-0014](0014-dashy-access-portal.md) | 애플리케이션 포털을 Dashy로 분리 | `Accepted` | groups/OIDC 지원 중단·동적 카탈로그 요구 |
 | [ADR-0015](0015-vault-aws-kms-auto-unseal.md) | Vault seal을 AWS KMS auto-unseal로 전환 | `Accepted` | access key·KMS 장애시간·replica 증가 |
 | [ADR-0016](0016-cert-manager-vault-pki-lifecycle.md) | Kubernetes 내부 인증서 lifecycle을 cert-manager와 Vault PKI로 분리 | `Accepted` | Secret key 금지·다중 cluster·제품 지원 변화 |
+| [ADR-0017](0017-team-identity-and-shuffle-rbac.md) | 팀 신원 이름과 Shuffle 권한 수명주기 | `Accepted` | GitHub lifecycle 연동·다중 조직·privileged access governance |
 
 ## 형식
 
