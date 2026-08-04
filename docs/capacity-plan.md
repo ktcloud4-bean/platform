@@ -777,6 +777,24 @@ Application 22개는 모두 `Synced/Healthy`(commit `dfdd2c29091d40de146a1ba725a
 배포에 포함하지 않아(SOAR-01 워크플로 단계 범위) 추가 RAM·PVC를 소비하지 않는다. 어느 지표도
 경고선을 새로 넘기지 않아 배포를 진행한다.
 
+### `SOAR-DASH-01` 배포 후 실측 (2026-08-04)
+
+`shuffle` Application이 `Synced/Healthy`가 된 뒤 같은 읽기 전용 경로로 재측정했다.
+
+| 지표 | 배포 전 | 배포 후 | 기준 | 판정 |
+|---|---:|---:|---:|---|
+| Proxmox available / swap | 29,789,491,200 bytes (27.746 GiB) / 0 | 26,223,181,824 bytes (24.421 GiB) / 0(8 GiB 중) | 12 GiB 경고, 8 GiB 정지 | 정상 |
+| host load15 / thin data | 0.58 / 6.94% | 0.87 / 7.16% | 20·70% 경고, 30·80% 정지 / 60% 경고, 70% 정지 | 정상 |
+| `k3s-01` available | 17,841,184,768 bytes (16.617 GiB) | 16,061,911,040 bytes (14.961 GiB) | 8 GiB 정지 | 정상, 정지선 위 6.961 GiB |
+| guest swap / root 사용률 | 0 / 20% | 0 / 21% | swap 0, root 여유 20% 이상 | 정상 |
+| PVC 요청 합계 | 91.125 GiB(11개) | 111.125 GiB(13개) | 96 GiB 경고, 120 GiB 정지 | 예측값과 정확히 일치, 정지선까지 8.875 GiB |
+| Argo Application(23개, `shuffle` 포함) | — | 전량 `Synced/Healthy` | — | 정상 |
+
+`shuffle-opensearch-0` 삭제 뒤 StatefulSet이 재생성한 Pod에서도 부트스트랩 admin 로그인이
+그대로 성공해 PVC 데이터 지속을 확인했다. `shuffle` namespace의 Kubernetes Secret은 0건이고
+image는 `release-metadata.env`가 고정한 digest와 정확히 일치했다. 상세 배포·검증 절차는
+[`gitops/apps/shuffle/README.md`](../gitops/apps/shuffle/README.md)가 소유한다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.
