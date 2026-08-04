@@ -500,8 +500,13 @@ def ensure_users(
         username: (emails[key], ["/platform-users", "/soar-readers"])
         for username, key in DAILY_USERS.items()
     }
-    # 특권 ID에는 일상 ID의 email을 복제하지 않는다. 검증 email 요구는 일상 ID 5개에만
-    # 적용되며, duplicateEmailsAllowed=false인 realm에서 같은 주소를 두 ID에 넣지 않는다.
+    # IAM-01-FIX-01: 애초 가정("특권 ID는 email 없음", "duplicateEmailsAllowed=false")은
+    # 라이브 realm과 어긋났다. 이 realm의 User Profile 스키마는 email을 모든 계정에
+    # 필수로 요구해, 특권 ID의 email을 비우면 로그인 중 Update Account Information
+    # required action에 막힌다. duplicateEmailsAllowed는 실제로 true라 같은 주소를
+    # 일상 ID와 공유해도 충돌하지 않는다. 검증 email 일치·emailVerified 요구는 일상
+    # ID 5개에만 적용하고, 특권 ID의 email 값 자체는 검증하지 않는다(필수 스키마를
+    # 만족하는 임의 값이면 충분하고, 원문을 Git·로그에 남기지 않는 요구와는 무관하다).
     definitions[PRIVILEGED_USER] = (None, ["/platform-privileged"])
     present = 0
     mfa_active = 0
@@ -517,8 +522,6 @@ def ensure_users(
         if email is not None:
             if user.get("email", "").casefold() != email.casefold() or not user.get("emailVerified"):
                 raise SafeError(f"existing Keycloak user email metadata drift: {username}")
-        elif user.get("email"):
-            raise SafeError(f"privileged Keycloak user unexpectedly has daily email metadata: {username}")
         if not user.get("enabled"):
             raise SafeError(f"existing Keycloak user is disabled: {username}")
         if user.get("totp"):
