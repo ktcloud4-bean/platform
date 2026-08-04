@@ -148,6 +148,10 @@ Cloudflare source만 k3s ingress HTTPS로 전달한다. `/admin/`, 관리 realm,
 public self-registration, `access` Portal과 애플리케이션은 공개하지 않는다. Keycloak은
 Pomerium의 IdP이므로 Pomerium이나 Cloudflare Access 뒤에 두지 않는다. `EDGE-02`는 공개 인증면,
 `NB-ENROLL-01`은 일반 사용자 device group·split DNS·exact route·offboarding을 각각 소유한다.
+`NB-ENROLL-01`은 OPNsense를 NetBird Network Router로 등록해 `/platform-users` group에
+`k3s-01` ingress(TCP 443)와 netbird-01의 split DNS relay(TCP/UDP 53) exact host route
+두 개만 연다. Warpgate와 같은 원칙(subnet route 대신 exact host)이되 목적지 호스트에는
+아무것도 설치하지 않는다. 상세는 [NetBird 등록 runbook](runbook/netbird-enrollment.md)이 소유한다.
 Harbor registry API, SeaweedFS S3 API와 비 HTTP 프로토콜도 Pomerium Portal 경로와 분리한다.
 
 역할은 겹치지 않는다.

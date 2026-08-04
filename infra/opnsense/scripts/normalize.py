@@ -37,6 +37,7 @@ SECRET_TAGS = {
     "bcrypt_hash",
     "radius_secret",
     "ldap_bindpw",
+    "setupkey",           # NetBird 플러그인의 peer 등록 setup key
 }
 
 # os-acme-client 의 DNS-01 validation 은 공급자별 자격증명을 dns_* 태그에

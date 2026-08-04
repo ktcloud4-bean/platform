@@ -131,6 +131,14 @@ host 간 통신은 OPNsense를 지나지 않으므로 OPNsense 차단 근거로 
 VLAN에는 routed IPv6 prefix·RA·gateway가 없고 IPv6 broad allow를 만들지 않았다. 기존
 LAN/HOME 규칙, DHCP와 automatic outbound NAT도 바꾸지 않았다.
 
+2026-08-04 `NB-ENROLL-01`은 OPNsense를 NetBird의 Network Router로 등록해(신규
+인터페이스 `opt6`/`wt0`, NetBird overlay `100.72.0.0/16`) `/platform-users` device
+group에 정확히 두 exact host route만 연다: `k3s-01`(`10.10.20.10`) TCP 443과
+netbird-01(`10.10.40.10`) TCP/UDP 53(내부 Unbound로 조건부 forward하는 split DNS
+relay). k3s-01 자체에는 아무것도 설치하지 않는다. subnet route·exit node는 계속
+만들지 않는다. 상세 경계·정확한 rule·발견한 self-referencing 라우팅 결함은
+[NetBird 등록 runbook](runbook/netbird-enrollment.md)이 소유한다.
+
 ## AWS 사설 착지점
 
 2026-07-31 `AWS-NET-01`에서 OPNsense와 AWS를 policy-based Site-to-Site VPN으로 연결했다.
