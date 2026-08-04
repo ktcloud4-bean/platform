@@ -200,6 +200,15 @@
       <type>none</type>
       <virtual>1</virtual>
     </enc0>
+    <opt6>
+      <if>wt0</if>
+      <descr>NETBIRD</descr>
+      <lock>1</lock>
+      <enable>1</enable>
+      <ipaddr>none</ipaddr>
+      <ipaddrv6>none</ipaddrv6>
+      <blockbogons>0</blockbogons>
+    </opt6>
   </interfaces>
   <dnsmasq version="1.0.9" persisted_at="1785242548.91" description="Dnsmasq DNS and DHCP">
     <enable>1</enable>
@@ -404,6 +413,46 @@
         <description />
       </updated>
     </rule>
+    <rule uuid="255f30fd-7a03-45d2-8f55-6bc6ab3d59f3">
+      <sequence>400</sequence>
+      <disabled>0</disabled>
+      <nordr>0</nordr>
+      <interface>wan</interface>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp</protocol>
+      <source>
+        <network>EDGE02_CF_EDGE_SOURCES</network>
+        <port />
+        <not>0</not>
+      </source>
+      <destination>
+        <network>wanip</network>
+        <port>8443</port>
+        <not>0</not>
+      </destination>
+      <target>10.10.20.10</target>
+      <local-port>https</local-port>
+      <poolopts />
+      <log>1</log>
+      <category />
+      <descr>EDGE-02 sso Cloudflare origin to k3s-01 HTTPS</descr>
+      <tag />
+      <tagged />
+      <nosync>0</nosync>
+      <natreflection />
+      <pass>rule</pass>
+      <associated-rule-id />
+      <created>
+        <username>root</username>
+        <time>1785835622.95</time>
+        <description>/api/api.php made changes</description>
+      </created>
+      <updated>
+        <username>root</username>
+        <time>1785835622.95</time>
+        <description>/api/api.php made changes</description>
+      </updated>
+    </rule>
   </nat>
   <filter>
   </filter>
@@ -413,7 +462,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1785732326.85" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1785845815.05" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -1872,6 +1921,118 @@
             <shaper2 />
             <description>OPN-METRICS-01: k3s-01 Prometheus에서 OPNsense node_exporter TCP 9100만 허용</description>
           </rule>
+          <rule uuid="1d28fd80-e6dd-45df-a2cc-a8f0fff14a2d">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>100</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt6</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>any</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.20.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>443</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NB-ENROLL-01: NetBird platform-users device group to k3s-01 ingress TCP 443</description>
+          </rule>
+          <rule uuid="750827d2-46a4-4bb2-9ee8-0f8a78086044">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>110</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt6</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP/UDP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>any</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.40.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>53</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>NB-ENROLL-01: NetBird platform-users split DNS to netbird-01 dnsmasq relay TCP/UDP 53</description>
+          </rule>
         </rules>
         <snatrules />
         <npt />
@@ -1880,7 +2041,7 @@
       <Lvtemplate version="0.0.1" persisted_at="1785198671.19" description="Firewall Live View filter templates">
         <templates />
       </Lvtemplate>
-      <Alias version="1.0.1" persisted_at="1785684950.31" description="Firewall aliases">
+      <Alias version="1.0.1" persisted_at="1785829984.74" description="Firewall aliases">
         <geoip>
           <url />
         </geoip>
@@ -1973,6 +2134,58 @@
             <expire />
             <categories />
             <description>NET-04 최종: Warpgate가 중계할 현재 관리 대상 SSH host</description>
+          </alias>
+          <alias uuid="b3179b1e-7a40-450f-923f-a42a0b7a9fad">
+            <enabled>1</enabled>
+            <name>EDGE02_CF_IPV4</name>
+            <type>urltable</type>
+            <path_expression />
+            <proto>IPv4</proto>
+            <interface />
+            <counters>0</counters>
+            <updatefreq>1</updatefreq>
+            <content>https://www.cloudflare.com/ips-v4</content>
+            <password />
+            <username />
+            <authtype />
+            <expire />
+            <categories />
+            <description>EDGE-02 Cloudflare IPv4 edge source (일일 자동 갱신)</description>
+          </alias>
+          <alias uuid="6da2ca4f-70e5-4765-a83b-8566812b18d1">
+            <enabled>1</enabled>
+            <name>EDGE02_CF_IPV6</name>
+            <type>urltable</type>
+            <path_expression />
+            <proto>IPv6</proto>
+            <interface />
+            <counters>0</counters>
+            <updatefreq>1</updatefreq>
+            <content>https://www.cloudflare.com/ips-v6</content>
+            <password />
+            <username />
+            <authtype />
+            <expire />
+            <categories />
+            <description>EDGE-02 Cloudflare IPv6 edge source (일일 자동 갱신)</description>
+          </alias>
+          <alias uuid="c489ea5e-632c-48a4-9ede-03848ad1f800">
+            <enabled>1</enabled>
+            <name>EDGE02_CF_EDGE_SOURCES</name>
+            <type>networkgroup</type>
+            <path_expression />
+            <proto />
+            <interface />
+            <counters>0</counters>
+            <updatefreq />
+            <content>EDGE02_CF_IPV4
+EDGE02_CF_IPV6</content>
+            <password />
+            <username />
+            <authtype />
+            <expire />
+            <categories />
+            <description>EDGE-02 sso origin 허용 source (Cloudflare IPv4+IPv6)</description>
           </alias>
         </aliases>
       </Alias>
@@ -2592,7 +2805,7 @@
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785804497.87" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1785846333.17" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2657,6 +2870,13 @@
       </advanced>
       <acls>
         <default_action>allow</default_action>
+        <acl uuid="2221dd0f-c04a-4dff-bf8a-aafe91a33cc7">
+          <enabled>1</enabled>
+          <name>nb-enroll-01-netbird-overlay</name>
+          <action>allow</action>
+          <networks>100.72.0.0/16</networks>
+          <description>NB-ENROLL-01: NetBird platform-users peer overlay allowed to query split DNS</description>
+        </acl>
       </acls>
       <dnsbl />
       <forwarding>
@@ -3286,6 +3506,46 @@
         <repeated_offenders />
       </active_response>
     </WazuhAgent>
+    <netbird>
+      <authentication version="1.0.0" persisted_at="1785842805.04" description="NetBird authentication">
+        <managementUrl>https://netbird.imcherry5778.xyz</managementUrl>
+        <setupKey>***MASKED***</setupKey>
+      </authentication>
+      <settings version="1.2.0" persisted_at="1785842788.35" description="NetBird settings">
+        <general>
+          <enable>1</enable>
+          <wireguardPort>51820</wireguardPort>
+          <ipmapping />
+        </general>
+        <firewall>
+          <allowConfig>1</allowConfig>
+          <blockInboundConnection>1</blockInboundConnection>
+        </firewall>
+        <ssh>
+          <enable>0</enable>
+          <enableRoot>0</enableRoot>
+          <enableSFTP>0</enableSFTP>
+          <enableLocalPortForwarding>0</enableLocalPortForwarding>
+          <enableRemotePortForwarding>0</enableRemotePortForwarding>
+          <enableAuth>1</enableAuth>
+        </ssh>
+        <dns>
+          <enable>0</enable>
+        </dns>
+        <routing>
+          <accessLan>1</accessLan>
+          <acceptClientRoutes>0</acceptClientRoutes>
+          <acceptServerRoutes>1</acceptServerRoutes>
+        </routing>
+        <postquantum>
+          <enableRosenpass>0</enableRosenpass>
+          <rosenpassPermissive>0</rosenpassPermissive>
+        </postquantum>
+        <syslog>
+          <logLevel>info</logLevel>
+        </syslog>
+      </settings>
+    </netbird>
   </OPNsense>
   <hasync version="1.0.2" persisted_at="1785198670.63" description="HA sync">
     <disablepreempt>0</disablepreempt>

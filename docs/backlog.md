@@ -280,7 +280,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `KC-01 DONE` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `KC-01-FIX-01 DONE` | bootstrap 메모리 시크릿 정리를 fail-closed로 보정 | `KC-01` 배포 선언 | 없음 | Keycloak bootstrap | Agent/bootstrap 동일 UID, 렌더링 파일 정리 실패 시 Job 실패, v1 prune·v2 성공 |
 | `IAM-01 DONE` | GitHub username 기준 팀 Keycloak 계정과 Shuffle OIDC·조직·RBAC, Pomerium Route 최소권한 전환 | `KC-01`, `POM-01`, `SOAR-DASH-01` | `IDENTITY-LIVE` | `NB-ENROLL-01` | 팀 일상 ID 5개와 분리 특권 ID 1개 생성·MFA required action, 보호 입력으로만 받은 검증 email과 Git·로그 추가 원문 0건, 그룹→Shuffle client role 정확 매핑과 대표 세션 한 role, 단일 조직의 reader 쓰기·실행 거부와 admin 허용, role 없는 OIDC 거부, Pomerium 그룹 allow/deny, MFA를 갖춘 `soar-dash-01-admin`의 IdP 독립 복구와 API key 0개, 임시 자동 프로비저닝 종료, 관련 Argo child `Synced/Healthy` |
-| `IAM-ENROLL-01 BLOCKED` | 팀 일상 ID 5개와 분리 특권 ID 1개의 사용자 직접 초기 비밀번호 변경·MFA·Shuffle 최초 OIDC 등록 | `IAM-01`, `NB-ENROLL-01` | `IDENTITY-LIVE` | `IAM-MIG-01`, `SOAR-01` | Keycloak MFA `6/6`, required action 0건, Shuffle canonical username `6/6`, 일상 `org-reader` 5개와 특권 `admin` 1개가 계정별 정확히 한 role, 등록 직후 자동 프로비저닝 off, 대상 계정·보호 입력 원문 Git·로그 추가 0건 |
+| `IAM-ENROLL-01 READY` | 팀 일상 ID 5개와 분리 특권 ID 1개의 사용자 직접 초기 비밀번호 변경·MFA·Shuffle 최초 OIDC 등록 | `IAM-01`, `NB-ENROLL-01` | `IDENTITY-LIVE` | `IAM-MIG-01`, `SOAR-01` | Keycloak MFA `6/6`, required action 0건, Shuffle canonical username `6/6`, 일상 `org-reader` 5개와 특권 `admin` 1개가 계정별 정확히 한 role, 등록 직후 자동 프로비저닝 off, 대상 계정·보호 입력 원문 Git·로그 추가 0건 |
 | `IAM-MIG-01 BLOCKED` | 기존 `imcherry`·`imcherry-admin`의 서비스별 OIDC 연결·소유권을 새 ID로 이전하고 legacy ID를 단계적으로 비활성화 | `IAM-ENROLL-01` | `IDENTITY-LIVE` | legacy identity 정리 | Keycloak client와 각 서비스의 영속 사용자·소유권 전수표, 새 ID allow와 기존 ID deny의 같은 시점 대조, NetBird 등 유일 Owner 선이전, legacy session revoke·계정 disable, 최소 90일 감사 보존 동안 hard delete 0건과 rollback 절차 |
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-PERF-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
 | `CORAZA-01 DEFERRED` | Traefik HTTP-WASM Coraza + CRS 직접 PoC; 호환 실패로 폐기하고 `CROWDSEC-01`이 대체 | `INGRESS-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)의 재검토 조건이 생기면 새 결정·새 작업으로만 검토 |
@@ -295,7 +295,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `NB-02-FIX-02 DONE` | NetBird dashboard가 `netbird-client`에 없는 `groups` scope를 `AUTH_SUPPORTED_SCOPES`에 요청해 Keycloak이 `invalid_scope`로 거부하던 결함을 보정 | `NB-02-FIX-01` | 없음 | NetBird 로그인 화면 진입 | Keycloak Admin API로 `netbird-client`가 `groups`를 default/optional scope 어디에도 갖지 않고 dedicated `oidc-group-membership-mapper`로 scope 요청과 무관하게 groups claim을 이미 전달함을 확인; `AUTH_SUPPORTED_SCOPES`에서 `groups` 제거해 템플릿·라이브 `netbird-01` 컨테이너 모두 반영, 재로그인으로 통과 확인 |
 | `NB-02-FIX-03 DONE` | NetBird management의 Device Authorization·PKCE flow 설정에도 같은 존재하지 않는 `groups` scope가 남아 있어 실제 `netbird` CLI client 로그인이 `invalid_scope`로 실패하던 결함을 보정 | `NB-02-FIX-02` | 없음 | NetBird CLI/device 로그인 | `management.json.j2`의 `DeviceAuthorizationFlow`·`PKCEAuthorizationFlow` 두 `Scope` 값에서 `groups` 제거, 템플릿과 라이브 `netbird-01`의 `management.json`·`netbird-management` 컨테이너 모두 반영 |
 | `NB-02-FIX-04 DONE` | `netbird-client`의 `post.logout.redirect.uris`가 Keycloak 와일드카드가 아닌 리터럴 `+` 문자로 등록되어 정상 로그아웃 redirect가 전부 `Invalid redirect uri`로 거부되던 결함을 보정 | `NB-02-FIX-03` | 없음 | NetBird 로그아웃 흐름 | Keycloak Admin API로 값을 `{dashboard_url}/+`(리터럴 일치만 허용)에서 `{dashboard_url}/*`(정상 wildcard)로 교체, slash 유무 두 형태 재현 테스트로 400→302 전환 확인, 소스 스크립트 `keycloak_netbird_clients.py`도 동일하게 반영 |
-| `NB-ENROLL-01 READY` | 기존 Keycloak 일상 ID의 외부 NetBird interactive onboarding과 일반 사용자 device group·split DNS·exact ingress route·offboarding | `EDGE-02`, `IAM-01`, `NB-02`, `NET-04`, `POM-01` | `NETBIRD-LIVE` | `IAM-ENROLL-01` | 랩 밖 신규 client가 `/platform-users` ID·MFA로 사용자 소유 peer를 만들고 내부 DNS와 ingress HTTPS exact route로 `access`에 도달, 미소속·특권 전용 ID와 허용 밖 목적지·port 거부, 사람용 setup key 0건, session revoke·사용자 차단·peer 삭제 뒤 재접근 거부와 임시 자원 0건 |
+| `NB-ENROLL-01 DONE` | 기존 Keycloak 일상 ID의 외부 NetBird interactive onboarding과 일반 사용자 device group·split DNS·exact ingress route·offboarding | `EDGE-02`, `IAM-01`, `NB-02`, `NET-04`, `POM-01` | `NETBIRD-LIVE` | `IAM-ENROLL-01` | 랩 밖 신규 client가 `/platform-users` ID·MFA로 사용자 소유 peer를 만들고 내부 DNS와 ingress HTTPS exact route로 `access`에 도달, 미소속·특권 전용 ID와 허용 밖 목적지·port 거부, 사람용 setup key 0건, session revoke·사용자 차단·peer 삭제 뒤 재접근 거부와 임시 자원 0건 |
 | `WG-02 DONE` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | `OPNSENSE-LIVE`, `PUBLIC-DNS` | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
 | `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
 | `VAULT-03 DONE` | Vault UI를 Pomerium 우회 표준 Ingress와 Vault OIDC auth method로 노출 (`gitops/apps/vault/`) | `VAULT-02`, `KC-01`, `INGRESS-01`, `KMS-01` | `VAULT-CONFIG`, `OPNSENSE-LIVE` | Vault 일상 운영·복구 독립성 | Vault OIDC auth method와 전용 Keycloak client 연결로 UI 사용자가 자기 policy 경로만 읽고 타 경로·`sys/mounts`는 403, Pomerium을 경유하지 않는 표준 Ingress와 자체서명 backend TLS 신뢰 설정, Pomerium Pod 정지 중 Vault UI 로그인 성공으로 복구 독립성 실증, root token·port-forward break-glass 보존 확인, audit device에 UI 로그인 event 기록과 token 원문 0건, `vault` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건과 `ip-plan.md` 노출 정의 갱신, Traefik 정적 설정·Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Vault Agent 소비자 회귀 없음 |
@@ -1511,6 +1511,51 @@ proxied 2건과 OPNsense WAN NAT(NB-01 세 건 + EDGE-02 8443 source 제한 한 
 또는 후속 FIX가 조사한다. `platform-root`는 검증 뒤 `main`으로 복귀했고 `ARGO-ROOT` 잠금을
 해제했다. 선행이 모두 충족된 `NB-ENROLL-01`만 `READY`로 열고 `IAM-ENROLL-01`은 `BLOCKED`를
 유지한다.
+
+2026-08-04 `NB-ENROLL-01`에서 `/platform-users` device group의 split DNS·exact ingress
+route·offboarding을 라이브로 증명했다. Warpgate가 `EDGE-01`에서 쓴 "subnet route 대신
+exact host peer" 원칙을 따르되, 목적지 호스트에는 아무것도 설치하지 않는 방식을 새로
+채택했다. OPNsense 26.7에 공식 `os-netbird` 플러그인을 설치해 NetBird Network Router로
+등록하고(신규 인터페이스 `opt6`/`wt0`), `k3s-01`(TCP 443)과 netbird-01의 신규 `dnsmasq`
+split DNS relay(TCP/UDP 53) 두 exact host Resource만 열었다. k3s-01 자체는 변경하지
+않았다.
+
+검증 중 OPNsense가 routing peer이면서 동시에 목적지(자신의 Unbound)인 self-referencing
+경로는 PF state는 생성되지만 패킷이 로컬 소켓까지 전달되지 않는 FreeBSD/userspace
+WireGuard 한계를 재현했다(`pfctl` state `SINGLE:NO_TRAFFIC`, Unbound query 로그 0건,
+masquerade on/off 모두 동일). 다른 호스트(k3s-01)로의 라우팅은 항상 정상이었으므로 DNS
+목적지를 OPNsense 자신에서 netbird-01로 옮겨 우회했다. 이 결함은 고치지 않고 런북에
+한계로 남긴다. 또 NetBird 이 버전의 `POST /api/policies`가 rule을 여러 개 보내도 첫
+rule만 저장하는 것을 발견해(`EDGE-01`의 기존 policy들도 모두 rule 1개였던 것과 같은
+제약) policy 1개당 rule 1개로 우회했다.
+
+실제 검증은 호스트의 NetBird·Tailscale 인터페이스를 배제한 격리 Docker container에서
+pinned `netbird` v0.73.0(서버와 동일)로 실행했다. `netbird up`/`login`은 headless
+Linux에서 기본적으로 OAuth Device Authorization Grant를 쓰는데, 이 랩의 `netbird-client`가
+PKCE를 필수로 요구해 device flow가 `400 Missing parameter: code_challenge_method`로
+거부되는 사전 존재 결함도 발견했다. 실제 데스크톱 사용자는 PKCE flow를 쓰므로 영향받지
+않으며(`XDG_CURRENT_DESKTOP` 설정으로 같은 경로 재현), 이번 완료 증거도 그 경로로
+검증했다. 완전 headless 사람 장치 지원이 실제로 필요해지기 전까지는 고치지 않는다.
+
+완료 증거 8개를 모두 실행했다. 격리 container가 `/platform-users` 일상 ID
+`imcherry5778`의 실제 비밀번호·TOTP로 Cloudflare edge를 거쳐 PKCE 로그인해 진짜 peer를
+등록했고, 등록 즉시 JWT groups propagation으로 `/platform-users`에 배정됐다. 그 peer에서
+`access.imcherry5778.xyz`가 split DNS로 `10.10.20.10`을 반환했고 `HTTPS 302`(Pomerium의
+정상 미인증 리다이렉트)로 도달했다. 그룹 없는 `headlamp-no-group`과 `/platform-privileged`만
+가진 `imcherry-admin`은 Keycloak 로그인은 성공해도 NetBird API가 `401`로 거부했다. 같은
+peer에서 허용 밖 목적지(`postgres-01`, `object-01`)는 라우팅 자체가 없어 즉시 실패했고,
+같은 k3s-01의 허용 밖 port(`22`, `6443`)는 timeout했다. 사람용 setup key는 0건이며,
+OPNsense routing peer 등록에 쓴 유일한 setup key는 headless one-off로 이미 소모됐다.
+Keycloak session revoke(`204`) 뒤 NetBird 사용자를 차단하고 peer를 삭제하자, 저장된
+peer 상태로 재연결은 `peer login has expired`로 거부됐고 차단 상태의 신규 등록 시도는
+peer record가 생겨도 `connected: false`였다. `imcherry5778`은 실 운영자의 상시 계정이라
+검증 뒤 차단 해제·소속 group·기존 peer(`fedora`) 연결까지 복원했고, 검증용 peer·container·
+Unbound 디버그 설정은 모두 제거했다. OPNsense config.xml 정규화 스크립트가 NetBird
+`setupKey` 필드를 마스킹하지 않던 것도 함께 고쳤다. `EDGE-01`의 recovery group·policy와
+`EDGE-02`의 공개 인증면은 변경하지 않았다. `Unauthenticated` 화면 결함은 이번 검증
+경로에서 재현되지 않아 원인 미특정으로 남긴다. 상세는
+[NetBird 등록 runbook](runbook/netbird-enrollment.md)이 소유한다. 선행이 모두 충족된
+`IAM-ENROLL-01`만 `READY`로 연다.
 
 2026-08-03 `KMS-01`의 `DEFERRED`를 해제하고 `READY`로 연다.
 [ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md)의 재검토 조건 중 "Vault와 S3 복구
