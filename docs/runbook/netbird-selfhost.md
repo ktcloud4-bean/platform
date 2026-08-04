@@ -214,9 +214,11 @@ Code + PKCE 또는 device authorization을 사용한다. `groups` claim의
 `/platform-users`만 NetBird single account에 허용한다. 직접 NetBird 권한을
 사용자에게 붙이지 않는다.
 
-Keycloak은 공개 DNS A/AAAA와 WAN NAT가 없으므로, 로그인 검증 범위는 내부 resolver로
-`sso.imcherry5778.xyz → 10.10.20.10`을 해석하는 클라이언트다. 외부 peer의
-대화형 OIDC 로그인은 검증하지 않았으며 `EDGE-01` 전에는 공개 레코드·NAT로 우회하지 않는다.
+현재 Keycloak은 공개 DNS와 WAN origin 경로가 없으므로 로그인 검증 범위는 내부 resolver로
+`sso.imcherry5778.xyz`를 [`ip-plan.md`](../ip-plan.md)의 내부 alias 대상으로 해석하는 클라이언트다.
+`EDGE-02`가 [공개 사용자 프런트엔드 런북](keycloak-public-frontchannel.md)의 외부 OIDC 경계를
+완료하기 전에는 이 범위를 외부 peer 대화형 로그인 증거로 승격하지 않는다. `EDGE-02` 뒤
+일반 사용자 device group·split DNS·exact route는 `NB-ENROLL-01`이 별도로 소유한다.
 
 Management의 Keycloak discovery·JWKS·userinfo/Admin API 경로는 OPNsense `opt4`의
 NB-02 rule만 사용한다: `10.10.40.10 → 10.10.20.10`, TCP 443, RFC1918 BLOCK보다
@@ -248,7 +250,7 @@ Management는 Docker bridge `172.18.0.0/16`의 Traefik만 reverse-proxy header �
   2회차는 `changed=0 failed=0`이다.
 - OPNsense 최소 rule과 재부팅 증거는
   [전용 경로 런북](opnsense-netbird-keycloak-path.md)이 소유한다. 검증 범위는 내부 resolver를
-  쓰는 클라이언트이며, 외부 peer의 대화형 OIDC 로그인은 `EDGE-01` 전까지 미검증이다.
+  쓰는 클라이언트이며, 이 2026-08-01 완료 증거는 외부 peer 대화형 OIDC 로그인을 검증하지 않았다.
 
 ## 8. 로그 및 이벤트 조회
 
@@ -307,5 +309,5 @@ ANSIBLE_ROLES_PATH="$PWD/infra/ansible/roles" ansible-playbook \
 | ISP 제약 | KT ISP 환경에서 외부 TCP 80 inbound에 타임아웃 발생. ACME HTTP-01 challenge 불가 |
 | IPv6 | AAAA 레코드 미생성. IPv6 경로 미검증 |
 | 로컬 Owner | Keycloak과 Dex 동시 운용 불가. `nb02-pre-switch.tar.gz` 복원과 실제 Dex Owner 로그인으로만 복구 증명 |
-| 외부 peer OIDC 로그인 | `sso` 공개 DNS·NAT가 없으므로 랩 밖 브라우저는 미검증. `EDGE-01` 전 우회 노출 금지 |
+| 외부 peer OIDC 로그인 | 현재 `sso` 공개 origin이 없어 랩 밖 브라우저는 미검증. `EDGE-02`가 제한된 사용자 프런트엔드를, `NB-ENROLL-01`이 일반 장치 경로를 완료하기 전까지 내부 검증과 구분 |
 | OPNsense 재부팅 | k3s의 유일한 upstream DNS가 일시 중단돼 Keycloak readiness가 약 10분 지연됐다. 설정·Pod 재시작 없이 자동 복구됨 |

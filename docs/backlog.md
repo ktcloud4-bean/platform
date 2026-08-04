@@ -68,6 +68,7 @@ revert·rollback 스냅샷 커밋 세 개와 새 작업 ID·브랜치·worktree 
 | `PUBLIC-DNS` | Cloudflare DNS·공개 origin 변경 |
 | `K3S-HEAVY` | Wazuh·관측·SOAR처럼 큰 워크로드의 최초 적용 |
 | `IDENTITY-LIVE` | Keycloak 사용자·그룹·client role과 서비스 OIDC 사용자·조직·role의 전환 |
+| `NETBIRD-LIVE` | NetBird account·peer·group·policy·route·DNS와 setup key의 변경 |
 
 ## 주 경로
 
@@ -80,6 +81,8 @@ CAP-01 + OS-01 + IAC-01 + PVE-ACME-01 + NET-03 → VM-01
 VM-01 → NIDS-01 · K3S-01 · PG-01 · S3-DESIGN-01 · NB-01 · WG-01
 VM-01 + S3-DESIGN-01 → S3-01
 GITOPS-01 → INGRESS-01 → WAF-DESIGN-01 → CROWDSEC-PERF-01 → CROWDSEC-FIX-01
+EDGE-01 + KC-01 + NB-02 + IAM-01 → EDGE-DESIGN-02 → EDGE-02
+→ NB-ENROLL-01 → IAM-ENROLL-01 → IAM-MIG-01
 
 기반 병렬 작업 → 백업 복구 gate → 공급망·정책 → 공개·최소권한
 → Loki → kube-prometheus-stack → Wazuh → Shuffle
@@ -276,8 +279,8 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `PKI-01 DONE` | Vault PKI를 첫 실제 consumer인 CrowdSec agent↔LAPI mTLS lifecycle에 연결 | `VAULT-02`, `CERTMGR-01` | `VAULT-CONFIG` | 내부 서비스 인증·인가 | CrowdSec 전용 최소권한 PKI role과 허용 밖 이름·OU 거부, agent↔LAPI mTLS 실제 연결 성공과 잘못된 CA·OU 거부, LAPI의 OU 기반 agent/bouncer 구분 보존, 자동 갱신·reload, revoke 뒤 CRL 등재와 해당 인증서 거부, Vault sealed 중 기존 인증서 유지·신규 발급만 실패, Git·로그의 private key 0건, `tls.enabled=false` rollback 뒤 `CROWDSEC-FIX-01` 기능(정상 200·공격 403·exact 예외) 회귀 없음 |
 | `KC-01 DONE` | Keycloak 배포·realm·그룹/client role·일상/특권 ID | `PG-01`, `VAULT-02`, `INGRESS-01` | 없음 | Pomerium·Headlamp·NetBird·Warpgate·AWS | MFA, claim, 최소 role, 로컬 admin 복구, issuer 고정 |
 | `KC-01-FIX-01 DONE` | bootstrap 메모리 시크릿 정리를 fail-closed로 보정 | `KC-01` 배포 선언 | 없음 | Keycloak bootstrap | Agent/bootstrap 동일 UID, 렌더링 파일 정리 실패 시 Job 실패, v1 prune·v2 성공 |
-| `IAM-01 DONE` | GitHub username 기준 팀 Keycloak 계정과 Shuffle OIDC·조직·RBAC, Pomerium Route 최소권한 전환 | `KC-01`, `POM-01`, `SOAR-DASH-01` | `IDENTITY-LIVE` | `IAM-ENROLL-01` | 팀 일상 ID 5개와 분리 특권 ID 1개 생성·MFA required action, 보호 입력으로만 받은 검증 email과 Git·로그 추가 원문 0건, 그룹→Shuffle client role 정확 매핑과 대표 세션 한 role, 단일 조직의 reader 쓰기·실행 거부와 admin 허용, role 없는 OIDC 거부, Pomerium 그룹 allow/deny, MFA를 갖춘 `soar-dash-01-admin`의 IdP 독립 복구와 API key 0개, 임시 자동 프로비저닝 종료, 관련 Argo child `Synced/Healthy` |
-| `IAM-ENROLL-01 READY` | 팀 일상 ID 5개와 분리 특권 ID 1개의 사용자 직접 초기 비밀번호 변경·MFA·Shuffle 최초 OIDC 등록 | `IAM-01` | `IDENTITY-LIVE` | `IAM-MIG-01`, `SOAR-01` | Keycloak MFA `6/6`, required action 0건, Shuffle canonical username `6/6`, 일상 `org-reader` 5개와 특권 `admin` 1개가 계정별 정확히 한 role, 등록 직후 자동 프로비저닝 off, 대상 계정·보호 입력 원문 Git·로그 추가 0건 |
+| `IAM-01 DONE` | GitHub username 기준 팀 Keycloak 계정과 Shuffle OIDC·조직·RBAC, Pomerium Route 최소권한 전환 | `KC-01`, `POM-01`, `SOAR-DASH-01` | `IDENTITY-LIVE` | `NB-ENROLL-01` | 팀 일상 ID 5개와 분리 특권 ID 1개 생성·MFA required action, 보호 입력으로만 받은 검증 email과 Git·로그 추가 원문 0건, 그룹→Shuffle client role 정확 매핑과 대표 세션 한 role, 단일 조직의 reader 쓰기·실행 거부와 admin 허용, role 없는 OIDC 거부, Pomerium 그룹 allow/deny, MFA를 갖춘 `soar-dash-01-admin`의 IdP 독립 복구와 API key 0개, 임시 자동 프로비저닝 종료, 관련 Argo child `Synced/Healthy` |
+| `IAM-ENROLL-01 BLOCKED` | 팀 일상 ID 5개와 분리 특권 ID 1개의 사용자 직접 초기 비밀번호 변경·MFA·Shuffle 최초 OIDC 등록 | `IAM-01`, `NB-ENROLL-01` | `IDENTITY-LIVE` | `IAM-MIG-01`, `SOAR-01` | Keycloak MFA `6/6`, required action 0건, Shuffle canonical username `6/6`, 일상 `org-reader` 5개와 특권 `admin` 1개가 계정별 정확히 한 role, 등록 직후 자동 프로비저닝 off, 대상 계정·보호 입력 원문 Git·로그 추가 0건 |
 | `IAM-MIG-01 BLOCKED` | 기존 `imcherry`·`imcherry-admin`의 서비스별 OIDC 연결·소유권을 새 ID로 이전하고 legacy ID를 단계적으로 비활성화 | `IAM-ENROLL-01` | `IDENTITY-LIVE` | legacy identity 정리 | Keycloak client와 각 서비스의 영속 사용자·소유권 전수표, 새 ID allow와 기존 ID deny의 같은 시점 대조, NetBird 등 유일 Owner 선이전, legacy session revoke·계정 disable, 최소 90일 감사 보존 동안 hard delete 0건과 rollback 절차 |
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-PERF-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
 | `CORAZA-01 DEFERRED` | Traefik HTTP-WASM Coraza + CRS 직접 PoC; 호환 실패로 폐기하고 `CROWDSEC-01`이 대체 | `INGRESS-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)의 재검토 조건이 생기면 새 결정·새 작업으로만 검토 |
@@ -288,6 +291,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `HEADLAMP-02 DONE` | Headlamp Keycloak OIDC·Kubernetes RBAC·Pomerium Route | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | 공유 cluster-admin SA 없음, 사용자별 조회·로그·exec·변경 allow/deny, bootstrap token 폐기, GitOps drift 없음, IdP 장애 시 break-glass kubeconfig |
 | `HEADLAMP-02-FIX-05 DONE` | Headlamp v0.44.0의 `/clusters/main` HttpOnly cookie 경계에 맞게 browser verifier를 보정하고 HEADLAMP-02 전체 경계를 재도입 | `HEADLAMP-01`, `POM-01` | `K3S-BOOTSTRAP` | k3s 일상 관리·`CAP-02` | cookie path 회귀 테스트, 사용자 OIDC·RBAC 전체 live·rollback·break-glass 재검증 |
 | `NB-02 DONE` | NetBird 일반 인증을 Keycloak OIDC로 전환 | `NB-01`, `KC-01` | 없음 | 원격 사용자 | 신규 OIDC 로그인·그룹 정책과 로컬 Owner 복구 모두 성공 |
+| `NB-ENROLL-01 BLOCKED` | 기존 Keycloak 일상 ID의 외부 NetBird interactive onboarding과 일반 사용자 device group·split DNS·exact ingress route·offboarding | `EDGE-02`, `IAM-01`, `NB-02`, `NET-04`, `POM-01` | `NETBIRD-LIVE` | `IAM-ENROLL-01` | 랩 밖 신규 client가 `/platform-users` ID·MFA로 사용자 소유 peer를 만들고 내부 DNS와 ingress HTTPS exact route로 `access`에 도달, 미소속·특권 전용 ID와 허용 밖 목적지·port 거부, 사람용 setup key 0건, session revoke·사용자 차단·peer 삭제 뒤 재접근 거부와 임시 자원 0건 |
 | `WG-02 DONE` | Warpgate SSO·역할·세션 정책 연동 | `WG-01`, `KC-01` | `OPNSENSE-LIVE`, `PUBLIC-DNS` | 관리자 접근 | 일반/특권 분리, 허용 대상만 접속, IdP 장애 복구 검증 |
 | `AWS-ID-01 DONE` | Keycloak `AssumeRoleWithSAML`·AWS role 매핑 | `KC-01` | 없음 | AWS 콘솔 권한 | 그룹별 임시 role, 세션 만료, 과권한·지속키 없음 |
 | `VAULT-03 DONE` | Vault UI를 Pomerium 우회 표준 Ingress와 Vault OIDC auth method로 노출 (`gitops/apps/vault/`) | `VAULT-02`, `KC-01`, `INGRESS-01`, `KMS-01` | `VAULT-CONFIG`, `OPNSENSE-LIVE` | Vault 일상 운영·복구 독립성 | Vault OIDC auth method와 전용 Keycloak client 연결로 UI 사용자가 자기 policy 경로만 읽고 타 경로·`sys/mounts`는 403, Pomerium을 경유하지 않는 표준 Ingress와 자체서명 backend TLS 신뢰 설정, Pomerium Pod 정지 중 Vault UI 로그인 성공으로 복구 독립성 실증, root token·port-forward break-glass 보존 확인, audit device에 UI 로그인 event 기록과 token 원문 0건, `vault` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건과 `ip-plan.md` 노출 정의 갱신, Traefik 정적 설정·Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Vault Agent 소비자 회귀 없음 |
@@ -329,6 +333,13 @@ OIDC subject와 서비스 내부 사용자·소유권이 username보다 오래 �
 OIDC 로그인을 `IAM-ENROLL-01`로 분리했다. `IAM-01`은 server-side 계정·MFA 강제·client와
 role mapping·Route·복구 계정·대표 정책 경계까지 완료한다. 목표 보안 상태는 바뀌지 않으며
 `IAM-MIG-01`과 `SOAR-01`은 실제 대상 ID 등록 `6/6` 전까지 열지 않는다.
+
+`EDGE-DESIGN-02`에서 외부 팀 등록은 사람용 setup key 대신 공개 Keycloak 사용자 프런트엔드와
+기존 일상 ID의 NetBird OIDC 로그인을 쓰기로 결정했다. `IAM-ENROLL-01`은 실제 팀원이 외부에서
+등록할 수 있는 `NB-ENROLL-01` 경로가 완료될 때까지 `BLOCKED`다. 일상 ID 다섯 개만 자기
+NetBird peer를 소유하고, `/platform-privileged`만 가진 특권 ID는 이미 연결된 승인 장치에서
+필요한 서비스에 별도로 로그인한다. 이 의존성 변경은 대상 계정의 credential·required action과
+Shuffle 자동 프로비저닝 상태를 바꾸지 않는다.
 
 | 경계 | 현재 `SOAR-DASH-01` 기준선 | `IAM-01`·`IAM-ENROLL-01` 목표 | 후속 |
 |---|---|---|---|
@@ -1448,15 +1459,25 @@ SHA에서 Dashy Keycloak 도달 양성, `token verification failed` 신규 0건,
 |---|---|---|---|---|---|
 | `NET-04 DONE` | 실제 통신표로 VLAN 규칙 최소화·hardened 검증 ([runbook](runbook/opnsense-vlan-firewall-hardening.md)) | `NB-02`, `WG-02`, `POM-01`, `BKP-05`, `E2E-01` | `OPNSENSE-LIVE` | 외부 공개·운영 통신 | 임시 rule 제거, `vlan-verify hardened`, drift 없음 |
 | `EDGE-01 DONE` | NetBird 단독 공개 DNS·NAT allowlist, 이전 프로젝트 공개 DNS 잔여 정리, Warpgate direct recovery peer와 최소 NetBird policy ([runbook](runbook/netbird-public-edge.md)) | `CROWDSEC-FIX-01`, `POM-01`, `NB-02`, `NIDS-01`, `NET-04` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 사용자 | 공개 권위 DNS는 DNS-only `netbird` A 1건·그 밖의 record 0건, WAN NAT는 NetBird TCP 80/443·UDP 3478만 존재, IDS 관측과 Warpgate TCP 8888 direct-peer 복구 경로가 Cloudflare proxy와 독립 |
-| `EDGE-02 DEFERRED` | Cloudflare proxied HTTP WAF·origin 제한·`sso`/Portal 공개 DNS·NAT | `EDGE-01` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | clientless Portal·외부 OIDC 셀프서비스 | 허용 hostname만 proxied 공개, origin 직접 우회 차단, IDS 경보·NetBird/Warpgate 복구 경로 독립 |
+| `EDGE-DESIGN-02 DONE` | 외부 NetBird OIDC bootstrap 순환을 해소할 Keycloak 사용자 프런트엔드 공개 경계 결정 ([ADR](adr/0018-public-keycloak-frontchannel.md)) | `EDGE-01`, `KC-01`, `NB-02`, `IAM-01` | 없음 | `EDGE-02`, `NB-ENROLL-01`, `IAM-ENROLL-01` | `sso` 사용자 프런트엔드만 공개하고 관리면·Portal·리소스·self-registration은 비공개로 둔 ADR, Cloudflare origin port 분리·OPNsense source 제한·rollback·후속 device/data-plane 소유권을 아키텍처·주소·런북·백로그에 일치시킴, 라이브 변경 0 |
+| `EDGE-02 READY` | Keycloak `platform` realm 사용자 OIDC 프런트엔드의 Cloudflare proxy/WAF·origin port 분리·OPNsense source 제한 적용 ([runbook](runbook/keycloak-public-frontchannel.md)) | `EDGE-01`, `EDGE-DESIGN-02` | `PUBLIC-DNS`, `OPNSENSE-LIVE` | 외부 NetBird 로그인·`NB-ENROLL-01` | 공개 DNS·origin allowlist, 랩 밖 기존 `/platform-users` ID의 PKCE/device authorization·MFA, Admin·master·management와 origin 직접 우회 차단, NetBird/Warpgate 복구·내부 issuer 불변, `sso` 객체만 제거한 EDGE-01 rollback |
 | `NIPS-01 DEFERRED` | 검증된 Suricata rule만 선택적 IPS로 승격 | `NIDS-01`, `NET-04` | `OPNSENSE-LIVE` | 전체 프로젝트 통신 | 정상 트래픽·오탐·부모 인터페이스·offloading·처리량·장애·즉시 rollback 검증; 공개의 필수 gate 아님 |
 | `KMS-01 DONE` | Vault Shamir→AWS KMS auto-unseal migration ([증거](evidence/kms-01/README.md)) | `BKP-05` | `VAULT-INIT` | Vault 부팅·복구 | 사전 snapshot, KMS 장애 시험, seal rollback drill, [ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md) 재검토 조건 2의 AWS IAM·KMS 최소권한과 비용·감사 기준 검증, migration 뒤 재부팅에서 사람 개입 없는 unseal과 Shamir 복귀 경로 보존; VPN은 선행 아님 |
 
-`EDGE-02`는 NetBird에 먼저 가입하지 않은 외부 기기의 Keycloak 대화형 로그인 또는
-NetBird 없이 쓰는 clientless Pomerium Portal이 실제 요구될 때만 재검토한다. 같은 WAN
-IPv4의 TCP 443은 현재 NetBird가 소유하므로, 별도 공인 IPv4나 Cloudflare origin port
-override처럼 L4 소유권 충돌을 해소하는 설계가 먼저 확정돼야 한다. AWS Site-to-Site VPN,
-AWS SAML과 공인 AWS API로 나가는 오프사이트 백업은 이 공개 HTTP 경로의 재검토 조건이 아니다.
+2026-08-04 외부 신규 장치가 기존 팀 Keycloak ID로 NetBird에 로그인해야 한다는 실제 요구가
+생겨 `EDGE-02`의 재검토 조건을 충족했다. [ADR-0018](adr/0018-public-keycloak-frontchannel.md)은
+`sso`의 `platform` realm 사용자 프런트엔드만 공개하고 `access` Portal·애플리케이션·Keycloak
+관리면과 self-registration은 비공개로 유지한다. 현재 NetBird가 소유한 WAN TCP 443은 바꾸지
+않고 Cloudflare hostname Origin Rule의 destination port override와 OPNsense의
+Cloudflare-source-only origin port를 사용한다. exact port와 DNS 노출 상태는
+[`ip-plan.md`](ip-plan.md)가 단일 원본이다.
+
+`EDGE-DESIGN-02`는 위 선택, 검토한 대안, 적용 전 stop condition, 완료 증거와 rollback을
+문서에만 반영했으며 Cloudflare, 공개 DNS, OPNsense, Traefik, Keycloak과 NetBird live 변경은
+0건이다. 선행이 모두 `DONE`이므로 `EDGE-02`만 `READY`로 연다. `NB-ENROLL-01`은
+`EDGE-02`가 외부 인증면을 증명할 때까지, `IAM-ENROLL-01`은 `NB-ENROLL-01`이 device group·
+split DNS·exact route·offboarding을 증명할 때까지 `BLOCKED`다. clientless Portal 공개는
+이번 결정을 확장하지 않고 별도 재검토한다.
 
 2026-08-03 `KMS-01`의 `DEFERRED`를 해제하고 `READY`로 연다.
 [ADR-0006](adr/0006-vault-seal-and-bootstrap-boundary.md)의 재검토 조건 중 "Vault와 S3 복구

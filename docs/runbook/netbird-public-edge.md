@@ -2,14 +2,16 @@
 
 - 작업: `EDGE-01`
 - 공개 hostname: `netbird.imcherry5778.xyz` 하나
-- 조건부 후속: `EDGE-02 DEFERRED` (Cloudflare proxied HTTP WAF·origin 제한)
+- 후속: `EDGE-02 READY` (`sso` Keycloak 사용자 프런트엔드만 Cloudflare proxy로 공개)
 
 ## 목적과 경계
 
 외부 사용자는 NetBird control·relay에만 직접 도달한다. Pomerium Portal과 Keycloak issuer를
-포함한 웹 서비스는 NetBird 연결 뒤 내부 DNS로 사용한다. NetBird에 가입하지 않은 외부
-기기의 셀프서비스 OIDC 또는 clientless Portal은 현재 요구가 아니며, 필요해질 때만
-`EDGE-02`에서 공개 hostname·Cloudflare WAF·origin 제한·WAN TCP 443 소유권을 함께 설계한다.
+포함한 웹 서비스는 NetBird 연결 뒤 내부 DNS로 사용한다. 이는 `EDGE-01`의 검증된 현재 경계다.
+2026-08-04 외부 신규 장치가 기존 팀 ID로 NetBird OIDC 로그인을 시작해야 한다는 요구가 생겨
+[ADR-0018](../adr/0018-public-keycloak-frontchannel.md)에서 `sso` 사용자 프런트엔드만 공개하기로
+결정했다. `EDGE-02 DONE` 전까지 공개 상태는 바뀌지 않으며 `access` Portal과 애플리케이션은
+후속 적용 뒤에도 NetBird 내부에 남는다.
 
 ```text
 외부 peer → public DNS-only netbird A → OPNsense WAN
@@ -22,6 +24,11 @@ NetBird 연결 뒤 → 내부 DNS → access/sso/Warpgate 및 허용된 내부 �
 
 등록된 recovery client → NetBird direct peer → warpgate-01:8888
 ```
+
+`EDGE-02` target은 Cloudflare proxied `sso`가 NetBird WAN TCP 443과 분리된 origin port로
+k3s Keycloak에 도달하는 경로다. exact target과 rollback은
+[Keycloak 공개 사용자 프런트엔드 런북](keycloak-public-frontchannel.md)이 소유한다. 이 경로는
+외부 OIDC bootstrap만 해결하며 일반 사용자 route·split DNS는 `NB-ENROLL-01`이 소유한다.
 
 다음은 `EDGE-01`에서 하지 않는다.
 
@@ -41,7 +48,7 @@ NetBird 연결 뒤 → 내부 DNS → access/sso/Warpgate 및 허용된 내부 �
 | OPNsense NAT | WAN TCP 80 → `netbird-01` TCP 80 | 기존 `NB-01` 객체 유지 |
 | OPNsense NAT | WAN TCP 443 → `netbird-01` TCP 443 | 기존 `NB-01` 객체 유지 |
 | OPNsense NAT | WAN UDP 3478 → `netbird-01` UDP 3478 | 기존 `NB-01` 객체 유지 |
-| Cloudflare proxy/origin | 없음 | `EDGE-02 DEFERRED` |
+| Cloudflare proxy/origin | 없음 | 현재 `EDGE-01` 완료 상태; `EDGE-02 READY` target은 별도 런북이 소유 |
 | OPNsense filter | `warpgate-01/32` → `netbird-01/32` TCP 443 | EDGE-01 direct peer control 연결만 허용 |
 
 OPNsense NAT UUID와 내부 주소는 마스킹 스냅샷 `infra/opnsense/config.xml`과
@@ -174,6 +181,6 @@ revision으로 복구한다. 기존 NetBird NAT 세 개, LAN/HOME, interface·ga
 NET-04 rule은 건드리지 않는다. `config.xml`은 apply 입력이 아니며 라이브 복구는 지원되는
 UI/API·설정 라이브러리만 사용한다.
 
-`EDGE-02`를 향후 적용했다가 실패하면 NetBird DNS-only A와 세 NAT는 rollback 대상이 아니다.
-Cloudflare proxied record와 그 origin 제한 객체만 제거해 이 runbook의 NetBird 단독 경계로
-돌아온다.
+`EDGE-02`를 적용했다가 실패하면 NetBird DNS-only A와 세 NAT는 rollback 대상이 아니다.
+[후속 런북](keycloak-public-frontchannel.md)의 `sso` Cloudflare·OPNsense 객체만 제거해 이
+runbook의 NetBird 단독 경계로 돌아온다.

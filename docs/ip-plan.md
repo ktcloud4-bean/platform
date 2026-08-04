@@ -169,7 +169,7 @@ traffic selector는 유지하지만 새 DATA→VPC 연결은 기본 차단한다
 | `DMZ` | `PLATFORM` | Keycloak·필수 control API만 허용 |
 | `DMZ` | `DATA` | 기본 차단; 제품 요구가 검증된 경우만 예외 |
 | `DATA` | 인터넷 | 업데이트·AWS S3 등 필요한 egress만 허용 |
-| 외부 | 내부 | NetBird TCP 80/443·UDP 3478만 허용; Traefik 공개는 `EDGE-02 DEFERRED` |
+| 외부 | 내부 | 현재 NetBird TCP 80/443·UDP 3478만 허용; `EDGE-02` TARGET은 Cloudflare source의 `sso` origin TCP 8443만 k3s HTTPS로 추가 |
 | 각 VLAN | OPNsense | DNS·NTP·DHCP 등 기반 포트만 허용; 관리 UI는 차단 |
 
 2026-08-03 `NET-04`가 공개 진입을 제외한 배포 서비스 경계를 구현하고 실제 source별
@@ -192,8 +192,8 @@ NetBird 단독 외부 공개 정책은 `EDGE-01`, 조건부 Cloudflare HTTP 공�
 | `object-01.imcherry5778.xyz` | canonical host | SeaweedFS 로컬 S3 VM | 내부 | Unbound 등록; A/PTR `10.10.50.20` |
 | `warpgate-01.imcherry5778.xyz` | canonical host | Warpgate VM | 내부 | Unbound 등록 |
 | `netbird-01.imcherry5778.xyz` | canonical host | NetBird VM | 내부 | Unbound 등록 |
-| `sso.imcherry5778.xyz` | service alias | Keycloak | 내부·NetBird 경유; 외부 OIDC는 `EDGE-02 DEFERRED` | Unbound alias → `k3s-01` (`10.10.20.10`) |
-| `access.imcherry5778.xyz` | service alias | Pomerium 보호 Dashy 포털 | 내부·NetBird 경유; clientless 공개는 `EDGE-02 DEFERRED` | Unbound alias → `k3s-01` (`10.10.20.10`); POM-01 등록 |
+| `sso.imcherry5778.xyz` | service alias | Keycloak | 현재 내부·NetBird 경유; `EDGE-02` TARGET은 `platform` realm 사용자 프런트엔드만 Cloudflare proxied 공개 | Unbound alias → `k3s-01` (`10.10.20.10`) |
+| `access.imcherry5778.xyz` | service alias | Pomerium 보호 Dashy 포털 | 내부·NetBird 경유; clientless 공개 미채택 | Unbound alias → `k3s-01` (`10.10.20.10`); POM-01 등록 |
 | `argo.imcherry5778.xyz` | service alias | Argo CD | Pomerium; 실제 권한은 Argo 자체 OIDC·RBAC가 판정 | Unbound alias → `k3s-01` (`10.10.20.10`); GITOPS-02 등록, 내부 AAAA·공개 A/AAAA 0건 |
 | `headlamp.imcherry5778.xyz` | service alias | Headlamp | Pomerium | `TARGET`; HEADLAMP-02 `OPNSENSE-LIVE` 승인 뒤 Unbound alias → `k3s-01` (`10.10.20.10`), 내부 AAAA·공개 A/AAAA 0건 |
 | `vault.imcherry5778.xyz` | service alias | Vault | Pomerium 미경유 표준 Ingress; 실제 권한은 Vault 자체 OIDC·policy가 판정 | Unbound alias → `k3s-01` (`10.10.20.10`); VAULT-03 등록, 내부 AAAA·공개 A/AAAA 0건 |
@@ -216,13 +216,28 @@ canonical host의 주소는 이 문서의 고정 배정 표를 참조한다. `Un
 
 Keycloak issuer는 `https://sso.imcherry5778.xyz`로 고정한다. k3s 웹 서비스의 내부 레코드는 Traefik 진입 주소를 가리키고, 공개 서비스는 공인 DNS와 Unbound override를 함께 검증한다.
 
-`EDGE-01`의 공개 권위 DNS allowlist는 DNS-only `netbird.imcherry5778.xyz` A 한 건이며
+`EDGE-01`의 현재 공개 권위 DNS allowlist는 DNS-only `netbird.imcherry5778.xyz` A 한 건이며
 그 밖의 A·AAAA·CNAME은 0건이다. 이전 `ktcloud4-acer` 프로젝트가 Tailscale CGNAT 주소에
 만들었던 DNS-only A 26건과 중단된 Cloudflare Tunnel을 가리키는 proxied CNAME 5건은 더
 이상 사용하지 않는 잔여로 확인해 제거했다. 보존한 `netbird` A는 작업 시작 시 현재 WAN과
-달랐던 값을 교정했으며 DNS-only와 TTL 120초를 유지한다. `access`·`sso` 공개 A와 Traefik 대상 WAN
-NAT는 만들지 않는다. 외부 OIDC 셀프서비스나 clientless Portal이 필요해지면
-`EDGE-02`에서 hostname·origin·WAF·TCP 443 소유권을 함께 재설계한다.
+달랐던 값을 교정했으며 DNS-only와 TTL 120초를 유지한다. `access`·`sso` 공개 A와 Traefik 대상
+WAN NAT는 아직 없으며 `EDGE-02 DONE` 전에는 이 현재 경계를 완료 상태로 사용한다.
+
+`EDGE-02`의 목표 공개 경계는 다음과 같다. 이 표는 target이며 아직 live 값이 아니다.
+
+| 계층 | `EDGE-02` TARGET |
+|---|---|
+| Cloudflare DNS | `sso.imcherry5778.xyz` proxied record 한 건을 추가하고 `netbird` DNS-only record는 그대로 유지 |
+| Cloudflare Origin Rule | `sso` hostname의 destination port를 TCP 8443으로 override |
+| OPNsense PF/NAT | Cloudflare origin source TCP 8443만 `k3s-01` HTTPS TCP 443으로 전달; 임의 인터넷 source 거부 |
+| Keycloak 공개 path | 현재 NetBird가 쓰는 `platform` realm OIDC 사용자·login action, 정적 resource와 discovery만 허용 |
+| 외부 차단 | `/admin/`, `master` realm, root·health·metrics와 origin 직접 접속 |
+| 계속 비공개 | `access`, k3s canonical host, 애플리케이션 alias, Warpgate |
+
+Cloudflare client가 보는 서비스 port는 HTTPS 443이고 origin 연결만 TCP 8443을 쓴다. 같은 WAN
+IPv4의 TCP 443은 계속 NetBird가 소유한다. 내부 `sso` split DNS와 Keycloak issuer는 바꾸지
+않는다. 공개 경계의 이유와 대안은 [ADR-0018](adr/0018-public-keycloak-frontchannel.md), 적용·
+rollback은 [Keycloak 공개 프런트엔드 런북](runbook/keycloak-public-frontchannel.md)이 소유한다.
 
 ## 인증서 이름과 공개 DNS 경계
 
@@ -232,6 +247,7 @@ NAT는 만들지 않는다. 외부 OIDC 셀프서비스나 clientless Portal이 
 - Proxmox 관리 endpoint는 내부 주소의 HTTPS 8006을 유지한다. 공인 인증서 발급은 public A/AAAA, Cloudflare proxy, NAT 또는 443 공개를 뜻하지 않는다.
 - Warpgate 인증서 식별자는 `warpgate.imcherry5778.xyz` 한 이름이다. 내부 Unbound alias와 TCP 8888을 유지하며 public A/AAAA·NAT를 만들지 않는다.
 - NetBird 와일드카드 인증서는 DNS-only 공개 A와 기존 TCP 80/443·UDP 3478 경로에서만 쓰며 Cloudflare proxy나 다른 서비스 origin에 재사용하지 않는다.
+- `sso`의 Cloudflare origin은 k3s ingress가 소유한 `sso.imcherry5778.xyz` 인증서를 Full (strict)로 검증하며 NetBird·OPNsense 인증서 private key를 재사용하지 않는다.
 - DNS-01은 공개 zone에 임시 `_acme-challenge` TXT만 만들며 발급 후 제거한다. 내부 Unbound host override는 그대로 유지한다.
 - 공인 CA의 Certificate Transparency log에는 canonical hostname이 공개될 수 있지만 내부 주소는 인증서에 넣지 않는다.
 

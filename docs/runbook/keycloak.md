@@ -116,15 +116,37 @@ python3 gitops/tools/iam-01/provision.py apply
 `$KTC_SECRET_ROOT/iam-01/shuffle-admin-totp` mode `0600`으로 저장한다. 이 계정은 rename·공유하지
 않고 API key를 만들지 않는다.
 
+### 외부 NetBird OIDC 온보딩 경계
+
+[ADR-0018](../adr/0018-public-keycloak-frontchannel.md)은 외부 신규 장치가 사람용 setup key 없이
+기존 팀 일상 ID로 NetBird OIDC 로그인을 시작하도록 `sso`의 `platform` realm 사용자
+프런트엔드만 공개한다. `EDGE-02`는 외부 OIDC 도달과 관리면·origin 우회 차단,
+`NB-ENROLL-01`은 일반 사용자 device group·split DNS·exact ingress route·offboarding을
+소유한다. 두 작업이 `DONE`이 되기 전에는 외부 팀 등록 창을 열지 않는다.
+
+Keycloak public self-registration은 계속 비활성이다. 일상 ID 다섯 개는 `/platform-users`
+claim으로 자기 NetBird peer를 등록하고 최초 흐름에서 임시 비밀번호 변경과 TOTP 설정을
+완료한다. `/platform-privileged`만 가진 `imcherry5778-admin`은 NetBird peer를 만들지 않고,
+일상 ID로 이미 연결된 승인 장치에서 특권 session만 별도로 연다. Keycloak 계정 회수와
+NetBird peer 회수는 서로 대체하지 않으며 offboarding 때 둘 다 수행한다.
+
 ### 팀 등록 창
 
 팀원 다섯 명과 특권 ID 소유자가 직접 로그인할 수 있는 같은 시간 창에서만 아래 순서를 쓴다.
 사람이 준비되지 않았으면 `registration-open`을 실행하지 않고 off 상태를 유지한다.
 
-1. `python3 gitops/tools/iam-01/provision.py registration-open`
-2. 각 사용자가 임시 비밀번호를 변경하고 Keycloak TOTP를 직접 등록한다.
-3. 같은 세션으로 Shuffle OIDC에 로그인한다. 일상 ID는 reader, 특권 ID는 admin이어야 한다.
-4. `python3 gitops/tools/iam-01/provision.py registration-close`
+1. 백로그에서 `EDGE-02`와 `NB-ENROLL-01`이 `DONE`이고 `IAM-ENROLL-01`이 `READY`인지 확인한다.
+2. `python3 gitops/tools/iam-01/provision.py registration-open`
+3. 일상 사용자 다섯 명이 외부 NetBird client에서 자기 기존 ID로 로그인하고 임시 비밀번호 변경·
+   Keycloak TOTP 등록·peer 연결을 직접 완료한다.
+4. 각 일상 사용자가 NetBird 내부 `access`를 통해 Shuffle OIDC에 로그인하고 reader인지 확인한다.
+5. 특권 ID 소유자는 일상 ID로 연결된 승인 장치에서 특권 ID의 비밀번호 변경·TOTP 등록과
+   Shuffle OIDC 로그인을 완료하고 admin인지 확인한다.
+6. `python3 gitops/tools/iam-01/provision.py registration-close`
+
+`registration-open`은 Keycloak public registration을 켜는 명령이 아니라 Shuffle의 통제된
+최초 OIDC 자동 프로비저닝 창만 연다. NetBird 외부 로그인 실패를 우회하려고 Keycloak
+self-registration, email login 또는 사람용 setup key를 활성화하지 않는다.
 
 `registration-close`는 Keycloak MFA 6/6과 Shuffle OIDC 사용자 6/6, canonical 소문자 username,
 일상 `org-reader` 다섯 개와 특권 `admin` 한 개가 정확할 때만 성공한다. 성공한 호출이
