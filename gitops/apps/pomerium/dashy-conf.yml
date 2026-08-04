@@ -71,3 +71,62 @@ sections:
         displayData:
           showForGroups:
             - /platform-users
+      - title: Jenkins
+        description: CI-01 Jenkins controller browser UI
+        icon: fab fa-jenkins
+        url: https://jenkins.imcherry5778.xyz
+        target: sametab
+        displayData:
+          showForGroups:
+            - /platform-users
+      - title: Argo CD
+        description: GITOPS-02 Argo CD browser UI; 실제 권한은 Argo 자체 OIDC·RBAC가 판정
+        icon: fas fa-dharmachakra
+        url: https://argo.imcherry5778.xyz
+        target: sametab
+        displayData:
+          showForGroups:
+            - /platform-users
+      - title: Grafana
+        description: OBS-02 Grafana node·PVC·Loki 운영 대시보드
+        icon: fas fa-chart-line
+        url: https://grafana.imcherry5778.xyz
+        target: sametab
+        displayData:
+          showForGroups:
+            - /platform-users
+      - title: Prometheus
+        description: OBS-02 Prometheus targets와 PromQL UI
+        icon: fas fa-fire
+        url: https://prometheus.imcherry5778.xyz
+        target: sametab
+        displayData:
+          showForGroups:
+            - /platform-users
+      - title: Alertmanager
+        description: OBS-02 Alertmanager UI; silence 생성·삭제는 /platform-privileged만
+        icon: fas fa-bell
+        url: https://alertmanager.imcherry5778.xyz
+        target: sametab
+        displayData:
+          showForGroups:
+            - /platform-users
+            - /platform-privileged
+      - title: Wazuh
+        description: WAZUH-02 Wazuh Dashboard 사고 조사 UI; /platform-privileged만 허용
+        icon: fas fa-binoculars
+        url: https://wazuh.imcherry5778.xyz
+        target: sametab
+        displayData:
+          showForGroups:
+            - /platform-privileged
+      - title: Shuffle
+        description: IAM-01 Shuffle SOAR route; reader·operator·특권 그룹만 허용
+        icon: fas fa-shuffle
+        url: https://shuffle.imcherry5778.xyz
+        target: sametab
+        displayData:
+          showForGroups:
+            - /soar-readers
+            - /soar-operators
+            - /platform-privileged
