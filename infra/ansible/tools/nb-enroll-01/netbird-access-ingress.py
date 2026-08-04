@@ -102,7 +102,11 @@ def arguments():
     # 패턴이라 정상 동작을 실측했다.
     parser.add_argument("--dns-address", default="10.10.40.10/32")
     parser.add_argument("--dns-nameserver-ip", default="10.10.40.10")
-    parser.add_argument("--dns-domain", default="access.imcherry5778.xyz")
+    # NB-ENROLL-01-FIX-01: Pomerium의 authenticate_service_url(k3s-01.imcherry5778.xyz)을
+    # 포함해 모든 서비스 로그인 리다이렉트가 access 하나만으로는 해석되지 않아 zone
+    # 전체로 넓혔다. netbird-01의 dnsmasq relay는 처음부터 zone 전체를 forward하므로
+    # 이 값은 client 측 domain match만 넓히면 된다.
+    parser.add_argument("--dns-domain", default="imcherry5778.xyz")
     parser.add_argument("--setup-key-out")
     return parser.parse_args()
 

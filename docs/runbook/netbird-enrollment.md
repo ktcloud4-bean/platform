@@ -101,7 +101,28 @@ netbird-01에 최소 `dnsmasq`(Rocky 9 공식 패키지)를 systemd 서비스로
 | Policy | `NB-ENROLL-01 TCP 443` | `/platform-users` → `nb-enroll-01-ingress`, TCP 443, 단방향 |
 | Policy | `NB-ENROLL-01 DNS UDP 53` | `/platform-users` → `nb-enroll-01-dns`, UDP 53, 단방향 |
 | Policy | `NB-ENROLL-01 DNS TCP 53` | `/platform-users` → `nb-enroll-01-dns`, TCP 53, 단방향 |
-| DNS Nameserver Group | `NB-ENROLL-01 access split DNS` | domain=`access.imcherry5778.xyz`, nameserver=`10.10.40.10:53/udp`, groups=`/platform-users`, primary=false |
+| DNS Nameserver Group | `NB-ENROLL-01 access split DNS` | domain=`imcherry5778.xyz`(전체 zone, `NB-ENROLL-01-FIX-01`에서 확장), nameserver=`10.10.40.10:53/udp`, groups=`/platform-users`, primary=false |
+
+### `NB-ENROLL-01-FIX-01`: DNS Nameserver Group 범위가 `access` 하나뿐이던 결함
+
+최초 적용은 `domain=access.imcherry5778.xyz` 하나만 등록했다. 그런데 Pomerium은 보호
+Route 전부(`access` 포함)의 로그인 리다이렉트를 `authenticate_service_url:
+https://k3s-01.imcherry5778.xyz` 하나로 통일해서 쓴다(`gitops/apps/pomerium/pomerium-conf.yaml`).
+이 이름이 이 Nameserver Group의 domain 범위 밖이라 NetBird 전용 client(Tailscale 등
+다른 경로 없이)는 `access`에는 도달해도 로그인 리다이렉트 단계에서 전부 막혔다. `access`
+403 curl 검증만으로는 이 결함이 드러나지 않고, 실제 브라우저로 로그인 리다이렉트 전체를
+타야 재현됐다.
+
+`netbird-01`의 `dnsmasq` relay는 애초에 `imcherry5778.xyz` 전체 zone을 조건부 forward하도록
+구성되어 있어(`server=/imcherry5778.xyz/10.10.40.1`), 고치는 데 새 인프라가 필요 없었다.
+Nameserver Group의 domain 값을 `access.imcherry5778.xyz`에서 `imcherry5778.xyz`로 넓히는
+한 필드 변경만으로 충분했다. exact route(Resource 2개)·정책 3개·group은 그대로다.
+
+라이브 검증(2026-08-05, Tailscale 완전 비활성 상태의 NetBird 전용 client에서): 수정 전
+`k3s-01`·`sso`·`shuffle`·`headlamp` 등은 미해석, 수정 후 전부 `10.10.20.10`으로 해석.
+`curl -L https://access.imcherry5778.xyz/`의 전체 redirect chain(`access` → `k3s-01`
+`.pomerium/sign_in` → `sso` Keycloak `/realms/platform/.../auth` → `200`)이 Tailscale 없이
+NetBird만으로 끝까지 통과했다.
 
 `Default`(All↔All) 정책은 `EDGE-01`에서 이미 비활성화된 상태를 그대로 유지한다. 이번
 작업은 그 정책을 건드리지 않았다.
