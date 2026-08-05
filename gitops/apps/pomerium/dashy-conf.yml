@@ -5,6 +5,8 @@ pageInfo:
 appConfig:
   theme: dashy-docs
   layout: auto
+  startingView: minimal
+  customCss: "body,h1,h2,h3,p,a,input,.tile-title .text,.description,.item-url{color:#fff!important}::placeholder{color:#fff!important;opacity:.7}"
   preventWriteToDisk: true
   disableConfigurationForNonAdmin: true
   enableServiceWorker: false
