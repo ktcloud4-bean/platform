@@ -1639,6 +1639,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `WAZUH-01 DONE` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle, `CERTMGR-01` | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 | `WAZUH-01-FIX-01 DONE` | WAZUH-01의 OPNsense live 상태와 masked drift snapshot을 일치시키고, 성공 경로에서 snapshot 갱신이 다시 누락되지 않도록 절차를 보정 (`gitops/tools/wazuh-01/apply-opnsense.sh`, `infra/opnsense/config.xml`) | `WAZUH-01` | `OPNSENSE-LIVE` | `OBS-02` | 라이브 Wazuh Agent 설정이 WAZUH-01 선언과 exact match, IDS 차이가 `persisted_at` metadata뿐이며 의미 설정 차이 0건이거나 다르면 변경 없이 중단, 갱신 전 sanitized drift가 승인된 WAZUH Agent subtree와 판정된 metadata 차이뿐, `check-drift.sh --update` 뒤 일반 drift 없음, snapshot의 credential 원문 0건과 Wazuh password masking 유지, 향후 성공 절차가 exact drift 분류 → snapshot update → 일반 drift 확인 없이는 완료되지 않음, 작업 전후 OPNsense live revision·Wazuh service·PF·NAT·DNS·IDS 의미 설정 불변, 최신 main에서 `platform-root`·`wazuh`가 `Synced/Healthy` |
 | `OBS-02 DONE` | Grafana·Prometheus·Alertmanager UI를 Pomerium Route로 노출하고 최소 대시보드 확보 (`gitops/apps/obs/`) | `OBS-01`, `POM-01` | `OPNSENSE-LIVE` | 운영 경보 silence·팀 온보딩 | Route 3건과 `pomerium`→`obs` NetworkPolicy egress 선언, Grafana 로그인 뒤 node·PVC·Loki 대표 패널 표시, Prometheus target `up=1`과 PromQL 실행, Alertmanager silence 생성·조회·만료 왕복, `/platform-users` 허용과 미소속 계정 403의 같은 시점 대조 및 Alertmanager 쓰기 경로의 `/platform-privileged` 한정, alias 3건 내부 A만·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig generation·Traefik Pod UID·restart 불변, 배포 전후 available RAM 정지선 통과와 신규 PVC 0개, Argo child `Synced/Healthy`와 OPNsense drift 없음, rollback 뒤 기존 Route·경보 전달 회귀 없음 |
+| `OBS-03 READY` | Grafana에 Keycloak `generic_oauth` 로그인을 추가하고 전용 group `/grafana-editors`(`imcherry5778`, `cerberos2022`)만 Editor로 매핑, 나머지 `/platform-users`는 Viewer 고정 (`gitops/apps/obs/`, `gitops/tools/obs-03/`) | `OBS-02` | `IDENTITY-LIVE` | Grafana 대시보드 편집 권한 운영 | 새 Keycloak confidential client `grafana`와 group `/grafana-editors`가 기존 realm 객체 무변경으로 check-first 선언과 일치, `imcherry5778`·`cerberos2022` 실제 OIDC 로그인 후 Grafana `orgRole=Editor` 확인, `foxgeun`·`Jaeeyun`·`snsd-hybirdinfra`는 `orgRole=Viewer` 확인, `imcherry5778-admin`(`/platform-privileged`)에는 Grafana 권한을 매핑하지 않음, 로컬 `admin` 복구 로그인과 기존 데이터소스·대시보드 provisioning(`editable: false`) 회귀 없음, Vault `kv/obs/grafana`에 `oidc_client_secret` 키만 추가하고 기존 `obs-grafana` policy·role 무변경, Argo child `obs` `Synced/Healthy` |
 | `WAZUH-02 DONE` | Wazuh Dashboard 배포와 보안 이벤트 조사 경로 확보 (`gitops/apps/wazuh/`) | `WAZUH-01`, `POM-01`, `CAP-04` | `K3S-HEAVY`, `OPNSENSE-LIVE` | 사고 조사·`SOAR-01` 용량 | 배포 직전 capacity gate 재측정으로 자기 8 GiB 정지선 통과를 판정하고 배포 후 available이 `SOAR-01` 진입선 12 GiB를 남기는지 기록(미달이면 `k3s-01` 32 GiB 증설이 `SOAR-01`의 선행임을 함께 기록), Dashboard를 `WAZUH-01`과 같은 4.14.7 계열 고정 version·image digest로 선언, Pomerium Route와 `pomerium`→`wazuh` NetworkPolicy egress, Dashboard 로그인 뒤 `D30`·`A90` index 검색과 `WAZUH-01`의 Suricata sid `2029054` 재현, indexer 자격증명을 Kubernetes Secret 원문 없이 Vault Agent로만 주입, `/platform-privileged` 허용과 일상 계정 거부, active response 비활성과 ISM 정책 두 건 불변, `wazuh` alias 내부 A 1건·공개 A/AAAA 0건, 배포 후 available·PVC 정지선 통과, Argo child `Synced/Healthy`, rollback 뒤 indexer·manager·retention 회귀 없음 |
 
 2026-08-03 `OBS-02`와 `WAZUH-02`를 신설한다. 두 작업은 결정된 목표와 실제 구현이 어긋난
@@ -1930,6 +1931,33 @@ GET 요청과 로컬 Git 파일만 바꿨고 OPNsense에 POST/PUT/DELETE를 보�
 Wazuh service·PF·NAT·DNS·IDS 의미 설정은 작업 전후 불변이다. 따라서 `WAZUH-01-FIX-01`을
 완료한다. `OBS-02`는 이미 `READY`이므로 상태를 다시 쓰지 않으며, 이 완료로 `OBS-02`의 merge
 전 gate를 막던 drift가 해소되어 `OBS-02`는 새 전용 branch/worktree로 다시 시작할 수 있다.
+
+2026-08-05 `OBS-03`을 신설해 `READY`로 연다. `OBS-02`는 Pomerium이 Grafana·Prometheus·
+Alertmanager 진입을 게이트하는 것까지만 검증했다. Grafana 자체는 `GF_SECURITY_ADMIN_USER`
+로컬 계정 하나뿐이라 `/platform-users` 팀원이 Pomerium을 통과해도 Grafana 안에서는 로그인할
+계정 자체가 없어, harbor·jenkins·grafana 접근 시 "OIDC 로그인이 안 보인다"는 관찰이 실제로는
+설계대로였음을 확인하는 과정에서 이 gap이 드러났다. 대상 검토 결과 대시보드 편집이 실제로
+필요한 사람은 `imcherry5778`(고광근, PM/온프레미스 보안)과 `cerberos2022`(이진희, 옵저버빌리티
+담당) 둘뿐이라, harbor·jenkins까지 한 번에 열지 않고 Grafana 하나만 먼저 범위로 잡는다. Harbor는
+OIDC 설정이 Helm values가 아니라 System Settings API(DB 저장)라 별도 idempotent Job 설계가
+필요하고, Jenkins는 SecurityRealm을 하나만 가질 수 있어 지금의 로컬 복구 `admin` 계정을 어떻게
+보존할지 먼저 결정해야 해서 이번 범위에서 제외했다.
+
+`imcherry5778-admin`(`/platform-privileged`)은 이번 대상에 넣지 않았다. 이 계정이 실제로
+쓰이는 곳(Vault operator policy, AWS IAM 변경, AWX workflow 승인, Wazuh Dashboard 조사,
+Shuffle 조직·사용자 관리, Headlamp `pods/exec`, Alertmanager silence 쓰기)은 모두 blast
+radius가 큰 mutating·관리 작업이고, ADR-0004가 일상 계정과 특권 계정을 분리한 이유도 이런
+작업에만 특권 계정을 쓰기 위해서다. Grafana 대시보드 편집은 daily 계정(`imcherry5778`)이 이미
+커버하므로 특권 계정을 끌어들일 이유가 없다. Grafana 자체의 관리 기능(데이터소스 추가·org
+설정)은 지금 전부 Helm values로 GitOps 선언돼 있어 UI 관리 계층이 필요 없고, 그 필요가 실제로
+생기면 Alertmanager의 "조회는 `/platform-users`, 쓰기는 `/platform-privileged`" 패턴을 그대로
+재사용해 별도로 판단한다.
+
+Vault는 새 policy·role을 만들지 않는다. `gitops/tools/obs-01/provision.sh`가 이미 만든
+`obs-grafana` policy가 `kv/data/obs/grafana` 전체를 read하므로, 같은 secret에
+`oidc_client_secret` 키만 추가하면 기존 Vault Agent 경로가 그대로 소비한다. Keycloak client·
+group 선언은 `pom-01`/`headlamp-02`와 같은 check-first 패턴(`gitops/tools/obs-03/`)을 따른다.
+이 세션은 백로그 항목만 추가했고 Keycloak·Vault·Helm values 라이브 변경은 없다.
 
 ## 10. 마지막 단계: Shuffle
 
