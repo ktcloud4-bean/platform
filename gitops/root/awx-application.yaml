@@ -11,7 +11,7 @@ spec:
   project: awx
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: main
+    targetRevision: f514b1ef7a7382384967303e08380e698cafa05b
     path: gitops/apps/awx
   destination:
     server: https://kubernetes.default.svc
