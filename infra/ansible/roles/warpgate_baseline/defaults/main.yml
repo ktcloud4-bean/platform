@@ -161,13 +161,27 @@ warpgate_roles:
     state: present
 warpgate_targets: []
 warpgate_users:
+  # IAM-MIG-01: imcherry/imcherry-admin(legacy)와 imcherry5778/imcherry5778-admin(신규)의
+  # Keycloak email이 각각 동일해(전자는 실제 email 재사용, 후자는 IAM-MIG-01에서 신규 계정에
+  # legacy와 같은 "+admin" 별칭을 부여) SSO credential이 email 기준으로 충돌한다. 두 계정을
+  # 동시에 email로 매핑하면 어느 Warpgate user로 로그인이 귀속되는지 결정할 수 없으므로,
+  # user 객체(세션 기록·역할 이력)는 보존하되 legacy 쪽 SSO credential만 제거해 로그인
+  # 경로를 신규 ID로 옮긴다. legacy Keycloak 계정 자체도 이 작업에서 disable한다.
   - name: "imcherry"
+    description: "Keycloak 일상 ID (legacy, IAM-MIG-01로 disable; SSO credential 제거)"
+    sso_credentials: []
+    state: present
+  - name: "imcherry-admin"
+    description: "Keycloak 특권 ID (legacy, IAM-MIG-01로 disable; SSO credential 제거)"
+    sso_credentials: []
+    state: present
+  - name: "imcherry5778"
     description: "Keycloak 일상 ID"
     sso_credentials:
       - provider: "keycloak"
         email: "imcherry5778@gmail.com"
     state: present
-  - name: "imcherry-admin"
+  - name: "imcherry5778-admin"
     description: "Keycloak 특권 ID"
     sso_credentials:
       - provider: "keycloak"

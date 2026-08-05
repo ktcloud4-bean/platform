@@ -94,15 +94,15 @@ data:
     api("PATCH", "/settings/authentication/", {
         "SOCIAL_AUTH_ORGANIZATION_MAP": {
             "Platform": {
-                "users": ["imcherry", "imcherry-admin"],
+                "users": ["imcherry5778", "imcherry5778-admin"],
                 "admins": [],
                 "remove_users": True,
                 "remove_admins": True,
             }
         },
         "SOCIAL_AUTH_TEAM_MAP": {
-            "AWX Operators": {"organization": "Platform", "users": ["imcherry"], "remove": True},
-            "AWX Approvers": {"organization": "Platform", "users": ["imcherry-admin"], "remove": True},
+            "AWX Operators": {"organization": "Platform", "users": ["imcherry5778"], "remove": True},
+            "AWX Approvers": {"organization": "Platform", "users": ["imcherry5778-admin"], "remove": True},
         },
     })
 
