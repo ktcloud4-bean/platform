@@ -68,6 +68,76 @@ Kubernetes API, node-exporter의 node IP TCP 9100, OPNsense 관리 주소 TCP 91
 Velero·Loki·Alloy metric port, Grafana init→Vault TCP 8200, blackbox→Traefik TCP 8443과
 `obs-01-verification` label의 임시 receiver TCP 8080만 연다.
 
+## OBS-03 Grafana Keycloak 로그인과 Editor 경계
+
+Grafana는 Keycloak `platform` realm의 confidential client `grafana`를 `generic_oauth` provider로
+사용한다. callback은 `https://grafana.imcherry5778.xyz/login/generic_oauth` 한 건이고, client의
+`groups` mapper가 full path claim을 ID token·access token·userinfo에 넣는다. client와 신규
+top-level group `/grafana-editors`는
+[`provision-keycloak.sh`](../../tools/obs-03/provision-keycloak.sh)가 기존 객체를 먼저 비교한 뒤
+없는 객체와 membership만 추가한다. `/grafana-editors`의 exact 회원은 daily ID
+`imcherry5778`·`cerberos2022` 두 개이며, `imcherry5778-admin`에는 membership을 주지 않는다.
+
+Grafana의 `role_attribute_path`는 `groups`에 `/grafana-editors`가 있으면 `Editor`, 없으면
+`Viewer`를 반환한다. `role_attribute_strict=true`, `skip_org_role_sync=false`이므로 로그인할
+때마다 이 결과를 org role로 동기화하고, `GrafanaAdmin`은 어떤 claim에도 매핑하지 않는다.
+Pomerium이 이미 `/platform-users`만 Route에 통과시키므로 Grafana에서 같은 allow 경계를
+중복 선언하지 않는다. `GF_AUTH_DISABLE_LOGIN_FORM`은 두지 않아 Vault의 기존
+`admin_password`를 쓰는 local `admin` 복구 로그인을 유지한다.
+
+OIDC client secret은 기존 `obs-grafana` Vault policy·Kubernetes auth role을 그대로 사용한다.
+[`provision-vault.sh`](../../tools/obs-03/provision-vault.sh)는
+`kv/obs/grafana`가 `admin_password` 한 key인 상태만 신규 적용 대상으로 받고, 현재 version을
+CAS로 고정한 `vault kv patch`로 `oidc_client_secret`만 추가한다. 전후 policy 본문과 role data는
+정규화해 비교하고, KV 값은 출력하지 않는다. OBS-01 provisioner도 기존 KV가 있으면 read-write patch를
+사용해 이후 재실행이 `oidc_client_secret`을 지우지 않는다. Vault Agent는 두 값을 각각
+memory `emptyDir` 파일로 렌더링한다.
+
+client secret 저장소 밖 파일은 영숫자 48자와 파일 종단 newline 정확히 1개만 허용한다. 초기
+검증에서 생성 파이프라인이 newline을 중복 추가해 Keycloak credential 값에 newline 1 byte가
+들어간 상태를 발견했으므로, provisioner는 이 exact legacy만 같은 48자 본문으로 교정하고 그 밖의
+secret 차이는 자동 변경하지 않는다. Vault도 같은 legacy 값일 때만 CAS patch하며 값은 출력하지
+않는다.
+
+default-deny egress에서 Grafana가 token·userinfo endpoint를 호출할 수 있도록 Grafana Pod에서
+기존 `kube-system` Traefik Pod의 HTTPS container port `8443`으로 가는 TCP 한 경로만 연다.
+내부 `sso` alias가 가리키는 node IP·TCP 443은 Service DNAT 뒤 이 Pod·port가 되므로, 같은
+namespace의 blackbox→Traefik 정책과 동일한 selector 경계를 재사용한다. 공개 DNS·방화벽,
+Pomerium Route, datasource와 dashboard 내용은 바꾸지 않는다.
+
+실제 role 증거는 immutable SHA 배포 뒤 사용자가 새 브라우저 세션으로 Grafana의
+`Sign in with Keycloak`을 한 번 완료해 만든다. `imcherry5778`의 Editor 로그인과
+`foxgeun`·`Jaeeyun`·`snsd-hybirdinfra` 중 한 명의 Viewer 대조 로그인을 확인한다. 아직 본인 IAM
+온보딩을 마치지 않은 `cerberos2022`는 exact group membership과 공통 role mapping 선언을
+OBS-03 증거로 삼고 실제 로그인은 온보딩 뒤로 이관한다. 이후 Grafana org에 나타난 경우
+Editor가 아니면 실패다. [`verify-live.sh`](../../tools/obs-03/verify-live.sh)는 local admin API
+로그인으로 생성된 org user를 조회해 실제 Editor와 선택한 Viewer role, 특권 ID 부재를 한 번
+판정한다. 같은 실행에서 Keycloak
+client/group check-first 일치, Vault key와 policy·role 불변, local admin 복구, datasource 세
+개와 dashboard provider의 `editable: false`, Argo `platform-root`·`obs`의 immutable
+`Synced/Healthy`만 확인한다. OBS-01/02의 dashboard 렌더링·수집·경보·용량 경계는 다시
+검증하지 않는다.
+
+### 2026-08-05 OBS-03 라이브 완료 증거
+
+실제 로그인은 immutable root `244cf4a0e91256c1788114cbeb7a8b9c149a2c8c`·child
+`534db0945901922aa8c54e582200ec803c64bdfa`에서, 나머지 선언은 완료 기준을 반영한 immutable
+root `69979a52273296a4ccbeb8f9810df28fe1d4539c`·child
+`f50b1003dd8ba1db3bb69627946efa8d2e99b8eb`에서 확인했다. 두 child 사이 런타임 선언 diff는
+0건이다.
+
+| acceptance | 라이브 증거 | 판정 |
+|---|---|---|
+| Keycloak | confidential client `grafana`, groups mapper, `/grafana-editors` exact 회원 `imcherry5778`·`cerberos2022`, 특권 ID membership 없음 | 통과 |
+| 실제 역할 | `imcherry5778=Editor`, `snsd-hybirdinfra=Viewer`; `cerberos2022` 실제 로그인은 본인 온보딩 뒤로 이관 | 통과 |
+| 복구·provisioning | local `admin=Admin`, 로그인 form 유지, datasource 세 개와 dashboard provider `editable:false` | 통과 |
+| Vault | `kv/obs/grafana` key가 `admin_password`·`oidc_client_secret`뿐이고 기존 `obs-grafana` policy·role 불변 | 통과 |
+| Argo | 검증 root·child와 복구한 literal `main`에서 `platform-root`·`obs` 모두 `Synced/Healthy` | 통과 |
+
+Grafana persistence가 꺼져 있어 rollback 뒤 재배포는 OIDC org user를 초기화한다. 같은 실제 로그인
+경계를 재검증하지 않고 위 API 판정을 보존하며, 이후 로그인은 같은 claim에서 role을 다시
+동기화한다.
+
 ## 용량과 보존
 
 Prometheus local-path PVC는 8 GiB, retention은 3일, size cap은 6 GiB다. Alertmanager PVC는

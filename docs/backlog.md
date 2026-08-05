@@ -1639,7 +1639,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `WAZUH-01 DONE` | Wazuh 배치·보안 소스 직접 수집·규칙 PoC | `AUDIT-01`, `OBS-01`, `FALCO-01`, `NIDS-01`, `CAP-03` | `K3S-HEAVY` | Shuffle, `CERTMGR-01` | Suricata 등 대표 이벤트의 직접 탐지·검색·retention, Loki relay 없음, active response 비활성, 오탐·용량 gate |
 | `WAZUH-01-FIX-01 DONE` | WAZUH-01의 OPNsense live 상태와 masked drift snapshot을 일치시키고, 성공 경로에서 snapshot 갱신이 다시 누락되지 않도록 절차를 보정 (`gitops/tools/wazuh-01/apply-opnsense.sh`, `infra/opnsense/config.xml`) | `WAZUH-01` | `OPNSENSE-LIVE` | `OBS-02` | 라이브 Wazuh Agent 설정이 WAZUH-01 선언과 exact match, IDS 차이가 `persisted_at` metadata뿐이며 의미 설정 차이 0건이거나 다르면 변경 없이 중단, 갱신 전 sanitized drift가 승인된 WAZUH Agent subtree와 판정된 metadata 차이뿐, `check-drift.sh --update` 뒤 일반 drift 없음, snapshot의 credential 원문 0건과 Wazuh password masking 유지, 향후 성공 절차가 exact drift 분류 → snapshot update → 일반 drift 확인 없이는 완료되지 않음, 작업 전후 OPNsense live revision·Wazuh service·PF·NAT·DNS·IDS 의미 설정 불변, 최신 main에서 `platform-root`·`wazuh`가 `Synced/Healthy` |
 | `OBS-02 DONE` | Grafana·Prometheus·Alertmanager UI를 Pomerium Route로 노출하고 최소 대시보드 확보 (`gitops/apps/obs/`) | `OBS-01`, `POM-01` | `OPNSENSE-LIVE` | 운영 경보 silence·팀 온보딩 | Route 3건과 `pomerium`→`obs` NetworkPolicy egress 선언, Grafana 로그인 뒤 node·PVC·Loki 대표 패널 표시, Prometheus target `up=1`과 PromQL 실행, Alertmanager silence 생성·조회·만료 왕복, `/platform-users` 허용과 미소속 계정 403의 같은 시점 대조 및 Alertmanager 쓰기 경로의 `/platform-privileged` 한정, alias 3건 내부 A만·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig generation·Traefik Pod UID·restart 불변, 배포 전후 available RAM 정지선 통과와 신규 PVC 0개, Argo child `Synced/Healthy`와 OPNsense drift 없음, rollback 뒤 기존 Route·경보 전달 회귀 없음 |
-| `OBS-03 READY` | Grafana에 Keycloak `generic_oauth` 로그인을 추가하고 전용 group `/grafana-editors`(`imcherry5778`, `cerberos2022`)만 Editor로 매핑, 나머지 `/platform-users`는 Viewer 고정 (`gitops/apps/obs/`, `gitops/tools/obs-03/`) | `OBS-02` | `IDENTITY-LIVE` | Grafana 대시보드 편집 권한 운영 | 새 Keycloak confidential client `grafana`와 group `/grafana-editors`가 기존 realm 객체 무변경으로 check-first 선언과 일치, `imcherry5778`·`cerberos2022` 실제 OIDC 로그인 후 Grafana `orgRole=Editor` 확인, `foxgeun`·`Jaeeyun`·`snsd-hybirdinfra`는 `orgRole=Viewer` 확인, `imcherry5778-admin`(`/platform-privileged`)에는 Grafana 권한을 매핑하지 않음, 로컬 `admin` 복구 로그인과 기존 데이터소스·대시보드 provisioning(`editable: false`) 회귀 없음, Vault `kv/obs/grafana`에 `oidc_client_secret` 키만 추가하고 기존 `obs-grafana` policy·role 무변경, Argo child `obs` `Synced/Healthy` |
+| `OBS-03 DONE` | Grafana에 Keycloak `generic_oauth` 로그인을 추가하고 전용 group `/grafana-editors`(`imcherry5778`, `cerberos2022`)만 Editor로 매핑, 나머지 `/platform-users`는 Viewer 고정 (`gitops/apps/obs/`, `gitops/tools/obs-03/`) | `OBS-02` | `IDENTITY-LIVE` | Grafana 대시보드 편집 권한 운영 | 새 Keycloak confidential client `grafana`와 group `/grafana-editors`가 기존 realm 객체 무변경으로 check-first 선언과 일치, 실제 OIDC 로그인으로 `imcherry5778`의 Grafana `orgRole=Editor`와 `foxgeun`·`Jaeeyun`·`snsd-hybirdinfra` 중 1명의 `orgRole=Viewer` 확인, 아직 Keycloak 가입을 완료하지 않은 `cerberos2022`는 `/grafana-editors` membership과 공통 role mapping 선언까지 확인하고 실제 로그인은 온보딩 시점으로 이관, `imcherry5778-admin`(`/platform-privileged`)에는 Grafana 권한을 매핑하지 않음, 로컬 `admin` 복구 로그인과 기존 데이터소스·대시보드 provisioning(`editable: false`) 회귀 없음, Vault `kv/obs/grafana`에 `oidc_client_secret` 키만 추가하고 기존 `obs-grafana` policy·role 무변경, Argo child `obs` `Synced/Healthy` |
 | `WAZUH-02 DONE` | Wazuh Dashboard 배포와 보안 이벤트 조사 경로 확보 (`gitops/apps/wazuh/`) | `WAZUH-01`, `POM-01`, `CAP-04` | `K3S-HEAVY`, `OPNSENSE-LIVE` | 사고 조사·`SOAR-01` 용량 | 배포 직전 capacity gate 재측정으로 자기 8 GiB 정지선 통과를 판정하고 배포 후 available이 `SOAR-01` 진입선 12 GiB를 남기는지 기록(미달이면 `k3s-01` 32 GiB 증설이 `SOAR-01`의 선행임을 함께 기록), Dashboard를 `WAZUH-01`과 같은 4.14.7 계열 고정 version·image digest로 선언, Pomerium Route와 `pomerium`→`wazuh` NetworkPolicy egress, Dashboard 로그인 뒤 `D30`·`A90` index 검색과 `WAZUH-01`의 Suricata sid `2029054` 재현, indexer 자격증명을 Kubernetes Secret 원문 없이 Vault Agent로만 주입, `/platform-privileged` 허용과 일상 계정 거부, active response 비활성과 ISM 정책 두 건 불변, `wazuh` alias 내부 A 1건·공개 A/AAAA 0건, 배포 후 available·PVC 정지선 통과, Argo child `Synced/Healthy`, rollback 뒤 indexer·manager·retention 회귀 없음 |
 
 2026-08-03 `OBS-02`와 `WAZUH-02`를 신설한다. 두 작업은 결정된 목표와 실제 구현이 어긋난
@@ -1958,6 +1958,34 @@ Vault는 새 policy·role을 만들지 않는다. `gitops/tools/obs-01/provision
 `oidc_client_secret` 키만 추가하면 기존 Vault Agent 경로가 그대로 소비한다. Keycloak client·
 group 선언은 `pom-01`/`headlamp-02`와 같은 check-first 패턴(`gitops/tools/obs-03/`)을 따른다.
 이 세션은 백로그 항목만 추가했고 Keycloak·Vault·Helm values 라이브 변경은 없다.
+
+2026-08-05 실행 중 `cerberos2022`가 아직 초기 비밀번호 변경·TOTP 등록을 하지 않아 본인 실제
+로그인 증거를 만들 수 없음을 확인했다. 다른 사람이 계정을 대신 활성화하거나 인증 정보를
+공유하는 것은 IAM 경계를 훼손하므로, OBS-03 완료 기준을 선언과 실제 사용 증거로 분리한다.
+`/grafana-editors`의 exact 회원은 계속 `imcherry5778`·`cerberos2022` 두 명이고 하나의
+`role_attribute_path`가 두 회원 모두에게 동일하게 적용되는 것을 check-first로 검증한다. 실제
+로그인 대조는 이 세션에서 가능한 `imcherry5778=Editor`와 `/platform-users` 중 한 명의
+`Viewer`로 완료하며, `cerberos2022`의 최초 로그인은 본인 IAM 온보딩 뒤 수행할 운영 확인으로
+이관하고 OBS-03 완료를 막지 않는다. 이후 `cerberos2022`가 Grafana org에 나타난 상태라면
+`Editor`가 아닌 경우에는 검증 실패로 판정한다.
+
+2026-08-05 `OBS-03`을 완료했다. immutable root
+`244cf4a0e91256c1788114cbeb7a8b9c149a2c8c`·child
+`534db0945901922aa8c54e582200ec803c64bdfa`에서 실제 OIDC 로그인을 수행해 Grafana API의
+`imcherry5778=Editor`, `snsd-hybirdinfra=Viewer`와 `imcherry5778-admin` org membership 부재를
+확인했다. `cerberos2022`는 아직 IAM 온보딩 전이라 실제 로그인하지 않았고, Keycloak exact
+group membership과 두 회원이 공유하는 role mapping 선언까지만 완료 증거로 삼았다.
+
+완료 기준을 반영한 immutable root `69979a52273296a4ccbeb8f9810df28fe1d4539c`·child
+`f50b1003dd8ba1db3bb69627946efa8d2e99b8eb`에서는 `grafana` confidential client, groups mapper,
+`/grafana-editors` exact 회원 두 명, client secret, Vault KV의
+`admin_password`·`oidc_client_secret` 두 key, 기존 `obs-grafana` policy·role 불변, local
+`admin=Admin`, 로그인 form 유지, datasource 세 개와 dashboard provider의 `editable:false`,
+root·child `Synced/Healthy`를 확인했다. 두 child SHA 사이 런타임 선언은 exact diff 0건이다.
+Grafana persistence가 꺼져 있어 검증 배포를 되돌릴 때 OIDC org user가 초기화되므로 이미 확보한
+실제 로그인 경계를 반복하지 않았다. 마지막으로 root와 child를 시작 main SHA
+`5bd18572c83d0b297fdde25464015685df0d44e9`의 literal `main`으로 복구해 둘 다
+`Synced/Healthy`임을 확인했다.
 
 ## 10. 마지막 단계: Shuffle
 

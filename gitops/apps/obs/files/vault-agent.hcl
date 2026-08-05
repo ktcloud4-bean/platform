@@ -27,3 +27,12 @@ template {
 {{- with secret "kv/data/obs/grafana" -}}{{ .Data.data.admin_password }}{{- end -}}
 EOT
 }
+
+template {
+  destination          = "/vault/secrets/oidc-client-secret"
+  perms                = "0440"
+  error_on_missing_key = true
+  contents             = <<EOT
+{{- with secret "kv/data/obs/grafana" -}}{{ .Data.data.oidc_client_secret }}{{- end -}}
+EOT
+}

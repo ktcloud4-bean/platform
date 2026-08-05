@@ -87,7 +87,7 @@ HCL
   tr -d '\n' <"${password_file}"
   printf '"}\n'
 } | ssh "${ssh_options[@]}" "${k3s_host}" \
-  "${kubectl_command} -n vault exec -i vault-0 -- sh -c 'read -r VAULT_TOKEN; export VAULT_TOKEN; umask 077; cat >/tmp/obs-01-grafana.json; vault kv put kv/obs/grafana @/tmp/obs-01-grafana.json >/dev/null; rm -f /tmp/obs-01-grafana.json'"
+  "${kubectl_command} -n vault exec -i vault-0 -- sh -c 'read -r VAULT_TOKEN; export VAULT_TOKEN; umask 077; cat >/tmp/obs-01-grafana.json; trap \"rm -f /tmp/obs-01-grafana.json\" EXIT; if vault kv metadata get kv/obs/grafana >/dev/null 2>&1; then vault kv patch -method=rw kv/obs/grafana @/tmp/obs-01-grafana.json >/dev/null; else vault kv put kv/obs/grafana @/tmp/obs-01-grafana.json >/dev/null; fi'"
 
 vault_check
 echo 'Provision=PASS secret_input=0600 policy=obs-grafana role=obs-grafana kv=kv/obs/grafana'
