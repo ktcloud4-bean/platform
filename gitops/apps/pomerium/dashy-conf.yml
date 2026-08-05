@@ -73,7 +73,8 @@ sections:
             - /platform-users
       - title: Argo CD
         description: GITOPS-02 Argo CD browser UI; 실제 권한은 Argo 자체 OIDC·RBAC가 판정
-        icon: favicon-local
+        icon: si-argo
+        color: "#EF7B4D"
         url: https://argo.imcherry5778.xyz
         target: sametab
         displayData:
@@ -81,7 +82,8 @@ sections:
             - /platform-users
       - title: Grafana
         description: OBS-02 Grafana node·PVC·Loki 운영 대시보드
-        icon: favicon-local
+        icon: si-grafana
+        color: "#F46800"
         url: https://grafana.imcherry5778.xyz
         target: sametab
         displayData:
@@ -89,7 +91,8 @@ sections:
             - /platform-users
       - title: Prometheus
         description: OBS-02 Prometheus targets와 PromQL UI
-        icon: favicon-local
+        icon: si-prometheus
+        color: "#E6522C"
         url: https://prometheus.imcherry5778.xyz
         target: sametab
         displayData:
