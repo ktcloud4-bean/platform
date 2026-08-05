@@ -33,7 +33,8 @@ sections:
             - /platform-privileged
       - title: Gitea
         description: Pomerium groups claim과 Gitea OIDC로 보호된 소스 저장소 UI
-        icon: favicon-local
+        icon: si-gitea
+        color: "#609926"
         url: https://git.imcherry5778.xyz
         target: sametab
         displayData:
@@ -59,7 +60,8 @@ sections:
             - /platform-privileged
       - title: SonarQube
         description: 정적 분석과 quality gate UI
-        icon: favicon-local
+        icon: si-sonarqubeserver
+        color: "#126ED3"
         url: https://sonar.imcherry5778.xyz
         target: sametab
         displayData:
@@ -67,7 +69,8 @@ sections:
             - /platform-users
       - title: Jenkins
         description: CI-01 Jenkins controller browser UI
-        icon: favicon-local
+        icon: si-jenkins
+        color: "#D24939"
         url: https://jenkins.imcherry5778.xyz
         target: sametab
         displayData:
