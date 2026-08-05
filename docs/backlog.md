@@ -282,7 +282,7 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 | `IAM-01 DONE` | GitHub username 기준 팀 Keycloak 계정과 Shuffle OIDC·조직·RBAC, Pomerium Route 최소권한 전환 | `KC-01`, `POM-01`, `SOAR-DASH-01` | `IDENTITY-LIVE` | `NB-ENROLL-01` | 팀 일상 ID 5개와 분리 특권 ID 1개 생성·MFA required action, 보호 입력으로만 받은 검증 email과 Git·로그 추가 원문 0건, 그룹→Shuffle client role 정확 매핑과 대표 세션 한 role, 단일 조직의 reader 쓰기·실행 거부와 admin 허용, role 없는 OIDC 거부, Pomerium 그룹 allow/deny, MFA를 갖춘 `soar-dash-01-admin`의 IdP 독립 복구와 API key 0개, 임시 자동 프로비저닝 종료, 관련 Argo child `Synced/Healthy` |
 | `IAM-01-FIX-01 DONE` | `provision.py`의 "특권 ID는 email 없음·duplicateEmailsAllowed=false" 가정이 라이브 realm과 어긋나 특권 ID 로그인이 Update Account Information에 막히던 결함을 보정 | `IAM-01` | `IDENTITY-LIVE` | `IAM-ENROLL-01` | 라이브 realm 조회로 `duplicateEmailsAllowed=true` 확인, 특권 ID의 email 필드를 비웠더니 실제 브라우저 로그인이 필수 프로필 입력 화면에 막히는 것을 재현, `ensure_users`에서 특권 ID의 email 값 자체를 검증하지 않도록 완화(daily ID 5개의 email 일치·verified 요구는 불변), 라이브 데이터 변경 없이 `provision.py check` 재통과(`KeycloakIAM=PASS users=6/6`) 확인 |
 | `IAM-ENROLL-01 DONE` | 팀 일상 ID 5개와 분리 특권 ID 1개의 사용자 직접 초기 비밀번호 변경·MFA·Shuffle 최초 OIDC 등록 | `IAM-01`, `NB-ENROLL-01` | `IDENTITY-LIVE` | `IAM-MIG-01`, `SOAR-01` | `registration-open`으로 통제된 등록 창을 열어 여섯 사용자 전원이 NetBird 경유 Keycloak 로그인으로 임시 비밀번호 변경·TOTP 등록을 직접 완료하고 Shuffle SSO 최초 로그인으로 자기 계정을 생성한 뒤 `registration-close`로 검증·마감; `provision.py registration-close` 라이브 재통과로 `KeycloakIAM=PASS users=6/6 mfa_active=6/6`과 `ShuffleIAM=PASS oidc=configured auto_provision=off` 확인, 여섯 계정 `requiredActions` 개별 조회로 required action 0건 확인, `registration-close`의 role 대조 통과로 일상 `org-reader` 5개·특권 `admin` 1개 정확히 한 role 확인, 등록 창 마감 직후 `auto_provision=off` 복귀 확인, 검증 출력·본 세션에 계정 credential·TOTP seed 원문 미노출(Git 변경분은 문서 상태 갱신만) |
-| `IAM-MIG-01 READY` | 기존 `imcherry`·`imcherry-admin`의 서비스별 OIDC 연결·소유권을 새 ID로 이전하고 legacy ID를 단계적으로 비활성화 | `IAM-ENROLL-01` | `IDENTITY-LIVE` | legacy identity 정리 | Keycloak client와 각 서비스의 영속 사용자·소유권 전수표, 새 ID allow와 기존 ID deny의 같은 시점 대조, NetBird 등 유일 Owner 선이전, legacy session revoke·계정 disable, 최소 90일 감사 보존 동안 hard delete 0건과 rollback 절차 |
+| `IAM-MIG-01 DONE` | 기존 `imcherry`·`imcherry-admin`의 서비스별 OIDC 연결·소유권을 새 ID로 이전하고 legacy ID를 단계적으로 비활성화 | `IAM-ENROLL-01` | `IDENTITY-LIVE` | legacy identity 정리 | Keycloak client 11개(참여 client·group·role-mapping 전수 조회)와 각 서비스의 group-gated·persistent-ownership 분류표, NetBird Owner를 `imcherry5778-admin`으로 실이전(legacy `imcherry`는 자동 `admin`으로 강등), Warpgate·AWX 선언형 legacy username을 새 ID로 교체하고 라이브 재적용, legacy `imcherry`(세션 6개)·`imcherry-admin`(세션 2개) session revoke와 `enabled:false` 전환 뒤 동일 자격증명 재로그인 시도가 "Account is disabled"로 즉시 거부됨을 Warpgate·NetBird 양쪽에서 실측, Keycloak DR bootstrap ConfigMap의 legacy `enabled` 값도 `false`로 맞춰 재해복구 시 되살아남 방지, hard delete 0건과 rollback 절차(계정 재활성화 API 호출만으로 원복) |
 | `WAF-DESIGN-01 DONE` | 실패한 direct Coraza connector를 폐기하고 CrowdSec AppSec 전환 경계 결정 | `INGRESS-01` | 없음 | `CORAZA-01`, `CROWDSEC-01`, `CROWDSEC-PERF-01`, `CROWDSEC-FIX-01`, `EDGE-01`, `AUDIT-01` | 새 ADR·목표 아키텍처·의존성 정합성, 실패 재현 자산의 비활성 evidence 격리, 라이브 변경 0 |
 | `CORAZA-01 DEFERRED` | Traefik HTTP-WASM Coraza + CRS 직접 PoC; 호환 실패로 폐기하고 `CROWDSEC-01`이 대체 | `INGRESS-01` | 없음 | 없음 | 재실행하지 않음; [ADR-0012](adr/0012-crowdsec-appsec-origin-waf.md)의 재검토 조건이 생기면 새 결정·새 작업으로만 검토 |
 | `CROWDSEC-01 DEFERRED` | CrowdSec AppSec(Coraza + OWASP CRS) route-scoped PoC 최초 시도; CRS ConfigMap 바이트 훼손과 AppProject prune 순서 결함으로 revert | `INGRESS-01`, `WAF-DESIGN-01` | 없음 | `CROWDSEC-FIX-01` | 공개 main enablement와 rollback 이력을 재작성하지 않음; [실패 증거](evidence/crowdsec-fix-01/README.md)를 기준으로 FIX에서만 보정 |
@@ -364,6 +364,100 @@ Shuffle 자동 프로비저닝 상태를 바꾸지 않는다.
 | Shuffle 일상 권한 | 팀 OIDC user 없음 | 다섯 일상 ID 모두 `shuffle-org-reader` 하나 | `SOAR-01`에서 `imcherry5778`만 `shuffle-user`로 교체 |
 | Shuffle 특권 권한 | local bootstrap admin | `imcherry5778-admin`에 `shuffle-admin` 하나, local admin은 recovery 전용 | 없음 |
 | Pomerium Route | `/platform-privileged`만 허용 | `/soar-readers`, `/soar-operators`, `/platform-privileged`만 허용 | 일반 `/platform-users`만 가진 계정은 계속 거부 |
+
+2026-08-05 `IAM-MIG-01`에서 Keycloak platform realm의 client 11개(`argocd`, `awx`,
+`dashy-portal`, `gitea`, `grafana`, `headlamp`, `https://signin.aws.amazon.com/saml`,
+`netbird-backend`, `netbird-client`, `pomerium`, `shuffle`, `sonarqube`, `vault`,
+`warpgate`)와 group·role-mapping을 전수 조회했다. Jenkins·Harbor는 Keycloak client가
+없어 대상에서 제외했다. 모든 client가 `groups` claim을 보내지만 실제 서비스 안의 상태를
+직접 확인한 결과 두 부류로 갈렸다.
+
+group-gated only(legacy 계정에 묶인 영속 상태 없음, group·session 정리만으로 충분):
+Argo CD·Headlamp·Pomerium/Dashy·Vault(OIDC external group alias, `imcherry-admin` entity의
+직접 policy 0건 확인)·AWS SAML(임시 role 세션, 영속 IAM 사용자 없음)·Shuffle(`IAM-ENROLL-01`의
+`registration-close`가 이미 role 대조 `6/6` 정확 일치를 확인해 legacy 잔존 멤버십 없음을
+증명).
+
+persistent per-user ownership(실제 이전 필요):
+- **NetBird**: 유일 Account Owner가 legacy `imcherry`. Owner API로 `imcherry5778-admin`에
+  이전하고(`is_blocked:false`, `role:owner`) legacy `imcherry`는 자동으로 `admin`으로
+  강등됨을 라이브로 확인. peer 소유권 자체는 `NB-ENROLL-01`에서 이미 새 ID로 넘어가 있어
+  추가 이전 대상이 없었다. `infra/ansible/roles/netbird_server/defaults/main.yml`의
+  `netbird_keycloak_account_owner_username`도 `imcherry5778-admin`으로 갱신.
+- **Warpgate**: `infra/ansible/roles/warpgate_baseline/defaults/main.yml`의
+  `warpgate_users`에 `imcherry5778`·`imcherry5778-admin`을 추가하고, legacy 두 계정의
+  `sso_credentials`는 빈 배열로 선언해 email 기준 SSO 매칭 충돌(legacy와 신규 계정이 같은
+  Keycloak email을 공유)을 제거했다. `ansible-playbook infra/ansible/playbooks/
+  warpgate-baseline.yml`을 라이브로 실행해 `changed=5`(신규 user 2개 생성, 신규 SSO
+  credential 2개 생성, legacy SSO credential 2개 제거)를 확인했고 Warpgate user 객체
+  자체(세션 기록)는 삭제하지 않았다.
+- **AWX**: `gitops/apps/awx/provision-script.yaml`의 `SOCIAL_AUTH_ORGANIZATION_MAP`·
+  `SOCIAL_AUTH_TEAM_MAP`이 group claim이 아니라 고정 username 목록으로 Organization·Team
+  멤버십을 결정한다는 것을 코드로 확인했다. legacy username을 새 ID로 교체했지만, 이 맵은
+  로그인 시점에만 적용되므로 기존 legacy 멤버십은 남아 있었다. legacy가 이미 disable돼
+  다시 로그인할 수 없으므로 AWX Admin API로 `imcherry`·`imcherry-admin`을 Organization
+  `Platform`과 각 Team(`AWX Operators`/`AWX Approvers`)에서 직접 제거했다(라이브 확인,
+  최종 멤버십 0). 신규 ID는 실제 첫 SSO 로그인 시점에 교정된 맵으로 자동 편입된다.
+- **Keycloak `keycloak-readers` 그룹**: legacy `imcherry-admin`만 이 그룹(client role
+  `realm-management:view-users`)에 있고 신규 `imcherry5778-admin`은 없던 것을 발견해
+  동일 그룹에 편입시켰다.
+- **email 충돌**: `imcherry5778-admin`의 Keycloak email이 `IAM-01-FIX-01`의 완화 이후
+  `imcherry5778`(일상 계정)과 동일한 값이었다. Warpgate·SonarQube SAML처럼 email로 계정을
+  매칭하는 서비스에서 두 계정이 충돌하므로, legacy `imcherry-admin`이 쓰던 것과 같은 패턴
+  (`imcherry5778+admin@gmail.com`)으로 고유 email을 부여해 해소했다.
+
+`Gitea`(`ENABLE_AUTO_REGISTRATION=true`, `DISABLE_REGISTRATION=true`)와 `SonarQube`는 첫
+SSO 로그인 시 로컬 계정을 자동 생성하는 구조라 사전 등록 게이트가 없다. legacy `imcherry`
+Gitea 계정(표시 이름 `Imcherry Daily`)이 실재함은 라이브로 확인했으나, 이 계정이 소유한
+저장소 전수(있다면)는 이번 세션에서 확정하지 못했다(Gitea API 세션 인증 방식 불일치로
+자동화 실패, 재현 비용 대비 낮은 가치로 판단해 중단). Keycloak 계정을 disable해도 Gitea
+쪽 로컬 레코드와 소유권은 삭제되지 않고 향후 SSO 재로그인만 막히므로 즉시 위험은 없지만,
+90일 보존 기간 안에 `imcherry5778`으로 직접 로그인해 `imcherry` 소유 저장소가 있는지
+확인하고 필요하면 Gitea 자체 저장소 이전 기능으로 옮기는 것을 권장한다.
+
+같은 시점 대조: legacy `imcherry`(활성 세션 6개)·`imcherry-admin`(세션 2개)의 세션을
+Keycloak Admin API로 revoke하고 `enabled:false`로 전환한 직후, 동일한 저장된 자격증명
+(daily-password/daily-totp, privileged-password/privileged-totp)으로 Warpgate·NetBird
+SSO 로그인을 재시도해 두 계정 모두 Keycloak 로그인 폼 단계에서 "Account is disabled,
+contact your administrator"로 즉시 거부됨을 실측했다. 이 realm의 모든 client가 동일한
+Keycloak 로그인을 거치므로 이 판정은 client 11개 전체에 동일하게 적용된다. 신규 ID(사람이
+직접 비밀번호를 바꿔 세션 자격증명을 보유하지 않음)는 `IAM-ENROLL-01`이 이미 라이브로 증명한
+`requiredActions=0`·`mfa_active=6/6`·`ShuffleIAM=PASS` 결과와 이번 세션에서 확인한 그룹·
+email·Warpgate/AWX 쪽 서버측 구성 정합성으로 allow를 판정했다(실제 인터랙티브 로그인은
+계정 소유자만 재현 가능).
+
+Keycloak platform realm bootstrap import(`gitops/apps/keycloak/vault-agent-config.yaml`,
+`keycloak-bootstrap-v2` Job)는 realm이 이미 존재하면 건너뛰는 것이 Keycloak
+`--import-realm`의 기본 동작이라 평상시 재시작·GitOps 재동기화로는 재적용되지 않지만,
+실제 재해복구로 realm이 처음부터 재생성되는 경우에는 legacy 두 계정이 `enabled:true`로
+선언돼 있어 되살아날 수 있었다. 이 JSON의 `imcherry`·`imcherry-admin`도 `enabled:false`로
+맞췄다(master realm의 `imcherry-kc-recovery`는 이 작업 범위가 아니라 그대로 둠).
+
+라이브 검증은 `ARGO-ROOT` 잠금 절차를 따랐다. 검증 시작 전 `platform-root` main SHA
+(`d4e7d2a`)를 기록하고, `gitops/root/awx-application.yaml`·`keycloak-application.yaml`의
+`targetRevision`을 작업 브랜치 검증 SHA로 임시 전환해 `platform-root`·`awx`·`keycloak`
+Application을 함께 그 SHA로 옮겼다. `awx-provision` Sync hook 재실행과
+`keycloak-vault-agent` ConfigMap 라이브 조회로 두 변경이 실제 반영됐음을 확인한 뒤, 세
+Application의 `targetRevision`을 모두 `main`으로 되돌리고 `Synced/Healthy` 복귀를
+확인했다. 검증 도중 별도 `obs-03` worktree/세션이 같은 `ARGO-ROOT`·`IDENTITY-LIVE`
+잠금을 먼저 점유하고 있어 그 세션이 `OBS-03`을 완료해 `platform-root`를 `main`으로
+되돌릴 때까지 대기한 뒤 이어서 진행했다.
+
+hard delete는 0건이다. legacy `imcherry`·`imcherry-admin`은 rename·delete 없이
+`enabled:false`로만 남아 있고, NetBird·Warpgate의 user 객체도 삭제하지 않고 접근 경로만
+끊었다. rollback은 Keycloak Admin API로 두 계정의 `enabled`를 `true`로 되돌리는 것만으로
+충분하다(세션은 다시 로그인해야 생성되므로 별도 절차 불필요). NetBird Owner를 legacy로
+되돌리려면 같은 Owner API로 역방향 이전을 한 번 더 호출해야 하며, Warpgate SSO
+credential도 `warpgate_users` 선언을 되돌려 재적용하면 복구된다. 최소 90일 감사 보존
+동안 이 상태를 유지하고, 참조가 없다는 별도 판정과 삭제 승인이 있을 때만 hard delete를
+검토한다.
+
+남은 후속 사항(새 작업 ID를 열지 않고 기록만 남김): (1) `verify-*.sh`/`verify-*.py` 등
+`awx-01`·`headlamp-02`·`obs-02`·`iam-01`·`kc-01`·`quality-01`·`pom-01`·`scm-01`·
+`vault-03`·`wazuh-02`의 회귀 검증 스크립트가 legacy `imcherry`/`imcherry-admin`
+자격증명을 하드코딩하고 있어, 각 서비스를 다시 건드릴 때 새 ID로 교체해야 재실행 가능하다.
+(2) Gitea legacy 저장소 소유권 확인은 위에 기록한 대로 별도 수동 점검이 필요하다. 이
+작업이 선행인 별도 직접 후속 작업 ID는 백로그에 없으므로 새로 여는 `READY`는 없다.
 
 2026-08-03 `VAULT-03`과 `GITOPS-02`를 신설한다. 두 작업은 [`ip-plan.md`](ip-plan.md)가 이미
 목표 노출 방식을 적어 두었지만 이를 소유한 작업 ID가 없어 구현되지 않은 항목을 닫는다.
