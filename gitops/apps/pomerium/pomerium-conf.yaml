@@ -153,6 +153,7 @@ routes:
     description: OBS-02 Grafana node PVC Loki 운영 대시보드
     from: https://grafana.imcherry5778.xyz
     to: http://obs-grafana.obs.svc.cluster.local:80
+    allow_websockets: true
     policy:
       - allow:
           or:
