@@ -2164,5 +2164,8 @@ Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 
 
 2026-08-06 `OBS-05-FIX-02`에서 `gitops/apps/obs/install.yaml` 내 `obs-grafana` ConfigMap의 `dashboardproviders.yaml` 항목에 중복 선언된 `platform-core-services` 프로바이더 항목을 제거하여 Grafana 기동 시 `CrashLoopBackOff` 원인을 보정했다.
 
+2026-08-06 `OBS-05-FIX-03`에서 `gitops/apps/obs/dashboard-core-services.yaml` 내 PromQL 패널 쿼리의 scalar binary expression `or 0` / `or 1`을 `or vector(0)` / `or vector(1)`로 교정하여 Prometheus 쿼리 파싱 에러(`set operator "or" not allowed in binary scalar expression`)를 해결했다.
+
+
 
 

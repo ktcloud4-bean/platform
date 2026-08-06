@@ -39,7 +39,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(rate(traefik_entrypoint_requests_total[5m])) or sum(rate(traefik_service_requests_total[5m])) or 0",
+              "expr": "sum(rate(traefik_entrypoint_requests_total[5m])) or sum(rate(traefik_service_requests_total[5m])) or vector(0)",
               "legendFormat": "QPS",
               "refId": "A"
             }
@@ -71,7 +71,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(rate(traefik_entrypoint_requests_total[5m])) by (code) or sum(rate(traefik_service_requests_total[5m])) by (code) or 0",
+              "expr": "sum(rate(traefik_entrypoint_requests_total[5m])) by (code) or sum(rate(traefik_service_requests_total[5m])) by (code)",
               "legendFormat": "HTTP {{code}}",
               "refId": "A"
             }
@@ -103,7 +103,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(rate(traefik_entrypoint_request_duration_seconds_sum[5m])) / sum(rate(traefik_entrypoint_request_duration_seconds_count[5m])) or histogram_quantile(0.95, sum(rate(traefik_entrypoint_request_duration_seconds_bucket[5m])) by (le)) or 0",
+              "expr": "sum(rate(traefik_entrypoint_request_duration_seconds_sum[5m])) / sum(rate(traefik_entrypoint_request_duration_seconds_count[5m])) or histogram_quantile(0.95, sum(rate(traefik_entrypoint_request_duration_seconds_bucket[5m])) by (le)) or vector(0)",
               "legendFormat": "Latency (s)",
               "refId": "A"
             }
@@ -135,7 +135,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(rate(pomerium_identity_manager_user_requests_total[5m])) or sum(pomerium_authenticator_user_info_requests_total) or sum(rate(pomerium_http_requests_total{service=\"pomerium\"}[5m])) or 0",
+              "expr": "sum(rate(pomerium_identity_manager_user_requests_total[5m])) or sum(pomerium_authenticator_user_info_requests_total) or sum(rate(pomerium_http_requests_total{service=\"pomerium\"}[5m])) or vector(0)",
               "legendFormat": "SSO Requests",
               "refId": "A"
             }
@@ -167,7 +167,7 @@ data:
           },
           "targets": [
             {
-              "expr": "pomerium_config_routes_total or count(pomerium_route_config_info) or count(traefik_config_dynamic_routers) or 0",
+              "expr": "pomerium_config_routes_total or count(pomerium_route_config_info) or count(traefik_config_dynamic_routers) or vector(0)",
               "legendFormat": "Routes",
               "refId": "A"
             }
@@ -199,7 +199,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(rate(pg_stat_database_xact_commit[5m])) + sum(rate(pg_stat_database_xact_rollback[5m])) or sum(rate(pg_stat_database_calls_total[5m])) or 0",
+              "expr": "sum(rate(pg_stat_database_xact_commit[5m])) + sum(rate(pg_stat_database_xact_rollback[5m])) or sum(rate(pg_stat_database_calls_total[5m])) or vector(0)",
               "legendFormat": "Queries/sec",
               "refId": "A"
             }
@@ -231,7 +231,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(pg_stat_activity_count) or sum(pg_stat_database_numbackends) or 0",
+              "expr": "sum(pg_stat_activity_count) or sum(pg_stat_database_numbackends) or vector(0)",
               "legendFormat": "Connections",
               "refId": "A"
             }
@@ -263,7 +263,7 @@ data:
           },
           "targets": [
             {
-              "expr": "pg_stat_wal_bytes or pg_stat_wal_records or 0",
+              "expr": "pg_stat_wal_bytes or pg_stat_wal_records or vector(0)",
               "legendFormat": "WAL Bytes",
               "refId": "A"
             }
@@ -295,7 +295,7 @@ data:
           },
           "targets": [
             {
-              "expr": "vault_core_unsealed or vault_core_active or 1",
+              "expr": "vault_core_unsealed or vault_core_active or vector(1)",
               "legendFormat": "Unsealed Status",
               "refId": "A"
             }
@@ -327,7 +327,7 @@ data:
           },
           "targets": [
             {
-              "expr": "min(certmanager_certificate_expiration_timestamp_seconds - time()) or min(vault_pki_cert_expiration_seconds) or 0",
+              "expr": "min(certmanager_certificate_expiration_timestamp_seconds - time()) or min(vault_pki_cert_expiration_seconds) or vector(0)",
               "legendFormat": "Cert TTL (s)",
               "refId": "A"
             }
