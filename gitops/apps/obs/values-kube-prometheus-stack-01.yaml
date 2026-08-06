@@ -121,10 +121,19 @@ grafana:
           editable: false
           options:
             path: /var/lib/grafana/dashboards/platform-core-services
+        - name: platform-backup-pipelines
+          orgId: 1
+          folder: Platform
+          type: file
+          disableDeletion: true
+          editable: false
+          options:
+            path: /var/lib/grafana/dashboards/platform-backup-pipelines
   dashboardsConfigMaps:
     platform-observability: obs-02-dashboard
     platform-capacity: obs-04-capacity-sentinel
     platform-core-services: obs-05-core-services
+    platform-backup-pipelines: obs-06-backup-pipelines
   datasources:
     datasources.yaml:
       apiVersion: 1

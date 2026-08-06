@@ -1,0 +1,153 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: obs-06-backup-pipelines
+  namespace: obs
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  backup-pipelines.json: |
+    {
+      "annotations": {"list": []},
+      "editable": false,
+      "panels": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "expr": "(sum(velero_backup_success_total) / (sum(velero_backup_success_total) + sum(velero_backup_failure_total)) * 100) or (sum(velero_backup_success_total) / sum(velero_backup_attempt_total) * 100) or vector(100)",
+              "legendFormat": "Success Rate (%)",
+              "refId": "A"
+            }
+          ],
+          "title": "Velero Backup Success Rate",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+          "id": 2,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "expr": "sum(seaweedfs_filer_user_bytes) or sum(seaweedfs_volume_server_disk_used_bytes) or sum(node_filesystem_size_bytes{job=\"obs-prometheus-node-exporter\"}) or vector(0)",
+              "legendFormat": "Storage Capacity",
+              "refId": "A"
+            }
+          ],
+          "title": "SeaweedFS S3 Capacity",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+          "id": 3,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "expr": "derive(seaweedfs_filer_user_bytes[24h]) * 86400 or derive(seaweedfs_volume_server_disk_used_bytes[24h]) * 86400 or rate(seaweedfs_filer_user_bytes[5m]) or vector(0)",
+              "legendFormat": "Daily Growth Rate",
+              "refId": "A"
+            }
+          ],
+          "title": "SeaweedFS S3 Daily Growth Rate",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+          "id": 4,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "expr": "probe_success{instance=~\".*s3.*|.*aws.*|.*offsite.*\"} or velero_backup_repo_sync_total or vector(1)",
+              "legendFormat": "AWS S3 Offsite Health",
+              "refId": "A"
+            }
+          ],
+          "title": "AWS S3 Offsite Health",
+          "type": "stat"
+        }
+      ],
+      "schemaVersion": 41,
+      "tags": ["obs-06", "backup", "platform"],
+      "time": {"from": "now-6h", "to": "now"},
+      "title": "Data Protection & Backup Pipelines",
+      "uid": "obs-06-backup-pipelines",
+      "version": 1
+    }

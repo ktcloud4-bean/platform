@@ -8,6 +8,7 @@ resources:
   - dashboard.yaml
   - dashboard-capacity.yaml
   - dashboard-core-services.yaml
+  - dashboard-backup-pipelines.yaml
 configMapGenerator:
   - name: obs-grafana-runtime-config
     namespace: obs
