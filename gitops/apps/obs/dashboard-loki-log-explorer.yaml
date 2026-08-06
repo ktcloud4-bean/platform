@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: obs-07-loki-log-explorer
+  namespace: obs
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  loki-log-explorer.json: |
+    {
+      "annotations": {"list": []},
+      "editable": false,
+      "templating": {
+        "list": [
+          {
+            "name": "namespace",
+            "label": "Namespace",
+            "type": "query",
+            "datasource": {"type": "loki", "uid": "loki"},
+            "query": "label_values(namespace)",
+            "refresh": 1,
+            "multi": true,
+            "includeAll": true,
+            "current": {"text": "All", "value": "$__all"}
+          },
+          {
+            "name": "app",
+            "label": "App",
+            "type": "query",
+            "datasource": {"type": "loki", "uid": "loki"},
+            "query": "label_values(app)",
+            "refresh": 1,
+            "multi": true,
+            "includeAll": true,
+            "current": {"text": "All", "value": "$__all"}
+          }
+        ]
+      },
+      "panels": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "gridPos": {"h": 10, "w": 24, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (namespace, app) (count_over_time({namespace=~\"$namespace\", app=~\"$app\", level=~\"error|warn\"}[5m]))",
+              "legendFormat": "{{namespace}}/{{app}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Namespace/App별 error|warn 로그 발생률 (5분)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "gridPos": {"h": 14, "w": 24, "x": 0, "y": 10},
+          "id": 2,
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": false,
+            "enableLogDetails": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          },
+          "targets": [
+            {"expr": "{namespace=~\"$namespace\", app=~\"$app\"}", "refId": "A"}
+          ],
+          "title": "Log Stream (dynamic filter)",
+          "type": "logs"
+        }
+      ],
+      "schemaVersion": 41,
+      "tags": ["obs-07", "logs", "platform"],
+      "time": {"from": "now-6h", "to": "now"},
+      "title": "Loki Operational Log Explorer",
+      "uid": "obs-07-loki-log-explorer",
+      "version": 1
+    }
