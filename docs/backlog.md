@@ -2153,3 +2153,5 @@ Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 
 
 2026-08-06 `OBS-04-FIX-01`에서 Grafana Live WebSocket Origin 차단 에러(`origin not allowed`) 및 패널 PromQL 라벨 미매칭 결함을 보정했다. `GF_LIVE_ALLOWED_ORIGINS` 및 `GF_SECURITY_ALLOW_EMBEDDING` 환경 변수를 추가하고, RAM Available(`node_memory_MemAvailable_bytes`), PVC Requested Total, thin-pool / filesystem 사용률(`mountpoint=~"/|/rootfs"`) PromQL 라벨 조건을 실제 수집 환경에 맞게 보정했다.
 
+2026-08-06 `OBS-04-FIX-02`에서 Grafana Live WebSocket `GF_LIVE_ALLOWED_ORIGINS` 환경 변수를 와일드카드(`"*"`)로 보정하여 프록시 헤더 변형 환경에서 `origin not allowed` 에러가 해제되도록 라이브 sync를 완료했다.
+
