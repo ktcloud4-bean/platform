@@ -2151,3 +2151,5 @@ Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 
 
 2026-08-06 `OBS-04`에서 Platform Capacity Sentinel 대시보드를 구축했다. `obs-04-capacity-sentinel` ConfigMap과 Grafana dashboard provider 마운트를 선언하고, RAM(8 GiB / 12 GiB), PVC(96 GiB / 120 GiB), thin-pool(60% / 70%) 정지/경보 기준 시각화 패널 3개를 구성했다. Argo child `obs`와 `platform-root` 모두 `Synced/Healthy`를 확인하고 백로그 `OBS-04`를 `DONE`으로 갱신하며, 직접 후속인 `OBS-05`를 `READY`로 연다.
 
+2026-08-06 `OBS-04-FIX-01`에서 Grafana Live WebSocket Origin 차단 에러(`origin not allowed`) 및 패널 PromQL 라벨 미매칭 결함을 보정했다. `GF_LIVE_ALLOWED_ORIGINS` 및 `GF_SECURITY_ALLOW_EMBEDDING` 환경 변수를 추가하고, RAM Available(`node_memory_MemAvailable_bytes`), PVC Requested Total, thin-pool / filesystem 사용률(`mountpoint=~"/|/rootfs"`) PromQL 라벨 조건을 실제 수집 환경에 맞게 보정했다.
+

@@ -143,6 +143,8 @@ grafana:
           editable: false
   env:
     GF_SERVER_ROOT_URL: https://grafana.imcherry5778.xyz
+    GF_SECURITY_ALLOW_EMBEDDING: "true"
+    GF_LIVE_ALLOWED_ORIGINS: "https://grafana.imcherry5778.xyz,grafana.imcherry5778.xyz"
     GF_SECURITY_ADMIN_USER: admin
     GF_SECURITY_ADMIN_PASSWORD__FILE: /vault/secrets/admin-password
     GF_USERS_ALLOW_SIGN_UP: "false"
