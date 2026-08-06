@@ -1,0 +1,151 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: obs-04-capacity-sentinel
+  namespace: obs
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  capacity-sentinel.json: |
+    {
+      "annotations": {"list": []},
+      "editable": false,
+      "panels": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 34359738368,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 8589934592},
+                  {"color": "green", "value": 12884901888}
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "expr": "node_memory_MemAvailable_bytes{service=\"obs-prometheus-node-exporter\"}",
+              "legendFormat": "Available RAM",
+              "refId": "A"
+            }
+          ],
+          "title": "RAM Available (Stop < 8GiB / Warning < 12GiB)",
+          "type": "gauge"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 137438953472,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 103079215104},
+                  {"color": "red", "value": 128849018880}
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+          "id": 2,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "expr": "sum(kube_persistentvolumeclaim_resource_requests_storage_bytes{service=\"obs-kube-state-metrics\"})",
+              "legendFormat": "PVC Requested",
+              "refId": "A"
+            }
+          ],
+          "title": "PVC Requested Total (Warning >= 96GiB / Stop >= 120GiB)",
+          "type": "gauge"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 60},
+                  {"color": "red", "value": 70}
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+          "id": 3,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "expr": "(node_thinpool_data_used_bytes / node_thinpool_data_total_bytes * 100) or (100 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"} * 100))",
+              "legendFormat": "thin-pool usage %",
+              "refId": "A"
+            }
+          ],
+          "title": "thin-pool Data Usage % (Warning >= 60% / Stop >= 70%)",
+          "type": "gauge"
+        }
+      ],
+      "schemaVersion": 41,
+      "tags": ["obs-04", "capacity", "platform"],
+      "time": {"from": "now-6h", "to": "now"},
+      "title": "Platform Capacity Sentinel",
+      "uid": "obs-04-capacity-sentinel",
+      "version": 1
+    }

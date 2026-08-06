@@ -6,6 +6,7 @@ resources:
   - monitoring.yaml
   - network-policies.yaml
   - dashboard.yaml
+  - dashboard-capacity.yaml
 configMapGenerator:
   - name: obs-grafana-runtime-config
     namespace: obs
