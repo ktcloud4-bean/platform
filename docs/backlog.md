@@ -2160,3 +2160,6 @@ Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 
 
 2026-08-06 `OBS-05`에서 Core Services & Traffic Infrastructure 대시보드를 구축했다. `obs-05-core-services` ConfigMap 선언 및 kustomization 추가, Grafana dashboard provider 마운트를 선언하고 Traefik(QPS/HTTP Status/Latency), Pomerium(SSO/Route), PostgreSQL(쿼리/커넥션/WAL), Vault(Unseal/Cert-TTL) 핵심 지표 시각화 패널 10개를 구성했다. ConfigMap 선언 및 kustomization 추가, Argo 검증 완료 후 백로그 `OBS-05`를 `DONE`으로 갱신하며, 직접 후속인 `OBS-06`을 `READY`로 연다.
 
+2026-08-06 `OBS-05-FIX-01`에서 `gitops/apps/obs/install.yaml` 내 `obs-grafana` Deployment의 중복 선언된 `dashboards-platform-core-services` volumeMount 및 volume 항목을 제거하여 Argo CD `ComparisonError` (duplicate entries for key) 항목을 보정했다.
+
+
