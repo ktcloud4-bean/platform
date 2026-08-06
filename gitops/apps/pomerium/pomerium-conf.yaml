@@ -154,6 +154,7 @@ routes:
     from: https://grafana.imcherry5778.xyz
     to: http://obs-grafana.obs.svc.cluster.local:80
     allow_websockets: true
+    preserve_host_header: true
     policy:
       - allow:
           or:
