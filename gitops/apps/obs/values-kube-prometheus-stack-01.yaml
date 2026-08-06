@@ -113,9 +113,18 @@ grafana:
           editable: false
           options:
             path: /var/lib/grafana/dashboards/platform-capacity
+        - name: platform-core-services
+          orgId: 1
+          folder: Platform
+          type: file
+          disableDeletion: true
+          editable: false
+          options:
+            path: /var/lib/grafana/dashboards/platform-core-services
   dashboardsConfigMaps:
     platform-observability: obs-02-dashboard
     platform-capacity: obs-04-capacity-sentinel
+    platform-core-services: obs-05-core-services
   datasources:
     datasources.yaml:
       apiVersion: 1
