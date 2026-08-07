@@ -10,7 +10,7 @@ metadata:
     app.kubernetes.io/component: dashboard
     app.kubernetes.io/part-of: platform-gitops
 data:
-  overview.json: |
+  overview.json: >
     {
       "annotations": {
         "list": []
@@ -26,7 +26,7 @@ data:
           "title": "Node Ready/NotReady",
           "type": "stat",
           "gridPos": {
-            "w": 5,
+            "w": 4,
             "h": 8,
             "x": 0,
             "y": 0
@@ -74,7 +74,8 @@ data:
                   }
                 }
               ],
-              "unit": "percentunit"
+              "unit": "percentunit",
+              "displayName": "Ready / Total Nodes"
             }
           }
         },
@@ -84,18 +85,17 @@ data:
             "uid": "prometheus"
           },
           "id": 2,
-          "title": "Core Components Up/Down",
+          "title": "Core Components",
           "type": "stat",
           "gridPos": {
             "w": 5,
             "h": 8,
-            "x": 5,
+            "x": 4,
             "y": 0
           },
           "targets": [
             {
-              "expr": "up{job=~\".*(traefik|postgres|vault|pomerium).*\"}",
-              "legendFormat": "{{job}}"
+              "expr": "count(up{job=~\"traefik|postgres|vault|pomerium\"} == 0) or vector(0)"
             }
           ],
           "options": {
@@ -108,20 +108,36 @@ data:
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "red",
+                    "color": "green",
                     "value": null
                   },
                   {
-                    "color": "yellow",
-                    "value": 0.5
-                  },
-                  {
-                    "color": "green",
+                    "color": "red",
                     "value": 1
                   }
                 ]
               },
               "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "Core Services: 정상",
+                      "color": "green"
+                    }
+                  }
+                },
+                {
+                  "type": "range",
+                  "options": {
+                    "from": 1,
+                    "to": 999,
+                    "result": {
+                      "text": "Core Services: N개 다운",
+                      "color": "red"
+                    }
+                  }
+                },
                 {
                   "type": "special",
                   "options": {
@@ -134,7 +150,14 @@ data:
                 }
               ]
             }
-          }
+          },
+          "links": [
+            {
+              "title": "OBS-05 Core Services",
+              "url": "/d/obs-05-core-services",
+              "targetBlank": false
+            }
+          ]
         },
         {
           "datasource": {
@@ -145,9 +168,9 @@ data:
           "title": "Firing Alerts Count",
           "type": "stat",
           "gridPos": {
-            "w": 4,
+            "w": 5,
             "h": 8,
-            "x": 10,
+            "x": 9,
             "y": 0
           },
           "targets": [
@@ -168,16 +191,8 @@ data:
                     "value": null
                   },
                   {
-                    "color": "yellow",
-                    "value": 1
-                  },
-                  {
-                    "color": "orange",
-                    "value": 3
-                  },
-                  {
                     "color": "red",
-                    "value": 5
+                    "value": 1
                   }
                 ]
               },
@@ -194,7 +209,14 @@ data:
                 }
               ]
             }
-          }
+          },
+          "links": [
+            {
+              "title": "Alertmanager",
+              "url": "/alerting/list",
+              "targetBlank": true
+            }
+          ]
         },
         {
           "datasource": {
@@ -202,8 +224,8 @@ data:
             "uid": "prometheus"
           },
           "id": 4,
-          "title": "Argo CD Sync Status",
-          "type": "table",
+          "title": "Argo CD OutOfSync",
+          "type": "stat",
           "gridPos": {
             "w": 5,
             "h": 8,
@@ -212,9 +234,46 @@ data:
           },
           "targets": [
             {
-              "expr": "argocd_app_info{sync_status!=\"Synced\"} or argocd_app_info{health_status!=\"Healthy\"}",
-              "format": "table",
-              "instant": true
+              "expr": "count(argocd_app_info{sync_status!=\"Synced\"} or argocd_app_info{health_status!=\"Healthy\"}) or vector(0)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "No data",
+                      "color": "dark-gray"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "options": {
+            "colorMode": "background"
+          },
+          "links": [
+            {
+              "title": "Argo CD UI",
+              "url": "/argocd",
+              "targetBlank": true
             }
           ]
         },
@@ -224,65 +283,6 @@ data:
             "uid": "prometheus"
           },
           "id": 5,
-          "title": "Cluster CPU / RAM (%)",
-          "type": "gauge",
-          "gridPos": {
-            "w": 18,
-            "h": 12,
-            "x": 0,
-            "y": 8
-          },
-          "targets": [
-            {
-              "expr": "avg(100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100))",
-              "legendFormat": "CPU Avg"
-            },
-            {
-              "expr": "max(100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100))",
-              "legendFormat": "CPU Max"
-            },
-            {
-              "expr": "avg((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)",
-              "legendFormat": "RAM Avg"
-            },
-            {
-              "expr": "max((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)",
-              "legendFormat": "RAM Max"
-            }
-          ],
-          "options": {
-            "orientation": "auto"
-          }
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "id": 6,
-          "title": "Max PVC Usage (%)",
-          "type": "gauge",
-          "gridPos": {
-            "w": 6,
-            "h": 12,
-            "x": 18,
-            "y": 8
-          },
-          "targets": [
-            {
-              "expr": "max(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100"
-            }
-          ],
-          "options": {
-            "orientation": "auto"
-          }
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "id": 7,
           "title": "Pod Restarts (15m)",
           "type": "stat",
           "gridPos": {
@@ -313,12 +313,206 @@ data:
                     "value": 1
                   },
                   {
-                    "color": "orange",
-                    "value": 3
+                    "color": "red",
+                    "value": 5
+                  }
+                ]
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "No data",
+                      "color": "dark-gray"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "links": [
+            {
+              "title": "OBS-07 Loki Log Explorer",
+              "url": "/d/obs-07-loki-log-explorer",
+              "targetBlank": false
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "Cluster CPU (%)",
+          "type": "gauge",
+          "gridPos": {
+            "w": 8,
+            "h": 12,
+            "x": 0,
+            "y": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "max(100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100))",
+              "legendFormat": "Max CPU"
+            },
+            {
+              "expr": "avg(100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100))",
+              "legendFormat": "Avg CPU",
+              "hide": true
+            }
+          ],
+          "options": {
+            "orientation": "auto",
+            "textMode": "value_and_name"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 50
                   },
                   {
                     "color": "red",
-                    "value": 5
+                    "value": 80
+                  }
+                ]
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "No data",
+                      "color": "dark-gray"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": 7,
+          "title": "Cluster RAM (%)",
+          "type": "gauge",
+          "gridPos": {
+            "w": 8,
+            "h": 12,
+            "x": 8,
+            "y": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "max((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)",
+              "legendFormat": "Max RAM"
+            },
+            {
+              "expr": "avg((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)",
+              "legendFormat": "Avg RAM",
+              "hide": true
+            }
+          ],
+          "options": {
+            "orientation": "auto",
+            "textMode": "value_and_name"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 50
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "No data",
+                      "color": "dark-gray"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "links": [
+            {
+              "title": "OBS-04 Capacity Sentinel",
+              "url": "/d/obs-04-capacity-sentinel",
+              "targetBlank": false
+            }
+          ]
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 8,
+          "title": "Max PVC Usage (%)",
+          "type": "gauge",
+          "gridPos": {
+            "w": 8,
+            "h": 12,
+            "x": 16,
+            "y": 8
+          },
+          "targets": [
+            {
+              "expr": "max(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100"
+            }
+          ],
+          "options": {
+            "orientation": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 75
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
                   }
                 ]
               },

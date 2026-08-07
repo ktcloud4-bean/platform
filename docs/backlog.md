@@ -2179,3 +2179,4 @@ Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 
 2026-08-07 OBS-02 대시보드의 패널 구성을 7개로 전면 재구성하는 OBS-08 작업을 완료했다.
 
 - 2026-08-07: OBS-08-FIX-01에서 Platform Observability Overview 대시보드의 No data 매핑 혼선, Node Ready 백분율 표기, 패널 레이아웃 불균형 및 일부 PromQL 쿼리 미매칭 결함을 일괄 보정했다.
+2026-08-07 OBS-02 (Platform Observability Overview) 대시보드 9개 항목 개편(Core/Node/Alerts/Argo/Pod/CPU/RAM/PVC 최적화 및 레이아웃 균등화) 적용 및 JSON 반영 완료. (k3s 클러스터 오프라인으로 라이브 검증 생략)
