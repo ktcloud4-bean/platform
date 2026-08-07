@@ -1,0 +1,119 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    component: opentofu-agent
+spec:
+  containers:
+  - name: opentofu
+    image: ghcr.io/opentofu/opentofu:1.12.5
+    command: ['cat']
+    tty: true
+  - name: trivy
+    image: aquasec/trivy:0.72.0
+    command: ['cat']
+    tty: true
+'''
+        }
+    }
+
+    parameters {
+        choice(
+            name: 'TARGET_ROOT',
+            choices: [
+                'tofu-app-network',
+                'tofu-app-db',
+                'tofu-app-eks',
+                'tofu-app-ecr',
+                'tofu-backend',
+                'tofu-kms',
+                'tofu-identity',
+                'tofu-network',
+                'tofu'
+            ],
+            description: '실행할 OpenTofu 인프라 대상을 선택하세요.'
+        )
+
+        choice(
+            name: 'ACTION',
+            choices: ['plan', 'apply'],
+            description: '수행할 작업을 선택하세요. (plan = Dry-run, apply = 실제 반영)'
+        )
+    }
+
+    environment {
+        AWS_REGION = 'ap-northeast-2'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('IaC Security Scan (SCAN-01)') {
+            steps {
+                container('trivy') {
+                    sh 'trivy config --exit-code 0 platform/infra/aws/'
+                }
+            }
+        }
+
+        stage('OpenTofu Init & Validate') {
+            steps {
+                container('opentofu') {
+                    withCredentials([usernamePassword(credentialsId: 'aws-credentials-ci01', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                        sh """
+                            cd platform/infra/aws/${params.TARGET_ROOT}
+                            tofu init -reconfigure
+                            tofu validate
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('OpenTofu Plan') {
+            steps {
+                container('opentofu') {
+                    withCredentials([usernamePassword(credentialsId: 'aws-credentials-ci01', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                        sh """
+                            cd platform/infra/aws/${params.TARGET_ROOT}
+                            tofu plan -out=tfplan
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Manual Approval for Apply') {
+            when {
+                expression { return params.ACTION == 'apply' }
+            }
+            steps {
+                input message: "정말로 [${params.TARGET_ROOT}] 인프라에 tofu apply를 진행하시겠습니까?", ok: 'Apply 승인'
+            }
+        }
+
+        stage('OpenTofu Apply') {
+            when {
+                expression { return params.ACTION == 'apply' }
+            }
+            steps {
+                container('opentofu') {
+                    withCredentials([usernamePassword(credentialsId: 'aws-credentials-ci01', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                        sh """
+                            cd platform/infra/aws/${params.TARGET_ROOT}
+                            tofu apply -input=false tfplan
+                        """
+                    }
+                }
+            }
+        }
+    }
+}

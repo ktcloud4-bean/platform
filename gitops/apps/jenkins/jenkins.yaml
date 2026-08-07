@@ -349,6 +349,12 @@ credentials:
               id: "sonar-token-e2e01"
               description: "E2E-01 SonarQube project-scoped analysis token"
               secret: "${e2e01_sonar_token}"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "aws-credentials-ci01"
+              description: "CI-01 AWS Credentials for OpenTofu Pipelines"
+              username: "${aws_access_key_id}"
+              password: "${aws_secret_access_key}"
 
 security:
   # Gitea SSH host key는 known_hosts 파일이 아니라 선언한 값으로 고정한다.

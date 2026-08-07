@@ -143,3 +143,25 @@ data:
     {{- end -}}
     EOT
     }
+
+    template {
+      destination          = "/vault/secrets/aws_access_key_id"
+      perms                = "0400"
+      error_on_missing_key = false
+      contents             = <<EOT
+    {{- with secret "kv/data/jenkins/runtime" -}}
+    {{ .Data.data.aws_access_key_id }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/aws_secret_access_key"
+      perms                = "0400"
+      error_on_missing_key = false
+      contents             = <<EOT
+    {{- with secret "kv/data/jenkins/runtime" -}}
+    {{ .Data.data.aws_secret_access_key }}
+    {{- end -}}
+    EOT
+    }
