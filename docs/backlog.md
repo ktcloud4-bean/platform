@@ -2187,3 +2187,6 @@ Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 
 
 2026-08-07 `OBS-04-FIX-06` Platform Capacity Sentinel 대시보드의 4개 그룹 2열 그리드 구조 전면 재배치 및 패널 세분화(RAM by Node, PVC Usage by Volume, 정지선 예상 도달일 Trend, Thin-pool 게이지 및 안내 텍스트) 완료.
 
+2026-08-07 `OBS-04-FIX-07` Platform Capacity Sentinel 대시보드의 RAM 지표를 사용량 기준(`MemTotal - MemAvailable`)으로 통일하여 정지선 초과 여부 해석 오류를 교정하고, 증가율/예상 도달일 패널 전면 제거 후 3개 그룹 구조 재배치 및 No Data 회색(`dark-gray`) 매핑을 완료함.
+
+

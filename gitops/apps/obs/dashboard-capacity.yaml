@@ -24,12 +24,28 @@ data:
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "red", "value": null},
+                  {"color": "green", "value": null},
                   {"color": "yellow", "value": 8589934592},
-                  {"color": "green", "value": 12884901888}
+                  {"color": "red", "value": 12884901888}
                 ]
               },
-              "unit": "bytes"
+              "unit": "bytes",
+              "valueMappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {"text": "No data", "color": "dark-gray"}
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {"text": "No data", "color": "dark-gray"}
+                  }
+                }
+              ]
             },
             "overrides": []
           },
@@ -49,12 +65,12 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(node_memory_MemAvailable_bytes) or node_memory_MemAvailable_bytes",
-              "legendFormat": "클러스터 합산",
+              "expr": "sum(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) or vector(0)",
+              "legendFormat": "클러스터 합산 사용량",
               "refId": "A"
             }
           ],
-          "title": "클러스터 합산: RAM Available / 12 GiB",
+          "title": "클러스터 합산 사용량: RAM Used / 12 GiB",
           "type": "stat"
         },
         {
@@ -66,12 +82,28 @@ data:
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "red", "value": null},
+                  {"color": "green", "value": null},
                   {"color": "yellow", "value": 8589934592},
-                  {"color": "green", "value": 12884901888}
+                  {"color": "red", "value": 12884901888}
                 ]
               },
-              "unit": "bytes"
+              "unit": "bytes",
+              "valueMappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {"text": "No data", "color": "dark-gray"}
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {"text": "No data", "color": "dark-gray"}
+                  }
+                }
+              ]
             },
             "overrides": []
           },
@@ -85,7 +117,7 @@ data:
           },
           "targets": [
             {
-              "expr": "node_memory_MemAvailable_bytes",
+              "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -107,7 +139,23 @@ data:
                   {"color": "red", "value": 128849018880}
                 ]
               },
-              "unit": "bytes"
+              "unit": "bytes",
+              "valueMappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {"text": "No data", "color": "dark-gray"}
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {"text": "No data", "color": "dark-gray"}
+                  }
+                }
+              ]
             },
             "overrides": []
           },
@@ -127,7 +175,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(kubelet_volume_stats_used_bytes) or sum(kube_persistentvolumeclaim_resource_requests_storage_bytes)",
+              "expr": "sum(kubelet_volume_stats_used_bytes) or sum(kube_persistentvolumeclaim_resource_requests_storage_bytes) or vector(0)",
               "legendFormat": "합산 사용량",
               "refId": "A"
             }
@@ -149,7 +197,23 @@ data:
                   {"color": "red", "value": 128849018880}
                 ]
               },
-              "unit": "bytes"
+              "unit": "bytes",
+              "valueMappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {"text": "No data", "color": "dark-gray"}
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {"text": "No data", "color": "dark-gray"}
+                  }
+                }
+              ]
             },
             "overrides": []
           },
@@ -164,93 +228,13 @@ data:
           },
           "targets": [
             {
-              "expr": "sort_desc(kubelet_volume_stats_used_bytes)",
+              "expr": "sort_desc(kubelet_volume_stats_used_bytes or kube_persistentvolumeclaim_resource_requests_storage_bytes)",
               "legendFormat": "{{persistentvolumeclaim}}",
               "refId": "A"
             }
           ],
           "title": "PVC Usage by Volume (정지선: 96/120 GiB)",
           "type": "barchart"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {
-            "defaults": {
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "red", "value": null},
-                  {"color": "yellow", "value": 7},
-                  {"color": "green", "value": 14}
-                ]
-              },
-              "unit": "d"
-            },
-            "overrides": []
-          },
-          "gridPos": {"h": 4, "w": 12, "x": 0, "y": 10},
-          "id": 5,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": ["lastNotNull"],
-              "fields": "",
-              "values": false
-            },
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "expr": "(sum(node_memory_MemAvailable_bytes) - 8589934592) / clamp_min(-deriv(sum(node_memory_MemAvailable_bytes)[1d:1h]), 1) / 86400",
-              "legendFormat": "정지선까지 예상 도달일",
-              "refId": "A"
-            }
-          ],
-          "title": "RAM 정지선 예상 도달일 (8 GiB 정지선 기준)",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {
-            "defaults": {
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "red", "value": null},
-                  {"color": "yellow", "value": 7},
-                  {"color": "green", "value": 14}
-                ]
-              },
-              "unit": "d"
-            },
-            "overrides": []
-          },
-          "gridPos": {"h": 4, "w": 12, "x": 12, "y": 10},
-          "id": 6,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": ["lastNotNull"],
-              "fields": "",
-              "values": false
-            },
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "expr": "(96 * 1073741824 - sum(kubelet_volume_stats_used_bytes)) / clamp_min(deriv(sum(kubelet_volume_stats_used_bytes)[1d:1h]), 1) / 86400",
-              "legendFormat": "정지선까지 예상 도달일",
-              "refId": "A"
-            }
-          ],
-          "title": "PVC 정지선 예상 도달일 (96 GiB 정지선 기준)",
-          "type": "stat"
         },
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -267,12 +251,28 @@ data:
                   {"color": "red", "value": 70}
                 ]
               },
-              "unit": "percent"
+              "unit": "percent",
+              "valueMappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {"text": "No data", "color": "dark-gray"}
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "nan",
+                    "result": {"text": "No data", "color": "dark-gray"}
+                  }
+                }
+              ]
             },
             "overrides": []
           },
-          "gridPos": {"h": 6, "w": 24, "x": 0, "y": 14},
-          "id": 7,
+          "gridPos": {"h": 6, "w": 24, "x": 0, "y": 10},
+          "id": 5,
           "options": {
             "colorMode": "value",
             "graphMode": "area",
@@ -287,7 +287,7 @@ data:
           },
           "targets": [
             {
-              "expr": "(node_thinpool_data_used_bytes / node_thinpool_data_total_bytes * 100) or (100 - (node_filesystem_avail_bytes{mountpoint=~\"/|/rootfs\", fstype=~\"xfs|ext4\"} / node_filesystem_size_bytes{mountpoint=~\"/|/rootfs\", fstype=~\"xfs|ext4\"} * 100))",
+              "expr": "(node_thinpool_data_used_bytes / node_thinpool_data_total_bytes * 100) or (100 - (node_filesystem_avail_bytes{mountpoint=~\"/|/rootfs\", fstype=~\"xfs|ext4\"} / node_filesystem_size_bytes{mountpoint=~\"/|/rootfs\", fstype=~\"xfs|ext4\"} * 100)) or vector(0)",
               "legendFormat": "thin-pool usage %",
               "refId": "A"
             }
@@ -296,8 +296,8 @@ data:
           "type": "gauge"
         },
         {
-          "gridPos": {"h": 2, "w": 24, "x": 0, "y": 20},
-          "id": 8,
+          "gridPos": {"h": 2, "w": 24, "x": 0, "y": 16},
+          "id": 6,
           "options": {
             "content": "LVM thin provisioning pool 실사용 대비 할당 비율. 70% 초과 시 신규 쓰기 실패 위험 — 대상: {노드/볼륨그룹명}",
             "mode": "markdown"
@@ -311,5 +311,5 @@ data:
       "time": {"from": "now-6h", "to": "now"},
       "title": "Platform Capacity Sentinel",
       "uid": "obs-04-capacity-sentinel",
-      "version": 2
+      "version": 3
     }
