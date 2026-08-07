@@ -33,21 +33,15 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"})",
-              "legendFormat": "Ready",
-              "refId": "A"
-            },
-            {
-              "expr": "count(kube_node_status_condition{condition=\"Ready\"})",
-              "legendFormat": "Total",
-              "refId": "B"
+              "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"}) or vector(0)",
+              "legendFormat": "Ready Nodes"
             }
           ],
           "transformations": [],
           "options": {
             "colorMode": "background",
             "graphMode": "none",
-            "textMode": "value_and_name"
+            "textMode": "value"
           },
           "fieldConfig": {
             "defaults": {
@@ -55,12 +49,29 @@ data:
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
+                    "color": "red",
                     "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
                   }
                 ]
               },
               "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "0 / 1",
+                      "color": "red"
+                    },
+                    "1": {
+                      "text": "1 / 1",
+                      "color": "green"
+                    }
+                  }
+                },
                 {
                   "type": "special",
                   "options": {
@@ -92,17 +103,11 @@ data:
           "targets": [
             {
               "expr": "count(up{job=~\"traefik|postgres|vault|pomerium\"} == 1) or vector(0)",
-              "legendFormat": "Ready",
-              "refId": "A"
-            },
-            {
-              "expr": "count(up{job=~\"traefik|postgres|vault|pomerium\"}) or vector(0)",
-              "legendFormat": "Total",
-              "refId": "B"
+              "legendFormat": "Ready Core"
             }
           ],
           "options": {
-            "textMode": "value_and_name",
+            "textMode": "value",
             "colorMode": "background"
           },
           "fieldConfig": {
@@ -111,12 +116,45 @@ data:
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
+                    "color": "red",
                     "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 3
+                  },
+                  {
+                    "color": "green",
+                    "value": 4
                   }
                 ]
               },
               "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "0 / 4",
+                      "color": "red"
+                    },
+                    "1": {
+                      "text": "1 / 4",
+                      "color": "red"
+                    },
+                    "2": {
+                      "text": "2 / 4",
+                      "color": "red"
+                    },
+                    "3": {
+                      "text": "3 / 4",
+                      "color": "orange"
+                    },
+                    "4": {
+                      "text": "4 / 4",
+                      "color": "green"
+                    }
+                  }
+                },
                 {
                   "type": "special",
                   "options": {
@@ -470,7 +508,7 @@ data:
           },
           "targets": [
             {
-              "expr": "max(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100"
+              "expr": "max(kubelet_volume_stats_used_bytes / on(persistentvolumeclaim, namespace) kubelet_volume_stats_capacity_bytes) * 100 or vector(0)"
             }
           ],
           "options": {
