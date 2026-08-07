@@ -34,48 +34,16 @@ data:
           "targets": [
             {
               "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"})",
+              "legendFormat": "Ready",
               "refId": "A"
             },
             {
               "expr": "count(kube_node_status_condition{condition=\"Ready\"})",
+              "legendFormat": "Total",
               "refId": "B"
             }
           ],
-          "transformations": [
-            {
-              "id": "merge",
-              "options": {}
-            },
-            {
-              "id": "calculateField",
-              "options": {
-                "alias": "Ratio",
-                "binary": {
-                  "left": "A",
-                  "operator": "/",
-                  "reducer": "sum",
-                  "right": "B"
-                },
-                "mode": "binary",
-                "reduce": {
-                  "reducer": "sum"
-                }
-              }
-            },
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Ratio": true
-                },
-                "indexByName": {},
-                "renameByName": {
-                  "A": "Ready",
-                  "B": "Total"
-                }
-              }
-            }
-          ],
+          "transformations": [],
           "options": {
             "colorMode": "background",
             "graphMode": "none",
@@ -87,20 +55,8 @@ data:
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "red",
-                    "value": null
-                  },
-                  {
-                    "color": "orange",
-                    "value": 0.5
-                  },
-                  {
-                    "color": "yellow",
-                    "value": 0.8
-                  },
-                  {
                     "color": "green",
-                    "value": 1
+                    "value": null
                   }
                 ]
               },
@@ -115,9 +71,7 @@ data:
                     }
                   }
                 }
-              ],
-              "unit": "percentunit",
-              "displayName": "Ready / Total Nodes"
+              ]
             }
           }
         },
@@ -137,12 +91,18 @@ data:
           },
           "targets": [
             {
-              "expr": "count(up{job=~\"traefik|postgres|vault|pomerium\"} == 0) or vector(0)",
-              "legendFormat": "Core Services"
+              "expr": "count(up{job=~\"traefik|postgres|vault|pomerium\"} == 1) or vector(0)",
+              "legendFormat": "Ready",
+              "refId": "A"
+            },
+            {
+              "expr": "count(up{job=~\"traefik|postgres|vault|pomerium\"}) or vector(0)",
+              "legendFormat": "Total",
+              "refId": "B"
             }
           ],
           "options": {
-            "textMode": "value",
+            "textMode": "value_and_name",
             "colorMode": "background"
           },
           "fieldConfig": {
@@ -153,34 +113,10 @@ data:
                   {
                     "color": "green",
                     "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
                   }
                 ]
               },
               "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "Core Services: 정상",
-                      "color": "green"
-                    }
-                  }
-                },
-                {
-                  "type": "range",
-                  "options": {
-                    "from": 1,
-                    "to": 999,
-                    "result": {
-                      "text": "Core Services: N개 다운",
-                      "color": "red"
-                    }
-                  }
-                },
                 {
                   "type": "special",
                   "options": {

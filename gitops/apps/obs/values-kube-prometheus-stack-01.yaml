@@ -374,9 +374,9 @@ prometheusOperator:
   serviceMonitor:
     selfMonitor: false
   kubeletService:
-    enabled: false
-  kubeletEndpointsEnabled: false
-  kubeletEndpointSliceEnabled: false
+    enabled: true
+  kubeletEndpointsEnabled: true
+  kubeletEndpointSliceEnabled: true
   image:
     registry: quay.io
     repository: prometheus-operator/prometheus-operator

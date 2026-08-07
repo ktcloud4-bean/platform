@@ -2180,3 +2180,7 @@ Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 
 
 - 2026-08-07: OBS-08-FIX-01에서 Platform Observability Overview 대시보드의 No data 매핑 혼선, Node Ready 백분율 표기, 패널 레이아웃 불균형 및 일부 PromQL 쿼리 미매칭 결함을 일괄 보정했다.
 2026-08-07 OBS-02 (Platform Observability Overview) 대시보드 9개 항목 개편(Core/Node/Alerts/Argo/Pod/CPU/RAM/PVC 최적화 및 레이아웃 균등화) 적용 및 JSON 반영 완료. (k3s 클러스터 오프라인으로 라이브 검증 생략)
+
+2026-08-07 OBS-08-FIX-02 (Platform Observability Overview) 대시보드의 남은 결함(PromQL 노출 차단, 스파크라인 제거 및 Ready/Total 분리) 수정 및 Max PVC Usage 지표 수집(kubelet 활성화) 완료. (클러스터 오프라인으로 Argo CD 검증 후 병합 완료 취급)
+
+2026-08-07 OBS-08-FIX-03 Platform Observability Overview 대시보드의 Max PVC Usage 수집 픽스(kubeletService 활성화) 및 Node/Core Components 패널의 Ready/Total 나란히 표기 결함 보정 완료. (클러스터 오프라인 가정 하에 Argo CD 생략 후 즉시 병합)
