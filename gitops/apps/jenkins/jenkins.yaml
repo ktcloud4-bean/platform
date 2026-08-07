@@ -399,3 +399,39 @@ jobs:
           }
         }
       }
+      pipelineJob('aws-opentofu-pipeline') {
+        description('AWS OpenTofu 인프라 GitOps 파이프라인 (tofu-app-network, db, eks, ecr, backend 등)')
+        logRotator {
+          numToKeep(20)
+          artifactNumToKeep(0)
+        }
+        parameters {
+          choiceParam('TARGET_ROOT', [
+            'tofu-app-network',
+            'tofu-app-db',
+            'tofu-app-eks',
+            'tofu-app-ecr',
+            'tofu-backend',
+            'tofu-kms',
+            'tofu-identity',
+            'tofu-network',
+            'tofu'
+          ], '실행할 OpenTofu 인프라 대상을 선택하세요.')
+          choiceParam('ACTION', ['plan', 'apply'], '수행할 작업을 선택하세요 (plan = Dry-run, apply = 실제 반영)')
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/scm-recovery/platform.git')
+                  credentials('gitea-ci01')
+                }
+                branch('*/main')
+              }
+            }
+            scriptPath('infra/aws/Jenkinsfile')
+            lightweight(false)
+          }
+        }
+      }
