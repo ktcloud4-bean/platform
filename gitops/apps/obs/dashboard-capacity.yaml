@@ -65,7 +65,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) or vector(0)",
+              "expr": "sum( (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) or (node_memory_MemTotal_bytes - node_memory_MemFree_bytes - node_memory_Cached_bytes - node_memory_Buffers_bytes) or (node_memory_active_bytes + node_memory_wired_bytes) ) or vector(0)",
               "legendFormat": "RAM Used",
               "refId": "A"
             }
@@ -141,7 +141,7 @@ data:
           ],
           "targets": [
             {
-              "expr": "sum(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) by (instance, node)",
+              "expr": "sum( (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) or (node_memory_MemTotal_bytes - node_memory_MemFree_bytes - node_memory_Cached_bytes - node_memory_Buffers_bytes) or (node_memory_active_bytes + node_memory_wired_bytes) ) by (instance, node)",
               "legendFormat": "{{node}} {{instance}}",
               "refId": "A"
             }
