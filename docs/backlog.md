@@ -2184,3 +2184,6 @@ Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 
 2026-08-07 OBS-08-FIX-02 (Platform Observability Overview) 대시보드의 남은 결함(PromQL 노출 차단, 스파크라인 제거 및 Ready/Total 분리) 수정 및 Max PVC Usage 지표 수집(kubelet 활성화) 완료. (클러스터 오프라인으로 Argo CD 검증 후 병합 완료 취급)
 
 2026-08-07 OBS-08-FIX-03 Platform Observability Overview 대시보드의 Max PVC Usage 수집 픽스(kubeletService 활성화) 및 Node/Core Components 패널의 Ready/Total 나란히 표기 결함 보정 완료. (클러스터 오프라인 가정 하에 Argo CD 생략 후 즉시 병합)
+
+2026-08-07 `OBS-04-FIX-06` Platform Capacity Sentinel 대시보드의 4개 그룹 2열 그리드 구조 전면 재배치 및 패널 세분화(RAM by Node, PVC Usage by Volume, 정지선 예상 도달일 Trend, Thin-pool 게이지 및 안내 텍스트) 완료.
+

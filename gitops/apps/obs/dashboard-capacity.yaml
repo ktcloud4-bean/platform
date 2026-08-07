@@ -33,11 +33,11 @@ data:
             },
             "overrides": []
           },
-          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+          "gridPos": {"h": 3, "w": 12, "x": 0, "y": 0},
           "id": 1,
           "options": {
             "colorMode": "value",
-            "graphMode": "area",
+            "graphMode": "none",
             "justifyMode": "center",
             "orientation": "auto",
             "reduceOptions": {
@@ -49,13 +49,49 @@ data:
           },
           "targets": [
             {
-              "expr": "node_memory_MemAvailable_bytes",
-              "legendFormat": "Available RAM",
+              "expr": "sum(node_memory_MemAvailable_bytes) or node_memory_MemAvailable_bytes",
+              "legendFormat": "클러스터 합산",
               "refId": "A"
             }
           ],
-          "title": "RAM Available (Stop < 8GiB / Warning < 12GiB)",
-          "type": "gauge"
+          "title": "클러스터 합산: RAM Available / 12 GiB",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 34359738368,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 8589934592},
+                  {"color": "green", "value": 12884901888}
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 7, "w": 12, "x": 0, "y": 3},
+          "id": 2,
+          "options": {
+            "barWidth": 0.6,
+            "groupWidth": 0.7,
+            "orientation": "horizontal",
+            "showValue": "always"
+          },
+          "targets": [
+            {
+              "expr": "node_memory_MemAvailable_bytes",
+              "legendFormat": "{{instance}}",
+              "refId": "A"
+            }
+          ],
+          "title": "RAM by Node (정지선: 8/12 GiB)",
+          "type": "barchart"
         },
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -75,11 +111,11 @@ data:
             },
             "overrides": []
           },
-          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
-          "id": 2,
+          "gridPos": {"h": 3, "w": 12, "x": 12, "y": 0},
+          "id": 3,
           "options": {
             "colorMode": "value",
-            "graphMode": "area",
+            "graphMode": "none",
             "justifyMode": "center",
             "orientation": "auto",
             "reduceOptions": {
@@ -91,16 +127,134 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(kube_persistentvolumeclaim_resource_requests_storage_bytes) or count(kube_persistentvolumeclaim_info)",
-              "legendFormat": "PVC Requested",
+              "expr": "sum(kubelet_volume_stats_used_bytes) or sum(kube_persistentvolumeclaim_resource_requests_storage_bytes)",
+              "legendFormat": "합산 사용량",
               "refId": "A"
             }
           ],
-          "title": "PVC Requested Total (Warning >= 96GiB / Stop >= 120GiB)",
-          "type": "gauge"
+          "title": "합산 사용량: PVC Usage / 120 GiB",
+          "type": "stat"
         },
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 137438953472,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 103079215104},
+                  {"color": "red", "value": 128849018880}
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 7, "w": 12, "x": 12, "y": 3},
+          "id": 4,
+          "options": {
+            "barWidth": 0.6,
+            "groupWidth": 0.7,
+            "orientation": "horizontal",
+            "showValue": "always",
+            "sorting": "desc"
+          },
+          "targets": [
+            {
+              "expr": "sort_desc(kubelet_volume_stats_used_bytes)",
+              "legendFormat": "{{persistentvolumeclaim}}",
+              "refId": "A"
+            }
+          ],
+          "title": "PVC Usage by Volume (정지선: 96/120 GiB)",
+          "type": "barchart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 7},
+                  {"color": "green", "value": 14}
+                ]
+              },
+              "unit": "d"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 4, "w": 12, "x": 0, "y": 10},
+          "id": 5,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "expr": "(sum(node_memory_MemAvailable_bytes) - 8589934592) / clamp_min(-deriv(sum(node_memory_MemAvailable_bytes)[1d:1h]), 1) / 86400",
+              "legendFormat": "정지선까지 예상 도달일",
+              "refId": "A"
+            }
+          ],
+          "title": "RAM 정지선 예상 도달일 (8 GiB 정지선 기준)",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 7},
+                  {"color": "green", "value": 14}
+                ]
+              },
+              "unit": "d"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 4, "w": 12, "x": 12, "y": 10},
+          "id": 6,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "expr": "(96 * 1073741824 - sum(kubelet_volume_stats_used_bytes)) / clamp_min(deriv(sum(kubelet_volume_stats_used_bytes)[1d:1h]), 1) / 86400",
+              "legendFormat": "정지선까지 예상 도달일",
+              "refId": "A"
+            }
+          ],
+          "title": "PVC 정지선 예상 도달일 (96 GiB 정지선 기준)",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "LVM thin provisioning pool 실사용 대비 할당 비율. 70% 초과 시 신규 쓰기 실패 위험 — 대상: {노드/볼륨그룹명}",
           "fieldConfig": {
             "defaults": {
               "min": 0,
@@ -117,8 +271,8 @@ data:
             },
             "overrides": []
           },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
-          "id": 3,
+          "gridPos": {"h": 6, "w": 24, "x": 0, "y": 14},
+          "id": 7,
           "options": {
             "colorMode": "value",
             "graphMode": "area",
@@ -138,8 +292,18 @@ data:
               "refId": "A"
             }
           ],
-          "title": "thin-pool Data Usage % (Warning >= 60% / Stop >= 70%)",
+          "title": "Thin-pool 사용률 (Warning >= 60% / Stop >= 70%)",
           "type": "gauge"
+        },
+        {
+          "gridPos": {"h": 2, "w": 24, "x": 0, "y": 20},
+          "id": 8,
+          "options": {
+            "content": "LVM thin provisioning pool 실사용 대비 할당 비율. 70% 초과 시 신규 쓰기 실패 위험 — 대상: {노드/볼륨그룹명}",
+            "mode": "markdown"
+          },
+          "title": "Thin-pool 안내",
+          "type": "text"
         }
       ],
       "schemaVersion": 41,
@@ -147,5 +311,5 @@ data:
       "time": {"from": "now-6h", "to": "now"},
       "title": "Platform Capacity Sentinel",
       "uid": "obs-04-capacity-sentinel",
-      "version": 1
+      "version": 2
     }
