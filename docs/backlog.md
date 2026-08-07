@@ -2191,5 +2191,8 @@ Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 
 
 2026-08-07 `OBS-04-FIX-08` Platform Capacity Sentinel 대시보드의 Bar Chart 패널 히스토그램 형태 렌더링 결함을 `reduce`/`sortBy` Transformation 적용으로 해결하여 카테고리별 가로 막대 그래프 및 PVC 사용량순 정렬을 구현하고, RAM 상단/하단 Threshold 색상 판단 기준을 일치시켰으며, Thin-pool 패널을 콤팩트 Stat으로 전환함.
 
+2026-08-07 `OBS-04-FIX-09` Platform Capacity Sentinel 대시보드의 Thin-pool 안내 Text 패널 높이를 4칸으로 확장하고 `{노드/볼륨그룹명}`을 실제 명칭(`k3s-01 / vg-data`)으로 치환하였으며, 상단 요약 Stat 패널에 Progress 배경 영역 시각화를 추가하고 Bar Chart 내부 여백을 조율함.
+
+
 
 

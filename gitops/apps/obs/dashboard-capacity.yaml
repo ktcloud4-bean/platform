@@ -20,7 +20,7 @@ data:
           "fieldConfig": {
             "defaults": {
               "min": 0,
-              "max": 34359738368,
+              "max": 12884901888,
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
@@ -52,8 +52,8 @@ data:
           "gridPos": {"h": 3, "w": 12, "x": 0, "y": 0},
           "id": 1,
           "options": {
-            "colorMode": "value",
-            "graphMode": "none",
+            "colorMode": "background",
+            "graphMode": "area",
             "justifyMode": "center",
             "orientation": "auto",
             "reduceOptions": {
@@ -78,7 +78,7 @@ data:
           "fieldConfig": {
             "defaults": {
               "min": 0,
-              "max": 34359738368,
+              "max": 12884901888,
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
@@ -110,8 +110,8 @@ data:
           "gridPos": {"h": 7, "w": 12, "x": 0, "y": 3},
           "id": 2,
           "options": {
-            "barWidth": 0.6,
-            "groupWidth": 0.7,
+            "barWidth": 0.8,
+            "groupWidth": 0.85,
             "orientation": "horizontal",
             "showValue": "always",
             "stacking": "none"
@@ -139,7 +139,7 @@ data:
           "fieldConfig": {
             "defaults": {
               "min": 0,
-              "max": 137438953472,
+              "max": 128849018880,
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
@@ -171,8 +171,8 @@ data:
           "gridPos": {"h": 3, "w": 12, "x": 12, "y": 0},
           "id": 3,
           "options": {
-            "colorMode": "value",
-            "graphMode": "none",
+            "colorMode": "background",
+            "graphMode": "area",
             "justifyMode": "center",
             "orientation": "auto",
             "reduceOptions": {
@@ -197,7 +197,7 @@ data:
           "fieldConfig": {
             "defaults": {
               "min": 0,
-              "max": 137438953472,
+              "max": 128849018880,
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
@@ -229,8 +229,8 @@ data:
           "gridPos": {"h": 7, "w": 12, "x": 12, "y": 3},
           "id": 4,
           "options": {
-            "barWidth": 0.6,
-            "groupWidth": 0.7,
+            "barWidth": 0.8,
+            "groupWidth": 0.85,
             "orientation": "horizontal",
             "showValue": "always",
             "stacking": "none"
@@ -303,7 +303,7 @@ data:
           "id": 5,
           "options": {
             "colorMode": "background",
-            "graphMode": "none",
+            "graphMode": "area",
             "justifyMode": "center",
             "orientation": "auto",
             "reduceOptions": {
@@ -324,10 +324,10 @@ data:
           "type": "stat"
         },
         {
-          "gridPos": {"h": 3, "w": 24, "x": 0, "y": 13},
+          "gridPos": {"h": 4, "w": 24, "x": 0, "y": 13},
           "id": 6,
           "options": {
-            "content": "### Thin-pool 상태 안내\nLVM thin provisioning pool 실사용 대비 할당 비율. 70% 초과 시 신규 쓰기 실패 위험 — 대상: {노드/볼륨그룹명}",
+            "content": "> **Thin-pool 상태 및 안전 운영 가이드**\n>\n> LVM thin provisioning pool 실사용 대비 할당 비율. 70% 초과 시 신규 쓰기 실패 위험 — **대상: k3s-01 / vg-data**",
             "mode": "markdown"
           },
           "title": "Thin-pool 안내",
@@ -339,5 +339,5 @@ data:
       "time": {"from": "now-6h", "to": "now"},
       "title": "Platform Capacity Sentinel",
       "uid": "obs-04-capacity-sentinel",
-      "version": 4
+      "version": 5
     }
