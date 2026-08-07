@@ -2196,3 +2196,4 @@ Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 
 
 
 
+2026-08-07 `OBS-04-FIX-10` Platform Capacity Sentinel 대시보드 시각화 정밀 보정: RAM 막대 Threshold 색상 연동, 단일 노드 렌더링 방어 및 정렬, PVC 차트 x축 자동 스케일 조정(max 제거), Thin-pool 텍스트 패널 높이 확장 및 실제 대상 치환, Stat 중복 문구 제거 완료.

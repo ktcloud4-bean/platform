@@ -61,12 +61,12 @@ data:
               "fields": "",
               "values": false
             },
-            "textMode": "value_and_name"
+            "textMode": "value"
           },
           "targets": [
             {
               "expr": "sum(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) or vector(0)",
-              "legendFormat": "클러스터 합산 사용량",
+              "legendFormat": "RAM Used",
               "refId": "A"
             }
           ],
@@ -77,6 +77,9 @@ data:
           "datasource": {"type": "prometheus", "uid": "prometheus"},
           "fieldConfig": {
             "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
               "min": 0,
               "max": 12884901888,
               "thresholds": {
@@ -122,12 +125,24 @@ data:
               "options": {
                 "reducers": ["last"]
               }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "fields": [],
+                "sort": [
+                  {
+                    "field": "Last",
+                    "desc": true
+                  }
+                ]
+              }
             }
           ],
           "targets": [
             {
-              "expr": "sum(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) by (instance)",
-              "legendFormat": "{{instance}}",
+              "expr": "sum(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) by (instance, node)",
+              "legendFormat": "{{node}} {{instance}}",
               "refId": "A"
             }
           ],
@@ -138,8 +153,9 @@ data:
           "datasource": {"type": "prometheus", "uid": "prometheus"},
           "fieldConfig": {
             "defaults": {
-              "min": 0,
-              "max": 128849018880,
+              "color": {
+                "mode": "thresholds"
+              },
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
@@ -180,12 +196,12 @@ data:
               "fields": "",
               "values": false
             },
-            "textMode": "value_and_name"
+            "textMode": "value"
           },
           "targets": [
             {
               "expr": "sum(kubelet_volume_stats_used_bytes) or sum(kube_persistentvolumeclaim_resource_requests_storage_bytes) or vector(0)",
-              "legendFormat": "합산 사용량",
+              "legendFormat": "PVC Used",
               "refId": "A"
             }
           ],
@@ -196,8 +212,9 @@ data:
           "datasource": {"type": "prometheus", "uid": "prometheus"},
           "fieldConfig": {
             "defaults": {
-              "min": 0,
-              "max": 128849018880,
+              "color": {
+                "mode": "thresholds"
+              },
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
@@ -324,10 +341,10 @@ data:
           "type": "stat"
         },
         {
-          "gridPos": {"h": 4, "w": 24, "x": 0, "y": 13},
+          "gridPos": {"h": 6, "w": 24, "x": 0, "y": 13},
           "id": 6,
           "options": {
-            "content": "> **Thin-pool 상태 및 안전 운영 가이드**\n>\n> LVM thin provisioning pool 실사용 대비 할당 비율. 70% 초과 시 신규 쓰기 실패 위험 — **대상: k3s-01 / vg-data**",
+            "content": "LVM thin provisioning pool 실사용 대비 할당 비율입니다. 70% 초과 시 신규 쓰기 실패 위험이 있습니다. (대상: proxmox-01 pve/data)",
             "mode": "markdown"
           },
           "title": "Thin-pool 안내",
