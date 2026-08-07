@@ -44,6 +44,39 @@ data:
           "targets": [{"expr": "sum(count_over_time({namespace=~\".+\"}[5m]))", "legendFormat": "logs", "refId": "A"}],
           "title": "Loki logs in the last 5 minutes",
           "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+          "id": 4,
+          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+          "targets": [{"expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)", "legendFormat": "Firing Alerts", "refId": "A"}],
+          "title": "Firing Alerts Count",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+          "id": 5,
+          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+          "targets": [{"expr": "sum(rate(kube_pod_container_status_restarts_total[15m])) or vector(0)", "legendFormat": "Restarts/sec", "refId": "A"}],
+          "title": "Container Restarts Rate (15m)",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "percent"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+          "id": 6,
+          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+          "targets": [
+            {"expr": "(100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) or vector(0)", "legendFormat": "CPU Usage (%)", "refId": "A"},
+            {"expr": "(((sum(node_memory_MemTotal_bytes) - sum(node_memory_MemAvailable_bytes)) / sum(node_memory_MemTotal_bytes)) * 100) or vector(0)", "legendFormat": "Memory Usage (%)", "refId": "B"}
+          ],
+          "title": "Cluster Avg CPU & Memory Usage",
+          "type": "stat"
         }
       ],
       "schemaVersion": 41,
@@ -51,5 +84,5 @@ data:
       "time": {"from": "now-6h", "to": "now"},
       "title": "Platform observability overview",
       "uid": "obs-02-overview",
-      "version": 1
+      "version": 2
     }
