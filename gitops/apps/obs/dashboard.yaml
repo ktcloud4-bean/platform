@@ -17,66 +17,116 @@ data:
       "panels": [
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
           "id": 1,
-          "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
-          "targets": [{"expr": "count(node_uname_info{service=\"obs-prometheus-node-exporter\"})", "legendFormat": "nodes", "refId": "A"}],
-          "title": "Node exporter",
-          "type": "stat"
+          "title": "Node Ready/NotReady",
+          "type": "stat",
+          "gridPos": {"h": 8, "w": 4, "x": 0, "y": 0},
+          "targets": [{"expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"}) / count(kube_node_status_condition{condition=\"Ready\"})"}],
+          "options": {"colorMode": "background"},
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
+                ]
+              }
+            }
+          }
         },
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
           "id": 2,
-          "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
-          "targets": [{"expr": "count(kube_persistentvolumeclaim_info{service=\"obs-kube-state-metrics\"})", "legendFormat": "PVC", "refId": "A"}],
-          "title": "PersistentVolumeClaims",
-          "type": "stat"
+          "title": "Core Components Up/Down",
+          "type": "stat",
+          "gridPos": {"h": 8, "w": 8, "x": 4, "y": 0},
+          "targets": [{"expr": "up{job=~\"traefik|postgres|vault|pomerium\"}", "legendFormat": "{{job}}"}],
+          "options": {
+            "textMode": "value_and_name",
+            "colorMode": "background"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
+                ]
+              }
+            }
+          }
         },
         {
-          "datasource": {"type": "loki", "uid": "loki"},
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
           "id": 3,
-          "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
-          "targets": [{"expr": "sum(count_over_time({namespace=~\".+\"}[5m]))", "legendFormat": "logs", "refId": "A"}],
-          "title": "Loki logs in the last 5 minutes",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
-          "id": 4,
-          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
-          "targets": [{"expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)", "legendFormat": "Firing Alerts", "refId": "A"}],
           "title": "Firing Alerts Count",
-          "type": "stat"
+          "type": "stat",
+          "gridPos": {"h": 8, "w": 4, "x": 12, "y": 0},
+          "targets": [{"expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)"}],
+          "options": {"colorMode": "background"},
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "red", "value": 1}
+                ]
+              }
+            }
+          }
         },
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
-          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+          "id": 4,
+          "title": "Argo CD Sync Status",
+          "type": "table",
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+          "targets": [{"expr": "argocd_app_info{sync_status!=\"Synced\"} or argocd_app_info{health_status!=\"Healthy\"}", "format": "table", "instant": true}]
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
           "id": 5,
-          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
-          "targets": [{"expr": "sum(rate(kube_pod_container_status_restarts_total[15m])) or vector(0)", "legendFormat": "Restarts/sec", "refId": "A"}],
-          "title": "Container Restarts Rate (15m)",
-          "type": "stat"
+          "title": "Cluster CPU / RAM (%)",
+          "type": "gauge",
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+          "targets": [
+            {"expr": "avg(100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100))", "legendFormat": "CPU Avg"},
+            {"expr": "max(100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100))", "legendFormat": "CPU Max"},
+            {"expr": "avg((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)", "legendFormat": "RAM Avg"},
+            {"expr": "max((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)", "legendFormat": "RAM Max"}
+          ]
         },
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {"defaults": {"unit": "percent"}, "overrides": []},
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
           "id": 6,
-          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
-          "targets": [
-            {"expr": "(100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) or vector(0)", "legendFormat": "CPU Usage (%)", "refId": "A"},
-            {"expr": "(((sum(node_memory_MemTotal_bytes) - sum(node_memory_MemAvailable_bytes)) / sum(node_memory_MemTotal_bytes)) * 100) or vector(0)", "legendFormat": "Memory Usage (%)", "refId": "B"}
-          ],
-          "title": "Cluster Avg CPU & Memory Usage",
-          "type": "stat"
+          "title": "Max PVC Usage (%)",
+          "type": "gauge",
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+          "targets": [{"expr": "max(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100"}]
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "id": 7,
+          "title": "Pod Restarts (15m)",
+          "type": "stat",
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+          "targets": [{"expr": "sum(increase(kube_pod_container_status_restarts_total[15m]))"}],
+          "options": {"colorMode": "background"},
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 5}
+                ]
+              }
+            }
+          }
         }
       ],
       "schemaVersion": 41,
