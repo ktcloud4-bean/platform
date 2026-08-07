@@ -1738,6 +1738,7 @@ NetBox는 주 경로를 막지 않는다. 아래 조건 중 하나가 생길 때
 | `OBS-05 DONE` | Core Services & Traffic Infrastructure 대시보드 구축 (`gitops/apps/obs/`) | `OBS-04` | 없음 | 관측·운영 | `obs-05-core-services` ConfigMap 선언 및 Grafana 마운트, Traefik(QPS/Status/Latency)·Pomerium(SSO/Route)·PostgreSQL(쿼리/커넥션/WAL)·Vault(Unseal/Cert-TTL) 패널 표시, ConfigMap 선언 및 kustomization 추가, Argo 검증 완료 |
 | `OBS-06 DONE` | Data Protection & Backup Pipelines 대시보드 구축 (`gitops/apps/obs/`) | `OBS-05` | 없음 | 관측·백업 | `obs-06-backup-pipelines` ConfigMap 선언 및 Grafana 마운트, Velero 백업 성공률·SeaweedFS S3 용량/일일 증가율·AWS S3 오프사이트 헬스 시각화, Argo child `obs` `Synced/Healthy` |
 | `OBS-07 DONE` | Loki Operational Log Explorer 대시보드 구축 (`gitops/apps/obs/`) | `OBS-06` | 없음 | 관측·로그 | `obs-07-loki-log-explorer` ConfigMap 선언 및 Grafana 마운트, Namespace/App별 5분 단위 `level=error|warn` 로그 발생률 차트 및 dynamic filter Log Stream 패널 표시, Argo child `obs` `Synced/Healthy` |
+| `OBS-08 DONE` | Platform Observability Overview 대시보드 최종 7개 패널 재구성 (`gitops/apps/obs/`) | `OBS-02` | 없음 | 관측·운영 경보 | `OBS-02` 대시보드 패널 7종으로 재구성 (Node Ready, 컴포넌트 상태, 경보, Argo Sync 등), Argo child `obs` `Synced/Healthy` |
 | `WAZUH-02 DONE` | Wazuh Dashboard 배포와 보안 이벤트 조사 경로 확보 (`gitops/apps/wazuh/`) | `WAZUH-01`, `POM-01`, `CAP-04` | `K3S-HEAVY`, `OPNSENSE-LIVE` | 사고 조사·`SOAR-01` 용량 | 배포 직전 capacity gate 재측정으로 자기 8 GiB 정지선 통과를 판정하고 배포 후 available이 `SOAR-01` 진입선 12 GiB를 남기는지 기록(미달이면 `k3s-01` 32 GiB 증설이 `SOAR-01`의 선행임을 함께 기록), Dashboard를 `WAZUH-01`과 같은 4.14.7 계열 고정 version·image digest로 선언, Pomerium Route와 `pomerium`→`wazuh` NetworkPolicy egress, Dashboard 로그인 뒤 `D30`·`A90` index 검색과 `WAZUH-01`의 Suricata sid `2029054` 재현, indexer 자격증명을 Kubernetes Secret 원문 없이 Vault Agent로만 주입, `/platform-privileged` 허용과 일상 계정 거부, active response 비활성과 ISM 정책 두 건 불변, `wazuh` alias 내부 A 1건·공개 A/AAAA 0건, 배포 후 available·PVC 정지선 통과, Argo child `Synced/Healthy`, rollback 뒤 indexer·manager·retention 회귀 없음 |
 
 2026-08-03 `OBS-02`와 `WAZUH-02`를 신설한다. 두 작업은 결정된 목표와 실제 구현이 어긋난
@@ -2170,6 +2171,9 @@ Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 
 
 2026-08-06 `OBS-07`에서 Loki Operational Log Explorer 대시보드를 구축했다. `obs-07-loki-log-explorer` ConfigMap 선언 및 kustomization 추가, Grafana dashboard provider 마운트를 선언하고 Namespace/App별 5분 단위 `level=error|warn` 로그 발생률 차트 및 dynamic filter Log Stream 패널 2개를 구성했다. Argo 검증 완료 후 백로그 `OBS-07`을 `DONE`으로 갱신한다.
 
+2026-08-07 `OBS-02` 대시보드의 패널 구성을 장애 발생 시 확인 순서에 맞춰 7개 패널로 전면 재구성하는 `OBS-08` 작업을 신설하고 `READY`로 연다.
 
 
 
+
+2026-08-07 OBS-02 대시보드의 패널 구성을 7개로 전면 재구성하는 OBS-08 작업을 완료했다.
