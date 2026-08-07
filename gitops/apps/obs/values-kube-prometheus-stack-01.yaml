@@ -266,7 +266,9 @@ grafana:
 kubeApiServer:
   enabled: false
 kubelet:
-  enabled: false
+  enabled: true
+  serviceMonitor:
+    insecureSkipVerify: true
 kubeControllerManager:
   enabled: false
 coreDns:

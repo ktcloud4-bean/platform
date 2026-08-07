@@ -33,11 +33,53 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"}) / count(kube_node_status_condition{condition=\"Ready\"})"
+              "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"})",
+              "refId": "A"
+            },
+            {
+              "expr": "count(kube_node_status_condition{condition=\"Ready\"})",
+              "refId": "B"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "merge",
+              "options": {}
+            },
+            {
+              "id": "calculateField",
+              "options": {
+                "alias": "Ratio",
+                "binary": {
+                  "left": "A",
+                  "operator": "/",
+                  "reducer": "sum",
+                  "right": "B"
+                },
+                "mode": "binary",
+                "reduce": {
+                  "reducer": "sum"
+                }
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Ratio": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "A": "Ready",
+                  "B": "Total"
+                }
+              }
             }
           ],
           "options": {
-            "colorMode": "background"
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value_and_name"
           },
           "fieldConfig": {
             "defaults": {
@@ -95,11 +137,12 @@ data:
           },
           "targets": [
             {
-              "expr": "count(up{job=~\"traefik|postgres|vault|pomerium\"} == 0) or vector(0)"
+              "expr": "count(up{job=~\"traefik|postgres|vault|pomerium\"} == 0) or vector(0)",
+              "legendFormat": "Core Services"
             }
           ],
           "options": {
-            "textMode": "value_and_name",
+            "textMode": "value",
             "colorMode": "background"
           },
           "fieldConfig": {
