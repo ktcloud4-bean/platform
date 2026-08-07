@@ -12,36 +12,92 @@ metadata:
 data:
   overview.json: |
     {
-      "annotations": {"list": []},
+      "annotations": {
+        "list": []
+      },
       "editable": false,
       "panels": [
         {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "id": 1,
           "title": "Node Ready/NotReady",
           "type": "stat",
-          "gridPos": {"h": 8, "w": 4, "x": 0, "y": 0},
-          "targets": [{"expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"}) / count(kube_node_status_condition{condition=\"Ready\"})"}],
-          "options": {"colorMode": "background"},
+          "gridPos": {
+            "w": 5,
+            "h": 8,
+            "x": 0,
+            "y": 0
+          },
+          "targets": [
+            {
+              "expr": "sum(kube_node_status_condition{condition=\"Ready\", status=\"true\"}) / count(kube_node_status_condition{condition=\"Ready\"})"
+            }
+          ],
+          "options": {
+            "colorMode": "background"
+          },
           "fieldConfig": {
             "defaults": {
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "red", "value": null},
-                  {"color": "green", "value": 1}
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.5
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.8
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
                 ]
-              }
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "No data",
+                      "color": "dark-gray"
+                    }
+                  }
+                }
+              ],
+              "unit": "percentunit"
             }
           }
         },
         {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "id": 2,
           "title": "Core Components Up/Down",
           "type": "stat",
-          "gridPos": {"h": 8, "w": 8, "x": 4, "y": 0},
-          "targets": [{"expr": "up{job=~\"traefik|postgres|vault|pomerium\"}", "legendFormat": "{{job}}"}],
+          "gridPos": {
+            "w": 5,
+            "h": 8,
+            "x": 5,
+            "y": 0
+          },
+          "targets": [
+            {
+              "expr": "up{job=~\".*(traefik|postgres|vault|pomerium).*\"}",
+              "legendFormat": "{{job}}"
+            }
+          ],
           "options": {
             "textMode": "value_and_name",
             "colorMode": "background"
@@ -51,87 +107,246 @@ data:
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "red", "value": null},
-                  {"color": "green", "value": 1}
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.5
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
                 ]
-              }
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "No data",
+                      "color": "dark-gray"
+                    }
+                  }
+                }
+              ]
             }
           }
         },
         {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "id": 3,
           "title": "Firing Alerts Count",
           "type": "stat",
-          "gridPos": {"h": 8, "w": 4, "x": 12, "y": 0},
-          "targets": [{"expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)"}],
-          "options": {"colorMode": "background"},
+          "gridPos": {
+            "w": 4,
+            "h": 8,
+            "x": 10,
+            "y": 0
+          },
+          "targets": [
+            {
+              "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)"
+            }
+          ],
+          "options": {
+            "colorMode": "background"
+          },
           "fieldConfig": {
             "defaults": {
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "red", "value": 1}
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "orange",
+                    "value": 3
+                  },
+                  {
+                    "color": "red",
+                    "value": 5
+                  }
                 ]
-              }
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "No data",
+                      "color": "dark-gray"
+                    }
+                  }
+                }
+              ]
             }
           }
         },
         {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "id": 4,
           "title": "Argo CD Sync Status",
           "type": "table",
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
-          "targets": [{"expr": "argocd_app_info{sync_status!=\"Synced\"} or argocd_app_info{health_status!=\"Healthy\"}", "format": "table", "instant": true}]
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "id": 5,
-          "title": "Cluster CPU / RAM (%)",
-          "type": "gauge",
-          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+          "gridPos": {
+            "w": 5,
+            "h": 8,
+            "x": 14,
+            "y": 0
+          },
           "targets": [
-            {"expr": "avg(100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100))", "legendFormat": "CPU Avg"},
-            {"expr": "max(100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100))", "legendFormat": "CPU Max"},
-            {"expr": "avg((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)", "legendFormat": "RAM Avg"},
-            {"expr": "max((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)", "legendFormat": "RAM Max"}
+            {
+              "expr": "argocd_app_info{sync_status!=\"Synced\"} or argocd_app_info{health_status!=\"Healthy\"}",
+              "format": "table",
+              "instant": true
+            }
           ]
         },
         {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 5,
+          "title": "Cluster CPU / RAM (%)",
+          "type": "gauge",
+          "gridPos": {
+            "w": 18,
+            "h": 12,
+            "x": 0,
+            "y": 8
+          },
+          "targets": [
+            {
+              "expr": "avg(100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100))",
+              "legendFormat": "CPU Avg"
+            },
+            {
+              "expr": "max(100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100))",
+              "legendFormat": "CPU Max"
+            },
+            {
+              "expr": "avg((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)",
+              "legendFormat": "RAM Avg"
+            },
+            {
+              "expr": "max((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)",
+              "legendFormat": "RAM Max"
+            }
+          ],
+          "options": {
+            "orientation": "auto"
+          }
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "id": 6,
           "title": "Max PVC Usage (%)",
           "type": "gauge",
-          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
-          "targets": [{"expr": "max(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100"}]
+          "gridPos": {
+            "w": 6,
+            "h": 12,
+            "x": 18,
+            "y": 8
+          },
+          "targets": [
+            {
+              "expr": "max(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100"
+            }
+          ],
+          "options": {
+            "orientation": "auto"
+          }
         },
         {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "id": 7,
           "title": "Pod Restarts (15m)",
           "type": "stat",
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
-          "targets": [{"expr": "sum(increase(kube_pod_container_status_restarts_total[15m]))"}],
-          "options": {"colorMode": "background"},
+          "gridPos": {
+            "w": 5,
+            "h": 8,
+            "x": 19,
+            "y": 0
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(kube_pod_container_status_restarts_total[15m]))"
+            }
+          ],
+          "options": {
+            "colorMode": "background"
+          },
           "fieldConfig": {
             "defaults": {
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "yellow", "value": 1},
-                  {"color": "red", "value": 5}
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "orange",
+                    "value": 3
+                  },
+                  {
+                    "color": "red",
+                    "value": 5
+                  }
                 ]
-              }
+              },
+              "mappings": [
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "No data",
+                      "color": "dark-gray"
+                    }
+                  }
+                }
+              ]
             }
           }
         }
       ],
       "schemaVersion": 41,
-      "tags": ["obs-02", "platform"],
-      "time": {"from": "now-6h", "to": "now"},
+      "tags": [
+        "obs-02",
+        "platform"
+      ],
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
       "title": "Platform observability overview",
       "uid": "obs-02-overview",
       "version": 2
