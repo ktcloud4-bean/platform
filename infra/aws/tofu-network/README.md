@@ -79,12 +79,20 @@ route, security group이 모두 이 값을 쓰므로 통신 가능 범위 자체
 
 ## state와 자격증명
 
-state backend는 local이다. **이 state에는 tunnel pre-shared key가 평문으로 들어간다.**
-AWS가 생성한 PSK는 state와 API 응답에만 존재하므로 선언형으로 다루려면 state에 남는 것을
-받아들여야 한다. 그래서 이 디렉터리의 `.gitignore`는 `*.tfstate`, `*.tfvars`, `*.tfplan`과
-자격증명이 떨어질 수 있는 이름을 함께 막는다.
+state backend는 전용 S3 bucket의
+`platform/infra/aws/tofu-network/terraform.tfstate` key다. 이 bucket은 versioning·SSE-S3·public
+access 차단·TLS 이외 접근 거부를 적용하고 DynamoDB lock table을 함께 쓴다. state에는 tunnel
+pre-shared key가 평문으로 들어갈 수 있으므로 administrator OpenTofu 실행만 이 key에 접근한다.
+Jenkins는 app network·ECR의 별도 `v1` key만 읽고 이 root를 실행하거나 state를 읽지 않는다.
 
-state 사본과 회수한 PSK는 저장소 밖 mode `0600` 파일에만 둔다.
+`AWS-STATE-RECOVERY-01`에서 유실된 legacy state를 실물 import한 뒤, static VPN route 하나를
+OpenTofu로 재생성해 provider import 불가 경계를 넘고 무변경 plan을 확인한 뒤 이 backend로
+이전했다. 재복구가 필요하면 S3 state를 먼저 보존하고 저장소 밖 mode `0600` 임시 state에서
+import·무변경 plan을 끝낸 뒤에만 `tofu init -migrate-state`를 쓴다. raw state와 plan 파일은
+Git·Jenkins log·일반 작업 디렉터리에 두지 않는다.
+
+AWS가 생성한 PSK는 state와 API 응답에만 존재하므로 선언형으로 다루려면 state 보안을
+받아들여야 한다. 회수한 PSK는 저장소 밖 mode `0600` 파일에만 둔다.
 
 ```bash
 # 터널 PSK 회수 (값을 화면에 남기지 않는다)

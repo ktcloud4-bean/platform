@@ -48,6 +48,13 @@ policy·permissions boundary·Organizations 제어 정책에는 해당 deny가 �
 이미 존재하는 AWS 리소스를 빈 `v1` state에 apply하면 중복 생성 또는 충돌을 계획한다.
 그 경우 이 절차를 쓰지 않고, 복구한 state 또는 `import`로 실제 소유권을 먼저 복원한다.
 
+## legacy root state
+
+오프사이트 root와 Site-to-Site VPN root는 각각 별도 S3 state key와 DynamoDB lock을 쓴다.
+이 두 key는 Jenkins IAM policy·Pod allowlist의 범위 밖이며 administrator OpenTofu만 접근한다.
+`AWS-STATE-RECOVERY-01`은 유실된 local state를 import로 복구하고 무변경 plan을 확인한 뒤
+이전한 기록이다. 두 root의 state를 하나로 합치거나 Jenkins 권한에 추가하지 않는다.
+
 ## 동적 입력과 정리
 
 GitHub read-only deploy key와 Vault runtime의

@@ -146,6 +146,7 @@ credential 입력 파일의 위치 규약은 `SECRET-02`가 소유한다. 실제
 | `NB-01-FIX-01 DONE` | NetBird role에 커밋된 폐기 Cloudflare 토큰 기본값 제거 | `NB-01` | 없음 | NetBird 구성 입력 경계 | 현재 HEAD 실제 토큰 0건, 역할 내 Cloudflare 입력 참조 0건, Ansible 검증, 토큰 폐기 확인 및 공개 과거 이력 잔존 기록 |
 | `WG-01 DONE` | Warpgate 기본 배포와 로컬 복구 계정 | `VM-01` | 없음 | 특권 접근 | Warpgate v0.26.1 고정·checksum·SBOM, 비-root + systemd hardening + SELinux label, 세션 중계와 기록 생성·제품 조회, 대상별 역할 허용/거부, 로컬 복구 로그인 성공·실패, 재부팅 후 유지, 격리 인스턴스 복원, Ansible 멱등(changed=0) |
 | `AWS-NET-01 DONE` | OPNsense↔AWS Site-to-Site VPN | `NET-03` | `OPNSENSE-LIVE` | AWS 사설 연동 | 양쪽 관점 일치한 IKEv2 SA, 실제 VM의 payload 정방향과 selector 밖 대조 차단, 역방향 허용·차단 양쪽 실증, 기본 경로 불변, 재부팅 후 자동 복구, 장애 격리·복구, 임시 자원 제거·plan 무변경·PSK 미커밋 |
+| `AWS-STATE-RECOVERY-01 DONE` | 유실된 AWS 오프사이트·VPN legacy root state를 실물 import로 복구하고 S3 backend로 이전 | `AWS-NET-01`, `BKP-04` | `TOFU-STATE` | AWS 오프사이트 백업·사설 연동의 후속 변경 안전성 | 오프사이트 12개·VPN 10개 import, provider import 불가 static VPN route 한 개만 승인 아래 재생성, 두 root 무변경 plan, 상태 S3 두 key의 version 확인, 복구 사본 mode 0600, 비밀 원문·PSK·access key 미출력 |
 
 2026-07-31 `K3S-01`에서 k3s `v1.36.2+k3s1`을 정확한 binary checksum과
 고정 release commit의 install script로 선언하고 SELinux Enforcing을 유지했다.
@@ -262,6 +263,15 @@ WAN이 ISP DHCP 임대라 주소가 바뀌면 Customer Gateway 교체가 필요�
 [AWS VPN runbook](runbook/aws-site-to-site-vpn.md)과 [ADR-0011](adr/0011-aws-site-to-site-vpn-boundary.md)이
 소유한다. 백로그에서 `AWS-NET-01`을 선행으로 갖는 작업이 없으므로 새로 `READY`로 여는
 후속은 없다. `AWS-ID-01`은 `KC-01`이, `KMS-01`은 `BKP-05`가 남아 있고 VPN은 그 선행이 아니다.
+
+2026-08-10 `AWS-STATE-RECOVERY-01`은 유실된 local state와 비어 있는 state S3 key를 확인한
+뒤, 오프사이트 root 12개와 VPN root 10개의 실물 소유권을 별도 mode `0600` 복구 state에
+import했다. AWS provider가 static VPN route import를 지원하지 않아 승인 아래 기존 route 하나를
+삭제하고 같은 OpenTofu 선언으로 즉시 재생성했다. 이외 AWS 리소스의 create·update·destroy는
+없었다. 두 root는 서로 다른 S3 state key로 이전됐고 각 key는 version 1개, DynamoDB에는
+state checksum 2개와 active lock 0개가 남았다. remote backend `validate`와 normal plan은 두 root
+모두 무변경이며, raw state·PSK·access key·plan 원문은 Git과 Jenkins log에 남기지 않았다. 상태
+경계와 대안은 [ADR-0020](adr/0020-aws-opentofu-state-recovery-backend.md)이 소유한다.
 
 ## 4. k3s 제어면·인증
 

@@ -33,6 +33,7 @@ ADR(Architecture Decision Record)은 목표 구조를 선택한 이유, 검토�
 | [ADR-0017](0017-team-identity-and-shuffle-rbac.md) | 팀 신원 이름과 Shuffle 권한 수명주기 | `Accepted` | GitHub lifecycle 연동·다중 조직·privileged access governance |
 | [ADR-0018](0018-public-keycloak-frontchannel.md) | 외부 OIDC 온보딩용 Keycloak 사용자 프런트엔드 공개 | `Accepted` | 외부 IdP·Cloudflare origin 기능 변화·clientless Portal 요구 |
 | [ADR-0019](0019-private-aws-service-egress.md) | 애플리케이션 AWS egress를 service endpoint로 제한 | `Accepted` | EKS endpoint 방식·추가 AWS API·egress proxy·공유 VPC |
+| [ADR-0020](0020-aws-opentofu-state-recovery-backend.md) | AWS legacy OpenTofu state를 분리 S3 backend로 복구 | `Accepted` | state 접근 경계·Jenkins 실행 범위·provider import 지원·AWS 토폴로지 |
 
 ## 형식
 

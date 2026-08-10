@@ -14,9 +14,13 @@ terraform {
     }
   }
 
-  # state backend는 명시적으로 local 이다. 원격 backend 전환 조건은 ADR-0008을 따른다.
-  # 이 state는 AWS access key secret을 포함하므로 저장소 밖 mode 0600 사본으로만 보관한다.
-  backend "local" {
-    path = "terraform.tfstate"
+  # 이 root의 state에는 AWS access key secret이 들어갈 수 있다. 버전·암호화·전송 TLS를
+  # 강제한 전용 state bucket에만 보관하고, Jenkins에는 이 key 권한을 주지 않는다.
+  backend "s3" {
+    bucket         = "ktcloud4-bean-opentofu-state-465137780685"
+    key            = "platform/infra/aws/tofu/terraform.tfstate"
+    region         = "ap-northeast-2"
+    dynamodb_table = "ktcloud4-bean-opentofu-locks"
+    encrypt        = true
   }
 }
