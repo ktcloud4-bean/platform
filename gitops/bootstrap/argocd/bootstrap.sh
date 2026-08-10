@@ -9,6 +9,9 @@ project_file="$repo_root/gitops/root/app-project.yaml"
 application_template="$repo_root/gitops/bootstrap/argocd/root-application.yaml.tmpl"
 argocd_cm_patch="$repo_root/gitops/bootstrap/argocd/argocd-cm.patch.yaml"
 argocd_rbac_cm_patch="$repo_root/gitops/bootstrap/argocd/argocd-rbac-cm.patch.yaml"
+aws_hr_vault_agent_file="$repo_root/gitops/bootstrap/argocd/aws-hr-01-vault-agent.yaml"
+aws_hr_runtime_patch="$repo_root/gitops/bootstrap/argocd/aws-hr-01-runtime.patch.yaml"
+vault_trust_source_file="$repo_root/gitops/apps/jenkins/trust-bundle.yaml"
 
 usage() {
   cat <<'USAGE'
@@ -99,12 +102,40 @@ remote_kubectl_patch_file() {
   "${ssh_base[@]}" "sudo -n /usr/local/bin/k3s kubectl -n argocd patch configmap $target --type merge --patch-file=/dev/stdin" < "$file"
 }
 
+remote_argocd_statefulset_patch_file() {
+  local file=$1
+  "${ssh_base[@]}" 'sudo -n /usr/local/bin/k3s kubectl -n argocd patch statefulset argocd-application-controller --type strategic --patch-file=/dev/stdin' < "$file"
+}
+
+remote_aws_hr_vault_trust() {
+  # Vault public leaf의 single source는 Jenkins trust bundle이다. 별도 copy를 두면 CA
+  # rotation 때 Argo만 stale해지므로, bootstrap 시 이 공개 PEM만 exact ConfigMap으로 만든다.
+  awk '
+    /^  vault\.crt: \|$/ { collecting=1; next }
+    collecting {
+      is_end = ($0 ~ /^    -----END CERTIFICATE-----$/)
+      sub(/^    /, "")
+      print
+      if (is_end) exit
+    }
+  ' "$vault_trust_source_file" | "${ssh_base[@]}" \
+    'set -o pipefail; sudo -n /usr/local/bin/k3s kubectl -n argocd create configmap argocd-aws-hr-01-vault-trust --from-file=vault.crt=/dev/stdin --dry-run=client -o yaml | sudo -n /usr/local/bin/k3s kubectl -n argocd apply --server-side --force-conflicts -f -'
+}
+
 remote_kubectl_file "$namespace_file"
 remote_kubectl_namespaced_file "$manifest_file"
 remote_kubectl '-n argocd rollout status deployment/argocd-server --timeout=300s'
 remote_kubectl '-n argocd rollout status deployment/argocd-repo-server --timeout=300s'
 remote_kubectl '-n argocd rollout status deployment/argocd-dex-server --timeout=300s'
 remote_kubectl '-n argocd rollout status deployment/argocd-redis --timeout=300s'
+remote_kubectl '-n argocd rollout status statefulset/argocd-application-controller --timeout=300s'
+
+# AWS-HR-01은 기존 Argo CD control plane을 유지하고 controller에만 Vault-backed AWS
+# credential file을 붙인다. upstream vendored manifest에는 patch하지 않아 release checksum을
+# 보존하며, bootstrap을 재실행해도 같은 strategic patch가 idempotent하게 적용된다.
+remote_kubectl_namespaced_file "$aws_hr_vault_agent_file"
+remote_aws_hr_vault_trust
+remote_argocd_statefulset_patch_file "$aws_hr_runtime_patch"
 remote_kubectl '-n argocd rollout status statefulset/argocd-application-controller --timeout=300s'
 
 # GITOPS-02: Argo CD 자체 OIDC·RBAC. 다른 작업이 argocd-cm에 이미 만든 UI clutter

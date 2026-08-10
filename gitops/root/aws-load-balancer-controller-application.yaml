@@ -1,0 +1,67 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  project: aws-load-balancer-controller
+  source:
+    repoURL: https://aws.github.io/eks-charts
+    chart: aws-load-balancer-controller
+    targetRevision: 3.4.2
+    helm:
+      releaseName: aws-load-balancer-controller
+      values: |
+        clusterName: hr-system-prod-cluster
+        region: ap-northeast-2
+        vpcId: vpc-0acb93744f1efd759
+        replicaCount: 1
+        serviceAccount:
+          create: true
+          name: aws-load-balancer-controller
+          annotations:
+            eks.amazonaws.com/role-arn: arn:aws:iam::465137780685:role/hr-system-prod-aws-load-balancer-controller-role
+        image:
+          repository: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-bootstrap-aws-load-balancer-controller
+          tag: v3.4.2@sha256:3d2c0cddc6cb80e85ca0d9487d8363736fe283501505726491593beb7be2aff9
+          pullPolicy: IfNotPresent
+        defaultTags:
+          Project: hr-system
+          Environment: prod
+          ManagedBy: argocd
+        # 사설 VPC에는 Shield/WAF/WAFv2 API endpoint 또는 public egress를 두지 않는다.
+        # internal HTTP ALB에는 이 통합이 필요 없으므로 chart 기본값(true)을 명시적으로 끈다.
+        enableShield: false
+        enableWaf: false
+        enableWafv2: false
+  destination:
+    name: hr-system-prod
+    namespace: kube-system
+  ignoreDifferences:
+    - kind: Secret
+      name: aws-load-balancer-tls
+      jqPathExpressions:
+        - '.data'
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      name: aws-load-balancer-webhook
+      jqPathExpressions:
+        - '.webhooks[].clientConfig.caBundle'
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: aws-load-balancer-webhook
+      jqPathExpressions:
+        - '.webhooks[].clientConfig.caBundle'
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions:
+      - ApplyOutOfSyncOnly=true
+      - RespectIgnoreDifferences=true
+      - ServerSideApply=true
+      - PruneLast=true
+      - PrunePropagationPolicy=foreground

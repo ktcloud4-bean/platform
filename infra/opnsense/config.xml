@@ -462,7 +462,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1785845815.05" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1786382497.52" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -2033,6 +2033,174 @@
             <shaper2 />
             <description>NB-ENROLL-01: NetBird platform-users split DNS to netbird-01 dnsmasq relay TCP/UDP 53</description>
           </rule>
+          <rule uuid="f9b0e9a7-7ce5-451a-8c8d-d2c47e8096c3">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1021</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.20.0.0/16</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>443</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>AWS-HR-01: k3s-01에서 AWS shared VPC EKS API와 internal ALB TCP 443만 허용</description>
+          </rule>
+          <rule uuid="5dd5fbe0-16e2-485d-b8bd-58cba38c68e8">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1017</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.20.0.0/16</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>80</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>AWS-HR-01: k3s-01 Pomerium에서 AWS internal ALB HTTP 80만 허용</description>
+          </rule>
+          <rule uuid="960a2195-325e-4fea-b4ec-213596343917">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1019</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP/UDP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>AWS_HR_01_RESOLVER_V4</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>53</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>AWS-HR-01: k3s-01에서 Route 53 Resolver endpoint DNS TCP/UDP 53만 허용</description>
+          </rule>
         </rules>
         <snatrules />
         <npt />
@@ -2041,7 +2209,7 @@
       <Lvtemplate version="0.0.1" persisted_at="1785198671.19" description="Firewall Live View filter templates">
         <templates />
       </Lvtemplate>
-      <Alias version="1.0.1" persisted_at="1785829984.74" description="Firewall aliases">
+      <Alias version="1.0.1" persisted_at="1786382490.14" description="Firewall aliases">
         <geoip>
           <url />
         </geoip>
@@ -2187,6 +2355,24 @@ EDGE02_CF_IPV6</content>
             <categories />
             <description>EDGE-02 sso origin 허용 source (Cloudflare IPv4+IPv6)</description>
           </alias>
+          <alias uuid="6e3cc4ea-7b4e-45ba-b8e7-cb8b450b418b">
+            <enabled>1</enabled>
+            <name>AWS_HR_01_RESOLVER_V4</name>
+            <type>network</type>
+            <path_expression />
+            <proto />
+            <interface />
+            <counters>0</counters>
+            <updatefreq />
+            <content>10.20.10.53
+10.20.20.102</content>
+            <password />
+            <username />
+            <authtype />
+            <expire />
+            <categories />
+            <description>AWS-HR-01 Route 53 Resolver inbound endpoint IPv4</description>
+          </alias>
         </aliases>
       </Alias>
       <Category version="1.0.0" persisted_at="1785198671.57" description="Firewall categories">
@@ -2204,7 +2390,7 @@ EDGE02_CF_IPV6</content>
         <servers />
       </server>
     </wireguard>
-    <IPsec version="1.0.5" persisted_at="1785499469.23" description="IPsec settings">
+    <IPsec version="1.0.5" persisted_at="1786372955.07" description="IPsec settings">
       <general>
         <enabled />
         <preferred_oldsa>0</preferred_oldsa>
@@ -2283,7 +2469,7 @@ EDGE02_CF_IPV6</content>
           </preSharedKey>
       </preSharedKeys>
     </IPsec>
-    <Swanctl version="1.0.0" persisted_at="1785499458.72" description="IPsec connections">
+    <Swanctl version="1.0.0" persisted_at="1786373013.77" description="IPsec connections">
       <Connections>
         <Connection uuid="0896c77c-7c7f-4002-80dd-8501d359fc30">
           <enabled>1</enabled>
@@ -2294,7 +2480,7 @@ EDGE02_CF_IPV6</content>
           <mobike>0</mobike>
           <local_addrs>182.211.45.54</local_addrs>
           <local_port />
-          <remote_addrs>3.38.27.17</remote_addrs>
+          <remote_addrs>13.125.189.39</remote_addrs>
           <remote_port />
           <encap>0</encap>
           <reauth_time />
@@ -2328,7 +2514,7 @@ EDGE02_CF_IPV6</content>
           <connection>0896c77c-7c7f-4002-80dd-8501d359fc30</connection>
           <round>0</round>
           <auth>psk</auth>
-          <id>3.38.27.17</id>
+          <id>13.125.189.39</id>
           <eap_id />
           <groups />
           <certs />
@@ -2349,7 +2535,7 @@ EDGE02_CF_IPV6</content>
           <dpd_action>start</dpd_action>
           <mode>tunnel</mode>
           <policies>1</policies>
-          <local_ts>10.10.50.0/24</local_ts>
+          <local_ts>10.10.0.0/16</local_ts>
           <remote_ts>10.20.0.0/16</remote_ts>
           <rekey_time>3600</rekey_time>
           <description>AWS-NET-01 child</description>
@@ -2805,7 +2991,7 @@ EDGE02_CF_IPV6</content>
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1786355608.49" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1786389027.79" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -2893,6 +3079,28 @@ EDGE02_CF_IPV6</content>
           <forward_tcp_upstream>0</forward_tcp_upstream>
           <forward_first>0</forward_first>
           <description>Forward default domain to Dnsmasq DHCP</description>
+        </dot>
+        <dot uuid="3c32151e-6b47-444c-bc28-d3408fe0fe1c">
+          <enabled>1</enabled>
+          <type>forward</type>
+          <domain>ap-northeast-2.eks.amazonaws.com</domain>
+          <server>10.10.20.10</server>
+          <port>1053</port>
+          <verify />
+          <forward_tcp_upstream>0</forward_tcp_upstream>
+          <forward_first>0</forward_first>
+          <description>AWS-HR-01 EKS private API conditional forwarder via k3s DNS relay</description>
+        </dot>
+        <dot uuid="2221d670-2f9f-4b54-b2b8-829481fe1aec">
+          <enabled>1</enabled>
+          <type>forward</type>
+          <domain>aws.imcherry5778.xyz</domain>
+          <server>10.10.20.10</server>
+          <port>1053</port>
+          <verify />
+          <forward_tcp_upstream>0</forward_tcp_upstream>
+          <forward_first>0</forward_first>
+          <description>AWS-HR-01 internal ALB private zone conditional forwarder via k3s DNS relay</description>
         </dot>
       </dots>
       <hosts>
@@ -3127,6 +3335,20 @@ EDGE02_CF_IPV6</content>
           <hostname>board</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>Pomerium protected Board Demo alias (BOARD-DEMO-01)</description>
+        </alias>
+        <alias uuid="ab609dee-654f-4e6f-ab6b-943ea61113e6">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>www</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>AWS-HR-01 employee self-service Pomerium alias</description>
+        </alias>
+        <alias uuid="63e5fd70-ee3d-4cce-a05a-0ed2d8c5fd12">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>admin</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>AWS-HR-01 HR admin Pomerium alias</description>
         </alias>
       </aliases>
     </unboundplus>

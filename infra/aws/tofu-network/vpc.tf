@@ -5,9 +5,10 @@
 resource "aws_vpc" "onprem_link" {
   cidr_block = var.vpc_cidr
 
-  # 내부 이름 해석만 켠다. 공개 DNS 이름은 만들지 않는다.
+  # HR의 Interface VPC Endpoint Private DNS를 위해 VPC DNS를 모두 켠다.
+  # 인터넷 gateway와 public IP가 없으므로 공개 접근 경로는 만들지 않는다.
   enable_dns_support   = true
-  enable_dns_hostnames = false
+  enable_dns_hostnames = true
 
   tags = {
     Name = local.vpc_name

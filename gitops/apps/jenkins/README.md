@@ -45,6 +45,18 @@ Buildah `1.43.1`은 비특권 단일 UID/GID mapping에서 Dockerfile `RUN`이 �
 `npm ci --omit=dev --ignore-scripts`와 test를 먼저 실행한다. Buildah는 검증된 `node_modules`와
 소스 파일을 복사만 하며, privileged·capability·Docker socket을 추가하지 않는다.
 
+## AWS-HR-01 ECR source build
+
+`hr-system-image-build`는 Gitea `ktcloud4-bean/hr-system` private pull-mirror만 read-only
+deploy key로 checkout한다. 전용 ECR publisher credential은 `frontend`, `employee-service`,
+`hr-service` repository의 upload/read와 ECR login만 허용한다. Jenkins job에는 Git write,
+Kubernetes/EKS, Aurora, Secrets Manager, IAM 관리 권한이 없다.
+
+세 image는 immutable source-SHA/build tag로 push한 manifest digest에 CycloneDX SBOM과 Cosign
+signature를 OCI 1.1 referrer로 붙인다. credential은 `kv/aws-hr-01/jenkins`에서 Vault Agent가
+memory `emptyDir` 파일로만 렌더링하며, 기존 CI-01 AWS plan credential 및 Board credential과
+공유하지 않는다.
+
 ## SCAN-01 결정과 근거
 
 ### Trivy와 ORAS는 같은 동적 agent의 별도 container

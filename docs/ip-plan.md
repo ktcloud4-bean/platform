@@ -1,6 +1,6 @@
 # IP · VLAN · DNS 계획
 
-이 문서는 네트워크 주소의 단일 진실 원천이다. `LIVE`는 검증된 현재값, `RESERVED`는 설치 전 예약, `TARGET`은 전환 후 목표다.
+이 문서는 네트워크 주소의 단일 진실 원천이다. `LIVE`는 검증된 현재값, `RESERVED`는 설치 전 예약, `DECLARED`는 Git 선언만 있고 아직 apply하지 않은 값, `TARGET`은 전환 후 목표다.
 
 ## 물리 인터페이스
 
@@ -149,11 +149,15 @@ relay). k3s-01 자체에는 아무것도 설치하지 않는다. subnet route·e
 |---|---|---|
 | `10.20.0.0/16` | AWS 사설 착지점 VPC | `LIVE`; 인터넷 gateway 없음 |
 | `10.20.1.0/24` | 사설 서브넷 (단일 AZ) | `LIVE` |
+| `10.20.10.0/24`, `10.20.20.0/24` | HR EKS private application subnet (2 AZ) | `LIVE`; internal ALB와 managed node 전용 |
+| `10.20.100.0/24`, `10.20.110.0/24` | HR Aurora private DB subnet (2 AZ) | `LIVE`; public route 없음 |
+| `10.30.0.0/16` | 과거 잘못 배치된 HR EKS application VPC | 제거됨; final snapshot 뒤 `AWS-HR-01`이 shared VPC로 재생성 |
 
-랩 대역 `10.10.0.0/16`, 계정 default VPC `172.31.0.0/16`과 겹치지 않는다. 터널의 IPsec
-traffic selector는 `10.10.50.0/24 ↔ 10.20.0.0/16`이며, 이 selector 밖 출발지는 암호화
-계층에서 이미 통신할 수 없다. AWS 쪽 터널 endpoint 주소는 재생성 때마다 바뀌므로 이
-문서에 고정값으로 적지 않고 OpenTofu output에서 읽는다.
+랩 대역 `10.10.0.0/16`, 계정 default VPC `172.31.0.0/16`과 겹치지 않는다. IPsec traffic
+selector는 `10.10.0.0/16 ↔ 10.20.0.0/16` 하나이며, 대역 전체를 암호화할 뿐 서비스
+허용 범위는 OPNsense의 source `/32`·목적지·port rule로 다시 최소화한다. AWS 쪽 터널
+endpoint 주소는 재생성 때마다 바뀌므로 이 문서에 고정값으로 적지 않고 OpenTofu output에서
+읽는다.
 
 `AWS-NET-01`이 만들었던 DATA→VPC 전체 프로토콜 임시 rule과 `AWSNET01_VPC_V4` alias는
 현재 서비스 소비자가 없어 2026-08-03 `NET-04`에서 제거했다. IPsec connection과
@@ -163,6 +167,20 @@ traffic selector는 유지하지만 새 DATA→VPC 연결은 기본 차단한다
 `pass out on enc0 ... keep state`만 두므로 온프레미스가 개시한 흐름과 그 응답만 지난다.
 
 오프사이트 백업 전송은 이 VPN을 쓰지 않고 계속 공인 AWS API endpoint로 나간다.
+
+`AWS-HR-01`은 기존 DATA 전용 selector와 별도 HR connection을 하나의 shared selector로
+통합했다. 이 변경은 두 VPN의 PSK·터널 운영을 중복하지 않되, `10.10.0.0/16` 전체 허용을
+의미하지 않는다. HR workload에 필요한 신규 OPNsense 흐름은 `k3s-01`(`10.10.20.10`) 하나의
+source에서만 다음 세 가지다.
+
+- Route 53 Resolver inbound endpoint 두 곳으로 DNS TCP/UDP 53. OPNsense Unbound는 직접
+  질의하지 않고 `k3s-01:1053`의 두 private zone 전용 relay로 조건부 전달한다.
+- EKS private API로 TCP 443.
+- controller-created internal ALB로 HTTP TCP 80.
+
+GitOps source는 기존 k3s Argo와 Gitea를 유지하므로 EKS→온프레미스 Gitea SSH 역방향
+허용을 만들지 않는다. shared selector 선택 이유와 재검토 조건은
+[ADR-0023](adr/0023-aws-shared-vpn-service-boundary.md)가 소유한다.
 
 ## 방화벽 정책
 
@@ -177,6 +195,7 @@ traffic selector는 유지하지만 새 DATA→VPC 연결은 기본 차단한다
 | `DMZ` | `PLATFORM` | Keycloak·필수 control API만 허용 |
 | `DMZ` | `DATA` | 기본 차단; 제품 요구가 검증된 경우만 예외 |
 | `DATA` | 인터넷 | 업데이트·AWS S3 등 필요한 egress만 허용 |
+| `PLATFORM` (`k3s-01`만) | AWS shared VPC | Resolver DNS TCP/UDP 53, EKS API TCP 443, HR internal ALB TCP 80만 허용 |
 | 외부 | 내부 | NetBird TCP 80/443·UDP 3478와 Cloudflare source(`EDGE02_CF_EDGE_SOURCES`)의 `sso` origin TCP 8443 → k3s HTTPS만 허용 |
 | 각 VLAN | OPNsense | DNS·NTP·DHCP 등 기반 포트만 허용; 관리 UI는 차단 |
 
@@ -203,6 +222,8 @@ NetBird 단독 외부 공개 정책은 `EDGE-01`, 조건부 Cloudflare HTTP 공�
 | `sso.imcherry5778.xyz` | service alias | Keycloak | 내부 split DNS·NetBird 경유 불변; `platform` realm 사용자 프런트엔드(`/realms/platform`·`/resources`)만 `EDGE-02`로 Cloudflare proxied 공개, 그 밖은 내부 source만 | Unbound alias → `k3s-01` (`10.10.20.10`) |
 | `access.imcherry5778.xyz` | service alias | Pomerium 보호 Dashy 포털 | 내부·NetBird 경유; clientless 공개 미채택 | Unbound alias → `k3s-01` (`10.10.20.10`); POM-01 등록 |
 | `board.imcherry5778.xyz` | service alias | BOARD-DEMO-01 게시판 | Pomerium `/platform-users`, 내부·NetBird 경유; 공개 DNS/NAT 미사용 | Unbound alias → `k3s-01` (`10.10.20.10`); BOARD-DEMO-01 등록 |
+| `www.imcherry5778.xyz` | service alias | HR 직원 self-service | Pomerium `/platform-users` → private EKS internal ALB, 공개 DNS/NAT 미사용 | Unbound alias → `k3s-01` (`10.10.20.10`); AWS-HR-01 등록 |
+| `admin.imcherry5778.xyz` | service alias | HR 관리 | Pomerium `/hr-admins` 및 HR app DB role → private EKS internal ALB, 공개 DNS/NAT 미사용 | Unbound alias → `k3s-01` (`10.10.20.10`); AWS-HR-01 등록 |
 | `argo.imcherry5778.xyz` | service alias | Argo CD | Pomerium; 실제 권한은 Argo 자체 OIDC·RBAC가 판정 | Unbound alias → `k3s-01` (`10.10.20.10`); GITOPS-02 등록, 내부 AAAA·공개 A/AAAA 0건 |
 | `headlamp.imcherry5778.xyz` | service alias | Headlamp | Pomerium | `TARGET`; HEADLAMP-02 `OPNSENSE-LIVE` 승인 뒤 Unbound alias → `k3s-01` (`10.10.20.10`), 내부 AAAA·공개 A/AAAA 0건 |
 | `vault.imcherry5778.xyz` | service alias | Vault | Pomerium 미경유 표준 Ingress; 실제 권한은 Vault 자체 OIDC·policy가 판정 | Unbound alias → `k3s-01` (`10.10.20.10`); VAULT-03 등록, 내부 AAAA·공개 A/AAAA 0건 |

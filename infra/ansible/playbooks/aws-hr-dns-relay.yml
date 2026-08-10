@@ -1,0 +1,10 @@
+---
+- name: AWS-HR-01 private AWS DNS relay
+  # 이 playbook은 `--limit k3s-01.imcherry5778.xyz`를 반드시 함께 사용한다.
+  # role의 PLATFORM address assertion이 다른 node로의 우발적 적용도 막는다.
+  hosts: all
+  serial: 1
+  gather_facts: true
+  become: true
+  roles:
+    - role: aws_hr_dns_relay

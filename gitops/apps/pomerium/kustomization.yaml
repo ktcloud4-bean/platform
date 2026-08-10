@@ -41,4 +41,5 @@ resources:
   - wazuh-egress.yaml
   - shuffle-egress.yaml
   - board-demo-egress.yaml
+  - hr-system-egress.yaml
   - ingress.yaml

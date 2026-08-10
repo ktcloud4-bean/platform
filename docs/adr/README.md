@@ -34,6 +34,9 @@ ADR(Architecture Decision Record)은 목표 구조를 선택한 이유, 검토�
 | [ADR-0018](0018-public-keycloak-frontchannel.md) | 외부 OIDC 온보딩용 Keycloak 사용자 프런트엔드 공개 | `Accepted` | 외부 IdP·Cloudflare origin 기능 변화·clientless Portal 요구 |
 | [ADR-0019](0019-private-aws-service-egress.md) | 애플리케이션 AWS egress를 service endpoint로 제한 | `Accepted` | EKS endpoint 방식·추가 AWS API·egress proxy·공유 VPC |
 | [ADR-0020](0020-aws-opentofu-state-recovery-backend.md) | AWS legacy OpenTofu state를 분리 S3 backend로 복구 | `Accepted` | state 접근 경계·Jenkins 실행 범위·provider import 지원·AWS 토폴로지 |
+| [ADR-0021](0021-aws-hr-aurora-serverless.md) | HR DB를 Aurora PostgreSQL Serverless v2로 선택 | `Accepted` | HR 부하·credit/비용·HA/reader 요구·Aurora 제약 변화 |
+| [ADR-0022](0022-aws-hr-shared-vpc-gitops.md) | HR EKS를 기존 AWS shared VPC와 기존 k3s Argo CD에 통합 | `Accepted` | VPC 분리·라우팅 허브·독립 EKS GitOps control plane 요구 |
+| [ADR-0023](0023-aws-shared-vpn-service-boundary.md) | AWS shared VPN을 단일 selector로 통합하고 service rule로 제한 | `Accepted` | VPC·site·tenant 분리 또는 dual tunnel 요구 |
 
 ## 형식
 

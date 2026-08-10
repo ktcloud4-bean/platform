@@ -100,6 +100,7 @@ Git에는 PVC 선언만 저장하고 PVC 데이터나 노드 디렉터리명을 
 | Kubernetes 관리 UI | Headlamp | k3s |
 | SCM·CI·품질·레지스트리 | Gitea · Jenkins · SonarQube · Harbor | k3s |
 | 내부 데모 애플리케이션 | Board Demo | k3s; Pomerium 뒤, PostgreSQL TLS·Vault runtime 분리 |
+| HR 애플리케이션 | HR System | `DECLARED`; private EKS, internal ALB, Pomerium·shared S2S VPN 뒤, private Aurora PostgreSQL·서비스별 IRSA·Secrets Manager DB credential |
 | 자동화 | AWX · Renovate | k3s |
 | 공급망 검증 | Trivy · Cosign · Kyverno | k3s |
 | 런타임 탐지 | Falco | k3s |
@@ -127,6 +128,9 @@ NetBird client/browser → Cloudflare WAF → OPNsense의 Cloudflare-source-only
 NetBird 연결 뒤 내부 웹 애플리케이션
 Client → NetBird overlay → Traefik → Pomerium → Service
                             └→ 선택한 route만 CrowdSec AppSec(Coraza + CRS) 판정
+
+HR System (`AWS-HR-01 DONE`)
+Client → NetBird overlay → Traefik → Pomerium → Site-to-Site VPN → EKS internal ALB → HR Service
 
 Cloudflare와 분리된 복구 경로
 등록된 recovery client → NetBird direct peer 정책 → warpgate-01:8888
@@ -285,6 +289,8 @@ S3 복구 자격증명, K3s server token과 Vault recovery share처럼 전체 �
 ## AWS 연동
 
 - OPNsense와 AWS VPC는 Site-to-Site VPN으로 사설 경로를 만든다.
+- HR EKS는 public subnet·IGW·NAT·public EKS endpoint 없이 기존 shared VPC에 둔다. S2S VPN은 단일 `10.10.0.0/16 ↔ 10.20.0.0/16` selector를 쓰되, OPNsense와 AWS security group의 service rule로 k3s-01 DNS·EKS API·internal ALB 흐름만 허용한다.
+- HR DB master/service credential은 AWS Secrets Manager에 두고 EKS ServiceAccount별 IRSA로 서비스 secret을 분리한다.
 - S3·STS·KMS의 공인 AWS API endpoint 사용은 금지하지 않는다.
 - Keycloak은 AWS 콘솔 임시 권한을 위한 SAML IdP다.
 - AWS S3는 온프레미스 장애와 분리된 최종 백업 사본이다.

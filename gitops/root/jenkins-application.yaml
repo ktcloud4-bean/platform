@@ -13,7 +13,9 @@ spec:
   project: jenkins
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: main
+    # AWS-HR-01 live 검증 중에는 platform-root가 이 immutable source SHA를 읽는다.
+    # main 병합 전에 반드시 literal main으로 되돌리고, 이 temporary revision은 main에 넣지 않는다.
+    targetRevision: dc060f80f1bfb7e86bff6348142b2790ab7851b6
     path: gitops/apps/jenkins
   destination:
     server: https://kubernetes.default.svc

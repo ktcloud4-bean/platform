@@ -1,20 +1,21 @@
-# 애플리케이션 네트워크 계층 · OpenTofu
+# HR application network root
 
-이 root는 애플리케이션 VPC, public·app private·DB private subnet, NAT Gateway와 EKS node/RDS
-security group을 소유한다. public subnet은 NAT Gateway와 internet-facing ELB용일 뿐, 새 instance에
-공인 IP를 자동 배정하지 않는다.
+이 root는 `tofu-network`가 소유한 `10.20.0.0/16` shared VPC를 read-only remote state로
+참조한다. 그 안의 HR EKS application/DB private subnet, EKS·RDS security group, AWS service
+endpoint만 소유한다. VPC·기본 security group·기존 DATA VPN을 import하거나 수정하지 않는다.
+IGW, NAT Gateway, public subnet, `0.0.0.0/0` route와 internet-facing ELB는 선언하지 않는다.
+실제 주소는 `docs/ip-plan.md`가 소유한다.
 
-EKS private application subnet의 egress는 다음으로 고정한다.
+Node/Pod egress는 CoreDNS가 있는 private application subnet의 DNS TCP/UDP 53, ECR API/DKR,
+S3, STS, RDS, EC2, Elastic Load Balancing, Secrets Manager의 VPC endpoint와 Aurora PostgreSQL로
+한정한다. migration Job의 Aurora managed master secret discovery는 RDS API endpoint를 쓴다.
+새로운 AWS API가 필요하면 public egress가 아니라 정확한 endpoint·SG rule을 별도 검토한다.
 
-- ECR API/DKR와 STS: 각 AZ의 Interface VPC endpoint HTTPS
-- S3: Gateway VPC endpoint HTTPS
-- RDS: RDS security group의 PostgreSQL 5432/TCP
+Route 53 Resolver inbound endpoint 두 개는 OPNsense Unbound가 EKS private API의 AWS DNS zone만
+조건부 전달하는 용도다. endpoint IP는 OpenTofu output으로만 소비하며, EKS endpoint IP를
+고정 host override로 선언하지 않는다.
 
-일반 인터넷 egress와 RDS의 새 outbound flow는 선언하지 않는다. 다른 AWS API가 필요하면
-`0.0.0.0/0` 예외를 추가하지 않고, 목적 endpoint와 보안 그룹 규칙을 별도 검토한다.
-
-## 실행 경계
-
-Jenkins는 이 root를 `init`·`validate`·`plan`만 수행한다. backend 없는 최초 plan은 state 객체를
-만들지 않는다. 최초 실제 생성은 완료된 plan의 대상·비용 검토와 명시 승인을 거쳐
-`TOFU-STATE` 잠금 아래 administrator가 같은 `v1` backend로 실행한다.
+이 root의 backend는 `platform/infra/aws/tofu-app-network/v1/terraform.tfstate`다. Jenkins는
+plan만 수행하며 첫 state 생성과 apply는 `TOFU-STATE` 잠금 아래 administrator가 소유한다.
+`tofu-app-vpn`만 이 root의 HR route table output과 `tofu-network`의 기존 VGW output을 함께
+읽어 on-prem route를 별도 resource로 추가할 수 있다.

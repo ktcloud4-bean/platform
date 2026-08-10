@@ -1,0 +1,15 @@
+# Ansible 관리 파일: infra/ansible/roles/aws_hr_dns_relay
+# EKS private API와 controller-created internal ALB private zone만 전달한다.
+port={{ aws_hr_dns_relay_listen_port }}
+listen-address={{ aws_hr_dns_relay_listen_address }}
+bind-interfaces
+no-resolv
+no-hosts
+domain-needed
+bogus-priv
+cache-size=0
+{% for zone in aws_hr_dns_relay_zones %}
+{% for upstream in aws_hr_dns_relay_upstreams %}
+server=/{{ zone }}/{{ upstream }}
+{% endfor %}
+{% endfor %}

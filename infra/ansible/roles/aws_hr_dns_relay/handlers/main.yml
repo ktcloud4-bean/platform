@@ -1,0 +1,7 @@
+---
+- name: AWS-HR-01 DNS relay restart
+  ansible.builtin.systemd:
+    name: "{{ aws_hr_dns_relay_service_name }}.service"
+    state: restarted
+    daemon_reload: true
+  when: not ansible_check_mode

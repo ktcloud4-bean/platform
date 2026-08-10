@@ -1,7 +1,9 @@
-# 애플리케이션 ECR 레지스트리 계층 · OpenTofu
+# HR application ECR root
 
-이 root는 frontend·backend ECR repository를 소유한다. 둘 다 push 시 scan을 켜고 immutable
-tag를 사용한다. 기존 tag 덮어쓰기와 repository force delete는 허용하지 않는다.
+이 root는 `frontend`, `employee-service`, `hr-service` 세 image repository를 소유한다. 세
+repository 모두 immutable tag, push scan, AES256 encryption, force delete 금지와 rollback을 위한
+tagged image 90개 보존을 강제한다. Jenkins는 digest와 SBOM·Cosign artifact를 검증한 뒤에만
+release tag를 push하며, GitOps는 tag가 아닌 digest를 참조한다.
 
-Jenkins는 `init`·`validate`·`plan`만 실행한다. 최초 생성은 검토된 plan과 명시 승인 뒤
-administrator가 같은 `v1` backend에서 수행한다.
+backend는 `platform/infra/aws/tofu-app-ecr/v1/terraform.tfstate`다. Jenkins는 init·validate·plan
+전용이며 최초 생성은 administrator가 `TOFU-STATE` 잠금 아래 별도 승인으로 수행한다.

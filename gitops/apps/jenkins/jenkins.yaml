@@ -97,6 +97,36 @@ jenkins:
                   - envVar:
                       key: "HOME"
                       value: "/home/node"
+              - name: "python"
+                image: "docker.io/library/python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                command: "sleep"
+                args: "infinity"
+                ttyEnabled: false
+                resourceRequestCpu: "100m"
+                resourceRequestMemory: "256Mi"
+                resourceLimitCpu: "1"
+                resourceLimitMemory: "1Gi"
+                envVars:
+                  - envVar:
+                      key: "HOME"
+                      value: "/tmp"
+              - name: "awscli"
+                image: "public.ecr.aws/aws-cli/aws-cli:2.27.18@sha256:244dcb5bd64c98d0c624b0f8951be872b6aa43a6587da6cbb5c7f30c2bd89e58"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                command: "sleep"
+                args: "infinity"
+                ttyEnabled: false
+                resourceRequestCpu: "20m"
+                resourceRequestMemory: "64Mi"
+                resourceLimitCpu: "250m"
+                resourceLimitMemory: "128Mi"
+                envVars:
+                  - envVar:
+                      key: "HOME"
+                      value: "/tmp"
               - name: "trivy"
                 image: "docker.io/aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f"
                 alwaysPullImage: false
@@ -144,10 +174,6 @@ jenkins:
                   - envVar:
                       key: "HOME"
                       value: "/home/cosign"
-                  # Cosign 3.1.2는 OCI 1.1 referrer mode를 이 명시적 gate 뒤에 둔다.
-                  - envVar:
-                      key: "COSIGN_EXPERIMENTAL"
-                      value: "1"
               - name: "sonar"
                 image: "docker.io/sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1@sha256:23ca0f137965d9dff2198074043fd48d386280bc5d0ccac8c8349cea4cf096a9"
                 alwaysPullImage: false
@@ -226,6 +252,31 @@ jenkins:
                         type: RuntimeDefault
                       capabilities:
                         drop: ["ALL"]
+                  - name: python
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: false
+                      seccompProfile:
+                        type: RuntimeDefault
+                      capabilities:
+                        drop: ["ALL"]
+                  - name: awscli
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: true
+                      seccompProfile:
+                        type: RuntimeDefault
+                      capabilities:
+                        drop: ["ALL"]
+                    volumeMounts:
+                      - name: awscli-tmp
+                        mountPath: /tmp
                   - name: trivy
                     securityContext:
                       runAsNonRoot: true
@@ -303,6 +354,10 @@ jenkins:
                   - name: trivy-cache
                     persistentVolumeClaim:
                       claimName: trivy-cache
+                  - name: awscli-tmp
+                    emptyDir:
+                      medium: Memory
+                      sizeLimit: 8Mi
                   - name: trivy-home
                     emptyDir:
                       medium: Memory
@@ -502,6 +557,14 @@ credentials:
               privateKeySource:
                 directEntry:
                   privateKey: "${board_demo_gitea_ssh_private_key}"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "gitea-hr-system"
+              description: "AWS-HR-01 Gitea read-only deploy key"
+              username: "git"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${hr_system_gitea_ssh_private_key}"
           - usernamePassword:
               scope: GLOBAL
               id: "harbor-robot-ci01"
@@ -545,6 +608,12 @@ credentials:
               description: "CI-01 AWS Credentials for OpenTofu Pipelines"
               username: "${aws_access_key_id}"
               password: "${aws_secret_access_key}"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "aws-hr-ecr-publisher"
+              description: "AWS-HR-01 ECR publish-only credential"
+              username: "${hr_system_aws_access_key_id}"
+              password: "${hr_system_aws_secret_access_key}"
 
 security:
   # Gitea SSH host key는 known_hosts 파일이 아니라 선언한 값으로 고정한다.
@@ -604,6 +673,28 @@ jobs:
                 remote {
                   url('ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/ktcloud4-bean/board-app.git')
                   credentials('gitea-board-demo')
+                }
+                branch('*/main')
+              }
+            }
+            scriptPath('Jenkinsfile')
+            lightweight(false)
+          }
+        }
+      }
+      pipelineJob('hr-system-image-build') {
+        description('AWS-HR-01: Gitea mirror에서 세 HR image를 scan·SBOM·Cosign 서명 후 ECR에 publish')
+        logRotator {
+          numToKeep(20)
+          artifactNumToKeep(0)
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/ktcloud4-bean/hr-system.git')
+                  credentials('gitea-hr-system')
                 }
                 branch('*/main')
               }

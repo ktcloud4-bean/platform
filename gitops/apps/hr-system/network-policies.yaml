@@ -1,0 +1,109 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: hr-system
+  annotations: {argocd.argoproj.io/sync-wave: "-2"}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dns-egress
+  namespace: hr-system
+  annotations: {argocd.argoproj.io/sync-wave: "-2"}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-ingress-and-api-egress
+  namespace: hr-system
+  annotations: {argocd.argoproj.io/sync-wave: "-2"}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: frontend}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{ipBlock: {cidr: 10.20.0.0/16}}]
+      ports: [{protocol: TCP, port: 8080}]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: employee-service}
+      ports: [{protocol: TCP, port: 8000}]
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: hr-service}
+      ports: [{protocol: TCP, port: 8000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: employee-service-ingress-and-aws-egress
+  namespace: hr-system
+  annotations: {argocd.argoproj.io/sync-wave: "-2"}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: employee-service}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: frontend}
+      ports: [{protocol: TCP, port: 8000}]
+  egress:
+    - to: [{ipBlock: {cidr: 10.20.0.0/16}}]
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 5432}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hr-service-ingress-and-aws-egress
+  namespace: hr-system
+  annotations: {argocd.argoproj.io/sync-wave: "-2"}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: hr-service}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: frontend}
+      ports: [{protocol: TCP, port: 8000}]
+  egress:
+    - to: [{ipBlock: {cidr: 10.20.0.0/16}}]
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 5432}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: migration-aws-egress
+  namespace: hr-system
+  annotations: {argocd.argoproj.io/sync-wave: "-2"}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: hr-db-migrate}
+  policyTypes: [Egress]
+  egress:
+    - to: [{ipBlock: {cidr: 10.20.0.0/16}}]
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 5432}

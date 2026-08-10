@@ -1,0 +1,149 @@
+---
+- name: AWS-HR-01 DNS relay 주소와 upstream 형식 확인
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.default_ipv4.address == aws_hr_dns_relay_listen_address
+      - aws_hr_dns_relay_listen_port | int > 1024
+      - aws_hr_dns_relay_upstreams | length == 2
+      - aws_hr_dns_relay_upstreams | select('match', '^[0-9]{1,3}(\\.[0-9]{1,3}){3}$') | list | length == 2
+      - aws_hr_dns_relay_zones | length == 2
+      - aws_hr_dns_relay_zones | select('match', '^[a-z0-9.-]+$') | list | length == 2
+    fail_msg: AWS-HR-01 DNS relay의 k3s PLATFORM 주소, non-privileged port 또는 private upstream 선언이 맞지 않는다.
+
+- name: dnsmasq package 설치
+  ansible.builtin.dnf:
+    name: dnsmasq
+    state: present
+  when: not ansible_check_mode
+
+- name: DNS relay SELinux port label 현재 상태 조회
+  ansible.builtin.command:
+    argv:
+      - semanage
+      - port
+      - -l
+  register: aws_hr_dns_relay_selinux_ports
+  changed_when: false
+  check_mode: false
+
+- name: DNS relay TCP port가 다른 SELinux type에 속하지 않는지 확인
+  ansible.builtin.assert:
+    that:
+      - >-
+        (aws_hr_dns_relay_selinux_ports.stdout is not search('(?m)^.*\\btcp\\b.*\\b' ~
+        (aws_hr_dns_relay_listen_port | string) ~ '\\b')) or
+        (aws_hr_dns_relay_selinux_ports.stdout is search('(?m)^dns_port_t\\s+tcp.*\\b' ~
+        (aws_hr_dns_relay_listen_port | string) ~ '\\b'))
+    fail_msg: AWS-HR-01 DNS relay TCP port가 이미 다른 SELinux type에 속한다.
+
+- name: DNS relay UDP port가 다른 SELinux type에 속하지 않는지 확인
+  ansible.builtin.assert:
+    that:
+      - >-
+        (aws_hr_dns_relay_selinux_ports.stdout is not search('(?m)^.*\\budp\\b.*\\b' ~
+        (aws_hr_dns_relay_listen_port | string) ~ '\\b')) or
+        (aws_hr_dns_relay_selinux_ports.stdout is search('(?m)^dns_port_t\\s+udp.*\\b' ~
+        (aws_hr_dns_relay_listen_port | string) ~ '\\b'))
+    fail_msg: AWS-HR-01 DNS relay UDP port가 이미 다른 SELinux type에 속한다.
+
+- name: DNS relay SELinux TCP port 선언
+  ansible.builtin.command:
+    argv:
+      - semanage
+      - port
+      - -a
+      - -t
+      - dns_port_t
+      - -p
+      - tcp
+      - "{{ aws_hr_dns_relay_listen_port }}"
+  when:
+    - not ansible_check_mode
+    - aws_hr_dns_relay_selinux_ports.stdout is not search('(?m)^dns_port_t\\s+tcp.*\\b' ~ (aws_hr_dns_relay_listen_port | string) ~ '\\b')
+
+- name: DNS relay SELinux UDP port 선언
+  ansible.builtin.command:
+    argv:
+      - semanage
+      - port
+      - -a
+      - -t
+      - dns_port_t
+      - -p
+      - udp
+      - "{{ aws_hr_dns_relay_listen_port }}"
+  when:
+    - not ansible_check_mode
+    - aws_hr_dns_relay_selinux_ports.stdout is not search('(?m)^dns_port_t\\s+udp.*\\b' ~ (aws_hr_dns_relay_listen_port | string) ~ '\\b')
+
+- name: AWS private zone 전용 dnsmasq configuration 선언
+  ansible.builtin.template:
+    src: aws-hr-01.conf.j2
+    dest: "{{ aws_hr_dns_relay_config_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: AWS-HR-01 DNS relay restart
+
+- name: AWS-HR-01 DNS relay systemd unit 선언
+  ansible.builtin.template:
+    src: aws-hr-01-dns-relay.service.j2
+    dest: "{{ aws_hr_dns_relay_unit_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: AWS-HR-01 DNS relay restart
+
+- name: AWS-HR-01 DNS relay config syntax 확인
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/dnsmasq
+      - --test
+      - "--conf-file={{ aws_hr_dns_relay_config_path }}"
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: 대기 중인 AWS-HR-01 DNS relay 변경 반영
+  ansible.builtin.meta: flush_handlers
+
+- name: AWS-HR-01 DNS relay enable 및 기동
+  ansible.builtin.systemd:
+    name: "{{ aws_hr_dns_relay_service_name }}.service"
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not ansible_check_mode
+
+- name: AWS-HR-01 DNS relay active 확인
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ aws_hr_dns_relay_service_name }}.service"
+  register: aws_hr_dns_relay_active
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+  retries: 10
+  delay: 1
+  until: aws_hr_dns_relay_active.stdout == 'active'
+
+- name: AWS-HR-01 DNS relay listen socket 확인
+  ansible.builtin.command:
+    argv:
+      - ss
+      - -H
+      - -lntup
+      - "( sport = :{{ aws_hr_dns_relay_listen_port }} )"
+  register: aws_hr_dns_relay_socket
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: AWS-HR-01 DNS relay runtime assertion
+  ansible.builtin.assert:
+    that:
+      - aws_hr_dns_relay_active.stdout == 'active'
+      - aws_hr_dns_relay_socket.stdout is search(aws_hr_dns_relay_listen_address ~ ':' ~ (aws_hr_dns_relay_listen_port | string))
+    fail_msg: AWS-HR-01 DNS relay가 k3s PLATFORM 주소의 지정 port에만 listen하지 않는다.
+  when: not ansible_check_mode

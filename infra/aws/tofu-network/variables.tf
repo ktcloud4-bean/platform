@@ -55,10 +55,11 @@ variable "onprem_cidr" {
   description = <<-EOT
     VPN으로 통신을 허용할 온프레미스 대역. IPsec traffic selector와 AWS static route,
     security group에 모두 이 값이 들어가므로 여기를 좁히는 것이 "대상 대역만 통신"의 실제 통제다.
-    기본값은 DATA VLAN 하나다. 랩 전체(10.10.0.0/16)로 넓히지 않는다.
+    VPN connection 하나의 selector는 PLATFORM과 DATA를 포함한다. 실제 허용은
+    OPNsense PF와 AWS security group의 exact source·port 규칙에서 다시 제한한다.
   EOT
   type        = string
-  default     = "10.10.50.0/24"
+  default     = "10.10.0.0/16"
 
   validation {
     condition     = can(cidrhost(var.onprem_cidr, 0))

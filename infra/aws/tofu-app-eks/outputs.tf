@@ -17,3 +17,18 @@ output "alb_controller_iam_role_arn" {
   description = "AWS Load Balancer Controller IAM Role ARN"
   value       = aws_iam_role.alb_controller.arn
 }
+
+output "employee_service_iam_role_arn" {
+  description = "Employee service ServiceAccount의 IRSA role ARN"
+  value       = aws_iam_role.employee_service.arn
+}
+
+output "hr_service_iam_role_arn" {
+  description = "HR service ServiceAccount의 IRSA role ARN"
+  value       = aws_iam_role.hr_service.arn
+}
+
+output "db_migrate_iam_role_arn" {
+  description = "DB migration Job ServiceAccount의 제한된 IRSA role ARN"
+  value       = aws_iam_role.db_migrate.arn
+}

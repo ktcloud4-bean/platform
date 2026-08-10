@@ -19,41 +19,34 @@ variable "execution_role_arn" {
 variable "project_name" {
   description = "프로젝트 명칭"
   type        = string
-  default     = "demo-project"
+  default     = "hr-system"
 }
 
 variable "environment" {
-  description = "환경 배포 명칭 (dev, prod)"
+  description = "환경 배포 명칭"
   type        = string
-  default     = "dev"
-}
-
-variable "vpc_cidr" {
-  description = "VPC CIDR 대역"
-  type        = string
-  default     = "10.0.0.0/16"
-}
-
-variable "public_subnet_cidrs" {
-  description = "퍼블릭 서브넷 CIDR 목록"
-  type        = list(string)
-  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+  default     = "prod"
 }
 
 variable "private_app_subnet_cidrs" {
-  description = "프라이빗 앱 서브넷 CIDR 목록"
+  description = "10.20 shared VPC 안의 HR 전용 프라이빗 앱 서브넷 CIDR 목록"
   type        = list(string)
-  default     = ["10.0.10.0/24", "10.0.20.0/24"]
+  default     = ["10.20.10.0/24", "10.20.20.0/24"]
 }
 
 variable "private_db_subnet_cidrs" {
-  description = "프라이빗 DB 서브넷 CIDR 목록"
+  description = "10.20 shared VPC 안의 HR 전용 프라이빗 DB 서브넷 CIDR 목록"
   type        = list(string)
-  default     = ["10.0.100.0/24", "10.0.110.0/24"]
+  default     = ["10.20.100.0/24", "10.20.110.0/24"]
 }
 
-variable "single_nat_gateway" {
-  description = "true면 NAT Gateway 1개만 사용, false면 AZ마다 1개"
-  type        = bool
-  default     = true
+variable "onprem_management_cidr" {
+  description = "EKS private API와 internal ALB에 접근하는 Pomerium/Argo 관리 대역. docs/ip-plan.md의 PLATFORM VLAN 하나로만 제한한다."
+  type        = string
+  default     = "10.10.20.0/24"
+
+  validation {
+    condition     = can(cidrhost(var.onprem_management_cidr, 0))
+    error_message = "onprem_management_cidr는 올바른 IPv4 CIDR이어야 한다."
+  }
 }

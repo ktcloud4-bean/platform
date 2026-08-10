@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hr-db-migrate
+  namespace: hr-system
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: hr-db-migrate
+    app.kubernetes.io/component: migration
+    app.kubernetes.io/part-of: hr-system
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hr-db-migrate
+        app.kubernetes.io/component: migration
+        app.kubernetes.io/part-of: hr-system
+    spec:
+      restartPolicy: Never
+      serviceAccountName: hr-db-migrate
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: migrate
+          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-hr-service@sha256:4f2002043e92e1462c4a52946d5ba7dea10e23d81cb5354689ad4afeea20e753
+          imagePullPolicy: IfNotPresent
+          command: [python, migrate.py]
+          env:
+            - {name: AWS_REGION, value: ap-northeast-2}
+            - {name: AWS_STS_REGIONAL_ENDPOINTS, value: regional}
+            - {name: AURORA_CLUSTER_IDENTIFIER, value: hr-system-prod-aurora}
+            - {name: EMPLOYEE_SERVICE_DB_SECRET_ARN, value: hr-system-prod/employee-service/database}
+            - {name: HR_SERVICE_DB_SECRET_ARN, value: hr-system-prod/hr-service/database}
+            - {name: BOOTSTRAP_HR_ADMIN_SECRET_ARN, value: hr-system-prod/bootstrap/hr-admin}
+            - {name: DB_SSLMODE, value: require}
+            - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes:
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}

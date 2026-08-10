@@ -1,0 +1,15 @@
+---
+# OPNsense가 policy-based IPsec의 적절한 local selector 주소로 DNS packet을
+# 선택하지 못하므로, 실제 EKS consumer인 k3s-01이 두 AWS Resolver inbound endpoint를
+# 질의한다. 이 relay는 두 private zone 이외의 재귀 resolver가 아니다.
+aws_hr_dns_relay_listen_address: 10.10.20.10
+aws_hr_dns_relay_listen_port: 1053
+aws_hr_dns_relay_service_name: aws-hr-01-dns-relay
+aws_hr_dns_relay_config_path: /etc/dnsmasq.d/aws-hr-01.conf
+aws_hr_dns_relay_unit_path: "/etc/systemd/system/{{ aws_hr_dns_relay_service_name }}.service"
+aws_hr_dns_relay_upstreams:
+  - 10.20.10.53
+  - 10.20.20.102
+aws_hr_dns_relay_zones:
+  - ap-northeast-2.eks.amazonaws.com
+  - aws.imcherry5778.xyz

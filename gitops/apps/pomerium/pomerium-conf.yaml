@@ -67,6 +67,31 @@ routes:
           or:
             - claim/groups: /platform-users
 
+  # AWS-HR-01: browser identity admission은 Pomerium의 OIDC groups claim으로 먼저
+  # 제한한다. internal ALB에는 IPsec으로만 도달하며, DB role/is_hr 판정은 upstream
+  # application이 다시 수행한다. stable private alias는 tofu-app-routing이 소유한다.
+  - name: hr-system-www
+    description: AWS-HR-01 employee self-service through private EKS ALB
+    from: https://www.imcherry5778.xyz
+    to: http://hr-system.alb.aws.imcherry5778.xyz
+    preserve_host_header: true
+    pass_identity_headers: true
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users
+
+  - name: hr-system-admin
+    description: AWS-HR-01 HR administration through private EKS ALB
+    from: https://admin.imcherry5778.xyz
+    to: http://hr-system.alb.aws.imcherry5778.xyz
+    preserve_host_header: true
+    pass_identity_headers: true
+    policy:
+      - allow:
+          or:
+            - claim/groups: /hr-admins
+
   # HEADLAMP-02: Pomerium은 browser Route 입장만 groups claim으로 판정한다.
   # upstream Headlamp에는 Pomerium token/header를 권한으로 전달하지 않으며,
   # Keycloak OIDC ID token과 Kubernetes RBAC가 API 요청마다 별도로 판정한다.

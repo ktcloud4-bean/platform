@@ -1,0 +1,3 @@
+locals {
+  component = "app-routing"
+}

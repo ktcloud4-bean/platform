@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: argocd-application-controller
+  namespace: argocd
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: aws-hr-01-vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/runtime.hcl
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: argocd-aws-hr-01-vault-agent
+              mountPath: /vault/config
+              readOnly: true
+            - name: argocd-aws-hr-01-vault-trust
+              mountPath: /vault/tls
+              readOnly: true
+            - name: argocd-aws-hr-01-credentials
+              mountPath: /argocd/aws
+            - name: argocd-aws-hr-01-tmp
+              mountPath: /tmp
+            - name: argocd-aws-hr-01-vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+      containers:
+        - name: argocd-application-controller
+          volumeMounts:
+            - name: argocd-aws-hr-01-credentials
+              mountPath: /argocd/aws
+              readOnly: true
+      volumes:
+        - name: argocd-aws-hr-01-vault-agent
+          configMap:
+            name: argocd-aws-hr-01-vault-agent
+            items:
+              - key: runtime.hcl
+                path: runtime.hcl
+        - name: argocd-aws-hr-01-vault-trust
+          configMap:
+            name: argocd-aws-hr-01-vault-trust
+            items:
+              - key: vault.crt
+                path: vault.crt
+        - name: argocd-aws-hr-01-credentials
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: argocd-aws-hr-01-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: argocd-aws-hr-01-vault-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600
+                  audience: vault
