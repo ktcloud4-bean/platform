@@ -305,6 +305,148 @@ jenkins:
                   - name: sonar-tmp
                     emptyDir:
                       sizeLimit: 1Gi
+          - name: "aws-opentofu"
+            label: "aws-opentofu"
+            namespace: "jenkins"
+            serviceAccount: "jenkins-agent"
+            nodeUsageMode: EXCLUSIVE
+            idleMinutes: 0
+            activeDeadlineSeconds: 1200
+            slaveConnectTimeout: 600
+            podRetention: "never"
+            containers:
+              - name: "jnlp"
+                image: "docker.io/jenkins/inbound-agent:3384.v60d89463d9e0-1-alpine-jdk21@sha256:359f763a8f3f337690593d6f20e476d77d07d2a7adf9acf5ebcc57f994e0e19f"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                ttyEnabled: false
+                resourceRequestCpu: "100m"
+                resourceRequestMemory: "256Mi"
+                resourceLimitCpu: "1"
+                resourceLimitMemory: "1Gi"
+              - name: "opentofu"
+                image: "ghcr.io/opentofu/opentofu:1.12.5@sha256:ba827d1af675c3f522eb78e2b8098cc87daefb9ceb9d3c4b69d0a1bb6d272463"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                command: "sleep"
+                args: "infinity"
+                ttyEnabled: false
+                resourceRequestCpu: "100m"
+                resourceRequestMemory: "256Mi"
+                resourceLimitCpu: "1"
+                resourceLimitMemory: "1Gi"
+                envVars:
+                  - envVar:
+                      key: "HOME"
+                      value: "/tmp"
+              - name: "awscli"
+                image: "public.ecr.aws/aws-cli/aws-cli:2.27.18@sha256:244dcb5bd64c98d0c624b0f8951be872b6aa43a6587da6cbb5c7f30c2bd89e58"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                command: "sleep"
+                args: "infinity"
+                ttyEnabled: false
+                resourceRequestCpu: "100m"
+                resourceRequestMemory: "256Mi"
+                resourceLimitCpu: "1"
+                resourceLimitMemory: "1Gi"
+                envVars:
+                  - envVar:
+                      key: "HOME"
+                      value: "/tmp"
+              - name: "trivy"
+                image: "docker.io/aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                command: "sleep"
+                args: "infinity"
+                ttyEnabled: false
+                resourceRequestCpu: "100m"
+                resourceRequestMemory: "256Mi"
+                resourceLimitCpu: "1"
+                resourceLimitMemory: "1Gi"
+                envVars:
+                  - envVar:
+                      key: "HOME"
+                      value: "/tmp"
+            yamlMergeStrategy: "merge"
+            yaml: |
+              apiVersion: v1
+              kind: Pod
+              spec:
+                automountServiceAccountToken: false
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                  runAsGroup: 1000
+                  fsGroup: 1000
+                  fsGroupChangePolicy: OnRootMismatch
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: jnlp
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: false
+                      seccompProfile:
+                        type: RuntimeDefault
+                      capabilities:
+                        drop: ["ALL"]
+                  - name: opentofu
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: true
+                      seccompProfile:
+                        type: RuntimeDefault
+                      capabilities:
+                        drop: ["ALL"]
+                    volumeMounts:
+                      # AWS provider 압축 해제와 plan 임시 파일은 64Mi memory tmp에
+                      # 맞지 않는다. Pod 수명으로 제한한 scratch volume만 쓴다.
+                      - name: aws-tofu-tmp
+                        mountPath: /tmp
+                  - name: trivy
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: true
+                      seccompProfile:
+                        type: RuntimeDefault
+                      capabilities:
+                        drop: ["ALL"]
+                    volumeMounts:
+                      - name: aws-tmp
+                        mountPath: /tmp
+                  - name: awscli
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: true
+                      seccompProfile:
+                        type: RuntimeDefault
+                      capabilities:
+                        drop: ["ALL"]
+                    volumeMounts:
+                      - name: aws-tmp
+                        mountPath: /tmp
+                volumes:
+                  - name: aws-tmp
+                    emptyDir:
+                      medium: Memory
+                      sizeLimit: 64Mi
+                  - name: aws-tofu-tmp
+                    emptyDir:
+                      sizeLimit: 2Gi
 
 credentials:
   system:
@@ -318,6 +460,14 @@ credentials:
               privateKeySource:
                 directEntry:
                   privateKey: "${gitea_ssh_private_key}"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "github-platform-readonly-aws-ci-fix-01"
+              description: "AWS-CI-FIX-01 GitHub platform read-only deploy key"
+              username: "git"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${github_platform_ssh_private_key}"
           - usernamePassword:
               scope: GLOBAL
               id: "harbor-robot-ci01"
@@ -361,7 +511,9 @@ security:
   gitHostKeyVerificationConfiguration:
     sshHostKeyVerificationStrategy:
       manuallyProvidedKeyVerificationStrategy:
-        approvedHostKeys: "${gitea_known_hosts}"
+        approvedHostKeys: |-
+          ${gitea_known_hosts}
+          [ssh.github.com]:443 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
 
 unclassified:
   location:
@@ -400,34 +552,24 @@ jobs:
         }
       }
       pipelineJob('aws-opentofu-pipeline') {
-        description('AWS OpenTofu 인프라 GitOps 파이프라인 (tofu-app-network, db, eks, ecr, backend 등)')
+        description('AWS-CI-FIX-01: app network/ECR OpenTofu plan 전용 파이프라인')
         logRotator {
           numToKeep(20)
           artifactNumToKeep(0)
         }
         parameters {
-          choiceParam('TARGET_ROOT', [
-            'tofu-app-network',
-            'tofu-app-db',
-            'tofu-app-eks',
-            'tofu-app-ecr',
-            'tofu-backend',
-            'tofu-kms',
-            'tofu-identity',
-            'tofu-network',
-            'tofu'
-          ], '실행할 OpenTofu 인프라 대상을 선택하세요.')
-          choiceParam('ACTION', ['plan', 'apply'], '수행할 작업을 선택하세요 (plan = Dry-run, apply = 실제 반영)')
+          choiceParam('TARGET_ROOT', ['tofu-app-network', 'tofu-app-ecr'], 'AWS-CI-FIX-01이 plan만 허용하는 root입니다.')
+          stringParam('GIT_REVISION', 'main', '일반 실행은 main, immutable 검증은 승인된 commit SHA만 사용합니다.')
         }
         definition {
           cpsScm {
             scm {
               git {
                 remote {
-                  url('ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/scm-recovery/platform.git')
-                  credentials('gitea-ci01')
+                  url('ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git')
+                  credentials('github-platform-readonly-aws-ci-fix-01')
                 }
-                branch('*/main')
+                branch('${GIT_REVISION}')
               }
             }
             scriptPath('infra/aws/Jenkinsfile')

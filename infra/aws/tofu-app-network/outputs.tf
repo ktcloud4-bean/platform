@@ -27,3 +27,8 @@ output "rds_security_group_id" {
   description = "RDS용 보안 그룹 ID"
   value       = aws_security_group.rds_sg.id
 }
+
+output "aws_service_endpoints_security_group_id" {
+  description = "ECR·S3·STS private endpoint용 보안 그룹 ID"
+  value       = aws_security_group.aws_service_endpoints_sg.id
+}

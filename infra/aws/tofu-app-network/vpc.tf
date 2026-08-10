@@ -17,11 +17,13 @@ resource "aws_internet_gateway" "main" {
 }
 
 resource "aws_subnet" "public" {
-  count                   = length(var.public_subnet_cidrs)
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = var.public_subnet_cidrs[count.index]
-  availability_zone       = local.azs[count.index]
-  map_public_ip_on_launch = true
+  count             = length(var.public_subnet_cidrs)
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.public_subnet_cidrs[count.index]
+  availability_zone = local.azs[count.index]
+  # NAT Gateway와 internet-facing ELB는 자기 EIP/주소를 사용한다. 이 subnet에 새로
+  # 시작되는 instance가 공인 IP를 자동으로 받으면 안 된다.
+  map_public_ip_on_launch = false
 
   tags = {
     Name                                                 = "${local.name_prefix}-public-subnet-${local.azs[count.index]}"
@@ -118,4 +120,56 @@ resource "aws_route_table_association" "private_db" {
   count          = length(aws_subnet.private_db)
   subnet_id      = aws_subnet.private_db[count.index].id
   route_table_id = aws_route_table.private[count.index].id
+}
+
+# EKS node는 NAT를 통한 일반 인터넷 egress 대신 필요한 AWS API를 PrivateLink와
+# S3 gateway endpoint로만 사용한다. private_app 두 AZ에 endpoint ENI를 둔다.
+resource "aws_vpc_endpoint" "ecr_api" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.ecr.api"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private_app[*].id
+  security_group_ids  = [aws_security_group.aws_service_endpoints_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "${local.name_prefix}-ecr-api-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "ecr_dkr" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.ecr.dkr"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private_app[*].id
+  security_group_ids  = [aws_security_group.aws_service_endpoints_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "${local.name_prefix}-ecr-dkr-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "sts" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.sts"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private_app[*].id
+  security_group_ids  = [aws_security_group.aws_service_endpoints_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "${local.name_prefix}-sts-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = aws_route_table.private[*].id
+
+  tags = {
+    Name = "${local.name_prefix}-s3-endpoint"
+  }
 }

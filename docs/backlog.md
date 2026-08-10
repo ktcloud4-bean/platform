@@ -1133,6 +1133,7 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `SCM-01 DONE` | Gitea | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Renovate | push/restore, SSO·RBAC, webhook 최소권한 |
 | `REG-01 DONE` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
 | `CI-01 DONE` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
+| `AWS-CI-FIX-01 DONE` | main에 들어간 `infra/aws` Jenkins pipeline을 GitHub source·plan 전용 agent·원격 state app root 경계로 보정하고, state가 없는 최초 실행은 admin bootstrap 절차로 분리; app network의 EKS egress는 ECR·S3·STS endpoint와 RDS로 한정 | `CI-01`, `SCAN-01` | `ARGO-ROOT`, `TOFU-STATE` | AWS OpenTofu plan | 단일 정적 검증에서 JCasC·Pod 보안·root allowlist·계정 guard·실패 Trivy gate·partial backend·OpenTofu init/validate 통과, immutable SHA의 `platform-root`·`jenkins` `Synced/Healthy`, `tofu-app-network`·`tofu-app-ecr` build 각각 `SUCCESS`와 plan-only·민감값 0건, main rollback 뒤 `Synced/Healthy` |
 | `QUALITY-01 DONE` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO·배포 직후 capacity stop/go |
 | `AWX-01 DONE` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
 | `UPDATE-01 DONE` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
@@ -1143,6 +1144,14 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `E2E-01 DONE` | Gitea→Jenkins→Sonar→Harbor→Trivy→Cosign→Argo E2E | `CI-01`, `QUALITY-01`, `SIGN-01`, `POL-01` | 없음 | 정책 Enforce | 정상 artifact 배포와 변조·미서명 artifact 차단 |
 | `POL-02 DONE` | 검증된 Kyverno 정책만 Enforce | `E2E-01` | 없음 | 모든 배포 | 예외 만료, rollback, 정상 릴리스 회귀 없음 |
 | `FALCO-01 DONE` | Falco runtime rule·출력 기준선 | `E2E-01`, `POL-01` | 없음 | Wazuh·Shuffle | 전용 테스트 이벤트 탐지, noise 기준, 대응 runbook 초안 |
+
+2026-08-10 `AWS-CI-FIX-01`에서 state 없는 app root는 새 `v1` key namespace의 404를
+정상 최초 상태로 판정했다. GitHub read-only deploy key, exact state/lock policy와 실제
+`DescribeAvailabilityZones` 응답으로 확인한 read policy를 분리했고, Jenkins build 10(network)·
+11(ECR)이 각각 plan-only `SUCCESS`와 민감값 0건을 통과했다. public IP 자동 할당·전체 egress·
+mutable ECR tag를 제거하고, provider 압축 해제는 Pod 수명 scratch `emptyDir`에서만 수행한다.
+검증 뒤 root·Jenkins는 `main`의 `Synced/Healthy`로 복구했다. AWS 리소스와 state 객체는 만들지
+않았으며 첫 apply는 별도 administrator bootstrap 승인으로 남긴다.
 
 2026-08-02 `CAP-02`에서 핵심 서비스와 백업 배포가 끝난 현재값을 읽기 전용으로 재측정했다.
 Proxmox는 available RAM 41.30 GiB·swap 0, thin data/metadata 3.00%/0.33%, `/` 5%,
