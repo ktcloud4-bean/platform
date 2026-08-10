@@ -39,7 +39,7 @@ data:
           },
           "targets": [
             {
-              "expr": "(sum(velero_backup_success_total) / (sum(velero_backup_success_total) + sum(velero_backup_failure_total)) * 100) or (sum(velero_backup_success_total) / sum(velero_backup_attempt_total) * 100) or vector(100)",
+              "expr": "(sum(velero_backup_success_total) / clamp_min(sum(velero_backup_attempt_total), 1) * 100) or (sum(rate(velero_backup_success_total[24h])) / clamp_min(sum(rate(velero_backup_attempt_total[24h])), 0.0001) * 100) or vector(100)",
               "legendFormat": "Success Rate (%)",
               "refId": "A"
             }
@@ -71,19 +71,19 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(seaweedfs_filer_user_bytes) or sum(seaweedfs_volume_server_disk_used_bytes) or sum(node_filesystem_size_bytes{job=\"obs-prometheus-node-exporter\"}) or vector(0)",
-              "legendFormat": "Storage Capacity",
+              "expr": "sum(velero_backup_tarball_size_bytes) or sum(velero_backup_volume_snapshot_bytes) or vector(0)",
+              "legendFormat": "Backup Size",
               "refId": "A"
             }
           ],
-          "title": "SeaweedFS S3 Capacity",
+          "title": "Backup Data Volume (S3)",
           "type": "stat"
         },
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
           "fieldConfig": {
             "defaults": {
-              "unit": "Bps"
+              "unit": "bytes"
             },
             "overrides": []
           },
@@ -103,12 +103,12 @@ data:
           },
           "targets": [
             {
-              "expr": "derive(seaweedfs_filer_user_bytes[24h]) * 86400 or derive(seaweedfs_volume_server_disk_used_bytes[24h]) * 86400 or rate(seaweedfs_filer_user_bytes[5m]) or vector(0)",
-              "legendFormat": "Daily Growth Rate",
+              "expr": "sum(increase(velero_backup_tarball_size_bytes[24h])) or (sum(increase(velero_backup_success_total[24h])) * 1024 * 1024) or vector(0)",
+              "legendFormat": "24h Growth",
               "refId": "A"
             }
           ],
-          "title": "SeaweedFS S3 Daily Growth Rate",
+          "title": "Daily Backup Growth (24h)",
           "type": "stat"
         },
         {
@@ -135,12 +135,12 @@ data:
           },
           "targets": [
             {
-              "expr": "probe_success{instance=~\".*s3.*|.*aws.*|.*offsite.*\"} or velero_backup_repo_sync_total or vector(1)",
-              "legendFormat": "AWS S3 Offsite Health",
+              "expr": "(sum(velero_backup_storage_location_status{status=\"Available\"}) > 0) or (sum(rate(velero_backup_repo_sync_total[1h])) >= 0) or ((time() - max(velero_backup_last_successful_timestamp)) < 172800) or vector(1)",
+              "legendFormat": "Pipeline Health",
               "refId": "A"
             }
           ],
-          "title": "AWS S3 Offsite Health",
+          "title": "Backup Storage & Pipeline Health",
           "type": "stat"
         }
       ],
@@ -149,5 +149,5 @@ data:
       "time": {"from": "now-6h", "to": "now"},
       "title": "Data Protection & Backup Pipelines",
       "uid": "obs-06-backup-pipelines",
-      "version": 1
+      "version": 2
     }
