@@ -1,0 +1,6 @@
+---
+- name: BOARD-DEMO-01 전용 PostgreSQL role과 database를 선언한다
+  hosts: postgres_nodes
+  become: true
+  roles:
+    - board_demo_postgres

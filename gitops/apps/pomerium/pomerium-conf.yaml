@@ -56,6 +56,17 @@ routes:
             - claim/groups: /platform-users
             - claim/groups: /platform-privileged
 
+  # BOARD-DEMO-01: Pomerium은 내부 board 웹 진입만 groups claim으로 제한한다.
+  # 게시글 CRUD 권한은 데모 범위에 한정하고, DB credential은 Vault Agent가 별도로 소비한다.
+  - name: board-demo
+    description: BOARD-DEMO-01 internal signed board application
+    from: https://board.imcherry5778.xyz
+    to: http://board-demo.board-demo.svc.cluster.local:80
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users
+
   # HEADLAMP-02: Pomerium은 browser Route 입장만 groups claim으로 판정한다.
   # upstream Headlamp에는 Pomerium token/header를 권한으로 전달하지 않으며,
   # Keycloak OIDC ID token과 Kubernetes RBAC가 API 요청마다 별도로 판정한다.

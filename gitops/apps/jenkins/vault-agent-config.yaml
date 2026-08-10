@@ -67,6 +67,40 @@ data:
     EOT
     }
 
+    # BOARD-DEMO-01은 기존 CI-01 bundle을 넓히지 않고 전용 Vault path를 소비한다.
+    template {
+      destination          = "/vault/secrets/board_demo_gitea_ssh_private_key"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/board-demo/jenkins" -}}
+    {{ .Data.data.gitea_ssh_private_key }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/board_demo_harbor_robot_name"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/board-demo/jenkins" -}}
+    {{ .Data.data.harbor_robot_name }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/board_demo_harbor_robot_secret"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/board-demo/jenkins" -}}
+    {{ .Data.data.harbor_robot_secret }}
+    {{- end -}}
+    EOT
+    }
+
     template {
       destination          = "/vault/secrets/harbor_robot_name"
       perms                = "0400"

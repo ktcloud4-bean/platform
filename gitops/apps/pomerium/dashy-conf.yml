@@ -40,6 +40,14 @@ sections:
         displayData:
           showForGroups:
             - /platform-users
+      - title: Board Demo
+        description: BOARD-DEMO-01 전용 PostgreSQL TLS와 signed image로 동작하는 내부 게시판
+        icon: si-fastify
+        url: https://board.imcherry5778.xyz
+        target: sametab
+        displayData:
+          showForGroups:
+            - /platform-users
       - title: AWX
         description: check 기본값과 사람 승인 apply 경계의 자동화 UI
         icon: favicon-local

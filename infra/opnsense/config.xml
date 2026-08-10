@@ -2805,7 +2805,7 @@ EDGE02_CF_IPV6</content>
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1785846333.17" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1786355608.49" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -3120,6 +3120,13 @@ EDGE02_CF_IPV6</content>
           <hostname>shuffle</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>SOAR-DASH-01 Shuffle dashboard alias</description>
+        </alias>
+        <alias uuid="8ff5456b-0dd2-446e-af40-00efdff9e6fd">
+          <enabled>1</enabled>
+          <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
+          <hostname>board</hostname>
+          <domain>imcherry5778.xyz</domain>
+          <description>Pomerium protected Board Demo alias (BOARD-DEMO-01)</description>
         </alias>
       </aliases>
     </unboundplus>

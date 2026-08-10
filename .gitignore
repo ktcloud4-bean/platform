@@ -11,6 +11,9 @@ infra/opnsense/*.raw.xml
 .env.*
 *secret*.yaml
 !**/sealed-secret*.yaml
+# BOARD-DEMO-01의 두 파일은 credential 원문이 아닌 Vault bootstrap Job/스크립트 선언이다.
+!gitops/apps/board-demo/secret-bootstrap-job.yaml
+!gitops/apps/board-demo/secret-bootstrap-script.yaml
 *.pem
 *.key
 *.p12
@@ -57,4 +60,3 @@ tmp/
 
 # --- 빌드 캐시 ---
 __pycache__/
-

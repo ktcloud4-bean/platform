@@ -1144,10 +1144,26 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `REG-01 DONE` | Harbor | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI·Trivy·Cosign | push/pull, robot account, retention, restore |
 | `CI-01 DONE` | Jenkins agent 격리와 pipeline 기준선 | `SCM-01`, `REG-01`, `VAULT-02` | 없음 | 공급망 E2E | 비밀 마스킹, 비특권 agent, 이미지 build/push |
 | `AWS-CI-FIX-01 DONE` | main에 들어간 `infra/aws` Jenkins pipeline을 GitHub source·plan 전용 agent·원격 state app root 경계로 보정하고, state가 없는 최초 실행은 admin bootstrap 절차로 분리; app network의 EKS egress는 ECR·S3·STS endpoint와 RDS로 한정 | `CI-01`, `SCAN-01` | `ARGO-ROOT`, `TOFU-STATE` | AWS OpenTofu plan | 단일 정적 검증에서 JCasC·Pod 보안·root allowlist·계정 guard·실패 Trivy gate·partial backend·OpenTofu init/validate 통과, immutable SHA의 `platform-root`·`jenkins` `Synced/Healthy`, `tofu-app-network`·`tofu-app-ecr` build 각각 `SUCCESS`와 plan-only·민감값 0건, main rollback 뒤 `Synced/Healthy` |
+| `BOARD-DEMO-01 DONE` | GitHub `ktcloud4-bean/board-app`를 Gitea `ktcloud4-bean/board-app` pull-mirror로 고정하고, 전용 PostgreSQL TLS·Vault·Jenkins·Harbor·서명 digest·내부 Pomerium 경계로 데모 게시판을 배포 | `SCM-01`, `REG-01`, `CI-01`, `SCAN-01`, `SIGN-01`, `POL-02`, `POM-01`, `PG-01`, `VAULT-02` | `VAULT-CONFIG`, `ARGO-ROOT`, `OPNSENSE-LIVE` | 내부 `board` 사용자 | GitHub/Gitea `main` SHA 일치·private pull-mirror, 전용 DB TLS와 Vault secret 분리, Jenkins signed digest·Trivy/SBOM, `board-demo`의 signed Pod Ready·unsigned admission 거부, `/platform-users` 내부 Pomerium 경로·공개 DNS/NAT 0건 |
 | `QUALITY-01 DONE` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO·배포 직후 capacity stop/go |
 | `AWX-01 DONE` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
 | `UPDATE-01 DONE` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
 | `SCAN-01 DONE` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
+
+2026-08-10 `BOARD-DEMO-01`에서 GitHub와 Gitea private pull-mirror의 `main`을
+`9880920ce7daf9a6a5e8bdc40f4c95985abe0334`로 일치시켰고, Jenkins build #6가
+Trivy·SBOM·Cosign을 통과한 signed digest
+`sha256:d0ca66a3fcb49145b62beeba0b28ecedd99289ecd162fba89b12ef9a37510cd1`를
+Harbor에 게시했다. 전용 PostgreSQL TLS role/database와 Vault runtime/bootstrap
+경계를 재적용해 `changed=0`을 확인했다. immutable root
+`a3ffc1976fd5deadf1ec9a94bf0b339b732b3f54`와 child
+`35fc305751e29f97ecf3b9f687a48f647a0a258c`에서 Argo root·board-demo·Pomerium이
+`Synced/Healthy`였고, signed Pod Ready 및 unsigned digest의 admission 거부를
+확인했다. 마이그레이션된 `imcherry5778` `/platform-users` 계정은 Pomerium을 거쳐
+board health의 정확한 PostgreSQL ready 응답을 받았다. Unbound `board` alias는
+내부 A `10.10.20.10` 한 건만 등록했고 내부 AAAA·공개 A/AAAA·NAT은 0건이며,
+마스킹 스냅샷 갱신 뒤 OPNsense drift는 없다. 검증 뒤 root·Pomerium은 literal
+`main`의 `Synced/Healthy`로 복구했다.
 | `SIGN-01 DONE` | Cosign 서명·검증 방식 확정과 구현 | `REG-01`, `SCAN-01`, `VAULT-02` | 없음 | Kyverno | 키 소유·회전·복구, 서명·검증·거부 테스트 |
 | `POL-01 DONE` | Kyverno Audit + namespace NetworkPolicy 기준선 | `GITOPS-01`, `POM-01` | 없음 | 모든 workload | 위반 report, DNS·ingress·필수 egress 회귀 없음 |
 | `POL-01-FIX-01 DONE` | `pomerium` default-deny에서 누락된 Dashy → Keycloak egress 보정 | `POL-01` | 없음 | Dashy Portal 로그인 | Dashy Keycloak discovery 도달 양성과 `token verification failed` 신규 0건, Vault 8200·Gitea 3000 음성 유지, headless 브라우저 보호 route 200·그룹 타일 표시, Pomerium error 로그 0건, 목적지 축소 3형태(svclb `podSelector`·노드 IP `ipBlock`·단독 port 규칙) 차단 실측, main rollback 뒤 `Synced/Healthy` |

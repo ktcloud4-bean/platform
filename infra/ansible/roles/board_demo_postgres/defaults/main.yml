@@ -1,0 +1,4 @@
+---
+pg_board_demo_password: ""
+pg_board_demo_database: board_demo
+pg_board_demo_role: board_demo_user

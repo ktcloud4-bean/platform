@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: board-demo-trust
+  namespace: board-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: board-demo
+    app.kubernetes.io/component: trust
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  # private key가 아닌 PostgreSQL/Vault 공개 trust anchor만 namespace에 복제한다.
+  # PostgreSQL SHA-256(DER): c3f83a6c7d8b94281efc80d56702f59defdb06b804dccb5f5705cf243164565c
+  # Vault SHA-256(DER): ded0362dd9be9f840ca23feb4a618bab9e763c161bca5cbc581882319cb869c1
+  postgres-01.crt: |
+    -----BEGIN CERTIFICATE-----
+    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
+    -----END CERTIFICATE-----
+  vault.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIGCzCCA/OgAwIBAgIUVVvFVIfjjiIt+DEuPBGV57XbPfMwDQYJKoZIhvcNAQEL
+    BQAwKDEmMCQGA1UEAwwddmF1bHQudmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwwHhcN
+    MjYwNzMxMDcxMzQ5WhcNMjcwNzMxMDcxMzQ5WjAoMSYwJAYDVQQDDB12YXVsdC52
+    YXVsdC5zdmMuY2x1c3Rlci5sb2NhbDCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCC
+    AgoCggIBAKWLdYOCC01Ilz5Jfg75/1bK30SLWGCyA5Xs523V0Y9xwQvQS1LWQU3Z
+    s/kHccjjhtFpeTExC4NSAKaiQBV+woigcH+nPMMr3RFQQB8qZKdx3OEw0Q98sgM/
+    RQqSlqpktKizpZLkYApKmtYmqJoG0yyj/5OX7X4s3RD1jKGgHEmcQWLz7ESVbCKf
+    k9HgvfB2YWIlF8aDFQU55DCCSPYZ1nrDXlvLC5EbU1wy9ly5xRG5L6ARcL+CKeAe
+    ybHA3PZ+xdwUOVqDPVeBbwx2P5YIC9/sNwRBkGH5bYgHImmA+ph1Wsh1DoupEGqF
+    9hPssELsEcoLUtcr0n0SXBZHfwRmCsYqhDhO+pl+qE6As30eSHDYQ3d9rxgaTqJ9
+    t2yxFR4dsg+tOMoycqRsamM2EzS4EPYZqnEz4EebKcqQ4mhRtyNLCy/SKFLLSMTz
+    8iNemRaQaUFFQAljygFOA7zeGx5QjVlJW9RBUztzvjGqwAPnZfhxktfdDgag0Tcp
+    qrMXFqeTArRy+Z7yudW1bC9EPsVJn/K9yOZXa8HljL/vtEVw1GnkockiIPjmPKok
+    5T9rGWlGp8VqNQ+1J3OcCTVhgsNx1/i9waew7s+tpCXrsSAM+6Y+/CWUJQAC3Vl6
+    TFRLuRZ35L0QDYNwNuQY7mam08fLVqeQ7QLc4paLmzxlHuGqJ+5PAgMBAAGjggEr
+    MIIBJzAdBgNVHQ4EFgQUuCw2kRJsw91q/YIrJgdvkztVRoowHwYDVR0jBBgwFoAU
+    uCw2kRJsw91q/YIrJgdvkztVRoowDwYDVR0TAQH/BAUwAwEB/zCB0wYDVR0RBIHL
+    MIHIgh12YXVsdC52YXVsdC5zdmMuY2x1c3Rlci5sb2NhbIIPdmF1bHQudmF1bHQu
+    c3ZjggV2YXVsdIIudmF1bHQtMC52YXVsdC1pbnRlcm5hbC52YXVsdC5zdmMuY2x1
+    c3Rlci5sb2NhbIIOdmF1bHQtaW50ZXJuYWyCJnZhdWx0LWludGVybmFsLnZhdWx0
+    LnN2Yy5jbHVzdGVyLmxvY2FsghZ2YXVsdC5pbWNoZXJyeTU3NzgueHl6gglsb2Nh
+    bGhvc3SHBH8AAAEwDQYJKoZIhvcNAQELBQADggIBAIBP5luICkidV4QDtEZGxO3+
+    OYVQXGjRxEOfQcAdfhSEMfFFZbG/vFxh9u6JAaojw1zQQ0mVGdcFq3rsCB1bzowH
+    l5fvHhxeb2jp2krgSwojlW6Ozs+VGNvH93qZ4lxm/jBwdMp1i09PTAp3T+P1UxGh
+    UxYiapJ8ifskWhfFG602pCObDMgGa30LaTY2u/6LBZTb9q7FdSVsEtf9Mf/mEOXV
+    HOh5kdxp4Rf2scwy3ZniVJpihEgisX5XuKMnoYvcN0NJlvZ/yz2uSYS1ptAvk6Sw
+    BvJFTdW7eBWw6yhcNs9F/Ry589RODwAZxGbEyfvgXtRXCqAFwy9JykBm3493ngCW
+    0ELb5jWvRO4mg38XhIqZ/vlHih3ZC3gERmEG41Xrg6hfPbXW6Ufl4wMO182t7hJR
+    VCK5ze1W8jD9IKOmugNV2kZGaGG6bqtgrQCAkepg6FLXu/148CCH0GW1zvzs6y/y
+    8fnhkZWY4DBNj41dmDaPqzzvnligQACM3oArHMM1BylVHYVZeGn7Yo5dCLPw/0BQ
+    Px2HD0zARXk226DgphTaurmbGk857USCIwcF3AKNPzWAC4Yef8dgXMftvu56wfqu
+    rH1EMPnHIv5sZRF+YKmTlIDy6xTvGMsDCMXfy8QkFlWasfXaT3Tbn6IfpqRS2iLj
+    kNq5MR6wc8ukRsdGvEfG
+    -----END CERTIFICATE-----

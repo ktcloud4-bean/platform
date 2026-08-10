@@ -25,6 +25,16 @@ spec:
                 name: pomerium
                 port:
                   name: http
+    - host: board.imcherry5778.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pomerium
+                port:
+                  name: http
     - host: k3s-01.imcherry5778.xyz
       http:
         paths:

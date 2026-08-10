@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: board-demo
+  namespace: board-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: board-demo
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: board-demo
+      app.kubernetes.io/component: application
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: board-demo
+        app.kubernetes.io/component: application
+        app.kubernetes.io/part-of: platform-gitops
+    spec:
+      serviceAccountName: board-demo
+      automountServiceAccountToken: false
+      imagePullSecrets: [{name: board-demo-registry}]
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args: ["agent", "-config=/vault/config/runtime.hcl"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          volumeMounts:
+            - {name: vault-agent-config, mountPath: /vault/config, readOnly: true}
+            - {name: trust, mountPath: /vault/tls, readOnly: true}
+            - {name: rendered, mountPath: /run/secrets}
+            - {name: vault-token, mountPath: /var/run/secrets/vault, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      containers:
+        - name: board-demo
+          image: harbor.imcherry5778.xyz/board-demo/board-app@sha256:d0ca66a3fcb49145b62beeba0b28ecedd99289ecd162fba89b12ef9a37510cd1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: COOKIE_SECURE
+              value: "true"
+            - name: PG_SSL_CA_PATH
+              value: /etc/board-demo/trust/postgres-01.crt
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts:
+            - {name: rendered, mountPath: /run/secrets, readOnly: true}
+            - {name: trust, mountPath: /etc/board-demo/trust, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: vault-agent-config
+          configMap:
+            name: board-demo-runtime-vault-agent
+            items: [{key: runtime.hcl, path: runtime.hcl}]
+        - name: trust
+          configMap: {name: board-demo-trust}
+        - name: rendered
+          emptyDir: {medium: Memory, sizeLimit: 1Mi}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 16Mi}
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 600, audience: vault}

@@ -40,4 +40,5 @@ resources:
   - obs-egress.yaml
   - wazuh-egress.yaml
   - shuffle-egress.yaml
+  - board-demo-egress.yaml
   - ingress.yaml

@@ -1,0 +1,151 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: board-demo-runtime-vault-agent
+  namespace: board-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: board-demo
+    app.kubernetes.io/component: secret-consumer
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  runtime.hcl: |
+    exit_after_auth = true
+    pid_file = "/tmp/vault-agent.pid"
+    vault {
+      address = "https://vault.vault.svc.cluster.local:8200"
+      ca_cert = "/vault/tls/vault.crt"
+      retry {
+        num_retries = 12
+      }
+    }
+    auto_auth {
+      method "kubernetes" {
+        mount_path = "auth/kubernetes"
+        config = {
+          role       = "board-demo"
+          token_path = "/var/run/secrets/vault/token"
+        }
+      }
+    }
+    template {
+      destination = "/run/secrets/db_type"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/board-demo/runtime" -}}{{ .Data.data.db_type }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/run/secrets/db_primary_host"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/board-demo/runtime" -}}{{ .Data.data.db_primary_host }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/run/secrets/db_primary_port"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/board-demo/runtime" -}}{{ .Data.data.db_primary_port }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/run/secrets/db_user"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/board-demo/runtime" -}}{{ .Data.data.db_user }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/run/secrets/db_password"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/board-demo/runtime" -}}{{ .Data.data.db_password }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/run/secrets/db_name"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/board-demo/runtime" -}}{{ .Data.data.db_name }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/run/secrets/db_replica_hosts"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/board-demo/runtime" -}}{{ .Data.data.db_replica_hosts }}{{- end -}}
+    EOT
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: board-demo-bootstrap-vault-agent
+  namespace: board-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: board-demo
+    app.kubernetes.io/component: runtime-bootstrap
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  bootstrap.hcl: |
+    exit_after_auth = true
+    pid_file = "/tmp/vault-agent.pid"
+    vault {
+      address = "https://vault.vault.svc.cluster.local:8200"
+      ca_cert = "/vault/tls/vault.crt"
+      retry {
+        num_retries = 12
+      }
+    }
+    auto_auth {
+      method "kubernetes" {
+        mount_path = "auth/kubernetes"
+        config = {
+          role       = "board-demo-bootstrap"
+          token_path = "/var/run/secrets/vault/token"
+        }
+      }
+    }
+    template {
+      destination = "/vault/secrets/cosign-current.pub"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/board-demo/bootstrap" -}}{{ .Data.data.cosign_public_key }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/vault/secrets/cosign-previous.pub"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/board-demo/bootstrap" -}}{{ .Data.data.cosign_previous_public_key }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/vault/secrets/harbor-robot-name"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/board-demo/bootstrap" -}}{{ .Data.data.harbor_robot_name }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/vault/secrets/harbor-robot-secret"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/board-demo/bootstrap" -}}{{ .Data.data.harbor_robot_secret }}{{- end -}}
+    EOT
+    }

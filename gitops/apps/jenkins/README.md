@@ -16,6 +16,7 @@ browser ── Traefik ── Pomerium claim/groups=/platform-users
 controller ── Kubernetes API (namespace jenkins의 Pod만)
            └─ 동적 agent Pod ── jnlp  ── Gitea SSH clone
                               └─ buildah ── docker.io base pull
+                              └─ node ── production npm install·test
                               └─ trivy ── read-only DB/checks PVC
                               └─ oras  ── Harbor image digest에 CycloneDX 첨부
                               └─ cosign ── 현재 image/SBOM digest 서명·공개키 검증
@@ -29,6 +30,20 @@ controller는 `numExecutors: 0`이라 build를 직접 실행하지 않는다. �
 `ci01-buildah` label의 동적 Pod에서 돌고 `podRetention: never`로 build 종료와 함께
 사라진다. agent Pod는 ServiceAccount token을 마운트하지 않으므로 Kubernetes API도
 Vault도 직접 호출하지 못한다.
+
+## BOARD-DEMO-01 source mirror build
+
+`board-demo-image-build`는 Gitea `ktcloud4-bean/board-app` pull-mirror의 `main`만
+read-only deploy key로 checkout한다. 전용 Harbor `board-demo` project robot은 image push·SBOM
+첨부·Cosign registry login에만 사용하고, GitHub/Gitea write credential과 Kubernetes deploy
+credential은 job에 주지 않는다. 전용 key와 robot credential은 기존 `kv/jenkins/runtime`이 아닌
+`kv/board-demo/jenkins`에서 controller Vault Agent가 memory `emptyDir` 파일로만 렌더링한다.
+Jenkins Vault role에는 이 path를 읽는 `board-demo-jenkins` policy만 추가한다.
+
+Buildah `1.43.1`은 비특권 단일 UID/GID mapping에서 Dockerfile `RUN`이 보조 그룹을 설정하면
+실패한다. 그래서 같은 agent의 digest-pinned Node `22.23.2-alpine` container가 workspace에
+`npm ci --omit=dev --ignore-scripts`와 test를 먼저 실행한다. Buildah는 검증된 `node_modules`와
+소스 파일을 복사만 하며, privileged·capability·Docker socket을 추가하지 않는다.
 
 ## SCAN-01 결정과 근거
 
