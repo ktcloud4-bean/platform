@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AWS-HR-03: 선택된 팀 일상 ID의 HR 직원 포털 admission만 최소권한으로 수렴시킨다.
+# AWS-HR-03-FIX-01: Git 선언의 HR 포털 group membership만 최소권한으로 수렴시킨다.
 set -Eeuo pipefail
 
 mode=${1:-}
@@ -8,6 +8,8 @@ mode=${1:-}
   exit 2
 }
 
+readonly repo_root=$(git rev-parse --show-toplevel)
+readonly membership_file=${repo_root}/gitops/tools/aws-hr-03/portal-group-members.json
 readonly secret_root=${KTC_SECRET_ROOT:-/home/imcherry/secrets/ktcloud4-bean}
 readonly keycloak_secret_dir=${KC01_SECRET_DIR:-${secret_root}/keycloak}
 readonly issuer=https://sso.imcherry5778.xyz
@@ -16,7 +18,29 @@ readonly connect_ip=${KC01_CONNECT_IP:-10.10.20.10}
 readonly realm=platform
 readonly employee_group_name=hr-users
 readonly admin_group_name=hr-admins
-readonly target_usernames=(foxgeun cerberos2022 jaeeyun snsd-hybirdinfra)
+
+[[ -f ${membership_file} && ! -L ${membership_file} ]] || {
+  echo 'HR 포털 membership 선언 파일이 regular file이 아니다.' >&2
+  exit 1
+}
+jq -e '
+  type == "object" and
+  (keys | sort == ["hr-admins", "hr-users"]) and
+  ([.[] | type == "array"] | all) and
+  ([.[] | .[] | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9-]*$")] | all) and
+  ([.[] | length == (unique | length)] | all)
+' "${membership_file}" >/dev/null || {
+  echo 'HR 포털 membership 선언 형식이 유효하지 않다.' >&2
+  exit 1
+}
+
+mapfile -t employee_usernames < <(jq -r '."hr-users"[]' "${membership_file}")
+mapfile -t admin_usernames < <(jq -r '."hr-admins"[]' "${membership_file}")
+mapfile -t all_usernames < <(printf '%s\n' "${employee_usernames[@]}" "${admin_usernames[@]}" | sort -u)
+[[ ${#employee_usernames[@]} -gt 0 && ${#admin_usernames[@]} -gt 0 && ${#all_usernames[@]} -gt 0 ]] || {
+  echo 'HR 포털 membership 선언이 비어 있다.' >&2
+  exit 1
+}
 
 for required in local-admin-password local-admin-totp; do
   secret_path=${keycloak_secret_dir}/${required}
@@ -74,16 +98,28 @@ exact_group() {
   printf '%s' "${groups}"
 }
 
+contains_username() {
+  local username=$1
+  shift
+  local candidate
+  for candidate in "$@"; do
+    [[ ${candidate} == "${username}" ]] && return 0
+  done
+  return 1
+}
+
 readonly employee_group=$(exact_group "${employee_group_name}")
 readonly employee_group_id=$(jq -r '.[0].id' <<<"${employee_group}")
 readonly employee_group_representation=$(jq -c '.[0]' <<<"${employee_group}")
 readonly admin_group=$(exact_group "${admin_group_name}")
 readonly admin_group_id=$(jq -r '.[0].id' <<<"${admin_group}")
+readonly admin_group_representation=$(jq -c '.[0]' <<<"${admin_group}")
 
 declare -A user_ids
 declare -A employee_membership_counts
+declare -A admin_membership_counts
 
-for username in "${target_usernames[@]}"; do
+for username in "${all_usernames[@]}"; do
   users=$(curl_admin "${issuer}/admin/realms/${realm}/users?username=${username}&exact=true&briefRepresentation=false" \
     | jq --arg username "${username}" '[.[] | select(.username == $username and .enabled == true)]')
   [[ $(jq 'length' <<<"${users}") == 1 ]] || {
@@ -95,54 +131,63 @@ for username in "${target_usernames[@]}"; do
   user_groups=$(curl_admin "${issuer}/admin/realms/${realm}/users/${user_id}/groups?first=0&max=100&briefRepresentation=true")
   employee_membership_count=$(jq --arg id "${employee_group_id}" '[.[] | select(.id == $id)] | length' <<<"${user_groups}")
   admin_membership_count=$(jq --arg id "${admin_group_id}" '[.[] | select(.id == $id)] | length' <<<"${user_groups}")
-
   [[ ${employee_membership_count} == 0 || ${employee_membership_count} == 1 ]] || {
     echo "${username}: /${employee_group_name} membership이 중복되어 변경하지 않는다." >&2
     exit 1
   }
-  [[ ${admin_membership_count} == 0 ]] || {
-    echo "${username}: /${admin_group_name} membership이 있어 직원 권한 작업을 중단한다." >&2
+  [[ ${admin_membership_count} == 0 || ${admin_membership_count} == 1 ]] || {
+    echo "${username}: /${admin_group_name} membership이 중복되어 변경하지 않는다." >&2
     exit 1
   }
+  if ! contains_username "${username}" "${admin_usernames[@]}" && [[ ${admin_membership_count} == 1 ]]; then
+    echo "${username}: 선언에 없는 /${admin_group_name} membership이 있어 자동 삭제하지 않는다." >&2
+    exit 1
+  fi
 
   user_ids[${username}]=${user_id}
   employee_membership_counts[${username}]=${employee_membership_count}
+  admin_membership_counts[${username}]=${admin_membership_count}
 done
 
-added=0
-unchanged=0
-for username in "${target_usernames[@]}"; do
-  if [[ ${employee_membership_counts[${username}]} == 1 ]]; then
-    ((unchanged += 1))
-    continue
-  fi
-
-  if [[ ${mode} == --check ]]; then
-    continue
-  fi
-
-  curl_admin --request PUT --header 'Content-Type: application/json' \
-    --data "${employee_group_representation}" \
-    "${issuer}/admin/realms/${realm}/users/${user_ids[${username}]}/groups/${employee_group_id}" >/dev/null
-
-  user_groups=$(curl_admin "${issuer}/admin/realms/${realm}/users/${user_ids[${username}]}/groups?first=0&max=100&briefRepresentation=true")
-  employee_membership_count=$(jq --arg id "${employee_group_id}" '[.[] | select(.id == $id)] | length' <<<"${user_groups}")
-  admin_membership_count=$(jq --arg id "${admin_group_id}" '[.[] | select(.id == $id)] | length' <<<"${user_groups}")
-  [[ ${employee_membership_count} == 1 && ${admin_membership_count} == 0 ]] || {
-    echo "${username}: 적용 뒤 HR group membership 검증에 실패했다." >&2
-    exit 1
-  }
-  ((added += 1))
+employee_needed=0
+admin_needed=0
+for username in "${employee_usernames[@]}"; do
+  [[ ${employee_membership_counts[${username}]} == 1 ]] || ((employee_needed += 1))
+done
+for username in "${admin_usernames[@]}"; do
+  [[ ${admin_membership_counts[${username}]} == 1 ]] || ((admin_needed += 1))
 done
 
-if [[ ${mode} == --check ]]; then
-  needed=0
-  for username in "${target_usernames[@]}"; do
+if [[ ${mode} == --apply ]]; then
+  for username in "${employee_usernames[@]}"; do
     if [[ ${employee_membership_counts[${username}]} == 0 ]]; then
-      ((needed += 1))
+      curl_admin --request PUT --header 'Content-Type: application/json' \
+        --data "${employee_group_representation}" \
+        "${issuer}/admin/realms/${realm}/users/${user_ids[${username}]}/groups/${employee_group_id}" >/dev/null
     fi
   done
-  echo "AWS-HR-03 Keycloak=PASS users=${#target_usernames[@]}/${#target_usernames[@]} employee_group=/${employee_group_name} add_needed=${needed} admin_membership=0"
-else
-  echo "AWS-HR-03 Keycloak=PASS users=${#target_usernames[@]}/${#target_usernames[@]} employee_group=/${employee_group_name} added=${added} unchanged=${unchanged} admin_membership=0"
+  for username in "${admin_usernames[@]}"; do
+    if [[ ${admin_membership_counts[${username}]} == 0 ]]; then
+      curl_admin --request PUT --header 'Content-Type: application/json' \
+        --data "${admin_group_representation}" \
+        "${issuer}/admin/realms/${realm}/users/${user_ids[${username}]}/groups/${admin_group_id}" >/dev/null
+    fi
+  done
 fi
+
+for username in "${employee_usernames[@]}"; do
+  user_groups=$(curl_admin "${issuer}/admin/realms/${realm}/users/${user_ids[${username}]}/groups?first=0&max=100&briefRepresentation=true")
+  [[ $(jq --arg id "${employee_group_id}" '[.[] | select(.id == $id)] | length' <<<"${user_groups}") == 1 ]] || {
+    echo "${username}: 적용 뒤 /${employee_group_name} membership 검증에 실패했다." >&2
+    exit 1
+  }
+done
+for username in "${admin_usernames[@]}"; do
+  user_groups=$(curl_admin "${issuer}/admin/realms/${realm}/users/${user_ids[${username}]}/groups?first=0&max=100&briefRepresentation=true")
+  [[ $(jq --arg id "${admin_group_id}" '[.[] | select(.id == $id)] | length' <<<"${user_groups}") == 1 ]] || {
+    echo "${username}: 적용 뒤 /${admin_group_name} membership 검증에 실패했다." >&2
+    exit 1
+  }
+done
+
+echo "AWS-HR-03-FIX-01 Keycloak=PASS employee_users=${#employee_usernames[@]}/${#employee_usernames[@]} admin_users=${#admin_usernames[@]}/${#admin_usernames[@]} employee_add_needed=${employee_needed} admin_add_needed=${admin_needed}"

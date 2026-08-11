@@ -1,15 +1,18 @@
 # HR 직원 포털 권한 운영
 
-`AWS-HR-03`은 팀 일상 Keycloak ID에 HR 직원 포털 admission만 부여한다. 사용자 생성, 비활성화,
-삭제, HR 관리자 승격, Pomerium·Dashy·AWS 변경과 HR DB 직원 원장 변경은 이 절차의 범위가 아니다.
+`AWS-HR-03-FIX-01`은 [portal-group-members.json](../../gitops/tools/aws-hr-03/portal-group-members.json)을
+HR 포털 Keycloak group membership의 단일 원본으로 사용한다. 사용자 생성, 비활성화, 삭제,
+Pomerium·Dashy·AWS 변경과 HR DB 직원 원장 변경은 이 절차의 범위가 아니다.
 
 | 대상 | Keycloak group 결과 | 포털 결과 |
 |---|---|---|
-| `imcherry5778` | 기존 `/hr-admins` 유지 | `www`·`admin` admission 유지 |
-| `foxgeun`, `cerberos2022`, `jaeeyun`, `snsd-hybirdinfra` | `/hr-users`만 부여 | `www` admission 허용, `admin` 거부 |
+| `imcherry5778` | `/hr-admins` | `www`·`admin` admission 허용 |
+| `foxgeun`, `jaeeyun` | `/hr-users`, `/hr-admins` | `www`·`admin` admission 허용 |
+| `cerberos2022`, `snsd-hybirdinfra` | `/hr-users` | `www` admission 허용, `admin` 거부 |
 
-실행 전과 후에는 다음 명령을 사용한다. 명령은 enabled user exact match, `/hr-users` 단일 membership,
-대상 네 사용자의 `/hr-admins` membership 0건을 확인한다. 어느 하나라도 성립하지 않으면 변경하지 않고
+권한을 추가하거나 회수할 때는 먼저 JSON 선언만 수정하고 PR 검토 뒤 다음 명령을 사용한다. 명령은
+enabled user exact match, 선언된 `/hr-users`·`/hr-admins` 단일 membership, 선언에 없는 일상 ID의
+`/hr-admins` membership 0건을 확인한다. 예상하지 않은 관리자 membership은 자동으로 삭제하지 않고
 실패한다.
 
 ```bash
