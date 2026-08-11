@@ -551,14 +551,6 @@ credentials:
                   privateKey: "${github_platform_ssh_private_key}"
           - basicSSHUserPrivateKey:
               scope: GLOBAL
-              id: "gitea-board-demo"
-              description: "BOARD-DEMO-01 Gitea read-only deploy key"
-              username: "git"
-              privateKeySource:
-                directEntry:
-                  privateKey: "${board_demo_gitea_ssh_private_key}"
-          - basicSSHUserPrivateKey:
-              scope: GLOBAL
               id: "gitea-hr-system"
               description: "AWS-HR-01 Gitea read-only deploy key"
               username: "git"
@@ -571,12 +563,6 @@ credentials:
               description: "CI-01 Harbor project-scoped robot"
               username: "${harbor_robot_name}"
               password: "${harbor_robot_secret}"
-          - usernamePassword:
-              scope: GLOBAL
-              id: "harbor-robot-board-demo"
-              description: "BOARD-DEMO-01 Harbor project-scoped robot"
-              username: "${board_demo_harbor_robot_name}"
-              password: "${board_demo_harbor_robot_secret}"
           - string:
               scope: GLOBAL
               id: "cosign-private-key-sign01"
@@ -651,28 +637,6 @@ jobs:
                 remote {
                   url('ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/scm-recovery/ci01-build-smoke.git')
                   credentials('gitea-ci01')
-                }
-                branch('*/main')
-              }
-            }
-            scriptPath('Jenkinsfile')
-            lightweight(false)
-          }
-        }
-      }
-      pipelineJob('board-demo-image-build') {
-        description('BOARD-DEMO-01: Gitea mirror에서 build·Trivy·SBOM·Cosign signed digest만 생성')
-        logRotator {
-          numToKeep(20)
-          artifactNumToKeep(0)
-        }
-        definition {
-          cpsScm {
-            scm {
-              git {
-                remote {
-                  url('ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/ktcloud4-bean/board-app.git')
-                  credentials('gitea-board-demo')
                 }
                 branch('*/main')
               }
