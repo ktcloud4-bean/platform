@@ -212,7 +212,7 @@ Wazuh 4.14.7의 Indexer(OpenSearch Security)와 Dashboard는 OIDC를 별도로 �
 | 계층 | 선언 | 범위 |
 |---|---|---|
 | Keycloak | confidential client `wazuh`, client role `wazuh-admin`, flat multi-value `wazuh_roles` claim | callback `https://wazuh.imcherry5778.xyz/auth/openid/login` 하나와 기존 `/platform-privileged` group에만 role mapping; 사용자·MFA·기존 group membership 변경 0건 |
-| Dashboard | 지원되는 native `openid` 단일 모드 | 모든 일반 UI 세션은 Keycloak SSO; Wazuh 4.14.7의 Dashboard는 multi-auth OIDC 자동 선택을 지원하지 않음 |
+| Dashboard | native multi-auth `basicauth` + `openid` | 로그인 선택 화면에서 `Keycloak SSO로 로그인`을 명시적으로 선택; local basic form은 IdP 장애의 local `admin` 복구용으로만 보존 |
 | Indexer | `openid_auth_domain` order 1, audience `wazuh`, `all_access.backend_roles`에 `wazuh-admin` | 기존 JWT·LDAP·proxy·client-cert·internal basic auth domain을 읽어 보존 |
 
 Indexer의 security config는 이미 초기화된 security index에 있으므로 ConfigMap mount로 덮어쓰지
@@ -225,11 +225,36 @@ Dashboard authorization-code 교환과 Indexer discovery/JWKS 요청은 canonica
 `sso.imcherry5778.xyz` TLS hostname을 유지하되, `hostAliases`의 in-cluster Traefik Service로
 보낸다. `wazuh-keycloak-egress`는 이 Service `443`과 실제 Traefik Pod `8443`만 허용한다.
 
-Wazuh 4.14.7에 포함된 Dashboard는 multi-auth에서 OIDC를 기본 선택하는 현행 OpenSearch
-설정을 지원하지 않는다. 따라서 `basicauth`를 함께 켜고 `?auto_login=false`로 고르는 방식은
-쓰지 않는다. 기존 Indexer local `admin`은 유지하되 IdP 장애 시에는 task 소유
-`oidc-security-rollback-job.yaml`을 trusted k3s mTLS 경로로 실행해 exact OIDC domain만
-제거한 뒤 기존 internal basic 경로로 복구한다.
+### WAZUH-02-FIX-02 OAuth 선택 UI와 Manager API URL
+
+Wazuh 4.14.7에 포함된 Dashboard의 native multi-auth는 `basicauth`와 `openid` 조합을 지원한다.
+`multiple_auth_enabled: true`와 `auth.type: ["basicauth", "openid"]`로 로그인 선택 UI를 열고,
+OIDC 버튼 이름은 `Keycloak SSO로 로그인`으로 고정한다. OIDC default redirect는 설정하지 않으므로
+Dashy를 통해 들어와도 사용자가 이 버튼을 선택한 뒤 Keycloak 세션을 사용한다.
+
+`basicauth`는 일반 SSO 대체 경로가 아니다. Pomerium의 `/platform-privileged` Route 뒤에서만
+보이는 local `admin` break-glass form이며, Keycloak OIDC와 Indexer `wazuh-admin` RBAC 선언은
+그대로 유지한다. OIDC가 실패하면 기존 task 소유 `oidc-security-rollback-job.yaml`을 trusted
+k3s mTLS 경로에서 실행해 exact OIDC domain만 제거하고 internal basic 경로를 복구한다.
+
+Dashboard의 Wazuh API client는 저장된 `url`과 `port`를 결합한다. 따라서 `WAZUH_API_URL`에는
+`https://wazuh.wazuh.svc.cluster.local`처럼 scheme/host만 두고 port `55000`은 생성된
+`wazuh.yml`에만 둔다. `:55000`을 환경 변수에 중복하면 `:55000:55000`으로 조합되어 Server APIs
+화면이 Offline이 된다.
+
+이 보정은 Keycloak·Vault·Indexer security 객체를 바꾸지 않는다. immutable root와 child SHA를
+각각 `WAZUH02FIX02_EXPECTED_ROOT_REVISION`·`WAZUH02FIX02_EXPECTED_WAZUH_REVISION`으로 주어
+`gitops/tools/wazuh-02-fix-02/verify-live.sh`를 한 번 실행한다. 이 verifier는 live Dashboard
+multi-auth 선언·OIDC 버튼의 native endpoint·기존 D30/A90 조사 권한·Server API Online과
+`platform-root`/`wazuh` `Synced/Healthy`만 판정한다.
+
+### 2026-08-12 WAZUH-02-FIX-02 완료 증거
+
+immutable root `9239e8af13141923b32bf18a1fd2422638104f57`와 child
+`4ce771e197b6af32e4e23afe777b4e5c4673b99c`에서 `basicauth+openid` 선택 UI와
+`Keycloak SSO로 로그인` 버튼 설정, 해당 native OIDC endpoint의 Keycloak 세션 로그인,
+D30 sid `2029054`·A90 조회 및 Server API Online을 한 verifier로 통과했다. 이후 root와 child는
+literal `main`·main `4f5811441f67b7af882d06eddcf320648d6c237b`의 `Synced/Healthy`로 복귀했다.
 
 ### WAZUH-02-FIX-01 설치·검증
 

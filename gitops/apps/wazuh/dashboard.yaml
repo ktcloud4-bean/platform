@@ -13,9 +13,10 @@
 #   컨테이너에 선언하지 않는다.
 # - SERVER_SSL_ENABLED와 그 인증서 mount 제거: `files/opensearch_dashboards.yml` 머리말과
 #   같은 이유로 내부 자체 서명 TLS 계층을 추가하지 않는다.
-# - WAZUH_API_URL을 이 namespace의 실제 manager Service(`wazuh.wazuh.svc.cluster.local:55000`)로
-#   고정한다. API_USERNAME/PASSWORD는 manager가 이미 provisioning한 `wazuh-01-api` 자격증명을
-#   그대로 재사용한다(새 API 사용자를 만들지 않는다).
+# - WAZUH_API_URL은 실제 manager Service의 scheme/host까지만
+#   (`wazuh.wazuh.svc.cluster.local`) 고정한다. Dashboard는 이 URL에 별도 API port를 덧붙이므로
+#   여기에 `:55000`을 넣으면 잘못된 `:55000:55000` URL이 된다. API_USERNAME/PASSWORD는 manager가
+#   이미 provisioning한 `wazuh-01-api` 자격증명을 그대로 재사용한다(새 API 사용자를 만들지 않는다).
 # - Secret 원문은 Git·Kubernetes Secret 어디에도 없다. Vault Agent init이 memory emptyDir에만
 #   렌더한다(manager·indexer와 같은 경로).
 apiVersion: v1
@@ -125,7 +126,7 @@ spec:
               exec /entrypoint.sh
           env:
             - name: WAZUH_API_URL
-              value: https://wazuh.wazuh.svc.cluster.local:55000
+              value: https://wazuh.wazuh.svc.cluster.local
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
