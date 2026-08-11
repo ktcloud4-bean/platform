@@ -114,13 +114,14 @@ Proxmox NIC ── VLAN-aware bridge
 VLAN 20~50의 source는 VLAN 전체가 아니라 위 고정 배정 표의 현재 배포 VM `/32`로
 한정한다. 각 source는 자기 gateway의 DNS TCP/UDP 53과 NTP UDP 123을 쓰며, 비공개·
 특수용 IPv4를 먼저 차단한 뒤 public IPv4 TCP 80/443만 쓴다. 실제 cross-VLAN 예외는
-다음 여섯 경로뿐이다.
+다음 일곱 경로뿐이다.
 
 - `k3s-01` → `postgres-01` TCP 5432
 - `k3s-01` → `object-01` TCP 8333
 - `warpgate-01` → `k3s-01` TCP 443
 - `warpgate-01` → `netbird-01` TCP 443
 - `warpgate-01` → 현재 여섯 관리 host TCP 22
+- `warpgate-01` → `postgres-01` TCP 5432 (WG-04 native PostgreSQL relay)
 - `netbird-01` → `k3s-01` TCP 443
 
 정확한 rule·alias 의미값과 순서, 소유 작업, 근거, rollback은

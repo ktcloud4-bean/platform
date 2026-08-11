@@ -25,13 +25,19 @@
     fail_msg: >-
       SELinux 는 Enforcing 이어야 한다. 이 role 은 SELinux 를 완화하지 않는다.
 
-- name: 전제 확인 — 로컬 복구 관리자 비밀번호 주입
+- name: 기존 설정 파일 확인
+  ansible.builtin.stat:
+    path: "{{ warpgate_config_path }}"
+  register: warpgate_config_stat
+
+- name: 전제 확인 — 최초 부트스트랩의 로컬 복구 관리자 비밀번호 주입
   ansible.builtin.assert:
     that:
-      - warpgate_admin_password | length >= 12
+      - warpgate_config_stat.stat.exists or warpgate_admin_password | length >= 12
     fail_msg: >-
-      warpgate_admin_password 를 저장소 밖 vars 파일이나 --extra-vars 로 주입해야 한다.
-      저장소에는 placeholder 만 둔다.
+      최초 Warpgate 부트스트랩에는 warpgate_admin_password 를 저장소 밖 vars 파일이나
+      --extra-vars 로 주입해야 한다. 이미 설정된 Warpgate를 재적용할 때는 기존 로컬
+      복구 계정의 비밀번호를 요구하거나 교체하지 않는다.
   no_log: true
 
 - name: WG-02 외부 비밀 파일 metadata 확인
@@ -145,11 +151,6 @@
 # 로컬 admin 사용자를 한 번에 만든다. 설정 파일 존재로 멱등성을 보장하고,
 # 이후 설정은 아래 template 이 소유한다.
 
-- name: 기존 설정 파일 확인
-  ansible.builtin.stat:
-    path: "{{ warpgate_config_path }}"
-  register: warpgate_config_stat
-
 - name: 최초 부트스트랩 (unattended-setup)
   ansible.builtin.command:
     argv: >-
@@ -195,6 +196,76 @@
 - name: Warpgate 전용 ACME 인증서 선언
   ansible.builtin.include_tasks: acme.yml
   when: warpgate_acme_enabled | bool
+
+- name: WG-04 입력 검증 — native PostgreSQL listener와 upstream TLS trust
+  ansible.builtin.assert:
+    that:
+      - warpgate_postgres_listen is match('^\\[::\\]:[0-9]{1,5}$')
+      - warpgate_postgres_external_host | length > 0
+      - warpgate_postgres_external_port | int > 0
+      - warpgate_postgres_external_port | int < 65536
+      - warpgate_postgres_upstream_host | length > 0
+      - warpgate_postgres_upstream_certificate_pem | length > 0
+    fail_msg: >-
+      WG-04에는 PostgreSQL listener endpoint, external host/port와 postgres-01의
+      public bootstrap CA 입력이 모두 필요하다.
+  when: warpgate_postgres_enabled | bool
+  no_log: true
+
+- name: WG-04 PostgreSQL public bootstrap CA를 Warpgate system trust anchor로 설치
+  ansible.builtin.copy:
+    content: "{{ warpgate_postgres_upstream_certificate_pem }}"
+    dest: "{{ warpgate_postgres_trust_anchor_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: warpgate_postgres_trust_anchor
+  when: warpgate_postgres_enabled | bool
+  no_log: true
+
+- name: WG-04 system trust store 갱신
+  ansible.builtin.command:
+    argv: ["update-ca-trust", "extract"]
+  when:
+    - warpgate_postgres_enabled | bool
+    - warpgate_postgres_trust_anchor.changed
+  changed_when: true
+
+- name: WG-04 actual PostgreSQL upstream TLS chain과 hostname 검증
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      printf '' | openssl s_client \
+        -starttls postgres \
+        -connect "${WG04_POSTGRES_HOST}:5432" \
+        -CAfile "${WG04_CA_FILE}" \
+        -verify_hostname "${WG04_POSTGRES_HOST}" \
+        -verify_return_error 2>&1 \
+        | grep -Fx 'Verify return code: 0 (ok)'
+    executable: /bin/bash
+  environment:
+    WG04_POSTGRES_HOST: "{{ warpgate_postgres_upstream_host }}"
+    WG04_CA_FILE: "{{ warpgate_postgres_trust_anchor_path }}"
+  changed_when: false
+  when: warpgate_postgres_enabled | bool
+
+- name: WG-04 actual PostgreSQL server leaf의 최소 잔여 유효기간 검증
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      printf '' | openssl s_client \
+        -starttls postgres \
+        -connect "${WG04_POSTGRES_HOST}:5432" \
+        -CAfile "${WG04_CA_FILE}" \
+        -verify_hostname "${WG04_POSTGRES_HOST}" \
+        -verify_return_error 2>/dev/null \
+        | openssl x509 -noout -checkend 86400
+    executable: /bin/bash
+  environment:
+    WG04_POSTGRES_HOST: "{{ warpgate_postgres_upstream_host }}"
+    WG04_CA_FILE: "{{ warpgate_postgres_trust_anchor_path }}"
+  changed_when: false
+  when: warpgate_postgres_enabled | bool
 
 # --- 선언형 설정 -----------------------------------------------------------
 

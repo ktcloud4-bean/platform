@@ -10,5 +10,11 @@ hostssl all             all             {{ postgres_data_ip }}/32          scram
 # PLATFORM VLAN (k3s / Keycloak)
 hostssl all             all             {{ postgres_platform_subnet }}         scram-sha-256
 
+{% if postgres_warpgate_session_enabled | bool %}
+# WG-04: Warpgate native PostgreSQL relay. ACCESS 전체가 아니라 relay VM 한 대,
+# 전용 운영 database/role에만 TLS(SCRAM)를 허용한다.
+hostssl {{ postgres_warpgate_database }} {{ postgres_warpgate_role }} {{ postgres_warpgate_source_ip }}/32          scram-sha-256
+
+{% endif %}
 # Explicitly reject non-SSL connections from any remote IPv4
 hostnossl all           all             0.0.0.0/0               reject

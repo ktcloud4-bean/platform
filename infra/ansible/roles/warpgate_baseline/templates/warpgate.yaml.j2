@@ -19,11 +19,20 @@ http:
   cookie_max_age: {{ warpgate_http_cookie_max_age }}
   trust_x_forwarded_headers: false
 
-# 아직 필요하지 않은 프로토콜은 열지 않는다.
+# 아직 필요하지 않은 프로토콜은 열지 않는다. PostgreSQL listener는 WG-04 전용
+# playbook이 명시적으로 활성화할 때만 열고, SSO web approval URL은 existing
+# internal service alias로만 만든다.
 mysql:
   enable: false
 postgres:
-  enable: false
+  enable: {{ warpgate_postgres_enabled | bool | lower }}
+{% if warpgate_postgres_enabled | bool %}
+  listen: '{{ warpgate_postgres_listen }}'
+  external_host: {{ warpgate_postgres_external_host | to_json }}
+  external_port: {{ warpgate_postgres_external_port | int }}
+  certificate: {{ warpgate_data_dir }}/tls.certificate.pem
+  key: {{ warpgate_data_dir }}/tls.key.pem
+{% endif %}
 kubernetes:
   enable: false
 
@@ -53,6 +62,10 @@ sso_providers:
       scopes: {{ warpgate_sso_scopes | to_json }}
       roles_claim: {{ warpgate_sso_roles_claim | to_json }}
       role_mappings: {{ warpgate_sso_role_mappings | to_json }}
+{% if warpgate_sso_admin_role_mappings | length > 0 %}
+      admin_roles_claim: {{ warpgate_sso_admin_roles_claim | to_json }}
+      admin_role_mappings: {{ warpgate_sso_admin_role_mappings | to_json }}
+{% endif %}
       trust_unknown_audiences: false
 {% else %}
 sso_providers: []

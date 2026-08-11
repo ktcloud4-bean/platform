@@ -1,0 +1,266 @@
+---
+# WG-04: 기존 로컬 break-glass admin 비밀번호를 알 수 없을 때만 쓰는 recovery entrypoint.
+# 사용자·target·access/admin role·SSO 설정은 건드리지 않는다. Warpgate v0.26.1의
+# recover-access는 새 password credential을 추가하고 그 사용자의 HTTP policy를 Password-only로
+# 정하므로, 반드시 명시 flag와 온라인 SQLite backup을 요구한다.
+
+- name: WG-04 local Warpgate admin recovery secret preparation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    wg04_recover_local_admin: false
+    wg04_warpgate_admin_vars_file: "/home/imcherry/secrets/wg-04/warpgate-admin-vars.yml"
+  tasks:
+    - name: WG-04 local admin recovery 명시 승인 확인
+      ansible.builtin.assert:
+        that:
+          - wg04_recover_local_admin | bool
+        fail_msg: >-
+          로컬 break-glass admin recovery는 wg04_recover_local_admin=true를 명시한
+          경우에만 실행합니다.
+
+    - name: WG-04 local admin vars file metadata 조회
+      ansible.builtin.stat:
+        path: "{{ wg04_warpgate_admin_vars_file }}"
+        follow: false
+      register: wg04_warpgate_admin_vars_stat
+      no_log: true
+
+    - name: 기존 local admin vars 안전성 확인
+      ansible.builtin.assert:
+        that:
+          - >-
+            not wg04_warpgate_admin_vars_stat.stat.exists
+            or (
+              wg04_warpgate_admin_vars_stat.stat.isreg | default(false)
+              and not (wg04_warpgate_admin_vars_stat.stat.islnk | default(false))
+              and wg04_warpgate_admin_vars_stat.stat.mode == "0600"
+            )
+        fail_msg: >-
+          기존 local admin vars file은 symlink가 아닌 mode 0600 regular file이어야 합니다.
+      no_log: true
+
+    - name: WG-04 local admin vars parent directory 생성
+      ansible.builtin.file:
+        path: "{{ wg04_warpgate_admin_vars_file | dirname }}"
+        state: directory
+        mode: "0700"
+
+    - name: 새 local admin password를 external vars에만 생성
+      ansible.builtin.copy:
+        content: >-
+          warpgate_admin_password: |-
+            {{ lookup('ansible.builtin.password', '/dev/null length=48 chars=ascii_letters,digits') }}
+        dest: "{{ wg04_warpgate_admin_vars_file }}"
+        mode: "0600"
+      when: not wg04_warpgate_admin_vars_stat.stat.exists
+      no_log: true
+
+    - name: WG-04 local admin password를 memory에서만 전달
+      ansible.builtin.set_fact:
+        wg04_recovered_warpgate_admin_password: >-
+          {{ (lookup('ansible.builtin.file', wg04_warpgate_admin_vars_file) | from_yaml).warpgate_admin_password }}
+      no_log: true
+
+- name: WG-04 Warpgate local admin recovery and online database backup
+  hosts: warpgate_nodes
+  become: true
+  gather_facts: false
+  vars:
+    wg04_warpgate_database_path: "/var/lib/warpgate/db/db.sqlite3"
+    wg04_warpgate_recovery_dir: "/var/lib/warpgate/recovery"
+    wg04_warpgate_external_host: "warpgate.imcherry5778.xyz"
+    wg04_recovered_warpgate_admin_password: "{{ hostvars['localhost'].wg04_recovered_warpgate_admin_password }}"
+  pre_tasks:
+    - name: WG-04 current Warpgate local admin recovery 전제 확인
+      ansible.builtin.assert:
+        that:
+          - hostvars['localhost'].wg04_recover_local_admin | bool
+          - wg04_recovered_warpgate_admin_password | length >= 32
+        fail_msg: WG-04 local admin recovery input이 유효하지 않습니다.
+      no_log: true
+
+    - name: WG-04 Warpgate service active 확인
+      ansible.builtin.command:
+        argv: ["systemctl", "is-active", "warpgate"]
+      register: wg04_warpgate_service
+      changed_when: false
+      failed_when: wg04_warpgate_service.stdout != "active"
+
+    - name: 기존 local admin credential의 내부 service API 상태 확인
+      ansible.builtin.uri:
+        # service alias는 내부 DNS에서 같은 Warpgate VM의 ACCESS 주소로 해석된다.
+        # v0.26.1 cookie의 host contract를 만족하면서 self-induced loopback block을 피한다.
+        url: "https://{{ wg04_warpgate_external_host }}:8888/@warpgate/api/auth/login"
+        method: POST
+        body_format: json
+        body:
+          username: admin
+          password: "{{ wg04_recovered_warpgate_admin_password }}"
+        validate_certs: true
+        use_proxy: false
+        status_code: [200, 201, 204, 401, 403]
+      register: wg04_local_admin_before_recovery
+      no_log: true
+      changed_when: false
+
+    - name: local admin session의 내부 service Admin API 권한 확인
+      ansible.builtin.uri:
+        url: "https://{{ wg04_warpgate_external_host }}:8888/@warpgate/admin/api/roles"
+        headers:
+          Cookie: "{{ wg04_local_admin_before_recovery.cookies_string }}"
+        validate_certs: true
+        use_proxy: false
+        status_code: 200
+      no_log: true
+      changed_when: false
+      when: wg04_local_admin_before_recovery.status in [200, 201, 204]
+
+    - name: WG-04 local admin login session metadata 확인
+      ansible.builtin.debug:
+        msg:
+          status: "{{ wg04_local_admin_before_recovery.status }}"
+          cookie_names: "{{ wg04_local_admin_before_recovery.cookies.keys() | list }}"
+          cookie_present: "{{ wg04_local_admin_before_recovery.cookies_string | length > 0 }}"
+
+    - name: WG-04 Warpgate SQLite DB metadata 확인
+      ansible.builtin.stat:
+        path: "{{ wg04_warpgate_database_path }}"
+        follow: false
+      register: wg04_warpgate_database_stat
+
+    - name: WG-04 Warpgate SQLite DB 입력 확인
+      ansible.builtin.assert:
+        that:
+          - wg04_warpgate_database_stat.stat.exists
+          - wg04_warpgate_database_stat.stat.isreg | default(false)
+          - not (wg04_warpgate_database_stat.stat.islnk | default(false))
+        fail_msg: WG-04 recovery 전에 Warpgate SQLite DB를 안전하게 확인할 수 없습니다.
+
+    - name: recovery 전 local admin password credential 수 조회
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - >-
+            import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); print(db.execute("select count(c.id) from users u left join credentials_password c on c.user_id=u.id where u.username='admin'").fetchone()[0])
+          - "{{ wg04_warpgate_database_path }}"
+      register: wg04_local_admin_password_count_before
+      changed_when: false
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+    - name: WG-04 online backup timestamp 생성
+      ansible.builtin.command:
+        argv: ["date", "-u", "+%Y%m%dT%H%M%SZ"]
+      register: wg04_recovery_timestamp
+      changed_when: false
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+    - name: WG-04 online backup path 결정
+      ansible.builtin.set_fact:
+        wg04_warpgate_backup_path: >-
+          {{ wg04_warpgate_recovery_dir }}/wg-04-pre-local-admin-recovery-{{ wg04_recovery_timestamp.stdout }}.sqlite3
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+    - name: WG-04 recovery backup directory 생성
+      ansible.builtin.file:
+        path: "{{ wg04_warpgate_recovery_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+    - name: WG-04 backup path existing file 확인
+      ansible.builtin.stat:
+        path: "{{ wg04_warpgate_backup_path }}"
+        follow: false
+      register: wg04_warpgate_backup_stat
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+    - name: WG-04 existing backup overwrite 차단
+      ansible.builtin.assert:
+        that:
+          - not wg04_warpgate_backup_stat.stat.exists
+        fail_msg: WG-04 recovery backup path가 이미 존재합니다. 기존 backup을 덮어쓰지 않습니다.
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+  tasks:
+    - name: WG-04 Warpgate SQLite online backup 생성
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - >-
+            import sqlite3,sys; source=sqlite3.connect(sys.argv[1]); destination=sqlite3.connect(sys.argv[2]); source.backup(destination); destination.close(); source.close()
+          - "{{ wg04_warpgate_database_path }}"
+          - "{{ wg04_warpgate_backup_path }}"
+      changed_when: true
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+    - name: WG-04 recovery backup 최소 권한 설정
+      ansible.builtin.file:
+        path: "{{ wg04_warpgate_backup_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+    - name: WG-04 recovery backup SQLite integrity 확인
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - >-
+            import sqlite3,sys; result=sqlite3.connect(sys.argv[1]).execute('PRAGMA integrity_check').fetchone()[0]; assert result == 'ok', result
+          - "{{ wg04_warpgate_backup_path }}"
+      changed_when: false
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+    - name: WG-04 Warpgate local admin password credential 추가
+      ansible.builtin.script: "../scripts/warpgate-recover-access.py"
+      become_user: warpgate
+      register: wg04_recover_access
+      environment:
+        WG04_RECOVER_ACCESS_PASSWORD: "{{ wg04_recovered_warpgate_admin_password }}"
+      no_log: true
+      changed_when: true
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+    - name: recovery 후 local admin password credential 수 조회
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - >-
+            import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); print(db.execute("select count(c.id) from users u left join credentials_password c on c.user_id=u.id where u.username='admin'").fetchone()[0])
+          - "{{ wg04_warpgate_database_path }}"
+      register: wg04_local_admin_password_count_after
+      changed_when: false
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+    - name: WG-04 local admin password credential 추가 확인
+      ansible.builtin.assert:
+        that:
+          - >-
+            wg04_local_admin_password_count_after.stdout | int
+            > wg04_local_admin_password_count_before.stdout | int
+        fail_msg: >-
+          WG-04 recover-access가 운영 SQLite에 새 local admin credential을 추가하지 않았습니다.
+      when: wg04_local_admin_before_recovery.status not in [200, 201, 204]
+
+    - name: 새 local admin password로 내부 service 관리 API 로그인 확인
+      ansible.builtin.uri:
+        url: "https://{{ wg04_warpgate_external_host }}:8888/@warpgate/api/auth/login"
+        method: POST
+        body_format: json
+        body:
+          username: admin
+          password: "{{ wg04_recovered_warpgate_admin_password }}"
+        validate_certs: true
+        use_proxy: false
+        status_code: [200, 201, 204]
+      no_log: true
+      changed_when: false

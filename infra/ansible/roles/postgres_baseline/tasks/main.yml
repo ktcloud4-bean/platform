@@ -2,6 +2,19 @@
 # infra/ansible/roles/postgres_baseline/tasks/main.yml
 # PostgreSQL 16 baseline installation and hardening
 
+- name: WG-04 입력 검증 — Warpgate 전용 운영 role
+  ansible.builtin.assert:
+    that:
+      - postgres_warpgate_source_ip is match('^[0-9]{1,3}(\\.[0-9]{1,3}){3}$')
+      - postgres_warpgate_role is match('^[a-z][a-z0-9_]{0,62}$')
+      - postgres_warpgate_database is match('^[a-z][a-z0-9_]{0,62}$')
+      - pg_warpgate_ops_password | length >= 32
+    fail_msg: >-
+      WG-04에는 단일 IPv4 relay source, 안전한 role/database 식별자와 저장소 밖의
+      32자 이상 pg_warpgate_ops_password가 필요하다.
+  when: postgres_warpgate_session_enabled | bool
+  no_log: true
+
 - name: Enable PostgreSQL 16 DNF stream module
   ansible.builtin.dnf:
     name: "@postgresql:16"
@@ -26,47 +39,287 @@
     cmd: postgresql-setup --initdb
   when: not pgdata_version.stat.exists and not ansible_check_mode
 
-- name: Check if host-specific TLS private key exists
+- name: Check PostgreSQL server leaf TLS private key
   ansible.builtin.stat:
-    path: "{{ postgres_data_dir }}/server.key"
-  register: pg_tls_key
+    path: "{{ postgres_tls_leaf_key_path }}"
+  register: pg_tls_leaf_key
 
-- name: Generate host-specific TLS leaf certificate and key for postgres-01
+- name: Check PostgreSQL bootstrap CA private key
+  ansible.builtin.stat:
+    path: "{{ postgres_tls_ca_key_path }}"
+  register: pg_tls_ca_key
+
+- name: WG-04 legacy PostgreSQL TLS certificate CA property read
   ansible.builtin.command:
-    cmd: >
-      openssl req -x509 -newkey rsa:4096
-      -keyout {{ postgres_data_dir }}/server.key
-      -out {{ postgres_data_dir }}/server.crt
-      -days 365 -nodes
-      -subj "/CN={{ postgres_canonical_fqdn }}"
-      -addext "subjectAltName=DNS:{{ postgres_canonical_fqdn }},IP:{{ postgres_data_ip }}"
-  when: not pg_tls_key.stat.exists and not ansible_check_mode
+    argv:
+      - openssl
+      - x509
+      - -in
+      - "{{ postgres_tls_leaf_cert_path }}"
+      - -noout
+      - -text
+  register: pg_tls_legacy_certificate
+  changed_when: false
+  check_mode: false
+  when:
+    - postgres_tls_migrate_legacy_ca_leaf | bool
+    - pg_tls_leaf_key.stat.exists
+
+- name: WG-04 legacy certificate must be a CA before migration
+  ansible.builtin.assert:
+    that:
+      - pg_tls_legacy_certificate.stdout is search('CA:TRUE')
+    fail_msg: >-
+      기존 PostgreSQL TLS leaf가 CA:TRUE bootstrap certificate가 아니므로 WG-04
+      migration을 적용할 수 없습니다. 실제 certificate chain을 별도로 판정해야 합니다.
+  when:
+    - postgres_tls_migrate_legacy_ca_leaf | bool
+    - pg_tls_leaf_key.stat.exists
+    - not pg_tls_ca_key.stat.exists
+
+- name: Determine whether current PostgreSQL server certificate is a legacy CA leaf
+  ansible.builtin.set_fact:
+    pg_tls_legacy_leaf_is_ca: >-
+      {{ postgres_tls_migrate_legacy_ca_leaf | bool
+         and (pg_tls_legacy_certificate.stdout | default('') is search('CA:TRUE')) }}
+  no_log: true
+
+- name: Generate dedicated PostgreSQL bootstrap CA for a new cluster
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - req
+      - -x509
+      - -newkey
+      - rsa:4096
+      - -keyout
+      - "{{ postgres_tls_ca_key_path }}"
+      - -out
+      - "{{ postgres_tls_ca_cert_path }}"
+      - -days
+      - "{{ postgres_tls_ca_days | string }}"
+      - -nodes
+      - -subj
+      - "/CN={{ postgres_tls_ca_common_name }}"
+      - -addext
+      - "basicConstraints=critical,CA:TRUE"
+      - -addext
+      - "keyUsage=critical,keyCertSign,cRLSign"
+  when:
+    - not pg_tls_leaf_key.stat.exists
+    - not pg_tls_ca_key.stat.exists
+    - not ansible_check_mode
+  no_log: true
+
+- name: WG-04 existing bootstrap CA certificate preserve
+  ansible.builtin.copy:
+    src: "{{ postgres_tls_leaf_cert_path }}"
+    dest: "{{ postgres_tls_ca_cert_path }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - postgres_tls_migrate_legacy_ca_leaf | bool
+    - pg_tls_leaf_key.stat.exists
+    - not pg_tls_ca_key.stat.exists
+    - not ansible_check_mode
+
+- name: WG-04 existing bootstrap CA private key preserve
+  ansible.builtin.copy:
+    src: "{{ postgres_tls_leaf_key_path }}"
+    dest: "{{ postgres_tls_ca_key_path }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - postgres_tls_migrate_legacy_ca_leaf | bool
+    - pg_tls_leaf_key.stat.exists
+    - not pg_tls_ca_key.stat.exists
+    - not ansible_check_mode
+  no_log: true
+
+- name: Determine whether a PostgreSQL server leaf must be issued
+  ansible.builtin.set_fact:
+    pg_tls_issue_leaf: >-
+      {{ (not pg_tls_leaf_key.stat.exists and not pg_tls_ca_key.stat.exists)
+         or (pg_tls_legacy_leaf_is_ca | bool) }}
+  no_log: true
+
+- name: Check PostgreSQL leaf staging paths before issuing
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ postgres_tls_leaf_key_path }}.next"
+    - "{{ postgres_tls_leaf_cert_path }}.next"
+    - "{{ postgres_data_dir }}/server-leaf.csr"
+    - "{{ postgres_data_dir }}/server-leaf.ext"
+  register: pg_tls_staging_paths
+  when: pg_tls_issue_leaf | bool
+
+- name: Refuse to overwrite PostgreSQL TLS staging material
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: >-
+      PostgreSQL TLS staging file {{ item.item }} already exists. 기존 leaf와 key를
+      덮어쓰지 않고 원인과 rollback 상태를 먼저 판정해야 합니다.
+  loop: "{{ pg_tls_staging_paths.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: pg_tls_issue_leaf | bool
+
+- name: Render PostgreSQL server leaf certificate extensions
+  ansible.builtin.copy:
+    content: |
+      basicConstraints=critical,CA:FALSE
+      keyUsage=critical,digitalSignature,keyEncipherment
+      extendedKeyUsage=serverAuth
+      subjectAltName=DNS:{{ postgres_canonical_fqdn }},IP:{{ postgres_data_ip }}
+    dest: "{{ postgres_data_dir }}/server-leaf.ext"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - pg_tls_issue_leaf | bool
+    - not ansible_check_mode
+
+- name: Generate PostgreSQL server leaf private key and CSR
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - req
+      - -new
+      - -newkey
+      - rsa:4096
+      - -nodes
+      - -keyout
+      - "{{ postgres_tls_leaf_key_path }}.next"
+      - -out
+      - "{{ postgres_data_dir }}/server-leaf.csr"
+      - -subj
+      - "/CN={{ postgres_canonical_fqdn }}"
+  when:
+    - pg_tls_issue_leaf | bool
+    - not ansible_check_mode
+  no_log: true
+
+- name: Sign PostgreSQL server leaf with bootstrap CA
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - x509
+      - -req
+      - -in
+      - "{{ postgres_data_dir }}/server-leaf.csr"
+      - -CA
+      - "{{ postgres_tls_ca_cert_path }}"
+      - -CAkey
+      - "{{ postgres_tls_ca_key_path }}"
+      - -CAcreateserial
+      - -CAserial
+      - "{{ postgres_data_dir }}/server-ca.srl"
+      - -out
+      - "{{ postgres_tls_leaf_cert_path }}.next"
+      - -days
+      - "{{ postgres_tls_leaf_days | string }}"
+      - -sha256
+      - -extfile
+      - "{{ postgres_data_dir }}/server-leaf.ext"
+  when:
+    - pg_tls_issue_leaf | bool
+    - not ansible_check_mode
+  no_log: true
+
+- name: Verify staged PostgreSQL leaf chain and hostname
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - verify
+      - -CAfile
+      - "{{ postgres_tls_ca_cert_path }}"
+      - -verify_hostname
+      - "{{ postgres_canonical_fqdn }}"
+      - "{{ postgres_tls_leaf_cert_path }}.next"
+  changed_when: false
+  when:
+    - pg_tls_issue_leaf | bool
+    - not ansible_check_mode
+
+- name: Verify staged PostgreSQL leaf is not a CA
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - x509
+      - -in
+      - "{{ postgres_tls_leaf_cert_path }}.next"
+      - -noout
+      - -text
+  register: pg_tls_staged_leaf
+  changed_when: false
+  when:
+    - pg_tls_issue_leaf | bool
+    - not ansible_check_mode
+
+- name: Assert staged PostgreSQL leaf CA constraint
+  ansible.builtin.assert:
+    that:
+      - pg_tls_staged_leaf.stdout is search('CA:FALSE')
+    fail_msg: PostgreSQL server leaf는 CA:FALSE여야 합니다.
+  when:
+    - pg_tls_issue_leaf | bool
+    - not ansible_check_mode
+
+- name: Activate staged PostgreSQL server leaf without replacing trust anchor
+  ansible.builtin.command:
+    argv:
+      - /bin/bash
+      - -c
+      - >-
+        set -euo pipefail;
+        mv "{{ postgres_tls_leaf_key_path }}.next" "{{ postgres_tls_leaf_key_path }}";
+        mv "{{ postgres_tls_leaf_cert_path }}.next" "{{ postgres_tls_leaf_cert_path }}";
+        chown postgres:postgres "{{ postgres_tls_leaf_key_path }}" "{{ postgres_tls_leaf_cert_path }}";
+        chmod 0600 "{{ postgres_tls_leaf_key_path }}";
+        chmod 0644 "{{ postgres_tls_leaf_cert_path }}";
+        rm -f "{{ postgres_data_dir }}/server-leaf.csr" "{{ postgres_data_dir }}/server-leaf.ext"
+  when:
+    - pg_tls_issue_leaf | bool
+    - not ansible_check_mode
+  notify: reload postgresql
+  no_log: true
 
 - name: Ensure correct permissions on TLS key file
   ansible.builtin.file:
-    path: "{{ postgres_data_dir }}/server.key"
+    path: "{{ postgres_tls_leaf_key_path }}"
     owner: postgres
     group: postgres
     mode: "0600"
-  when: pg_tls_key.stat.exists or not ansible_check_mode
+  when: pg_tls_leaf_key.stat.exists or pg_tls_issue_leaf | bool
 
 - name: Ensure correct permissions on TLS certificate file
   ansible.builtin.file:
-    path: "{{ postgres_data_dir }}/server.crt"
+    path: "{{ postgres_tls_leaf_cert_path }}"
     owner: postgres
     group: postgres
     mode: "0644"
-  when: pg_tls_key.stat.exists or not ansible_check_mode
+  when: pg_tls_leaf_key.stat.exists or pg_tls_issue_leaf | bool
 
-- name: Deploy public copy of bootstrap leaf certificate for client trust
+- name: Check PostgreSQL bootstrap CA certificate after TLS setup
+  ansible.builtin.stat:
+    path: "{{ postgres_tls_ca_cert_path }}"
+  register: pg_tls_ca_cert_after
+
+- name: Deploy public copy of PostgreSQL bootstrap CA for client trust
   ansible.builtin.copy:
-    src: "{{ postgres_data_dir }}/server.crt"
+    src: >-
+      {{ postgres_tls_ca_cert_path if pg_tls_ca_cert_after.stat.exists else postgres_tls_leaf_cert_path }}
     dest: "/etc/pki/tls/certs/postgres-01-bootstrap.crt"
     remote_src: true
     owner: root
     group: root
     mode: "0644"
-  when: pg_tls_key.stat.exists or not ansible_check_mode
 
 - name: Ensure postgres-01.imcherry5778.xyz points to 10.10.50.10 in /etc/hosts
   ansible.builtin.lineinfile:
@@ -165,6 +418,19 @@
     - not ansible_check_mode
     - pg_gitea_password | length > 0
 
+- name: Create Warpgate PostgreSQL operator role with no administrative attributes
+  community.postgresql.postgresql_user:
+    name: "{{ postgres_warpgate_role }}"
+    password: "{{ pg_warpgate_ops_password }}"
+    role_attr_flags: "LOGIN,NOSUPERUSER,NOCREATEDB,NOCREATEROLE,NOREPLICATION,NOINHERIT,NOBYPASSRLS"
+    state: present
+  no_log: true
+  become: true
+  become_user: postgres
+  when:
+    - postgres_warpgate_session_enabled | bool
+    - not ansible_check_mode
+
 - name: Create keycloak database owned by keycloak_user
   community.postgresql.postgresql_db:
     name: keycloak
@@ -251,6 +517,21 @@
   when:
     - not ansible_check_mode
     - pg_gitea_password | length > 0
+
+- name: Grant pg_monitor and CONNECT only to the Warpgate operator role
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: >-
+      GRANT pg_monitor TO {{ postgres_warpgate_role }};
+      GRANT CONNECT ON DATABASE {{ postgres_warpgate_database }} TO {{ postgres_warpgate_role }};
+      REVOKE pg_read_all_data, pg_write_all_data, pg_database_owner, pg_signal_backend
+      FROM {{ postgres_warpgate_role }};
+  become: true
+  become_user: postgres
+  changed_when: false
+  when:
+    - postgres_warpgate_session_enabled | bool
+    - not ansible_check_mode
 
 - name: Revoke ALL on schema public from PUBLIC in keycloak database
   community.postgresql.postgresql_query:

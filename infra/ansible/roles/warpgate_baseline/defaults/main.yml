@@ -38,6 +38,17 @@ warpgate_data_dir: "/var/lib/warpgate"
 warpgate_http_listen: "[::]:8888"
 warpgate_ssh_listen: "[::]:2222"
 
+# WG-04 native PostgreSQL listener. 기본 기준선에서는 비활성으로 유지한다.
+# 활성화할 때 upstream TLS trust anchor는 postgres-01의 public bootstrap CA만
+# 전달하며 Warpgate host system trust store에 고정한다. 실제 server leaf는 CA:FALSE여야 한다.
+warpgate_postgres_enabled: false
+warpgate_postgres_listen: "[::]:55432"
+warpgate_postgres_external_host: "{{ warpgate_external_host }}"
+warpgate_postgres_external_port: 55432
+warpgate_postgres_upstream_host: "postgres-01.imcherry5778.xyz"
+warpgate_postgres_upstream_certificate_pem: ""
+warpgate_postgres_trust_anchor_path: "/etc/pki/ca-trust/source/anchors/warpgate-postgres-01.crt"
+
 # 브라우저 SSO callback 과 service cookie 가 사용하는 내부 service alias.
 # 공개 A/AAAA 또는 NAT 를 뜻하지 않으며 docs/ip-plan.md 가 단일 원본이다.
 warpgate_external_host: "warpgate.imcherry5778.xyz"
@@ -86,6 +97,10 @@ warpgate_sso_roles_claim: "groups"
 warpgate_sso_role_mappings:
   /platform-users: "platform-users"
   /platform-privileged: "platform-privileged"
+# OIDC access role과 Admin role은 분리한다. Admin mapping은 별도 task가 명시적으로
+# 활성화할 때만 넣어 일반 특권 접근자가 제품 관리 UI를 보지 못하게 한다.
+warpgate_sso_admin_roles_claim: ""
+warpgate_sso_admin_role_mappings: {}
 warpgate_sso_auto_create_users: false
 
 warpgate_keycloak_manage_client: true
@@ -139,7 +154,11 @@ warpgate_lego_binary_link: "/usr/local/bin/lego"
 # warpgate_targets:
 #   - name: "<target>"
 #     description: ""
-#     ssh: { host: "127.0.0.1", port: 22, username: "<user>" }
+#     ssh: { host: "127.0.0.1", port: 22, username: "<user>" } # 기존 SSH shorthand
+#     # 또는 Warpgate API TargetOptions 전체를 options로 선언한다. 비밀을 포함할 수
+#     # 있으므로 해당 API task는 no_log로 처리한다.
+#     options: { kind: "Postgres", host: "postgres.example", port: 5432, username: "ops", auth: { kind: "Password", password: "<외부 입력>" }, tls: { mode: "Required", verify: true }, idle_timeout: null, default_database_name: "postgres", protocol_version: null }
+#     reconcile: true # 명시한 run에서만 동일 kind target을 PUT으로 갱신
 #     roles: ["<role>"]
 #     state: present
 # warpgate_users:
@@ -162,6 +181,9 @@ warpgate_roles:
   - name: "platform-privileged"
     description: "Keycloak /platform-privileged 승인 특권 접근"
     state: present
+# Admin role은 target access role과 다른 제품 내부 RBAC다. 각 항목은 Warpgate v0.26.1
+# AdminRole API의 전체 permission 집합을 명시해 누락된 권한이 암묵적으로 허용되지 않게 한다.
+warpgate_admin_roles: []
 warpgate_targets: []
 warpgate_users:
   # IAM-MIG-01: imcherry/imcherry-admin(legacy)와 imcherry5778/imcherry5778-admin(신규)의
@@ -186,6 +208,11 @@ warpgate_users:
     state: present
   - name: "imcherry5778-admin"
     description: "Keycloak 특권 ID"
+    # WG-04 native PostgreSQL은 사용자의 Warpgate password 1차 인증 뒤, 이미
+    # 브라우저에서 Keycloak SSO/MFA를 마친 사용자의 explicit web approval을 추가한다.
+    credential_policy:
+      # 관리 API의 OpenAPI enum 표기다. 설정 파일의 serde value("web")와 다르다.
+      postgres: ["WebUserApproval"]
     sso_credentials:
       - provider: "keycloak"
         email: "imcherry5778+admin@gmail.com"
@@ -202,7 +229,7 @@ warpgate_provision_enabled: >-
   {{ (warpgate_roles | length + warpgate_targets | length
       + warpgate_users | length + warpgate_known_hosts | length) > 0 }}
 
-# admin API 호출에 쓰는 loopback base URL.
-# WG-02 공인 인증서는 service alias 단일 SAN이라 127.0.0.1 URL과 일치하지 않는다.
-# 관리 API는 외부로 열지 않고 loopback 한정으로 호출한다.
-warpgate_api_base: "https://127.0.0.1:{{ warpgate_http_listen | regex_replace('^.*:', '') }}"
+# admin API 호출에 쓰는 내부 service alias URL. Warpgate v0.26.1 HTTP session cookie는
+# request Host가 external_host와 일치해야 한다. 이 alias는 Unbound 내부 DNS만 소유하며
+# 같은 VM의 ACCESS 주소로 해석된다. 외부 API listener·NAT·공개 DNS를 뜻하지 않는다.
+warpgate_api_base: "https://{{ warpgate_external_host }}:{{ warpgate_http_listen | regex_replace('^.*:', '') }}"

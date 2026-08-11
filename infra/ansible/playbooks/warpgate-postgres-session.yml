@@ -1,0 +1,191 @@
+---
+# WG-04: Warpgate native PostgreSQL session entrypoint.
+#
+# 이 playbook은 postgres-01의 local peer/superuser 경로를 바꾸지 않는다. Warpgate가
+# 전달할 전용 pg_monitor role 하나와 hostssl HBA 한 줄, Warpgate PostgreSQL TLS listener와
+# target 하나만 함께 선언한다. OPNsense exact TCP 5432 rule은 별도 OPNSENSE-LIVE 단계가
+# 소유한다.
+
+- name: WG-04 local PostgreSQL relay secret preparation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  # ansible.cfg의 기본 become=true가 비밀 파일을 root 소유로 만들지 않게 한다.
+  become: false
+  vars:
+    wg04_pg_ops_password_file: "/home/imcherry/secrets/wg-04/pg-warpgate-ops-password"
+    # 초기 비밀 파일이 없을 때만 명시적으로 true로 만들어야 한다. 기존 파일은 어떤
+    # 경우에도 회전하거나 덮어쓰지 않는다.
+    wg04_create_pg_ops_password: false
+  tasks:
+    - name: WG-04 password file absolute path 확인
+      ansible.builtin.assert:
+        that:
+          - wg04_pg_ops_password_file is match('^/[^\n]+$')
+        fail_msg: WG-04 password file은 저장소 밖 absolute path여야 한다.
+      no_log: true
+
+    - name: WG-04 password file metadata 조회
+      ansible.builtin.stat:
+        path: "{{ wg04_pg_ops_password_file }}"
+        follow: false
+      register: wg04_pg_ops_password_stat
+      no_log: true
+
+    - name: WG-04 password parent directory 생성
+      ansible.builtin.file:
+        path: "{{ wg04_pg_ops_password_file | dirname }}"
+        state: directory
+        mode: "0700"
+      when:
+        - not wg04_pg_ops_password_stat.stat.exists
+        - wg04_create_pg_ops_password | bool
+
+    - name: WG-04 초기 PostgreSQL relay password 생성
+      ansible.builtin.copy:
+        content: >-
+          {{ lookup('ansible.builtin.password', '/dev/null length=48 chars=ascii_letters,digits') }}
+        dest: "{{ wg04_pg_ops_password_file }}"
+        mode: "0600"
+      when:
+        - not wg04_pg_ops_password_stat.stat.exists
+        - wg04_create_pg_ops_password | bool
+      no_log: true
+
+    - name: WG-04 password file 생성 승인 확인
+      ansible.builtin.assert:
+        that:
+          - wg04_pg_ops_password_stat.stat.exists or wg04_create_pg_ops_password | bool
+        fail_msg: >-
+          WG-04 password file이 없습니다. 사전에 mode 0600 regular file을 만들거나
+          첫 적용에서 wg04_create_pg_ops_password=true를 명시하십시오.
+      no_log: true
+
+    - name: WG-04 password file metadata 재조회
+      ansible.builtin.stat:
+        path: "{{ wg04_pg_ops_password_file }}"
+        follow: false
+      register: wg04_pg_ops_password_final_stat
+      no_log: true
+
+    - name: WG-04 password file 최소 권한 확인
+      ansible.builtin.assert:
+        that:
+          - wg04_pg_ops_password_final_stat.stat.exists
+          - wg04_pg_ops_password_final_stat.stat.isreg | default(false)
+          - not (wg04_pg_ops_password_final_stat.stat.islnk | default(false))
+          - wg04_pg_ops_password_final_stat.stat.mode == "0600"
+        fail_msg: WG-04 password input은 symlink가 아닌 mode 0600 regular file이어야 한다.
+      no_log: true
+
+- name: WG-04 PostgreSQL minimal relay role and TLS HBA
+  hosts: postgres_nodes
+  become: true
+  vars:
+    wg04_pg_ops_password_file: "/home/imcherry/secrets/wg-04/pg-warpgate-ops-password"
+    pg_warpgate_ops_password: >-
+      {{ lookup('ansible.builtin.file', wg04_pg_ops_password_file) | trim }}
+    postgres_warpgate_session_enabled: true
+    # PG-01의 CA:TRUE self-signed server certificate를 기존 trust anchor CA로 보존하고,
+    # 그 CA가 서명한 CA:FALSE server leaf로 한 번만 전환한다.
+    postgres_tls_migrate_legacy_ca_leaf: true
+  roles:
+    - postgres_baseline
+  post_tasks:
+    - name: WG-04 PostgreSQL public bootstrap CA read
+      ansible.builtin.slurp:
+        src: "/etc/pki/tls/certs/postgres-01-bootstrap.crt"
+      register: wg04_postgres_public_certificate
+      no_log: true
+
+- name: WG-04 Warpgate PostgreSQL TLS listener and target
+  hosts: warpgate_nodes
+  become: true
+  pre_tasks:
+    # WG-04는 existing WG-02 SSO client의 소유자가 아니다. specialized playbook을
+    # 재적용할 때 controller에 client secret 사본을 요구하지 않도록, root-only current
+    # config에서만 읽어 template에 다시 주입한다. 어떤 task도 값을 출력하지 않는다.
+    - name: WG-04 current Warpgate SSO configuration read
+      ansible.builtin.slurp:
+        src: "/etc/warpgate.yaml"
+      register: wg04_warpgate_current_config
+      no_log: true
+
+    - name: WG-04 existing SSO client secret in-memory reuse
+      ansible.builtin.set_fact:
+        warpgate_sso_client_secret: >-
+          {{
+            ((wg04_warpgate_current_config.content | b64decode | from_yaml).sso_providers
+             | first).provider.client_secret
+          }}
+      when: warpgate_sso_client_secret | default('') | length == 0
+      no_log: true
+
+    - name: WG-04 current SSO configuration compatibility verify
+      ansible.builtin.assert:
+        that:
+          - warpgate_sso_client_secret | length >= 32
+        fail_msg: >-
+          current Warpgate config에서 WG-02 SSO client secret을 읽을 수 없습니다.
+          기존 WG-02 secret input으로만 복구한 뒤 WG-04를 재시도해야 합니다.
+      no_log: true
+  vars:
+    wg04_pg_ops_password_file: "/home/imcherry/secrets/wg-04/pg-warpgate-ops-password"
+    # target의 upstream password 회전이나 product DB의 확인된 drift 보정 때만 true로
+    # 명시한다. 일반 재적용이 API password redaction 때문에 항상 changed가 되지 않게 한다.
+    wg04_reconcile_target: false
+    pg_warpgate_ops_password: >-
+      {{ lookup('ansible.builtin.file', wg04_pg_ops_password_file) | trim }}
+    warpgate_keycloak_manage_client: false
+    warpgate_acme_enabled: false
+    warpgate_postgres_enabled: true
+    # /warpgate-auditors는 target access와 별개인 Admin role 하나만 받는다. 이 그룹의
+    # platform user는 postgres-ops target role을 추가로 받지 않는다.
+    warpgate_sso_admin_roles_claim: "groups"
+    warpgate_sso_admin_role_mappings:
+      /warpgate-auditors: "warpgate-audit-reader"
+    warpgate_admin_roles:
+      - name: "warpgate-audit-reader"
+        description: "WG-04 Keycloak /warpgate-auditors read-only session and recording audit"
+        targets_create: false
+        targets_edit: false
+        targets_delete: false
+        users_create: false
+        users_edit: false
+        users_delete: false
+        access_roles_create: false
+        access_roles_edit: false
+        access_roles_delete: false
+        access_roles_assign: false
+        sessions_view: true
+        sessions_terminate: false
+        recordings_view: true
+        tickets_create: false
+        tickets_delete: false
+        config_edit: false
+        admin_roles_manage: false
+        ticket_requests_manage: false
+    warpgate_postgres_upstream_certificate_pem: >-
+      {{ hostvars[groups['postgres_nodes'] | first].wg04_postgres_public_certificate.content | b64decode }}
+    warpgate_targets:
+      - name: "postgres-ops"
+        description: "WG-04 PostgreSQL read-only operator session"
+        options:
+          kind: "Postgres"
+          host: "postgres-01.imcherry5778.xyz"
+          port: 5432
+          username: "warpgate_pg_ops"
+          auth:
+            kind: "Password"
+            password: "{{ pg_warpgate_ops_password }}"
+          tls:
+            mode: "Required"
+            verify: true
+          idle_timeout: null
+          default_database_name: "postgres"
+          protocol_version: null
+        reconcile: "{{ wg04_reconcile_target | bool }}"
+        roles: ["platform-privileged"]
+        state: present
+  roles:
+    - warpgate_baseline

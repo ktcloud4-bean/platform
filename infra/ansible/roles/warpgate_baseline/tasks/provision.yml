@@ -3,17 +3,32 @@
 # WG-01: role / target / user 를 Warpgate 관리 API 로 선언형 반영한다.
 #
 # Warpgate 는 role·target·user 를 설정 파일이 아니라 제품 DB 에 둔다. 따라서
-# 선언은 loopback 관리 API 호출로 반영한다. 모든 호출은 127.0.0.1 로만 나가며
-# 이 role 은 공개 경로나 방화벽을 만들지 않는다.
+# 선언은 같은 VM의 내부 service alias 관리 API 호출로 반영한다. 이 role 은 공개 경로나
+# 방화벽을 만들지 않는다.
 #
-# 관리 API 는 외부 공개 없이 loopback 으로만 호출한다. 외부 브라우저용 인증서는
-# 같은 role 의 WG-02 전용 DNS-01 선언이 소유하지만, loopback URL 과 SAN 이 다르므로
+# 관리 API 는 외부 공개 없이 내부 alias로만 호출한다. 외부 브라우저용 인증서는 같은 role의
+# WG-02 전용 DNS-01 선언이 소유한다. bootstrap self-signed certificate도 지원해야 하므로
 # 이 내부 호출은 validate_certs 를 끈다.
 
-- name: 관리 API 로그인 (loopback 한정)
+- name: 선언형 Warpgate 제품 DB 수렴용 기존 로컬 관리자 입력 확인
+  ansible.builtin.assert:
+    that:
+      - warpgate_admin_password | length >= 12
+    fail_msg: >-
+      role·target·user·Admin role은 Warpgate 제품 DB에 저장되므로, 기존 로컬 admin의
+      현재 비밀번호를 저장소 밖 mode 0600 vars file로 주입해야 합니다. 이 task는
+      비밀번호를 생성·교체하거나 recover-access를 실행하지 않습니다.
+  no_log: true
+
+- name: 관리 API 로그인 (같은 VM의 내부 service alias)
   ansible.builtin.uri:
     url: "{{ warpgate_api_base }}/@warpgate/api/auth/login"
     method: POST
+    # v0.26.1은 HTTP session cookie request Host를 external_host와 대조한다.
+    # Host를 internal service alias로 고정해 cookie를 재사용한다. 요청은 같은 VM의
+    # ACCESS 주소로만 나가며 외부 관리 listener를 만들지 않는다.
+    headers:
+      Host: "{{ warpgate_external_host }}"
     body_format: json
     body:
       username: admin
@@ -27,6 +42,7 @@
 - name: 세션 쿠키 보관
   ansible.builtin.set_fact:
     wg_headers:
+      Host: "{{ warpgate_external_host }}"
       Cookie: "{{ wg_login.cookies_string }}"
   no_log: true
 
@@ -83,6 +99,113 @@
 - name: role 이름 → id 색인
   ansible.builtin.set_fact:
     wg_role_ids: "{{ dict(wg_roles_current.json | map(attribute='name') | zip(wg_roles_current.json | map(attribute='id'))) }}"
+
+# --- admin role -------------------------------------------------------------
+# access role은 target 연결 여부만, admin role은 제품 관리 UI의 기능별 권한만 소유한다.
+# 이 목록은 별도 OIDC claim mapping으로만 사용자에게 붙으며 target role에는 영향을 주지 않는다.
+
+- name: 현재 Admin role 목록 조회
+  ansible.builtin.uri:
+    url: "{{ warpgate_api_base }}/@warpgate/admin/api/admin-roles"
+    headers: "{{ wg_headers }}"
+    validate_certs: false
+  register: wg_admin_roles_current
+  check_mode: false
+  when: warpgate_admin_roles | length > 0
+
+- name: WG-04 Admin role 입력의 최소권한 shape 확인
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[a-z][a-z0-9-]{0,62}$')
+      - item.description is string
+      - item.targets_create is boolean
+      - item.targets_edit is boolean
+      - item.targets_delete is boolean
+      - item.users_create is boolean
+      - item.users_edit is boolean
+      - item.users_delete is boolean
+      - item.access_roles_create is boolean
+      - item.access_roles_edit is boolean
+      - item.access_roles_delete is boolean
+      - item.access_roles_assign is boolean
+      - item.sessions_view is boolean
+      - item.sessions_terminate is boolean
+      - item.recordings_view is boolean
+      - item.tickets_create is boolean
+      - item.tickets_delete is boolean
+      - item.config_edit is boolean
+      - item.admin_roles_manage is boolean
+      - item.ticket_requests_manage is boolean
+    fail_msg: Warpgate Admin role은 이름과 v0.26.1의 전체 boolean permission을 명시해야 한다.
+  loop: "{{ warpgate_admin_roles }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: warpgate_admin_roles | length > 0
+
+- name: 선언한 Admin role 생성
+  ansible.builtin.uri:
+    url: "{{ warpgate_api_base }}/@warpgate/admin/api/admin-roles"
+    method: POST
+    headers: "{{ wg_headers }}"
+    body_format: json
+    body: "{{ item }}"
+    validate_certs: false
+    status_code: [201]
+  changed_when: true
+  loop: "{{ warpgate_admin_roles }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - warpgate_admin_roles | length > 0
+    - item.name not in (wg_admin_roles_current.json | map(attribute='name') | list)
+
+- name: 선언한 Admin role의 drift 판정
+  ansible.builtin.set_fact:
+    wg_admin_role_drift: >-
+      {{ wg_admin_role_drift | default([]) + [item] }}
+  loop: "{{ warpgate_admin_roles }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - warpgate_admin_roles | length > 0
+    - item.name in (wg_admin_roles_current.json | map(attribute='name') | list)
+    - >-
+      ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).description != item.description)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).targets_create != item.targets_create)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).targets_edit != item.targets_edit)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).targets_delete != item.targets_delete)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).users_create != item.users_create)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).users_edit != item.users_edit)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).users_delete != item.users_delete)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).access_roles_create != item.access_roles_create)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).access_roles_edit != item.access_roles_edit)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).access_roles_delete != item.access_roles_delete)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).access_roles_assign != item.access_roles_assign)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).sessions_view != item.sessions_view)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).sessions_terminate != item.sessions_terminate)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).recordings_view != item.recordings_view)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).tickets_create != item.tickets_create)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).tickets_delete != item.tickets_delete)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).config_edit != item.config_edit)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).admin_roles_manage != item.admin_roles_manage)
+      or ((wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).ticket_requests_manage != item.ticket_requests_manage)
+
+- name: 선언한 Admin role drift 보정
+  ansible.builtin.uri:
+    url: >-
+      {{ warpgate_api_base }}/@warpgate/admin/api/admin-roles/{{
+        (wg_admin_roles_current.json | selectattr('name', 'eq', item.name) | first).id
+      }}
+    method: PUT
+    headers: "{{ wg_headers }}"
+    body_format: json
+    body: "{{ item }}"
+    validate_certs: false
+    status_code: [200]
+  changed_when: true
+  loop: "{{ wg_admin_role_drift | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
 
 # --- 대상 SSH host key ------------------------------------------------------
 # host_key_verification 이 prompt 라 첫 접속에서 사용자에게 TOFU 확인을 요구한다.
@@ -309,19 +432,24 @@
     headers: "{{ wg_headers }}"
     body_format: json
     # 관리 API 의 union discriminator 는 Rust variant 이름(PascalCase)을 쓴다.
-    # port 는 정수여야 하므로 body 전체를 하나의 Jinja 식으로 만들어 native 형을 유지한다.
+    # options를 명시하면 SSH 이외 protocol도 선언할 수 있다. port 등 숫자 형과
+    # PostgreSQL upstream password를 안전하게 유지하려고 body 전체를 Jinja 식으로 만든다.
     body: >-
       {{
         {
           'name': item.name,
           'description': item.description | default(''),
-          'options': {
-            'kind': 'Ssh',
-            'host': item.ssh.host,
-            'port': item.ssh.port | default(22) | int,
-            'username': item.ssh.username,
-            'auth': {'kind': 'PublicKey'}
-          }
+          'options': (
+            item.options
+            if item.options is defined
+            else {
+              'kind': 'Ssh',
+              'host': item.ssh.host,
+              'port': item.ssh.port | default(22) | int,
+              'username': item.ssh.username,
+              'auth': {'kind': 'PublicKey'}
+            }
+          )
         }
       }}
     validate_certs: false
@@ -331,6 +459,7 @@
   loop_control:
     label: "{{ item.name }}"
   when: item.name not in (wg_targets_current.json | map(attribute='name') | list)
+  no_log: true
 
 - name: 제거할 target 삭제
   ansible.builtin.uri:
@@ -354,6 +483,49 @@
     validate_certs: false
   register: wg_targets_current
   check_mode: false
+  no_log: true
+
+- name: reconcile 대상의 현재 options와 선언 options 일치 여부 확인
+  ansible.builtin.assert:
+    that:
+      - >-
+        (wg_targets_current.json | selectattr('name', 'eq', item.name) | list | length) == 1
+    fail_msg: "{{ item.name }} target은 reconcile 전에 정확히 하나여야 한다."
+  loop: >-
+    {{ warpgate_targets | selectattr('state', 'defined') | selectattr('state', 'eq', 'present')
+       | selectattr('reconcile', 'defined') | selectattr('reconcile', 'equalto', true) | list }}
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+- name: 선언과 달라진 reconcile target options 갱신
+  ansible.builtin.uri:
+    url: >-
+      {{ warpgate_api_base }}/@warpgate/admin/api/targets/{{
+        (wg_targets_current.json | selectattr('name', 'eq', item.name) | first).id }}
+    method: PUT
+    headers: "{{ wg_headers }}"
+    body_format: json
+    body: >-
+      {{
+        {
+          'name': item.name,
+          'description': item.description | default(''),
+          'options': item.options
+        }
+      }}
+    validate_certs: false
+    status_code: 200
+  changed_when: true
+  loop: >-
+    {{ warpgate_targets | selectattr('state', 'defined') | selectattr('state', 'eq', 'present')
+       | selectattr('reconcile', 'defined') | selectattr('reconcile', 'equalto', true) | list }}
+  loop_control:
+    label: "{{ item.name }}"
+  when: >-
+    (wg_targets_current.json | selectattr('name', 'eq', item.name) | first).options
+    != item.options
+  no_log: true
 
 - name: target 이름 → id 색인
   ansible.builtin.set_fact:
@@ -454,6 +626,38 @@
 - name: user 이름 → id 색인
   ansible.builtin.set_fact:
     wg_user_ids: "{{ dict(wg_users_current.json | map(attribute='username') | zip(wg_users_current.json | map(attribute='id'))) }}"
+
+- name: user 이름 → 현재 정책 색인
+  ansible.builtin.set_fact:
+    wg_users_by_name: "{{ dict(wg_users_current.json | map(attribute='username') | zip(wg_users_current.json)) }}"
+  no_log: true
+
+- name: 선언한 native protocol credential policy 반영
+  ansible.builtin.uri:
+    url: "{{ warpgate_api_base }}/@warpgate/admin/api/users/{{ wg_user_ids[item.name] }}"
+    method: PUT
+    headers: "{{ wg_headers }}"
+    body_format: json
+    body: >-
+      {{
+        {
+          'username': item.name,
+          'description': item.description | default(''),
+          'credential_policy': item.credential_policy,
+          'rate_limit_bytes_per_second': wg_users_by_name[item.name].rate_limit_bytes_per_second,
+          'allowed_ip_ranges': wg_users_by_name[item.name].allowed_ip_ranges
+        }
+      }}
+    validate_certs: false
+    status_code: 200
+  changed_when: true
+  loop: >-
+    {{ warpgate_users | selectattr('state', 'defined') | selectattr('state', 'eq', 'present')
+       | selectattr('credential_policy', 'defined') | list }}
+  loop_control:
+    label: "{{ item.name }}"
+  when: wg_users_by_name[item.name].credential_policy != item.credential_policy
+  no_log: true
 
 - name: 선언한 user 의 SSO credential 정확 일치
   ansible.builtin.include_tasks: user_sso_credentials.yml

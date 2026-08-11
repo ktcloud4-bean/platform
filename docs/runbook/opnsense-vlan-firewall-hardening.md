@@ -34,6 +34,7 @@ deny가 처리한다.
 | `warpgate-01/32` | ACCESS gateway | UDP 123 | `opt3` inbound | ALLOW | `NET-04`; Warpgate 시간 동기화 |
 | `warpgate-01/32` | `k3s-01/32` | TCP 443 | `opt3` inbound | ALLOW | `WG-02`; Keycloak OIDC backend |
 | `warpgate-01/32` | `NET04_WARPGATE_SSH_TARGETS` | TCP 22 | `opt3` inbound | ALLOW | `WG-01`, `WG-02`; 현재 관리 대상 SSH 중계 |
+| `warpgate-01/32` | `postgres-01/32` | TCP 5432 | `opt3` inbound | ALLOW | `WG-04`; native PostgreSQL TLS relay |
 | `netbird-01/32` | DMZ gateway | TCP·UDP 53 | `opt4` inbound | ALLOW | `NET-04`; NetBird 이름 해석 |
 | `netbird-01/32` | DMZ gateway | UDP 123 | `opt4` inbound | ALLOW | `NET-04`; NetBird 시간 동기화 |
 | `netbird-01/32` | `k3s-01/32` | TCP 443 | `opt4` inbound | ALLOW | `NB-02`; Keycloak OIDC·Admin/control API |
@@ -58,7 +59,7 @@ DATA↔VPC selector는 유지하지만 DATA에서 VPC로 시작하는 통신은 
 | interface | sequence와 UUID | 의미 |
 |---|---|---|
 | `opt2` | `1002` `b5756159-a650-4b13-b474-ff61efa2a3f3`; `1012` `25d7180e-7ef7-47a3-bdd6-b11e3014070f`; `1018` `c10373d1-3158-45ff-83f0-199385d46671`; `1022` `72723db0-524d-4098-8e84-a54f8548610c`; `1032` `23d19d9b-dd08-4920-8082-19cc0bbcf890` | k3s DNS, NTP, PostgreSQL, non-public BLOCK, public Web |
-| `opt3` | `1102` `fc3cea96-d45e-4694-bf5e-ba0fa7113dcb`; `1112` `ca0af6b5-5356-4572-8646-e03e2b88d665`; `1117` `7e9fcac3-e5da-43e1-96a3-dee968e28a9b`; `1118` `21422214-412c-4596-84e5-062bba81b2da`; `1122` `f1ec0a02-e42e-455b-b09c-98ba69a54f1d`; `1132` `f4d8cbe0-4ba0-48b3-8a1f-6981339324e2` | Warpgate DNS, NTP, OIDC, SSH, non-public BLOCK, public Web |
+| `opt3` | `1102` `fc3cea96-d45e-4694-bf5e-ba0fa7113dcb`; `1112` `ca0af6b5-5356-4572-8646-e03e2b88d665`; `1117` `7e9fcac3-e5da-43e1-96a3-dee968e28a9b`; `1118` `21422214-412c-4596-84e5-062bba81b2da`; `1120` `cdb5d60d-91be-4144-b4eb-e74dcd652dfb`; `1122` `f1ec0a02-e42e-455b-b09c-98ba69a54f1d`; `1132` `f4d8cbe0-4ba0-48b3-8a1f-6981339324e2` | Warpgate DNS, NTP, OIDC, SSH, PostgreSQL TLS relay, non-public BLOCK, public Web |
 | `opt4` | `1202` `590dc3ac-13b4-4855-8bcf-806c2bd58a87`; `1212` `da27944c-dc48-40ce-bcbf-056686579ac9`; `1218` `b0ba06fb-54b9-4cbd-9830-106d2ca71f22`; `1222` `be877eb8-4ccf-4f72-839f-a5074efa83ec`; `1232` `3f6fa0bd-614d-4cb4-8612-69148cf30b2b` | NetBird DNS, NTP, Keycloak/control, non-public BLOCK, public Web |
 | `opt5` | `1302` `2ee3f199-b683-4671-ba61-d000667ed165`; `1312` `6326c0ae-ba05-4933-a8ad-405d5fb00480`; `1322` `4afe287d-be72-4330-a9f8-35ea64b1a38f`; `1332` `6f28ee7a-87e4-4a97-8b15-6267c28ca483` | 두 DATA host DNS, NTP, non-public BLOCK, public Web |
 

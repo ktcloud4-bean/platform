@@ -179,6 +179,7 @@ data:
       "groups": [
         {"name":"platform-users"},
         {"name":"platform-privileged"},
+        {"name":"warpgate-auditors"},
         {
           "name":"keycloak-readers",
           "clientRoles":{"realm-management":["view-users"]}

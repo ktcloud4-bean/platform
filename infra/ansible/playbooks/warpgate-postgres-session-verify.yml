@@ -1,0 +1,297 @@
+---
+# WG-04의 native PostgreSQL relay 1회 검증. 사람의 Keycloak SSO/MFA Web approval을
+# 가장하지 않고, 기존 Warpgate local break-glass 관리 API로만 일회성 verifier를 만든다.
+# verifier는 먼저 target role 없이 거부돼야 하며 platform-privileged를 받은 뒤에만 TLS
+# psql을 통과한다. 모든 product object와 pgpass는 always에서 제거한다.
+
+- name: WG-04 native PostgreSQL relay verification
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    wg04_api_base: "https://warpgate.imcherry5778.xyz:8888"
+    wg04_listener_host: "warpgate.imcherry5778.xyz"
+    wg04_listener_port: 55432
+    wg04_target_name: "postgres-ops"
+    wg04_privileged_role: "platform-privileged"
+    wg04_verify_username: "wg04-postgres-verify"
+    wg04_pgpass_path: ""
+  pre_tasks:
+    - name: WG-04 local break-glass password input 확인
+      ansible.builtin.assert:
+        that:
+          - warpgate_admin_password | default('') | length >= 12
+        fail_msg: >-
+          WG-04 verifier는 저장소 밖 WG-02 vars의 warpgate_admin_password를 받아야 한다.
+      no_log: true
+
+    - name: WG-04 관리 API local break-glass 로그인
+      ansible.builtin.uri:
+        url: "{{ wg04_api_base }}/@warpgate/api/auth/login"
+        method: POST
+        body_format: json
+        body:
+          username: admin
+          password: "{{ warpgate_admin_password }}"
+        status_code: [200, 201, 204]
+      register: wg04_login
+      changed_when: false
+      no_log: true
+
+    - name: WG-04 관리 API session cookie 보관
+      ansible.builtin.set_fact:
+        wg04_headers:
+          Cookie: "{{ wg04_login.cookies_string }}"
+      no_log: true
+
+  tasks:
+    - name: WG-04 postgres target 목록 조회
+      ansible.builtin.uri:
+        url: "{{ wg04_api_base }}/@warpgate/admin/api/targets"
+        headers: "{{ wg04_headers }}"
+      register: wg04_targets
+      changed_when: false
+      no_log: true
+
+    - name: WG-04 postgres target 단일성 확인
+      ansible.builtin.assert:
+        that:
+          - wg04_targets.json | selectattr('name', 'eq', wg04_target_name) | list | length == 1
+        fail_msg: "WG-04 postgres-ops target은 product DB에 정확히 하나여야 한다."
+      no_log: true
+
+    - name: WG-04 postgres target id 보관
+      ansible.builtin.set_fact:
+        wg04_target_id: >-
+          {{ (wg04_targets.json | selectattr('name', 'eq', wg04_target_name) | first).id }}
+      no_log: true
+
+    - name: WG-04 postgres target 허용 role 조회
+      ansible.builtin.uri:
+        url: "{{ wg04_api_base }}/@warpgate/admin/api/targets/{{ wg04_target_id }}/roles"
+        headers: "{{ wg04_headers }}"
+      register: wg04_target_roles
+      changed_when: false
+      no_log: true
+
+    - name: WG-04 postgres target 최소 role 확인
+      ansible.builtin.assert:
+        that:
+          - (wg04_target_roles.json | map(attribute='name') | list | sort) == [wg04_privileged_role]
+        fail_msg: "WG-04 postgres-ops target은 platform-privileged 하나만 허용해야 한다."
+      no_log: true
+
+    - name: WG-04 temporary verifier password 생성
+      ansible.builtin.set_fact:
+        wg04_verify_password: "{{ lookup('ansible.builtin.password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+      no_log: true
+
+    - name: WG-04 temporary verifier와 native relay 검증
+      block:
+        - name: WG-04 기존 user 목록 조회
+          ansible.builtin.uri:
+            url: "{{ wg04_api_base }}/@warpgate/admin/api/users"
+            headers: "{{ wg04_headers }}"
+          register: wg04_users_before
+          changed_when: false
+          no_log: true
+
+        - name: WG-04 temporary verifier 이름 충돌 거부
+          ansible.builtin.assert:
+            that:
+              - wg04_verify_username not in (wg04_users_before.json | map(attribute='username') | list)
+            fail_msg: >-
+              wg04-postgres-verify는 일회성 WG-04 verifier 전용 이름이다. 기존 사용자는
+              접근하거나 삭제하지 않고 중단한다.
+          no_log: true
+
+        - name: WG-04 platform-privileged role 조회
+          ansible.builtin.uri:
+            url: "{{ wg04_api_base }}/@warpgate/admin/api/roles"
+            headers: "{{ wg04_headers }}"
+          register: wg04_roles
+          changed_when: false
+          no_log: true
+
+        - name: WG-04 privileged role 단일성 확인
+          ansible.builtin.assert:
+            that:
+              - wg04_roles.json | selectattr('name', 'eq', wg04_privileged_role) | list | length == 1
+            fail_msg: "WG-04 verifier에는 platform-privileged role 하나가 필요하다."
+          no_log: true
+
+        - name: WG-04 temporary verifier 생성
+          ansible.builtin.uri:
+            url: "{{ wg04_api_base }}/@warpgate/admin/api/users"
+            method: POST
+            headers: "{{ wg04_headers }}"
+            body_format: json
+            body:
+              username: "{{ wg04_verify_username }}"
+              description: "WG-04 temporary PostgreSQL relay verification; removed by this run"
+            status_code: [200, 201]
+          register: wg04_verify_user_create
+          changed_when: true
+          no_log: true
+
+        - name: WG-04 verifier user id 조회
+          ansible.builtin.uri:
+            url: "{{ wg04_api_base }}/@warpgate/admin/api/users"
+            headers: "{{ wg04_headers }}"
+          register: wg04_users_after_create
+          changed_when: false
+          no_log: true
+
+        - name: WG-04 verifier user와 privileged role id 보관
+          ansible.builtin.set_fact:
+            wg04_verify_user_id: >-
+              {{ (wg04_users_after_create.json
+                  | selectattr('username', 'eq', wg04_verify_username) | first).id }}
+            wg04_privileged_role_id: >-
+              {{ (wg04_roles.json
+                  | selectattr('name', 'eq', wg04_privileged_role) | first).id }}
+          no_log: true
+
+        - name: WG-04 verifier password credential 생성
+          ansible.builtin.uri:
+            url: >-
+              {{ wg04_api_base }}/@warpgate/admin/api/users/{{ wg04_verify_user_id }}/credentials/passwords
+            method: POST
+            headers: "{{ wg04_headers }}"
+            body_format: json
+            body:
+              password: "{{ wg04_verify_password }}"
+            status_code: [200, 201]
+          changed_when: true
+          no_log: true
+
+        - name: WG-04 temporary pgpass file 생성
+          ansible.builtin.tempfile:
+            state: file
+            suffix: ".pgpass"
+          register: wg04_pgpass
+          no_log: true
+
+        - name: WG-04 temporary pgpass 최소 권한으로 기록
+          ansible.builtin.copy:
+            content: >-
+              {{ wg04_listener_host }}:{{ wg04_listener_port }}:*:{{ wg04_verify_username }}#{{ wg04_target_name }}:{{ wg04_verify_password }}
+            dest: "{{ wg04_pgpass.path }}"
+            mode: "0600"
+          no_log: true
+
+        - name: WG-04 role 없는 verifier target 거부 확인
+          ansible.builtin.command:
+            argv:
+              - psql
+              - "host={{ wg04_listener_host }} port={{ wg04_listener_port }} dbname=postgres user={{ wg04_verify_username }}#{{ wg04_target_name }} sslmode=verify-full sslrootcert=system"
+              - -c
+              - "SELECT 1;"
+          environment:
+            PGPASSFILE: "{{ wg04_pgpass.path }}"
+            PGCONNECT_TIMEOUT: "10"
+          register: wg04_no_role_attempt
+          changed_when: false
+          failed_when: false
+          no_log: true
+
+        - name: WG-04 role 없는 verifier는 거부돼야 함
+          ansible.builtin.assert:
+            that:
+              - wg04_no_role_attempt.rc != 0
+            fail_msg: "platform-privileged 없는 verifier가 postgres-ops target을 통과했습니다."
+          no_log: true
+
+        - name: WG-04 verifier에 platform-privileged 부여
+          ansible.builtin.uri:
+            url: >-
+              {{ wg04_api_base }}/@warpgate/admin/api/users/{{ wg04_verify_user_id }}/roles/{{ wg04_privileged_role_id }}
+            method: POST
+            headers: "{{ wg04_headers }}"
+            body_format: json
+            body: {}
+            status_code: [200, 201, 409]
+          changed_when: true
+          no_log: true
+
+        - name: WG-04 native PostgreSQL TLS relay 최소권한 query
+          ansible.builtin.command:
+            argv:
+              - psql
+              - -A
+              - -t
+              - "host={{ wg04_listener_host }} port={{ wg04_listener_port }} dbname=postgres user={{ wg04_verify_username }}#{{ wg04_target_name }} sslmode=verify-full sslrootcert=system"
+              - -c
+              - >-
+                BEGIN;
+                SET LOCAL ROLE pg_monitor;
+                SELECT session_user = 'warpgate_pg_ops',
+                current_user = 'pg_monitor',
+                current_database() = 'postgres',
+                NOT has_database_privilege(session_user, 'keycloak', 'CONNECT'),
+                NOT has_table_privilege(session_user, 'pg_catalog.pg_authid', 'SELECT');
+                ROLLBACK;
+          environment:
+            PGPASSFILE: "{{ wg04_pgpass.path }}"
+            PGCONNECT_TIMEOUT: "10"
+          register: wg04_native_relay
+          changed_when: false
+          failed_when: false
+          no_log: true
+
+        - name: WG-04 native relay 실패 지점 분류
+          ansible.builtin.debug:
+            msg:
+              rc: "{{ wg04_native_relay.rc }}"
+              category: >-
+                {{
+                  'tls-certificate'
+                  if 'certificate' in (wg04_native_relay.stderr | lower)
+                  else 'warpgate-upstream'
+                  if 'target connection failed' in (wg04_native_relay.stderr | lower)
+                  else 'postgres-auth-or-policy'
+                  if 'password authentication' in (wg04_native_relay.stderr | lower)
+                  else 'network-or-protocol'
+                  if wg04_native_relay.rc != 0
+                  else 'success'
+                }}
+
+        - name: WG-04 native PostgreSQL 최소권한 결과 확인
+          ansible.builtin.assert:
+            that:
+              - wg04_native_relay.rc == 0
+              - wg04_native_relay.stdout_lines | select('equalto', 't|t|t|t|t') | list | length == 1
+            fail_msg: >-
+              native PostgreSQL relay의 upstream identity, database, pg_monitor 또는
+              서비스 database·pg_authid 최소권한 판정이 기대값과 다릅니다.
+          no_log: true
+
+        - name: WG-04 native relay 성공 요약
+          ansible.builtin.debug:
+            msg: >-
+              WG-04 native PostgreSQL TLS relay는 platform-privileged 뒤에만 허용되고,
+              warpgate_pg_ops 최소권한으로 동작한다.
+
+      always:
+        - name: WG-04 temporary pgpass 제거
+          ansible.builtin.file:
+            path: "{{ wg04_pgpass.path }}"
+            state: absent
+          when: wg04_pgpass is defined
+          no_log: true
+
+        - name: WG-04 temporary verifier 제거
+          ansible.builtin.uri:
+            url: "{{ wg04_api_base }}/@warpgate/admin/api/users/{{ wg04_verify_user_id }}"
+            method: DELETE
+            headers: "{{ wg04_headers }}"
+            status_code: [200, 204, 404]
+          when: wg04_verify_user_id is defined
+          changed_when: true
+          no_log: true
+
+        - name: WG-04 temporary verifier 정리 요약
+          ansible.builtin.debug:
+            msg: "WG-04 temporary verifier와 pgpass 정리를 완료했다."
+          when: wg04_verify_user_id is defined

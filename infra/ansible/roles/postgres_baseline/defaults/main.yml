@@ -11,7 +11,29 @@ postgres_canonical_fqdn: "postgres-01.imcherry5778.xyz"
 postgres_data_ip: "10.10.50.10"
 postgres_platform_subnet: "10.10.20.0/24"
 
+# PostgreSQL TLS는 CA와 server leaf를 분리한다. 기존 PG-01 bootstrap은 CA:TRUE
+# self-signed certificate를 server leaf로도 사용했으므로, WG-04는 기존 신뢰 anchor를
+# CA로 보존하고 그 CA가 서명한 CA:FALSE leaf로 한 번 전환한다. 일반 재적용은 기존
+# legacy certificate를 절대 자동 전환하지 않으며, 해당 전환은 전용 playbook이 명시한다.
+postgres_tls_ca_cert_path: "{{ postgres_data_dir }}/server-ca.crt"
+postgres_tls_ca_key_path: "{{ postgres_data_dir }}/server-ca.key"
+postgres_tls_leaf_cert_path: "{{ postgres_data_dir }}/server.crt"
+postgres_tls_leaf_key_path: "{{ postgres_data_dir }}/server.key"
+postgres_tls_ca_common_name: "ktcloud4-bean postgres-01 bootstrap CA"
+postgres_tls_ca_days: 3650
+postgres_tls_leaf_days: 365
+postgres_tls_migrate_legacy_ca_leaf: false
+
+# WG-04 native PostgreSQL relay. 기본 기준선은 ACCESS VLAN에서 PostgreSQL을 열지
+# 않는다. 전용 playbook이 명시적으로 true로 줄 때만 Warpgate 한 대와 최소권한
+# 운영 role 하나를 추가한다.
+postgres_warpgate_session_enabled: false
+postgres_warpgate_source_ip: "10.10.30.10"
+postgres_warpgate_role: "warpgate_pg_ops"
+postgres_warpgate_database: "postgres"
+
 # Secret passwords should be provided via vault / extra-vars in runtime
 pg_keycloak_password: ""
 pg_verify_password: ""
 pg_gitea_password: ""
+pg_warpgate_ops_password: ""

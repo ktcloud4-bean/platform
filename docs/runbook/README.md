@@ -39,6 +39,7 @@ UI 위치나 명령을 추측해 미리 작성하지 않는다. 첫 PoC는 백�
 - [`integrated-disaster-recovery-drill.md`](integrated-disaster-recovery-drill.md) — 2026-08-02 `BKP-05` 통합 drill의 계층 의존성, RPO/RTO, 저장소 밖 입력과 실제 중단 지점
 - [`netbird-selfhost.md`](netbird-selfhost.md) — 2026-07-31 `NB-01`에서 배포·재부팅·로컬 Owner 로그인과 백업을 검증한 NetBird self-host 절차
 - [`warpgate-privileged-access.md`](warpgate-privileged-access.md) — 2026-07-31 `WG-01`에서 버전 선정·선언형 배포·역할 제한·감사/세션 기록·재부팅·격리 복원을 검증한 Warpgate 기준선
+- [`warpgate-postgres-sessions.md`](warpgate-postgres-sessions.md) — `WG-04` Warpgate native PostgreSQL TLS relay와 최소권한 운영 session 절차
 - [`vault-raft-baseline.md`](vault-raft-baseline.md) — 2026-07-31 `VAULT-01`에서 GitOps 배포·TLS·초기화/unseal·Pod 재시작 복구를 검증한 Vault 단일 replica Raft 기준선
 - [`seaweedfs-s3-offsite-backup.md`](seaweedfs-s3-offsite-backup.md) — 2026-07-31 `BKP-04`에서 전송·격리 위치 복원·최소권한 음성 시험·실패 경보를 검증한 AWS S3 오프사이트 사본 절차
 - [`aws-site-to-site-vpn.md`](aws-site-to-site-vpn.md) — 2026-07-31 `AWS-NET-01`에서 터널 확립·양방향 대조·기본 경로 불변·재부팅·장애 격리와 복구를 검증한 OPNsense↔AWS IPsec 절차

@@ -44,7 +44,7 @@ Proxmox
 | `k3s-01` | 단일 서버 k3s | 자원 효율과 local storage 단순성 |
 | `postgres-01` | 서비스별 DB·role을 둔 PostgreSQL | 클러스터 재구축과 DB 복구 분리 |
 | `object-01` | SeaweedFS S3와 로컬 백업 | k3s 장애와 백업 착지점 분리 |
-| `warpgate-01` | SSH 등 특권 세션 중계 | 일반 워크로드·공개 진입점과 분리 |
+| `warpgate-01` | SSH·native PostgreSQL 특권 세션 중계 | 일반 워크로드·공개 진입점과 분리 |
 | `netbird-01` | 원격접속 제어·relay 계열 | 인터넷 노출면을 DMZ에 격리 |
 
 VM 분리는 장애 도메인을 물리적으로 늘리지 않는다. 업데이트 순서, 권한, 방화벽과 복구 단위를 분리하는 것이 목적이다.
@@ -93,7 +93,7 @@ Git에는 PVC 선언만 저장하고 PVC 데이터나 노드 디렉터리명을 
 | 오리진 WAF | CrowdSec AppSec(Coraza + OWASP CRS) | k3s; Traefik route middleware가 판정 연결 |
 | 네트워크 IDS | Suricata alert-only | OPNsense |
 | 원격 네트워크 접근 | NetBird | 전용 VM |
-| 특권 세션 | Warpgate | 전용 VM |
+| 특권 세션 | Warpgate | 전용 VM; SSH와 최소권한 native PostgreSQL 운영 session |
 | 시크릿·내부 CA·발급 정책 | Vault | k3s |
 | Kubernetes 내부 인증서 lifecycle | cert-manager | k3s; Vault PKI ClusterIssuer |
 | GitOps | Argo CD | k3s |

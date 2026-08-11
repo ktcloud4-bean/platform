@@ -37,6 +37,7 @@ ADR(Architecture Decision Record)은 목표 구조를 선택한 이유, 검토�
 | [ADR-0021](0021-aws-hr-aurora-serverless.md) | HR DB를 Aurora PostgreSQL Serverless v2로 선택 | `Accepted` | HR 부하·credit/비용·HA/reader 요구·Aurora 제약 변화 |
 | [ADR-0022](0022-aws-hr-shared-vpc-gitops.md) | HR EKS를 기존 AWS shared VPC와 기존 k3s Argo CD에 통합 | `Accepted` | VPC 분리·라우팅 허브·독립 EKS GitOps control plane 요구 |
 | [ADR-0023](0023-aws-shared-vpn-service-boundary.md) | AWS shared VPN을 단일 selector로 통합하고 service rule로 제한 | `Accepted` | VPC·site·tenant 분리 또는 dual tunnel 요구 |
+| [ADR-0024](0024-warpgate-native-postgresql-sessions.md) | PostgreSQL 운영 세션을 Warpgate native TLS relay로 중계 | `Accepted` | DB 운영 권한·JIT credential·다중 cluster 요구 |
 
 ## 형식
 

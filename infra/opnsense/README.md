@@ -46,8 +46,9 @@ check-drift.sh --update로 스냅샷 승인
 ## NET-04 VLAN 최소 경계
 
 - VLAN network 전체가 아니라 현재 배포된 source host만 자기 gateway DNS·NTP를 쓴다.
-- `k3s-01`의 PostgreSQL 5432·S3 8333, Warpgate의 Keycloak 443·관리 대상 SSH 22,
-  NetBird의 Keycloak/control 443과 EDGE-01 Warpgate direct peer의 NetBird control 443만
+- `k3s-01`의 PostgreSQL 5432·S3 8333, Warpgate의 Keycloak 443·관리 대상 SSH 22·
+  PostgreSQL native relay 5432, NetBird의 Keycloak/control 443과 EDGE-01 Warpgate direct
+  peer의 NetBird control 443만
   exact cross-VLAN PASS로 둔다.
 - 비공개·특수용 IPv4를 public Web보다 먼저 차단·기록하고, 각 배포 host의 public TCP
   80/443만 허용한다. 나머지는 PF implicit deny다.
