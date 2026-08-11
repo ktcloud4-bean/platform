@@ -170,6 +170,16 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
+              kubernetes.io/metadata.name: argocd
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argocd-application-controller
+      ports:
+        - protocol: TCP
+          port: 8082
+    - to:
+        - namespaceSelector:
+            matchLabels:
               kubernetes.io/metadata.name: velero
           podSelector:
             matchLabels:

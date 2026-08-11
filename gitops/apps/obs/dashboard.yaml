@@ -291,6 +291,11 @@ data:
               "title": "Argo CD UI",
               "url": "/argocd",
               "targetBlank": true
+            },
+            {
+              "title": "Argo CD Application Overview",
+              "url": "/d/obs-12-argocd-applications",
+              "targetBlank": false
             }
           ]
         },

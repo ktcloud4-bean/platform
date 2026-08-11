@@ -78,3 +78,31 @@ spec:
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: obs-argocd-application-controller
+  namespace: obs
+  labels:
+    release: obs
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  namespaceSelector:
+    matchNames: [argocd]
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: metrics
+      app.kubernetes.io/name: argocd-metrics
+      app.kubernetes.io/part-of: argocd
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      metricRelabelings:
+        - action: keep
+          sourceLabels: [__name__]
+          regex: argocd_app_info|argocd_app_sync_total
+        - action: labeldrop
+          regex: repo|operation|dry_run

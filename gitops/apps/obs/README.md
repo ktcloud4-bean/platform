@@ -59,6 +59,28 @@ Loki datasource가 `loki.loki.svc:3100`을 사용하므로 Grafana Pod에만 정
 추가한다. Grafana native admin login은 Pomerium 로그인과 별개이며, password의 Vault Agent
 소비 경계는 바꾸지 않는다.
 
+## OBS-12 Argo CD Application Overview
+
+`obs-argocd-application-controller` ServiceMonitor는 이미 존재하는
+`argocd/argocd-metrics:8082`만 30초마다 읽는다. Prometheus가 ServiceMonitor를 `obs`
+namespace에서만 선택하므로 monitor 자체는 `obs`에 두고, target namespace만 `argocd`로
+한정한다. `obs-prometheus-scrape-egress`는 Prometheus Pod에서 application-controller Pod의
+TCP 8082로 가는 exact egress 한 건만 더 허용한다. Argo CD 설정·Service·ingress 정책·권한은
+바꾸지 않는다.
+
+저장하는 metric은 Grafana.com [ArgoCD / Application / Overview (ID 19974)](https://grafana.com/grafana/dashboards/19974-argocd-application-overview/)
+revision 6의 필요량인 `argocd_app_info`·`argocd_app_sync_total`뿐이다. `repo`·`operation`·`dry_run`
+label은 대시보드에 쓰지 않으므로 ingestion 전에 버린다. upstream download SHA-256은
+`7a230d1221b1014a40a70d989a80d25d3d800c3a62dd77b63a4a1088c5fbbaf1`이며, 현재 Argo CD metric
+label에 맞춰 upstream의 없는 `cluster` selector를 제거하고 `exported_namespace`를
+`dest_namespace`로 정규화했다. sync counter에는 destination namespace label이 없으므로
+application별 sync-result panel만 그 namespace selector를 쓰지 않는다.
+
+대시보드는 Prometheus datasource UID `prometheus`와 `Platform` folder의 native read-only provider를
+쓴다. 기존 Platform Overview의 Argo CD OutOfSync 요약은 유지하되 새 drill-down 링크를 더한다.
+Grafana Viewer 권한과 Pomerium `/platform-users` 경계는 `OBS-03`·`OBS-02`에서 이미 판정한 것을
+재사용하며, Grafana의 raw metric query로 repo label을 보이지 않게 한다.
+
 `obs-default-deny`는 cross-namespace ingress도 막으므로 Pomerium egress만으로는 UI backend에
 도달하지 못한다. 세 `obs-02-*-pomerium-ingress` 정책은 Pomerium server Pod만 Grafana TCP 3000,
 Prometheus TCP 9090, Alertmanager TCP 9093에 도달하게 해 해당 egress와 정확히 짝을 이룬다.

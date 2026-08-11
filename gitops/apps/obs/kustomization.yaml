@@ -10,6 +10,7 @@ resources:
   - dashboard-core-services.yaml
   - dashboard-backup-pipelines.yaml
   - dashboard-loki-log-explorer.yaml
+  - dashboard-argocd-application-overview.yaml
 configMapGenerator:
   - name: obs-grafana-runtime-config
     namespace: obs
