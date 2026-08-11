@@ -29,6 +29,7 @@ NetBird client → k3s Traefik → Pomerium
                                       └→ hr-service :8000 → Aurora :5432
 
 k3s Argo → EKS private API :443
+ClusterFirst Pod → CoreDNS private-zone forward → k3s-01:1053
 OPNsense Unbound → k3s-01:1053 → Route 53 Resolver endpoint :53
 ```
 
@@ -42,8 +43,9 @@ DNS TCP/UDP 53을 허용해야 ClusterFirst Pod DNS가 동작한다.
 
 1. `tofu-app-network`, `tofu-app-vpn`, `tofu-app-eks`, `tofu-app-argocd`의 no-change plan과
    Argo EKS runtime registration을 확인한다.
-2. `aws_hr_dns_relay` Ansible role을 `k3s-01`에 적용한다. relay는 두 AWS private zone만
-   Route 53 Resolver inbound endpoint로 전달한다.
+2. `aws_hr_dns_relay` Ansible role과 CoreDNS `coredns` child Application을 적용한다. relay는
+   두 AWS private zone만 Route 53 Resolver inbound endpoint로 전달하고, CoreDNS는 그 두 zone만
+   `k3s-01:1053`로 전달한다.
 3. 지원 API로 OPNsense의 두 AWS private zone 조건부 forward, `www`·`admin`의 exact
    Unbound alias와 세 exact firewall rule을 적용·검증한다.
 4. immutable Git SHA로 platform root를 전환해 AWS Load Balancer Controller와

@@ -3,6 +3,8 @@ kind: Kustomization
 namespace: argocd
 resources:
   - app-project.yaml
+  - coredns-project.yaml
+  - coredns-application.yaml
   - ingress-project.yaml
   - ingress-application.yaml
   - vault-project.yaml

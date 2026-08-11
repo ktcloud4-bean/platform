@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: coredns
+    app.kubernetes.io/component: private-dns
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  aws-hr-01.server: |
+    # ClusterFirst Pods need the same two private AWS zones as the on-prem
+    # resolver.  This is an exact forward only; CoreDNS remains the owner of
+    # Kubernetes Service and Pod DNS and never becomes the lab resolver.
+    aws.imcherry5778.xyz:53 {
+        errors
+        cache 30
+        forward . 10.10.20.10:1053
+    }
+    ap-northeast-2.eks.amazonaws.com:53 {
+        errors
+        cache 30
+        forward . 10.10.20.10:1053
+    }

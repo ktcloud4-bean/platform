@@ -208,7 +208,7 @@ NetBird 단독 외부 공개 정책은 `EDGE-01`, 조건부 Cloudflare HTTP 공�
 
 ## DNS와 도메인
 
-랩 도메인은 `imcherry5778.xyz`다. OPNsense Unbound가 내부 응답과 split DNS를 담당하고, Kubernetes CoreDNS는 클러스터 내부 이름만 담당한다.
+랩 도메인은 `imcherry5778.xyz`다. OPNsense Unbound가 내부 응답과 split DNS를 담당한다. Kubernetes CoreDNS는 클러스터 내부 이름을 담당하며, `AWS-HR-01-FIX-01`의 두 AWS private zone만 `k3s-01:1053` relay로 조건부 전달한다.
 
 | 이름 | 종류 | 대상 | 노출 | 내부 DNS |
 |---|---|---|---|---|
