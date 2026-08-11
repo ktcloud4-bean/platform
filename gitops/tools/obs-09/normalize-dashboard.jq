@@ -13,8 +13,8 @@ def normalize_string:
   gsub("\\{[[:space:]]*,[[:space:]]*"; "{") |
   gsub(",[[:space:]]*\\}"; "}") |
   gsub(",[[:space:]]*,"; ",") |
-  gsub("machine_cpu_cores\\{\\}"; "kube_node_status_allocatable{resource=\\\"cpu\\\",unit=\\\"core\\\"}") |
-  gsub("machine_memory_bytes\\{\\}"; "kube_node_status_allocatable{resource=\\\"memory\\\",unit=\\\"byte\\\"}");
+  gsub("machine_cpu_cores\\{\\}"; "kube_node_status_allocatable{resource=\"cpu\",unit=\"core\"}") |
+  gsub("machine_memory_bytes\\{\\}"; "kube_node_status_allocatable{resource=\"memory\",unit=\"byte\"}");
 
 walk(
   if type == "object" and (.datasource? | type) == "object" and .datasource.uid == "${datasource}" then

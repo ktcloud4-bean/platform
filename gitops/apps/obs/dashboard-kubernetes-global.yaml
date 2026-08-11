@@ -163,7 +163,7 @@ data:
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\"}) / sum(kube_node_status_allocatable{resource=\\\"cpu\\\",unit=\\\"core\\\"})",
+              "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\"}) / sum(kube_node_status_allocatable{resource=\"cpu\",unit=\"core\"})",
               "hide": false,
               "legendFormat": "Requests",
               "range": true,
@@ -175,7 +175,7 @@ data:
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "sum(kube_pod_container_resource_limits{resource=\"cpu\"}) / sum(kube_node_status_allocatable{resource=\\\"cpu\\\",unit=\\\"core\\\"})",
+              "expr": "sum(kube_pod_container_resource_limits{resource=\"cpu\"}) / sum(kube_node_status_allocatable{resource=\"cpu\",unit=\"core\"})",
               "hide": false,
               "legendFormat": "Limits",
               "range": true,
@@ -312,7 +312,7 @@ data:
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "sum(kube_pod_container_resource_requests{resource=\"memory\"}) / sum(kube_node_status_allocatable{resource=\\\"memory\\\",unit=\\\"byte\\\"})",
+              "expr": "sum(kube_pod_container_resource_requests{resource=\"memory\"}) / sum(kube_node_status_allocatable{resource=\"memory\",unit=\"byte\"})",
               "hide": false,
               "legendFormat": "Requests",
               "range": true,
@@ -324,7 +324,7 @@ data:
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "sum(kube_pod_container_resource_limits{resource=\"memory\"}) / sum(kube_node_status_allocatable{resource=\\\"memory\\\",unit=\\\"byte\\\"})",
+              "expr": "sum(kube_pod_container_resource_limits{resource=\"memory\"}) / sum(kube_node_status_allocatable{resource=\"memory\",unit=\"byte\"})",
               "hide": false,
               "legendFormat": "Limits",
               "range": true,
@@ -875,7 +875,7 @@ data:
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "sum(kube_node_status_allocatable{resource=\\\"cpu\\\",unit=\\\"core\\\"})",
+              "expr": "sum(kube_node_status_allocatable{resource=\"cpu\",unit=\"core\"})",
               "hide": false,
               "legendFormat": "Total",
               "range": true,
@@ -1031,7 +1031,7 @@ data:
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "sum(kube_node_status_allocatable{resource=\\\"memory\\\",unit=\\\"byte\\\"})",
+              "expr": "sum(kube_node_status_allocatable{resource=\"memory\",unit=\"byte\"})",
               "hide": false,
               "legendFormat": "Total",
               "range": true,

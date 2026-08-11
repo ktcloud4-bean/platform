@@ -111,6 +111,15 @@ immutable root `ce81ebee7fe2d0a49b8d244342828800b87e0d35`과 child
 | 용량·범위 | head series 42,631→54,351; Prometheus 312,475,648→325,058,560 bytes, KSM 68,157,440→33,554,432 bytes; available RAM 14,742,831,104→14,297,698,304 bytes, swap 0, retention 3d/6GiB; obs Service 9·NetworkPolicy 13·PVC 2·Secret 9로 불변 | 통과 |
 | rollback | literal `main` 복구 뒤 `platform-root`·`obs`가 `dac2fe9facf2278faaac3b113887b4941a80703f`에서 `Synced/Healthy` | 통과 |
 
+### 2026-08-11 OBS-09-FIX-01 라이브 완료 증거
+
+`machine_*` capacity metric 치환문이 label quote 앞에 literal backslash를 남겨 Prometheus parser가
+거부하던 결함을 보정했다. immutable root `7cbe87450c213b0f85c3748425f4a51667beb175`와 child
+`6f66f115734765d819c4fbe1b6665886f95c5a8b`에서 Grafana API의 allocatable CPU·memory query 6건이
+backslash 0건이고 Prometheus API parse 성공임을 확인했다. collector·RBAC·ServiceMonitor·NetworkPolicy·PVC·Secret·Ingress
+변경은 0건이며, 이후 literal `main` `4ac2336a8d352e89416f00654ee8475e87e89901`에서
+`platform-root`·`obs` 모두 `Synced/Healthy`로 복구했다.
+
 `obs-default-deny`는 cross-namespace ingress도 막으므로 Pomerium egress만으로는 UI backend에
 도달하지 못한다. 세 `obs-02-*-pomerium-ingress` 정책은 Pomerium server Pod만 Grafana TCP 3000,
 Prometheus TCP 9090, Alertmanager TCP 9093에 도달하게 해 해당 egress와 정확히 짝을 이룬다.
