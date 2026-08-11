@@ -7,6 +7,9 @@ metadata:
     argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
     argocd.argoproj.io/sync-wave: "0"
+    # AWS-HR-01-BOOTSTRAP-01: 현재 선언 revision에서 초기 HR 관리자를
+    # Secrets Manager identity와 일치하도록 idempotent하게 재확인한다.
+    platform.imcherry5778.xyz/bootstrap-revision: "1"
   labels:
     app.kubernetes.io/name: hr-db-migrate
     app.kubernetes.io/component: migration
