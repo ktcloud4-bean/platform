@@ -11,6 +11,18 @@ resource "aws_security_group" "eks_nodes_sg" {
     cidr_blocks = [data.terraform_remote_state.shared_network.outputs.vpc_cidr]
   }
 
+  # VPC CNI Pod IP는 worker node ENI에 붙는다. 서로 다른 node의 frontend/API Pod 통신은
+  # Kubernetes NetworkPolicy가 service별 port를 제한하지만, 이 lower-layer security group도
+  # 같은 node SG 안의 data-plane packet을 허용해야 한다. 그렇지 않으면 cross-node Service
+  # request가 TCP connect 단계에서 대기해 upstream timeout으로 보인다.
+  egress {
+    description = "Allow EKS node and VPC CNI Pod data-plane traffic within the node security group"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    self        = true
+  }
+
   # ECR·S3·STS endpoint와 RDS 규칙은 아래의 특정 목적지만 허용한다.
   egress {
     description     = "HTTPS to explicitly declared AWS PrivateLink endpoints"
