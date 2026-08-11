@@ -145,6 +145,14 @@ grafana:
           editable: false
           options:
             path: /var/lib/grafana/dashboards/platform-argocd-application-overview
+        - name: platform-kubernetes-global
+          orgId: 1
+          folder: Platform
+          type: file
+          disableDeletion: true
+          editable: false
+          options:
+            path: /var/lib/grafana/dashboards/platform-kubernetes-global
   dashboardsConfigMaps:
     platform-observability: obs-02-dashboard
     platform-capacity: obs-04-capacity-sentinel
@@ -152,6 +160,7 @@ grafana:
     platform-backup-pipelines: obs-06-backup-pipelines
     platform-loki-log-explorer: obs-07-loki-log-explorer
     platform-argocd-application-overview: obs-12-argocd-application-overview
+    platform-kubernetes-global: obs-09-kubernetes-global
   datasources:
     datasources.yaml:
       apiVersion: 1
@@ -305,6 +314,19 @@ kube-state-metrics:
     - persistentvolumeclaims
     - persistentvolumes
     - pods
+    - namespaces
+    - deployments
+    - daemonsets
+    - statefulsets
+    - replicasets
+    - jobs
+    - cronjobs
+    - services
+    - endpoints
+    - ingresses
+    - horizontalpodautoscalers
+    - networkpolicies
+    - resourcequotas
   prometheus:
     monitor:
       enabled: true
