@@ -248,6 +248,36 @@ Dashboard의 Wazuh API client는 저장된 `url`과 `port`를 결합한다. 따�
 multi-auth 선언·OIDC 버튼의 native endpoint·기존 D30/A90 조사 권한·Server API Online과
 `platform-root`/`wazuh` `Synced/Healthy`만 판정한다.
 
+### WAZUH-02-FIX-03 Manager API `run_as`
+
+Wazuh 4.14.7 Dashboard의 `/wazuh_app_config.sh`는 `RUN_AS`를 지정하지 않으면 `true`로 둔다.
+다만 고정한 Dashboard image의 `data/wazuh/config/wazuh.yml`에는 API host가 이미 있어 이 스크립트는
+`Wazuh APP already configured`으로 끝나며 `RUN_AS` 값을 반영하지 않는다. 그 host의 `run_as: true`와
+`wazuh-01-api`의 `allow_run_as=false` 불일치 때문에 Dashboard의 scoped `/api/login` token 발급은
+Manager API의 3000 오류로 거부된다. `/api/check-api`는 internal-user token만 써 이 조건을 판정하지
+못한다.
+
+Dashboard command는 Vault 환경을 읽은 뒤 entrypoint와 같은 `/wazuh_app_config.sh`를 먼저 한 번
+실행해 API host를 만들고, 정확히 한 `run_as` 필드가 있는지 확인해 이를 `false`로 바꾼다. 이어지는
+entrypoint 호출은 이미 만든 host를 보존한다. 예상 밖 image 형식이면 Dashboard가 기동하지 않아 이
+경계를 조용히 우회하지 않는다. scope token은 기존 Dashboard 전용 service account로 발급되고 Manager API가
+사용자 auth context를 가장하지 않는다. 이는 API 사용자 권한을 넓히지 않으며, Pomerium의
+`/platform-privileged` admission, Keycloak native OIDC session, Indexer의 `wazuh-admin` RBAC 및
+local `admin` break-glass 경계도 바꾸지 않는다.
+
+`gitops/tools/wazuh-02-fix-03/verify-live.sh`는 immutable root·child SHA에서 Deployment 환경과
+실제 생성 `wazuh.yml`의 port 없는 URL·단일 `55000`·`run_as:false`를 확인한 뒤, 특권 OIDC session의
+`/api/login` scoped token 발급이 HTTP 200인지 한 번만 판정한다. token·cookie·password는 읽거나
+출력하지 않는다.
+
+### 2026-08-12 WAZUH-02-FIX-03 완료 증거
+
+immutable root `50f0cbc1590023b800c6369370221dd7b26968a2`와 child
+`0ab08780ed8760f226fea08f09c1ab9ffc1bd6f0`에서 `DashboardConfig=PASS
+manager-url=single-port run_as=false`와 OIDC session의 scoped Manager token 발급을 통과했다.
+이후 `platform-root`와 `wazuh` child는 literal `main`·main
+`688db86570f78be63d353b7f77f4c8f08eca054f`의 `Synced/Healthy`로 복귀했다.
+
 ### 2026-08-12 WAZUH-02-FIX-02 완료 증거
 
 immutable root `9239e8af13141923b32bf18a1fd2422638104f57`와 child
