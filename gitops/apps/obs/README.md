@@ -13,12 +13,18 @@ node-exporter, kube-state-metrics, Grafana, 인증서 probe와 OPNsense node_exp
 | PVC | `obs-kube-state-metrics`, `kube_persistentvolumeclaim_info` | 이 chart의 kube-state-metrics |
 | backup | `velero`, `velero_backup_total` | `obs`의 ServiceMonitor가 기존 `velero` Service를 선택 |
 | certificate | `obs-blackbox`, `probe_success`, `probe_ssl_earliest_cert_expiry` | blackbox-exporter가 기존 Traefik의 `k3s-01.imcherry5778.xyz` TLS를 검증 |
+| Traefik traffic | `obs-traefik`, `traefik_entrypoint_*`·`traefik_router_*`·`traefik_service_*` | ingress의 private `traefik-metrics:9100` Service와 `obs` ServiceMonitor |
 | 수집 pipeline | `loki`·`alloy`, `loki_build_info`·`alloy_build_info` | `obs`의 ServiceMonitor가 기존 `loki` namespace Service를 선택 |
 | OPNsense | `opnsense-node`, CPU·memory·interface node metric | 이 앱의 외부 static target ScrapeConfig |
 
 Prometheus는 `obs` namespace에 있는 `release=obs` ServiceMonitor·PrometheusRule·ScrapeConfig를
 선택한다. Velero와 Loki 선언은 수정하지 않는다. `OPN-METRICS-01`의 OPNsense static target,
 Prometheus egress와 방화벽 rule은 이 앱을 확장하며 OBS-01의 과거 증거에는 포함하지 않는다.
+
+`TRAEFIK-METRICS`의 ServiceMonitor도 `obs` namespace에만 두고 `kube-system`의
+`traefik-metrics` ClusterIP Service를 선택한다. Prometheus Pod egress는 Traefik Pod의 TCP
+9100 한 포트로만 추가한다. 이 경로는 외부 serving Service·Ingress·DNS·NAT와 독립적이며,
+Prometheus metric에는 path·client IP·사용자·인증 header label을 넣지 않는다.
 
 OPNsense 플러그인 node_exporter와 API 기반 opnsense-exporter를 한 번 비교했고, 추가 API
 credential 없이 CPU·memory·interface를 얻는 더 짧은 경로라 `os-node_exporter`를 선택했다.

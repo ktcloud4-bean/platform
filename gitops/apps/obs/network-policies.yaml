@@ -156,6 +156,16 @@ spec:
   policyTypes: [Egress]
   egress:
     - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 9100
+    - to:
         - ipBlock:
             cidr: 10.10.20.10/32
       ports:

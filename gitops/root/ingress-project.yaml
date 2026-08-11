@@ -8,7 +8,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: platform-gitops
 spec:
-  description: INGRESS-01 packaged Traefik HelmChartConfig 최소 배포 경계
+  description: packaged Traefik HelmChartConfig와 private metrics Service 최소 배포 경계
   sourceRepos:
     - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
   destinations:
@@ -16,5 +16,7 @@ spec:
       server: https://kubernetes.default.svc
   clusterResourceWhitelist: []
   namespaceResourceWhitelist:
+    - group: ""
+      kind: Service
     - group: helm.cattle.io
       kind: HelmChartConfig

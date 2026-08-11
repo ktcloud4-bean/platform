@@ -1,8 +1,8 @@
 # packaged Traefik ingress 기준선
 
-이 디렉터리는 `INGRESS-01`이 k3s packaged Traefik에 더하는
-`HelmChartConfig`만 소유한다. k3s가 생성하는 `HelmChart traefik`과
-`/var/lib/rancher/k3s/server/manifests/traefik.yaml`은 직접 수정하지 않는다.
+이 디렉터리는 `INGRESS-01`이 k3s packaged Traefik에 더하는 `HelmChartConfig`와
+`TRAEFIK-METRICS`의 private `traefik-metrics` Service만 소유한다. k3s가 생성하는
+`HelmChart traefik`과 `/var/lib/rancher/k3s/server/manifests/traefik.yaml`은 직접 수정하지 않는다.
 
 ## 현재 선언 단계
 
@@ -37,6 +37,13 @@ forwarded header와 인증서 값은 바꾸지 않는다. ADR-0012의 별도 승
 mount만 제거하고 같은 packaged image와 이 문서의 production 기준선을 회복한다. 비밀이
 없는 `AppProject/crowdsec` 기반은 rollback 뒤에도 남겨 child Application finalizer가
 namespace를 정상 prune할 수 있게 한다.
+
+`TRAEFIK-METRICS`는 이미 실행 중인 `metrics:9100` entrypoint를 외부 serving Service와
+분리한다. `traefik-metrics`는 Traefik Pod만 선택하는 ClusterIP Service이므로 ServiceLB·공개
+DNS·NAT에 TCP 9100을 추가하지 않는다. Prometheus의 router drill-down에 필요한
+`metrics.prometheus.addRoutersLabels: true`만 HelmChartConfig에 명시하며, header label은
+설정하지 않는다. 이 static 설정 변경은 Traefik Pod 한 번의 교체를 수반할 수 있으므로
+`TRAEFIK-LIVE`와 immutable Argo 검증·rollback 안에서만 적용한다.
 
 정확한 hostname은 [`docs/ip-plan.md`](../../../docs/ip-plan.md)의 canonical
 `k3s-01.imcherry5778.xyz` 하나다. production 인증서가 있어도 public A/AAAA와 NAT는
