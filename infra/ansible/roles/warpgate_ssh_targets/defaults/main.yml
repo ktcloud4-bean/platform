@@ -1,0 +1,8 @@
+---
+# WG-03: Warpgate가 실제 운영 대상에 쓸 SSH client public key의 최소 권한 배치.
+# 구체적인 source IP는 inventory의 warpgate_nodes.ansible_host에서만 받는다.
+warpgate_ssh_target_user: rocky
+warpgate_ssh_target_authorized_keys_path: "/home/{{ warpgate_ssh_target_user }}/.ssh/authorized_keys"
+warpgate_ssh_target_allowed_source: ""
+warpgate_ssh_target_public_key: ""
+warpgate_ssh_target_key_comment: "wg-03-warpgate"

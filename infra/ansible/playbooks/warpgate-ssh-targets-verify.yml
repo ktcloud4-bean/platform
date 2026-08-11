@@ -1,0 +1,489 @@
+---
+# WG-03의 단일 라이브 완료 증거. SSO 일반 사용자를 가장하지 않고 기존 local admin
+# break-glass 계정은 관리 API 인증에만 쓴다. listener 공개 host key는 strict 관리 SSH로
+# 인증된 warpgate-01에서 service PID·2222 socket ownership을 확인한 loopback scan과 독립
+# 외부 scan이 일치할 때만 task-local known_hosts에 pin한다.
+
+- name: WG-03 Warpgate listener trust, role, relay, recording verification
+  hosts: warpgate_nodes
+  gather_facts: false
+  become: true
+  vars:
+    # verifier는 baseline role을 include하지 않으므로 loopback 관리 API의 고정 endpoint를
+    # 여기에서 명시한다. 이 주소는 listener·DNS·방화벽을 우회해 외부에 노출되지 않는다.
+    warpgate_api_base: 'https://127.0.0.1:8888'
+    wg03_listener_host: warpgate.imcherry5778.xyz
+    wg03_listener_port: 2222
+    wg03_listener_known_hosts_file: ''
+    wg03_target_names: ['k3s-01', 'postgres-01', 'object-01', 'netbird-01']
+    wg03_verify_username: 'wg03-verify'
+  pre_tasks:
+    - name: WG-03 listener known_hosts 경로 확인
+      ansible.builtin.assert:
+        that:
+          - wg03_listener_known_hosts_file is match('^/')
+        fail_msg: WG-03 listener known_hosts는 저장소 밖 absolute mode 0600 파일이어야 한다.
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: WG-03 local break-glass password 입력 확인
+      ansible.builtin.assert:
+        that:
+          - warpgate_admin_password | default('') | length >= 12
+        fail_msg: WG-03 relay 검증에는 저장소 밖 warpgate_admin_password가 필요하다.
+      no_log: true
+
+  tasks:
+    - name: WG-03 관리 API 로그인
+      ansible.builtin.uri:
+        url: "{{ warpgate_api_base }}/@warpgate/api/auth/login"
+        method: POST
+        body_format: json
+        body:
+          username: admin
+          password: "{{ warpgate_admin_password }}"
+        validate_certs: false
+        status_code: [200, 201, 204]
+      register: wg03_login
+      changed_when: false
+      no_log: true
+
+    - name: WG-03 관리 API 세션 쿠키 보관
+      ansible.builtin.set_fact:
+        wg03_headers:
+          Cookie: "{{ wg03_login.cookies_string }}"
+      no_log: true
+
+    # /ssh/own-keys는 listener host key가 아니라 대상 접속용 client key를 돌려준다.
+    # strict 관리 SSH로 이미 인증한 VM 안에서 실제 systemd main PID가 소유한 loopback
+    # listener를 조회한다. ssh-keyscan 단독 TOFU가 아니라 인증된 관리 경로의 관측값이다.
+    - name: WG-03 인증된 listener loopback source와 service ownership 확인
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          test "$(systemctl is-active warpgate.service)" = active
+          wg_pid="$(systemctl show warpgate.service -p MainPID --value)"
+          test "$wg_pid" -gt 1
+          ps -p "$wg_pid" -o args= | grep -Eq 'warpgate.*--config /etc/warpgate\.yaml run$'
+          ss -ltnp 'sport = :2222' | grep -Eq "pid=${wg_pid}[,)]"
+          ssh-keyscan -4 -T 5 -t ed25519 -p 2222 127.0.0.1 2>/dev/null \
+            | awk '$2 == "ssh-ed25519" { print $3; exit }'
+        executable: /bin/bash
+      register: wg03_listener_loopback_key
+      changed_when: false
+      no_log: true
+
+    - name: WG-03 인증된 listener loopback ed25519 key 단일성 확인
+      ansible.builtin.assert:
+        that:
+          - wg03_listener_loopback_key.stdout_lines | length == 1
+          - wg03_listener_loopback_key.stdout | trim is match('^[A-Za-z0-9+/]+={0,3}$')
+        fail_msg: >-
+          Warpgate systemd main PID가 소유한 loopback :2222 listener에서 ed25519
+          공개 host key를 정확히 하나 읽어야 한다.
+      no_log: true
+
+    - name: WG-03 외부 listener가 제시한 ed25519 key 조회
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          ssh-keyscan -T 5 -t ed25519 -p "$WG03_LISTENER_PORT" "$WG03_LISTENER_HOST" 2>/dev/null \
+            | awk '$2 == "ssh-ed25519" { print $3; exit }'
+        executable: /bin/bash
+      environment:
+        WG03_LISTENER_HOST: "{{ wg03_listener_host }}"
+        WG03_LISTENER_PORT: "{{ wg03_listener_port | string }}"
+      delegate_to: localhost
+      become: false
+      register: wg03_listener_scanned_key
+      changed_when: false
+      no_log: true
+
+    - name: WG-03 listener key 비교용 fingerprint 산출
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          printf 'loopback-sha256='
+          printf '%s' "$WG03_API_KEY" | sha256sum | awk '{print $1}'
+          printf 'scan-sha256='
+          printf '%s' "$WG03_SCANNED_KEY" | sha256sum | awk '{print $1}'
+        executable: /bin/bash
+      environment:
+        WG03_API_KEY: "{{ wg03_listener_loopback_key.stdout | trim }}"
+        WG03_SCANNED_KEY: "{{ wg03_listener_scanned_key.stdout | trim }}"
+      delegate_to: localhost
+      become: false
+      register: wg03_listener_key_fingerprints
+      changed_when: false
+      no_log: true
+
+    - name: WG-03 listener key 비교 metadata 표시
+      ansible.builtin.debug:
+        msg: >-
+          DNS={{ wg03_listener_host }}, loopback-key-bytes={{ (wg03_listener_loopback_key.stdout | trim) | length }},
+          scanned-key-bytes={{ (wg03_listener_scanned_key.stdout | trim) | length }},
+          {{ wg03_listener_key_fingerprints.stdout_lines | join(', ') }}
+
+    - name: WG-03 인증된 loopback과 외부 listener ed25519 host key 일치 확인
+      ansible.builtin.assert:
+        that:
+          - wg03_listener_scanned_key.stdout | trim == wg03_listener_loopback_key.stdout | trim
+        fail_msg: >-
+          Warpgate product API의 host key와 외부 listener key가 다릅니다. pinning이나
+          relay 검증을 진행하지 마십시오.
+      no_log: true
+
+    - name: WG-03 기존 listener known_hosts metadata 조회
+      ansible.builtin.stat:
+        path: "{{ wg03_listener_known_hosts_file }}"
+        follow: false
+      delegate_to: localhost
+      become: false
+      register: wg03_listener_known_hosts_stat
+      no_log: true
+
+    - name: WG-03 기존 listener known_hosts 조회
+      ansible.builtin.slurp:
+        src: "{{ wg03_listener_known_hosts_file }}"
+      delegate_to: localhost
+      become: false
+      register: wg03_listener_known_hosts_current
+      when: wg03_listener_known_hosts_stat.stat.exists
+      no_log: true
+
+    - name: WG-03 기존 listener pin 변경 거부
+      ansible.builtin.assert:
+        that:
+          - wg03_listener_known_hosts_stat.stat.isreg | default(false)
+          - not (wg03_listener_known_hosts_stat.stat.islnk | default(false))
+          - wg03_listener_known_hosts_stat.stat.mode == '0600'
+          - >-
+            (wg03_listener_known_hosts_current.content | b64decode | trim)
+            == ('[' ~ wg03_listener_host ~ ']:' ~ (wg03_listener_port | string)
+                ~ ' ssh-ed25519 ' ~ (wg03_listener_loopback_key.stdout | trim))
+        fail_msg: >-
+          기존 WG-03 listener pin이 API에서 검증한 공개 key와 다릅니다. host key rotation은
+          별도 검증·승인 절차로 처리해야 합니다.
+      when: wg03_listener_known_hosts_stat.stat.exists
+      no_log: true
+
+    - name: WG-03 검증된 listener host key 최초 pin
+      ansible.builtin.copy:
+        content: >-
+          [{{ wg03_listener_host }}]:{{ wg03_listener_port }} ssh-ed25519
+          {{ wg03_listener_loopback_key.stdout | trim }}
+        dest: "{{ wg03_listener_known_hosts_file }}"
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+      when: not wg03_listener_known_hosts_stat.stat.exists
+      no_log: true
+
+    - name: WG-03 target 목록 조회
+      ansible.builtin.uri:
+        url: "{{ warpgate_api_base }}/@warpgate/admin/api/targets"
+        headers: "{{ wg03_headers }}"
+        validate_certs: false
+      register: wg03_targets
+      changed_when: false
+      no_log: true
+
+    - name: WG-03 target 범위와 단일성 확인
+      ansible.builtin.assert:
+        that:
+          - >-
+            (wg03_targets.json | selectattr('name', 'in', wg03_target_names)
+             | map(attribute='name') | list | sort) == (wg03_target_names | sort)
+          - >-
+            (wg03_targets.json | selectattr('name', 'in', wg03_target_names)
+             | list | length) == (wg03_target_names | length)
+        fail_msg: WG-03 target 네 개가 product DB에 정확히 하나씩 있어야 한다.
+
+    - name: WG-03 target 이름에서 id 색인 생성
+      ansible.builtin.set_fact:
+        wg03_target_ids: >-
+          {{ dict((wg03_targets.json | selectattr('name', 'in', wg03_target_names)
+                   | map(attribute='name'))
+                  | zip(wg03_targets.json | selectattr('name', 'in', wg03_target_names)
+                    | map(attribute='id'))) }}
+      no_log: true
+
+    - name: WG-03 target별 허용 role 조회
+      ansible.builtin.uri:
+        url: "{{ warpgate_api_base }}/@warpgate/admin/api/targets/{{ wg03_target_ids[item] }}/roles"
+        headers: "{{ wg03_headers }}"
+        validate_certs: false
+      loop: "{{ wg03_target_names }}"
+      loop_control:
+        label: "{{ item }}"
+      register: wg03_target_roles
+      changed_when: false
+      no_log: true
+
+    - name: WG-03 target role 최소권한 확인
+      ansible.builtin.assert:
+        that:
+          - (item.json | map(attribute='name') | list | sort) == ['platform-privileged']
+        fail_msg: "{{ item.item }}은 platform-privileged 하나만 허용해야 한다."
+      loop: "{{ wg03_target_roles.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      no_log: true
+
+    - name: WG-03 target role 최소권한 통과 요약
+      ansible.builtin.debug:
+        msg: "WG-03 target 4개는 모두 platform-privileged 하나만 허용한다."
+
+    - name: WG-03 relay 전 session 목록 조회
+      ansible.builtin.uri:
+        url: "{{ warpgate_api_base }}/@warpgate/admin/api/sessions"
+        headers: "{{ wg03_headers }}"
+        validate_certs: false
+      register: wg03_sessions_before
+      changed_when: false
+      no_log: true
+
+    - name: WG-03 relay 전 session id 보관
+      ansible.builtin.set_fact:
+        wg03_session_ids_before: "{{ wg03_sessions_before.json['items'] | map(attribute='id') | list }}"
+      no_log: true
+
+    # 기존 local admin은 break-glass 관리 경로일 뿐 target authorization을 우회하지 않는다.
+    # Keycloak 사용자를 가장하지 않고, platform-privileged만 가진 일회성 local user로
+    # 실제 target role 경계를 검증하며 실패해도 always에서 product DB 자원을 지운다.
+    - name: WG-03 일회성 verifier password 생성
+      ansible.builtin.set_fact:
+        wg03_verify_password: "{{ lookup('ansible.builtin.password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+      no_log: true
+
+    - name: WG-03 일회성 verifier relay와 recording 검증
+      block:
+        - name: WG-03 현재 user 목록 조회
+          ansible.builtin.uri:
+            url: "{{ warpgate_api_base }}/@warpgate/admin/api/users"
+            headers: "{{ wg03_headers }}"
+            validate_certs: false
+          register: wg03_users_before
+          changed_when: false
+          no_log: true
+
+        - name: WG-03 verifier 이름 충돌 거부
+          ansible.builtin.assert:
+            that:
+              - wg03_verify_username not in (wg03_users_before.json | map(attribute='username') | list)
+            fail_msg: >-
+              {{ wg03_verify_username }}는 일회성 WG-03 verifier 전용 이름이다. 기존 사용자가
+              있으면 해당 계정에 접근하거나 삭제하지 않고 중단한다.
+          no_log: true
+
+        - name: WG-03 platform-privileged role id 조회
+          ansible.builtin.uri:
+            url: "{{ warpgate_api_base }}/@warpgate/admin/api/roles"
+            headers: "{{ wg03_headers }}"
+            validate_certs: false
+          register: wg03_roles
+          changed_when: false
+          no_log: true
+
+        - name: WG-03 platform-privileged role 단일성 확인
+          ansible.builtin.assert:
+            that:
+              - wg03_roles.json | selectattr('name', 'eq', 'platform-privileged') | list | length == 1
+            fail_msg: WG-03 verifier에는 platform-privileged role 하나가 필요하다.
+          no_log: true
+
+        - name: WG-03 일회성 verifier user 생성
+          ansible.builtin.uri:
+            url: "{{ warpgate_api_base }}/@warpgate/admin/api/users"
+            method: POST
+            headers: "{{ wg03_headers }}"
+            body_format: json
+            body:
+              username: "{{ wg03_verify_username }}"
+              description: 'WG-03 temporary relay verification; removed by this run'
+            validate_certs: false
+            status_code: [200, 201]
+          changed_when: true
+          register: wg03_verify_user_create
+          no_log: true
+
+        - name: WG-03 verifier user id 조회
+          ansible.builtin.uri:
+            url: "{{ warpgate_api_base }}/@warpgate/admin/api/users"
+            headers: "{{ wg03_headers }}"
+            validate_certs: false
+          register: wg03_users_after_create
+          changed_when: false
+          no_log: true
+
+        - name: WG-03 verifier user id 보관
+          ansible.builtin.set_fact:
+            wg03_verify_user_id: >-
+              {{ (wg03_users_after_create.json
+                  | selectattr('username', 'eq', wg03_verify_username) | first).id }}
+            wg03_privileged_role_id: >-
+              {{ (wg03_roles.json
+                  | selectattr('name', 'eq', 'platform-privileged') | first).id }}
+          no_log: true
+
+        - name: WG-03 verifier에 platform-privileged만 부여
+          ansible.builtin.uri:
+            url: >-
+              {{ warpgate_api_base }}/@warpgate/admin/api/users/{{ wg03_verify_user_id }}/roles/{{ wg03_privileged_role_id }}
+            method: POST
+            headers: "{{ wg03_headers }}"
+            body_format: json
+            body: {}
+            validate_certs: false
+            status_code: [200, 201, 409]
+          changed_when: true
+          no_log: true
+
+        - name: WG-03 verifier password credential 생성
+          ansible.builtin.uri:
+            url: >-
+              {{ warpgate_api_base }}/@warpgate/admin/api/users/{{ wg03_verify_user_id }}/credentials/passwords
+            method: POST
+            headers: "{{ wg03_headers }}"
+            body_format: json
+            body:
+              password: "{{ wg03_verify_password }}"
+            validate_certs: false
+            status_code: [200, 201]
+          changed_when: true
+          no_log: true
+
+        - name: WG-03 일회성 verifier relay 확인
+          ansible.builtin.shell:
+            cmd: |
+              set -euo pipefail
+              sshpass -d 0 ssh \
+                -o StrictHostKeyChecking=yes \
+                -o UserKnownHostsFile="$WG03_LISTENER_KNOWN_HOSTS" \
+                -o GlobalKnownHostsFile=/dev/null \
+                -o PreferredAuthentications=password \
+                -o PasswordAuthentication=yes \
+                -o PubkeyAuthentication=no \
+                -o KbdInteractiveAuthentication=no \
+                -o NumberOfPasswordPrompts=1 \
+                -o ConnectTimeout=10 \
+                -o ControlMaster=no \
+                -o ControlPath=none \
+                -p "$WG03_LISTENER_PORT" \
+                -l "${WG03_VERIFY_USERNAME}:${WG03_TARGET}" \
+                "$WG03_LISTENER_HOST" true
+            executable: /bin/bash
+          environment:
+            WG03_LISTENER_HOST: "{{ wg03_listener_host }}"
+            WG03_LISTENER_PORT: "{{ wg03_listener_port | string }}"
+            WG03_LISTENER_KNOWN_HOSTS: "{{ wg03_listener_known_hosts_file }}"
+            WG03_VERIFY_USERNAME: "{{ wg03_verify_username }}"
+            WG03_TARGET: "{{ item }}"
+          args:
+            stdin: "{{ wg03_verify_password }}"
+            stdin_add_newline: true
+          delegate_to: localhost
+          become: false
+          loop: "{{ wg03_target_names }}"
+          loop_control:
+            label: "{{ item }}"
+          register: wg03_relays
+          changed_when: false
+          failed_when: false
+          no_log: true
+
+        - name: WG-03 verifier relay 실패 유형 요약
+          ansible.builtin.debug:
+            msg: >-
+              {{ item.item }} relay={{ 'PASS' if item.rc == 0 else 'FAILED' }}
+              classification={{
+                'n/a'
+                if item.rc == 0
+                else ('target-authorization-denied'
+                      if ((item.stderr | default('')) is search('not authorized', ignorecase=True))
+                      else 'authentication-or-target-authorization-failed')
+              }}
+          loop: "{{ wg03_relays.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+
+        - name: WG-03 verifier relay exit status 확인
+          ansible.builtin.assert:
+            that:
+              - item.rc == 0
+            fail_msg: "{{ item.item }} Warpgate relay가 성공해야 한다."
+          loop: "{{ wg03_relays.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+          no_log: true
+
+        - name: WG-03 relay 성공 요약
+          ansible.builtin.debug:
+            msg: 'WG-03 platform-privileged verifier가 네 target relay를 모두 성공했다.'
+
+        - name: WG-03 relay 후 session 목록 조회
+          ansible.builtin.uri:
+            url: "{{ warpgate_api_base }}/@warpgate/admin/api/sessions"
+            headers: "{{ wg03_headers }}"
+            validate_certs: false
+          register: wg03_sessions_after
+          changed_when: false
+          no_log: true
+
+        - name: WG-03 새 session 선별
+          ansible.builtin.set_fact:
+            wg03_new_sessions: >-
+              {{ wg03_sessions_after.json['items']
+                 | rejectattr('id', 'in', wg03_session_ids_before) | list }}
+          no_log: true
+
+        - name: WG-03 relay session 생성 확인
+          ansible.builtin.assert:
+            that:
+              - (wg03_new_sessions | length) >= (wg03_target_names | length)
+            fail_msg: WG-03 relay 네 건 뒤 session metadata가 네 건 이상 새로 생겨야 한다.
+          no_log: true
+
+        - name: WG-03 새 session recording metadata 조회
+          ansible.builtin.uri:
+            url: "{{ warpgate_api_base }}/@warpgate/admin/api/sessions/{{ item.id }}/recordings"
+            headers: "{{ wg03_headers }}"
+            validate_certs: false
+          loop: "{{ wg03_new_sessions }}"
+          loop_control:
+            label: 'new-session'
+          register: wg03_session_recordings
+          changed_when: false
+          no_log: true
+
+        - name: WG-03 terminal recording metadata 확인
+          ansible.builtin.assert:
+            that:
+              - item.json | selectattr('kind', 'eq', 'Terminal') | list | length >= 1
+            fail_msg: WG-03 relay session마다 Terminal recording metadata가 있어야 한다.
+          loop: "{{ wg03_session_recordings.results }}"
+          loop_control:
+            label: 'new-session'
+          no_log: true
+
+        - name: WG-03 recording metadata 성공 요약
+          ansible.builtin.debug:
+            msg: 'WG-03 relay의 새 session 네 건 이상에 Terminal recording metadata가 있다.'
+
+      always:
+        - name: WG-03 일회성 verifier user 제거
+          ansible.builtin.uri:
+            url: "{{ warpgate_api_base }}/@warpgate/admin/api/users/{{ wg03_verify_user_id }}"
+            method: DELETE
+            headers: "{{ wg03_headers }}"
+            validate_certs: false
+            status_code: [200, 204, 404]
+          when: wg03_verify_user_id is defined
+          changed_when: true
+          no_log: true
+
+        - name: WG-03 일회성 verifier 정리 요약
+          ansible.builtin.debug:
+            msg: 'WG-03 temporary verifier user cleanup completed.'
+          when: wg03_verify_user_id is defined

@@ -151,7 +151,10 @@ warpgate_lego_binary_link: "/usr/local/bin/lego"
 #       - { provider: "keycloak", email: "<검증된 이메일>" }
 #     state: present
 # warpgate_known_hosts:
-#   - { host: "<대상>", port: 22, key_type: "ssh-ed25519", key_base64: "<인증 경로로 확인한 값>", state: present }
+#   - { host: "<대상>", port: 22, key_type: "ssh-ed25519", source_host: "<인증된 known_hosts의 이름 또는 IP>", state: present }
+# `source_host`를 쓰면 아래 저장소 밖 trusted known_hosts에서 키를 읽는다. key_base64를
+# 직접 주입하는 기존 호출도 호환하지만, 자동 수집·TOFU는 허용하지 않는다.
+warpgate_trusted_known_hosts_file: ""
 warpgate_roles:
   - name: "platform-users"
     description: "Keycloak /platform-users 일상 접근"

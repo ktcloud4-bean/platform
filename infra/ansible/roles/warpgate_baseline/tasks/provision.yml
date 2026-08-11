@@ -88,6 +88,119 @@
 # host_key_verification 이 prompt 라 첫 접속에서 사용자에게 TOFU 확인을 요구한다.
 # 인증된 경로(Proxmox 직렬 콘솔)로 이미 확인한 host key 만 미리 선언해 TOFU 를 없앤다.
 
+- name: 저장소 밖 known_hosts에서 읽을 대상 선별
+  ansible.builtin.set_fact:
+    wg_known_hosts_needing_resolution: >-
+      {{ warpgate_known_hosts
+         | selectattr('state', 'defined')
+         | selectattr('state', 'eq', 'present')
+         | rejectattr('key_base64', 'defined')
+         | list }}
+  no_log: true
+
+- name: trusted known_hosts 입력 경로 확인
+  ansible.builtin.assert:
+    that:
+      - warpgate_trusted_known_hosts_file | length > 0
+      - warpgate_trusted_known_hosts_file is match('^/')
+    fail_msg: >-
+      key_base64를 직접 주입하지 않는 운영 대상은 저장소 밖 absolute trusted known_hosts
+      파일과 source_host를 지정해야 한다. ssh-keyscan·accept-new·TOFU는 사용하지 않는다.
+  when: wg_known_hosts_needing_resolution | length > 0
+  no_log: true
+
+- name: trusted known_hosts 파일 metadata 확인
+  ansible.builtin.stat:
+    path: "{{ warpgate_trusted_known_hosts_file }}"
+    follow: false
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: wg_trusted_known_hosts_stat
+  when: wg_known_hosts_needing_resolution | length > 0
+  no_log: true
+
+- name: trusted known_hosts 파일 최소 권한 확인
+  ansible.builtin.assert:
+    that:
+      - wg_trusted_known_hosts_stat.stat.exists
+      - wg_trusted_known_hosts_stat.stat.isreg | default(false)
+      - wg_trusted_known_hosts_stat.stat.mode == '0600'
+      - not (wg_trusted_known_hosts_stat.stat.islnk | default(false))
+    fail_msg: trusted known_hosts는 저장소 밖 mode 0600 regular file이어야 한다.
+  delegate_to: localhost
+  become: false
+  run_once: true
+  when: wg_known_hosts_needing_resolution | length > 0
+  no_log: true
+
+- name: 인증된 known_hosts에서 대상 ed25519 key 추출
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      ssh-keygen -F "$WG_SOURCE_HOST" -f "$WG_TRUSTED_KNOWN_HOSTS" \
+        | awk -v key_type="$WG_KEY_TYPE" '$2 == key_type { print $3; exit }'
+    executable: /bin/bash
+  environment:
+    WG_SOURCE_HOST: "{{ item.source_host | default(item.host) }}"
+    WG_KEY_TYPE: "{{ item.key_type }}"
+    WG_TRUSTED_KNOWN_HOSTS: "{{ warpgate_trusted_known_hosts_file }}"
+  delegate_to: localhost
+  become: false
+  register: wg_known_hosts_extract
+  changed_when: false
+  check_mode: false
+  loop: "{{ wg_known_hosts_needing_resolution }}"
+  loop_control:
+    label: "{{ item.host }} ← {{ item.source_host | default(item.host) }}"
+  no_log: true
+
+- name: 인증된 known_hosts key 추출 결과 확인
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - item.stdout_lines | length == 1
+      - item.stdout | trim is match('^[A-Za-z0-9+/]+={0,3}$')
+    fail_msg: >-
+      {{ item.item.host }}의 {{ item.item.key_type }} key가 trusted known_hosts의
+      {{ item.item.source_host | default(item.item.host) }} 항목에 정확히 하나 있어야 한다.
+  loop: "{{ wg_known_hosts_extract.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.host }}"
+  no_log: true
+
+- name: 기존 key_base64 선언으로 resolved 목록 초기화
+  ansible.builtin.set_fact:
+    wg_known_hosts_resolved: >-
+      {{ warpgate_known_hosts
+         | selectattr('state', 'defined')
+         | rejectattr('state', 'eq', 'present')
+         | list }}
+  no_log: true
+
+- name: 직접 주입한 key_base64를 resolved 목록에 추가
+  ansible.builtin.set_fact:
+    wg_known_hosts_resolved: "{{ wg_known_hosts_resolved + [item] }}"
+  loop: >-
+    {{ warpgate_known_hosts
+       | selectattr('state', 'defined')
+       | selectattr('state', 'eq', 'present')
+       | selectattr('key_base64', 'defined')
+       | list }}
+  loop_control:
+    label: "{{ item.host }}"
+  no_log: true
+
+- name: trusted known_hosts key를 resolved 목록에 추가
+  ansible.builtin.set_fact:
+    wg_known_hosts_resolved: >-
+      {{ wg_known_hosts_resolved
+         + [item.item | combine({'key_base64': item.stdout | trim})] }}
+  loop: "{{ wg_known_hosts_extract.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.host }}"
+  no_log: true
+
 - name: 신뢰 host key 현황 조회
   ansible.builtin.uri:
     url: "{{ warpgate_api_base }}/@warpgate/admin/api/ssh/known-hosts"
@@ -95,6 +208,37 @@
     validate_certs: false
   register: wg_known_hosts_current
   check_mode: false
+
+- name: 기존 trusted host key 색인
+  ansible.builtin.set_fact:
+    wg_known_hosts_current_by_slot: >-
+      {{ wg_known_hosts_current_by_slot | default({})
+         | combine({
+             item.host ~ '|' ~ (item.port | string) ~ '|' ~ item.key_type:
+             (item.key_base64 | default(''))
+           }) }}
+  loop: "{{ wg_known_hosts_current.json }}"
+  loop_control:
+    label: "{{ item.host }}:{{ item.port }} {{ item.key_type }}"
+  no_log: true
+
+- name: 기존 trusted host key 불일치 fail closed
+  ansible.builtin.assert:
+    that:
+      - >-
+        (item.host ~ '|' ~ (item.port | default(22) | int | string) ~ '|' ~ item.key_type)
+        not in (wg_known_hosts_current_by_slot | default({}))
+        or
+        (wg_known_hosts_current_by_slot[
+          item.host ~ '|' ~ (item.port | default(22) | int | string) ~ '|' ~ item.key_type
+        ] == item.key_base64)
+    fail_msg: >-
+      {{ item.host }}:{{ item.port | default(22) }}의 기존 {{ item.key_type }} key가
+      인증된 선언과 다릅니다. key rotation은 별도 검증·승인 절차로 처리해야 합니다.
+  loop: "{{ wg_known_hosts_resolved }}"
+  loop_control:
+    label: "{{ item.host }}:{{ item.port | default(22) }} {{ item.key_type }}"
+  no_log: true
 
 - name: 검증된 대상 host key 선언
   ansible.builtin.uri:
@@ -114,7 +258,7 @@
     validate_certs: false
     status_code: [200, 201]
   changed_when: true
-  loop: "{{ warpgate_known_hosts | selectattr('state', 'defined') | selectattr('state', 'eq', 'present') | list }}"
+  loop: "{{ wg_known_hosts_resolved | selectattr('state', 'defined') | selectattr('state', 'eq', 'present') | list }}"
   loop_control:
     label: "{{ item.host }}:{{ item.port | default(22) }} {{ item.key_type }}"
   when: >-
@@ -138,7 +282,7 @@
     validate_certs: false
     status_code: [200, 204]
   changed_when: true
-  loop: "{{ warpgate_known_hosts | selectattr('state', 'defined') | selectattr('state', 'eq', 'absent') | list }}"
+  loop: "{{ wg_known_hosts_resolved | selectattr('state', 'defined') | selectattr('state', 'eq', 'absent') | list }}"
   loop_control:
     label: "{{ item.host }}:{{ item.port | default(22) }} {{ item.key_type }}"
   when: >-

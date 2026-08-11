@@ -19,6 +19,12 @@
 [warpgate_nodes]
 # warpgate-01 ansible_host=10.10.30.10 ansible_user=rocky
 
+[warpgate_ssh_targets]
+# WG-03: k3s-01 ansible_host=<docs/ip-plan.md의 k3s-01 주소> ansible_user=rocky
+# WG-03: postgres-01 ansible_host=<docs/ip-plan.md의 postgres-01 주소> ansible_user=rocky
+# WG-03: object-01 ansible_host=<docs/ip-plan.md의 object-01 주소> ansible_user=rocky
+# WG-03: netbird-01 ansible_host=<docs/ip-plan.md의 netbird-01 주소> ansible_user=rocky
+
 [netbird_server]
 # netbird-01 ansible_host=<docs/ip-plan.md의 netbird-01 주소> ansible_user=rocky
 

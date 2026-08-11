@@ -1,0 +1,43 @@
+---
+# WG-03: 대상의 기존 rocky 계정에 Warpgate가 생성한 ed25519 public key 한 줄만 추가한다.
+# 계정·sudo·sshd 전역 설정과 다른 authorized_keys 행은 소유하지 않는다. k3s의 짧은
+# SSH connection-rate 제한을 넘지 않도록 모든 읽기 전제는 하나의 remote command에서 확인한다.
+
+- name: WG-03 대상 SSH 전제 한 번에 확인
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      . /etc/os-release
+      test "$ID" = 'rocky'
+      test "${VERSION_ID%%.*}" = '9'
+      test -f "{{ warpgate_ssh_target_authorized_keys_path }}"
+      test "$(stat -c '%U:%G:%a' {{ warpgate_ssh_target_authorized_keys_path }})" = '{{ warpgate_ssh_target_user }}:{{ warpgate_ssh_target_user }}:600'
+      test "$(grep -Ec ' {{ warpgate_ssh_target_key_comment }}$' {{ warpgate_ssh_target_authorized_keys_path }})" -le 1
+      /usr/sbin/sshd -t
+      /usr/sbin/sshd -T | grep -Fx 'pubkeyauthentication yes' >/dev/null
+    executable: /bin/bash
+  changed_when: false
+  check_mode: false
+
+- name: WG-03 Warpgate source와 ed25519 client key 입력 확인
+  ansible.builtin.assert:
+    that:
+      - warpgate_ssh_target_allowed_source is match('^[0-9]{1,3}(\\.[0-9]{1,3}){3}$')
+      - warpgate_ssh_target_public_key is match('^ssh-ed25519 [A-Za-z0-9+/]+={0,3}$')
+    fail_msg: >-
+      Warpgate inventory source와 Warpgate가 현재 생성한 ed25519 public key가 정확히
+      하나 필요하다. 임의 client key·password 인증은 허용하지 않는다.
+  no_log: true
+
+- name: WG-03 source와 forwarding이 제한된 Warpgate client key 선언
+  ansible.builtin.lineinfile:
+    path: "{{ warpgate_ssh_target_authorized_keys_path }}"
+    create: false
+    owner: "{{ warpgate_ssh_target_user }}"
+    group: "{{ warpgate_ssh_target_user }}"
+    mode: '0600'
+    regexp: '.* {{ warpgate_ssh_target_key_comment }}$'
+    line: >-
+      from="{{ warpgate_ssh_target_allowed_source }}",no-port-forwarding,no-agent-forwarding,no-X11-forwarding
+      {{ warpgate_ssh_target_public_key }} {{ warpgate_ssh_target_key_comment }}
+  no_log: true

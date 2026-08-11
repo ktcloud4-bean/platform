@@ -1,0 +1,112 @@
+---
+# WG-03: 실제 운영 VM의 SSH target 등록. inventory와 trusted known_hosts는 저장소 밖 입력이다.
+# Keycloak membership, OPNsense firewall, Proxmox와 OpenTofu state는 이 playbook이 소유하지 않는다.
+
+- name: WG-03 Warpgate client public key read
+  hosts: warpgate_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: WG-03 단일 Warpgate source 확인
+      ansible.builtin.assert:
+        that:
+          - groups['warpgate_nodes'] | length == 1
+          - ansible_facts.default_ipv4.address | default('') is match('^[0-9]{1,3}(\\.[0-9]{1,3}){3}$')
+        fail_msg: WG-03은 inventory에서 검증 가능한 Warpgate source 한 대만 허용한다.
+
+    - name: WG-03 Warpgate ed25519 client public key 조회
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/warpgate
+          - --config
+          - /etc/warpgate.yaml
+          - client-keys
+      register: wg03_client_keys_raw
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: WG-03 ed25519 client public key 한 개 선별
+      ansible.builtin.set_fact:
+        wg03_ed25519_client_key_candidates: >-
+          {{ (wg03_client_keys_raw.stdout_lines + wg03_client_keys_raw.stderr_lines)
+             | map('trim')
+             | select('match', '^ssh-ed25519 [A-Za-z0-9+/]+={0,3}$')
+             | list }}
+      no_log: true
+
+    - name: WG-03 ed25519 client public key 단일성 확인
+      ansible.builtin.assert:
+        that:
+          - wg03_ed25519_client_key_candidates | length == 1
+        fail_msg: Warpgate의 ed25519 client public key가 정확히 하나여야 한다.
+      no_log: true
+
+    - name: WG-03 선별 client public key를 이 실행에만 보관
+      ansible.builtin.set_fact:
+        wg03_ed25519_client_key: "{{ wg03_ed25519_client_key_candidates | first }}"
+      no_log: true
+
+- name: WG-03 실제 SSH 대상에 제한된 Warpgate key 배치
+  hosts: warpgate_ssh_targets
+  gather_facts: false
+  become: true
+  serial: 1
+  vars:
+    wg03_warpgate_inventory_host: "{{ groups['warpgate_nodes'] | first }}"
+    warpgate_ssh_target_allowed_source: "{{ hostvars[wg03_warpgate_inventory_host].ansible_facts.default_ipv4.address }}"
+    warpgate_ssh_target_public_key: "{{ hostvars[wg03_warpgate_inventory_host].wg03_ed25519_client_key }}"
+  pre_tasks:
+    - name: WG-03 대상 inventory 범위 확인
+      ansible.builtin.assert:
+        that:
+          - groups['warpgate_nodes'] | length == 1
+          - groups['warpgate_ssh_targets'] | sort == ['k3s-01', 'netbird-01', 'object-01', 'postgres-01']
+        fail_msg: WG-03은 k3s-01, postgres-01, object-01, netbird-01 네 VM만 대상으로 한다.
+  roles:
+    - role: warpgate_ssh_targets
+
+- name: WG-03 Warpgate target·role·known-host 선언
+  hosts: warpgate_nodes
+  gather_facts: false
+  become: true
+  vars:
+    warpgate_targets:
+      - name: k3s-01
+        description: 'WG-03 PLATFORM k3s operator SSH'
+        ssh: { host: 'k3s-01.imcherry5778.xyz', port: 22, username: 'rocky' }
+        roles: ['platform-privileged']
+        state: present
+      - name: postgres-01
+        description: 'WG-03 DATA PostgreSQL operator SSH'
+        ssh: { host: 'postgres-01.imcherry5778.xyz', port: 22, username: 'rocky' }
+        roles: ['platform-privileged']
+        state: present
+      - name: object-01
+        description: 'WG-03 DATA object storage operator SSH'
+        ssh: { host: 'object-01.imcherry5778.xyz', port: 22, username: 'rocky' }
+        roles: ['platform-privileged']
+        state: present
+      - name: netbird-01
+        description: 'WG-03 DMZ NetBird operator SSH'
+        ssh: { host: 'netbird-01.imcherry5778.xyz', port: 22, username: 'rocky' }
+        roles: ['platform-privileged']
+        state: present
+    warpgate_known_hosts:
+      - { host: 'k3s-01.imcherry5778.xyz', port: 22, key_type: 'ssh-ed25519', source_host: 'k3s-01.imcherry5778.xyz', state: present }
+      - { host: 'postgres-01.imcherry5778.xyz', port: 22, key_type: 'ssh-ed25519', source_host: 'postgres-01.imcherry5778.xyz', state: present }
+      - { host: 'object-01.imcherry5778.xyz', port: 22, key_type: 'ssh-ed25519', source_host: '10.10.50.20', state: present }
+      - { host: 'netbird-01.imcherry5778.xyz', port: 22, key_type: 'ssh-ed25519', source_host: 'netbird-01.imcherry5778.xyz', state: present }
+  tasks:
+    - name: WG-03 trusted known_hosts 입력 확인
+      ansible.builtin.assert:
+        that:
+          - warpgate_trusted_known_hosts_file | default('') | length > 0
+        fail_msg: WG-03에는 인증된 저장소 밖 known_hosts 파일이 필요하다.
+      no_log: true
+
+    - name: WG-03 Warpgate 제품 DB 선언 반영
+      ansible.builtin.include_role:
+        name: warpgate_baseline
+        tasks_from: provision.yml
+      when: not ansible_check_mode
