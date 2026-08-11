@@ -40,6 +40,18 @@ sections:
         displayData:
           showForGroups:
             - /platform-users
+      - title: AWS Console
+        description: Keycloak SAML 임시 role로 여는 단일 AWS 계정 조회 콘솔
+        icon: si-amazonaws
+        color: "#FF9900"
+        url: https://sso.imcherry5778.xyz/realms/platform/protocol/saml/clients/aws-console
+        target: sametab
+        displayData:
+          showForGroups:
+            - /aws-console-inventory-readers
+            - /aws-console-observability-readers
+            - /aws-console-security-readers
+            - /aws-console-identity-readers
       - title: HR 직원 포털
         description: Keycloak HR 사용자 그룹으로 제한된 직원 셀프서비스 포털
         icon: fas fa-id-card

@@ -32,7 +32,33 @@ data "aws_iam_policy_document" "saml_trust" {
 
 resource "aws_iam_role" "observer" {
   name                 = local.role_names.observer
-  description          = "AWS-ID-01: Keycloak SAML daily observer temporary role"
+  description          = "AWS-ID-02: Keycloak SAML inventory reader temporary role"
+  max_session_duration = 3600
+  assume_role_policy   = data.aws_iam_policy_document.saml_trust.json
+
+  depends_on = [aws_iam_saml_provider.keycloak_platform]
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_iam_role" "observability_reader" {
+  name                 = local.role_names.observability_reader
+  description          = "AWS-ID-02: Keycloak SAML observability reader temporary role"
+  max_session_duration = 3600
+  assume_role_policy   = data.aws_iam_policy_document.saml_trust.json
+
+  depends_on = [aws_iam_saml_provider.keycloak_platform]
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_iam_role" "security_reader" {
+  name                 = local.role_names.security_reader
+  description          = "AWS-ID-02: Keycloak SAML security reader temporary role"
   max_session_duration = 3600
   assume_role_policy   = data.aws_iam_policy_document.saml_trust.json
 
@@ -85,12 +111,110 @@ data "aws_iam_policy_document" "observer_permissions" {
     actions   = ["sts:GetCallerIdentity"]
     resources = ["*"]
   }
+
+  statement {
+    sid    = "ReadOnlyWorkloadInventory"
+    effect = "Allow"
+    actions = [
+      "ec2:DescribeInstances",
+      "ec2:DescribeTags",
+      "ecr:DescribeImages",
+      "ecr:DescribeRepositories",
+      "ecr:ListImages",
+      "eks:DescribeAddon",
+      "eks:DescribeCluster",
+      "eks:DescribeNodegroup",
+      "eks:ListAddons",
+      "eks:ListClusters",
+      "eks:ListNodegroups",
+      "elasticloadbalancing:DescribeListeners",
+      "elasticloadbalancing:DescribeLoadBalancers",
+      "elasticloadbalancing:DescribeTargetGroups",
+      "elasticloadbalancing:DescribeTargetHealth",
+      "rds:DescribeDBClusters",
+      "rds:DescribeDBInstances",
+      "rds:DescribeDBSubnetGroups",
+      "tag:GetResources",
+    ]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "observer_permissions" {
   name   = "AWSID01ObserverReadOnly"
   role   = aws_iam_role.observer.id
   policy = data.aws_iam_policy_document.observer_permissions.json
+}
+
+data "aws_iam_policy_document" "observability_reader_permissions" {
+  statement {
+    sid    = "ReadOnlyCloudWatchMetricsAndAlarms"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:DescribeAlarmHistory",
+      "cloudwatch:DescribeAlarms",
+      "cloudwatch:GetDashboard",
+      "cloudwatch:GetMetricData",
+      "cloudwatch:GetMetricStatistics",
+      "cloudwatch:ListDashboards",
+      "cloudwatch:ListMetrics",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ReadOnlyCloudWatchLogsQueries"
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams",
+      "logs:FilterLogEvents",
+      "logs:GetLogEvents",
+      "logs:GetQueryResults",
+      "logs:StartQuery",
+      "logs:StopQuery",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "observability_reader_permissions" {
+  name   = "AWSID02ObservabilityReadOnly"
+  role   = aws_iam_role.observability_reader.id
+  policy = data.aws_iam_policy_document.observability_reader_permissions.json
+}
+
+data "aws_iam_policy_document" "security_reader_permissions" {
+  statement {
+    sid    = "ReadOnlySecurityPosture"
+    effect = "Allow"
+    actions = [
+      "access-analyzer:GetAnalyzer",
+      "access-analyzer:GetFinding",
+      "access-analyzer:ListAnalyzers",
+      "access-analyzer:ListFindings",
+      "cloudtrail:DescribeTrails",
+      "cloudtrail:GetTrailStatus",
+      "cloudtrail:LookupEvents",
+      "iam:GetAccountSummary",
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:GetRole",
+      "iam:GetRolePolicy",
+      "iam:GetSAMLProvider",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListRolePolicies",
+      "iam:ListRoles",
+      "iam:ListSAMLProviders",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "security_reader_permissions" {
+  name   = "AWSID02SecurityReadOnly"
+  role   = aws_iam_role.security_reader.id
+  policy = data.aws_iam_policy_document.security_reader_permissions.json
 }
 
 data "aws_iam_policy_document" "identity_reader_permissions" {

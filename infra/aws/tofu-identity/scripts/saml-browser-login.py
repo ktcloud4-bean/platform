@@ -5,8 +5,10 @@ import argparse
 import base64
 import hashlib
 import hmac
+import http.client
 from html.parser import HTMLParser
 import http.cookiejar
+import ipaddress
 import json
 import os
 import struct
@@ -30,13 +32,19 @@ class FormParser(HTMLParser):
         self.in_form = False
         self.action = None
         self.values = {}
+        self.form_ids = []
+        self.input_names = []
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
-        if tag == "form" and (self.form_id is None or values.get("id") == self.form_id):
-            self.in_form = True
-            self.action = values.get("action")
+        if tag == "form":
+            if values.get("id"):
+                self.form_ids.append(values["id"])
+            if self.form_id is None or values.get("id") == self.form_id:
+                self.in_form = True
+                self.action = values.get("action")
         elif tag == "input" and self.in_form and values.get("name"):
+            self.input_names.append(values["name"])
             self.values[values["name"]] = values.get("value", "")
 
     def handle_endtag(self, tag):
@@ -48,8 +56,46 @@ def parse_form(document, form_id=None):
     parser = FormParser(form_id)
     parser.feed(document.decode("utf-8"))
     if not parser.action:
-        raise RuntimeError(f"required form missing: {form_id or 'SAML response'}")
+        summary = FormParser()
+        summary.feed(document.decode("utf-8"))
+        raise RuntimeError(
+            f"required form missing: {form_id or 'SAML response'} "
+            f"(form_ids={sorted(set(summary.form_ids))}, "
+            f"input_names={sorted(set(summary.input_names))})"
+        )
     return parser.action, parser.values
+
+
+class FixedAddressHTTPSConnection(http.client.HTTPSConnection):
+    """Connect to one internal IP while retaining the public URL host, SNI, and TLS checks."""
+
+    def __init__(self, host, *, fixed_ip, expected_host, **kwargs):
+        self.fixed_ip = fixed_ip
+        self.expected_host = expected_host
+        super().__init__(host, **kwargs)
+
+    def connect(self):
+        if self.host != self.expected_host:
+            raise OSError("fixed-address redirect left the expected issuer host")
+        self.sock = self._create_connection((self.fixed_ip, self.port), self.timeout, self.source_address)
+        if self._tunnel_host:
+            self._tunnel()
+        self.sock = self._context.wrap_socket(self.sock, server_hostname=self.expected_host)
+
+
+class FixedAddressHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, fixed_ip, expected_host):
+        super().__init__()
+        self.fixed_ip = fixed_ip
+        self.expected_host = expected_host
+
+    def https_open(self, request):
+        def connection(host, **kwargs):
+            return FixedAddressHTTPSConnection(
+                host, fixed_ip=self.fixed_ip, expected_host=self.expected_host, **kwargs
+            )
+
+        return self.do_open(connection, request, context=self._context)
 
 
 def totp(seed_file):
@@ -99,6 +145,7 @@ def main():
     parser.add_argument("--password-file", required=True)
     parser.add_argument("--totp-file", required=True)
     parser.add_argument("--assertion-file", required=True)
+    parser.add_argument("--connect-ip")
     parser.add_argument("--expected-role-pair-file")
     parser.add_argument("--expect-no-role", action="store_true")
     parser.add_argument("--post-to-aws", action="store_true")
@@ -108,17 +155,22 @@ def main():
 
     with open(args.password_file, encoding="utf-8") as stream:
         password = stream.read().strip()
+    if args.connect_ip:
+        ipaddress.ip_address(args.connect_ip)
     cookies = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(
-        urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(cookies)
-    )
+    handlers = [urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(cookies)]
+    if args.connect_ip:
+        handlers.insert(1, FixedAddressHTTPSHandler(args.connect_ip, "sso.imcherry5778.xyz"))
+    opener = urllib.request.build_opener(*handlers)
     with opener.open(SAML_ENDPOINT, timeout=25) as response:
         login_page = response.read()
-    action, _ = parse_form(login_page, "kc-form-login")
-    with post(opener, action, {"username": args.username, "password": password}) as response:
+    action, login_values = parse_form(login_page, "kc-form-login")
+    login_values.update({"username": args.username, "password": password})
+    with post(opener, action, login_values) as response:
         otp_page = response.read()
-    action, _ = parse_form(otp_page, "kc-otp-login-form")
-    with post(opener, action, {"otp": totp(args.totp_file)}) as response:
+    action, otp_values = parse_form(otp_page, "kc-otp-login-form")
+    otp_values["otp"] = totp(args.totp_file)
+    with post(opener, action, otp_values) as response:
         saml_page = response.read()
 
     action, fields = parse_form(saml_page)

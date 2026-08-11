@@ -178,8 +178,10 @@ verify_client() {
   ' "${roles_json}" >/dev/null
 
   local observer_group identity_group
-  observer_group=$(group_uuid platform-users)
-  identity_group=$(group_uuid platform-privileged)
+  # AWS-ID-02부터 일반 platform group은 다른 서비스의 admission만 소유하고,
+  # AWS client role은 전용 group으로만 매핑한다.
+  observer_group=$(group_uuid aws-console-inventory-readers)
+  identity_group=$(group_uuid aws-console-identity-readers)
   api GET "groups/${observer_group}/role-mappings/clients/${cid}" \
     | jq -e --arg role "${observer_role}" '[.[].name] | index($role) != null' >/dev/null
   api GET "groups/${identity_group}/role-mappings/clients/${cid}" \

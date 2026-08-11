@@ -2,8 +2,10 @@ locals {
   provider_arn = "arn:aws:iam::${var.aws_account_id}:saml-provider/${var.saml_provider_name}"
 
   role_names = {
-    observer        = "platform-saml-observer"
-    identity_reader = "platform-saml-identity-reader"
+    observer             = "platform-saml-observer"
+    observability_reader = "platform-saml-observability-reader"
+    security_reader      = "platform-saml-security-reader"
+    identity_reader      = "platform-saml-identity-reader"
   }
 
   role_arns = {

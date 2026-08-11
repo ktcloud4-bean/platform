@@ -58,11 +58,13 @@ OIDC claim을 직접 확인하는 `claim/groups`를 쓴다.
 | `https://prometheus.imcherry5778.xyz` | `/platform-users` | OBS-02 Prometheus UI·PromQL |
 | `https://alertmanager.imcherry5778.xyz` | `/platform-users` 조회, `/platform-privileged` silence write | OBS-02 Alertmanager UI |
 | `https://shuffle.imcherry5778.xyz` | `/soar-readers`, `/soar-operators`, `/platform-privileged` | IAM-01 Route 진입만 판정; 내부 role은 Shuffle이 별도 판정 |
+| AWS Console 타일 | `/aws-console-inventory-readers`, `/aws-console-observability-readers`, `/aws-console-security-readers`, `/aws-console-identity-readers` | Dashy 탐색 타일만 표시; Keycloak SAML client role과 AWS IAM role trust/policy가 실제 권한을 판정 |
 
 로그인 성공, email 또는 `authenticated_user`만으로 허용하는 fallback은 없다.
 `/platform-privileged`만 가진 사용자는 Portal에는 들어가지만 검증 Route는 403이고 해당 타일도
 보이지 않는다. Dashy `showForGroups`는 탐색 편의일 뿐 보안 통제가 아니므로 각 후속 타일 URL은
-별도 Pomerium Route policy를 가져야 한다.
+별도 Pomerium Route policy를 가져야 한다. AWS Console 타일은 Pomerium upstream route가 아니라
+Keycloak의 IdP-initiated SAML client로 직접 이동하며, 숨김/표시는 AWS role 권한을 부여하지 않는다.
 
 `HEADLAMP-02` Route는 두 group 모두 웹 진입을 허용하지만, Pomerium은 웹 진입만 판정하며
 upstream의 실제 권한을 대신하지 않는다. Headlamp는 사용자별 Keycloak OIDC ID token과

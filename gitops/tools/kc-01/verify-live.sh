@@ -132,10 +132,10 @@ assert claims["iss"] == expected_issuer, claims.get("iss")
 groups = set(claims.get("groups", []))
 roles = set(claims.get("resource_access", {}).get("realm-management", {}).get("roles", []))
 if account_kind == "daily":
-    assert groups == {"/platform-users"}, groups
+    assert groups == {"/platform-users", "/aws-console-inventory-readers"}, groups
     assert not roles, roles
 elif account_kind == "privileged":
-    assert groups == {"/platform-privileged", "/keycloak-readers"}, groups
+    assert groups == {"/platform-privileged", "/keycloak-readers", "/aws-console-identity-readers"}, groups
     assert "view-users" in roles, roles
     assert roles <= {"view-users", "query-users", "query-groups"}, roles
     assert not ({"manage-users", "view-clients", "realm-admin"} & roles), roles

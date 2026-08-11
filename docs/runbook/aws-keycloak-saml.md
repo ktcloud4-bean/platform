@@ -1,6 +1,6 @@
 # AWS Keycloak SAML 임시 콘솔 권한 런북
 
-- 소유 작업: `AWS-ID-01`
+- 소유 작업: `AWS-ID-01`, `AWS-ID-02`
 - Keycloak realm/issuer: `platform` / `https://sso.imcherry5778.xyz`
 - AWS 방식: IAM SAML provider + `sts:AssumeRoleWithSAML` (IAM Identity Center가 아님)
 - 선언 root: [`infra/aws/tofu-identity`](../../infra/aws/tofu-identity/)
@@ -10,15 +10,15 @@
 SAML browser flow는 사용자의 browser가 Keycloak assertion을 AWS sign-in endpoint로 전송한다.
 AWS가 Keycloak으로 직접 연결하지 않는다. 따라서 이 작업은 SSO public exposure, VLAN route,
 OPNsense PF/NAT, Site-to-Site VPN의 변경을 요구하지 않는다. 그런 변경이 필요하다는 결과가
-나오면 적용을 멈추고 `AWS-ID-01` 범위 밖 차이로 보고한다.
+나오면 적용을 멈추고 `AWS-ID-02` 범위 밖 차이로 보고한다.
 
 다음은 각각 독립 state다.
 
-| root | 소유 대상 | AWS-ID-01에서의 규칙 |
+| root | 소유 대상 | AWS-ID-02에서의 규칙 |
 |---|---|---|
 | `infra/aws/tofu` | 오프사이트 backup bucket, 전송 service identity/access key | 읽기·변경·import 금지. bucket access 권한도 SAML role에 부여하지 않음 |
 | `infra/aws/tofu-network` | VPC, VGW, Site-to-Site VPN | 읽기·변경·import 금지. VPN Connection gate를 건드리지 않음 |
-| `infra/aws/tofu-identity` | Keycloak SAML provider, 사람용 임시 IAM role | 이 런북과 AWS-ID-01만 소유 |
+| `infra/aws/tofu-identity` | Keycloak SAML provider, 사람용 임시 IAM role | 이 런북과 AWS-ID-01/02만 소유 |
 
 기존 `seaweedfs-offsite-backup` access key는 backup service identity다. 이 작업의
 "지속 access key 없음" 검증은 사람용 IAM user에 한정한다. 새 IAM user/access key는 만들지
@@ -47,12 +47,11 @@ gitops/tools/kc-01/verify-live.sh
 
 다음 조건이 모두 맞을 때만 plan을 만든다.
 
-- issuer가 고정 값이고 daily/privileged login 모두 TOTP 없이는 거부된다.
-- daily는 `/platform-users`만, privileged는 `/platform-privileged`와
-  `/keycloak-readers`만 가진다. `kc-verify`는 그대로 `fullScopeAllowed=false`다.
-- 새 SAML provider와 `platform-saml-*` role이 없다. 같은 이름이 이미 있다면 import하거나
-  덮어쓰지 않고 중단한다.
-- `AWS-ID-01`을 선행으로 갖는 후속 작업은 없음을 현재 backlog에서 다시 확인한다.
+- issuer가 고정 값이고 기존 일상/특권 login 모두 TOTP 없이는 거부된다.
+- 기존 SAML provider와 observer/identity role은 `tofu-identity` state가 이미 소유한다.
+  import하거나 재생성하지 않는다.
+- `AWS-ID-02`는 existing direct membership만 새 전용 group으로 복사하며, observability/security
+  membership은 명시적인 역할 매트릭스 없이는 비운다.
 
 ## 계획과 apply gate
 
@@ -85,33 +84,39 @@ tofu show -json "$AWS_ID01_SECRET_DIR/identity.tfplan" | jq '{
 }'
 ```
 
-승인자가 확인할 정확한 target은 provider 1개, role 2개, inline policy 2개뿐이다.
+`AWS-ID-02`에서는 기존 provider를 건드리지 않는다. 아래 새 role/policy 네 개 생성과 기존
+observer/identity policy의 최소 권한 갱신만 허용하며, `destroy=0`이어야 한다.
 
 ```text
-aws_iam_saml_provider.keycloak_platform
-aws_iam_role.observer
-aws_iam_role.identity_reader
-aws_iam_role_policy.observer_permissions
-aws_iam_role_policy.identity_reader_permissions
+aws_iam_role.observability_reader
+aws_iam_role.security_reader
+aws_iam_role_policy.observability_reader_permissions
+aws_iam_role_policy.security_reader_permissions
 ```
 
-`create=5`, `change=0`, `destroy=0` 및 backup/VPN 주소 0개가 아니면 적용하지 않는다.
-적용 전 롤백 지점은 Git branch와 아직 만들지 않은 IAM/Keycloak 객체다. apply 직후 오류가
-나면 새 SAML client만 `reconcile-keycloak-saml.sh --rollback`으로 제거하고, IAM 삭제는
-`prevent_destroy` 보호를 유지한 채 별도 폐기 plan으로만 다룬다.
+`destroy=0` 및 backup/VPN 주소 0개가 아니면 적용하지 않는다. 이행 중 오류가 나면
+`reconcile-keycloak-saml-aws-id-02.sh --rollback`으로 legacy group mapping만 되돌린다.
+IAM 삭제는 `prevent_destroy` 보호를 유지한 채 별도 폐기 plan으로만 다룬다.
 
 사람의 명시적 승인 뒤에만 실행한다.
 
 ```sh
 tofu apply "$AWS_ID01_SECRET_DIR/identity.tfplan"
 tofu plan -input=false -var-file="$AWS_ID01_SECRET_DIR/identity.tfvars" >/dev/null
+
+umask 077
+tofu output -json >"$AWS_ID01_SECRET_DIR/tofu-outputs.json"
+jq -r '.keycloak_saml_role_arns.value.observability_reader' "$AWS_ID01_SECRET_DIR/tofu-outputs.json" \
+  >"$AWS_ID01_SECRET_DIR/observability-reader-role-arn"
+jq -r '.keycloak_saml_role_arns.value.security_reader' "$AWS_ID01_SECRET_DIR/tofu-outputs.json" \
+  >"$AWS_ID01_SECRET_DIR/security-reader-role-arn"
 ```
 
 ## Keycloak client 반영
 
-`reconcile-keycloak-saml.sh`는 기존 realm을 import/recreate하지 않는다. 새 `https://signin.aws.amazon.com/saml`
-SAML client에 아래만 만들고 현재 두 group에 새 client role mapping만 추가한다. client ID와
-`Audience`는 전역 AWS sign-in URI를 사용하지만, AWS trust의 `SAML:aud` 판정값은
+`reconcile-keycloak-saml-aws-id-02.sh`는 기존 realm을 import/recreate하지 않는다. 기존
+`https://signin.aws.amazon.com/saml` SAML client에 아래 reader client role·mapper·group mapping만
+추가한다. client ID와 `Audience`는 전역 AWS sign-in URI를 사용하지만, AWS trust의 `SAML:aud` 판정값은
 `SubjectConfirmationData Recipient`이므로 서울 ACS URI를 사용한다.
 
 | mapper/설정 | 값 |
@@ -122,14 +127,16 @@ SAML client에 아래만 만들고 현재 두 group에 새 client role mapping�
 | `aws-session-duration` | `SessionDuration=900` |
 | `aws-console-audience` | `https://signin.aws.amazon.com/saml` (SAML `Audience`) |
 | SAML POST ACS / Recipient | `https://ap-northeast-2.signin.aws.amazon.com/saml` (IAM trust `SAML:aud`) |
-| group mapping | `/platform-users`→observer, `/platform-privileged`→identity-reader |
+| group mapping | `/aws-console-inventory-readers`→observer, `/aws-console-observability-readers`→observability-reader, `/aws-console-security-readers`→security-reader, `/aws-console-identity-readers`→identity-reader |
 
 Keycloak이 SAML client 생성 때 자동 연결하는 공용 `role_list` client scope는 이 전용 client에서만
 분리한다. 그렇지 않으면 AWS URI Role mapper와 기본 `Role` mapper가 충돌해 assertion의 AWS
 Role attribute가 덮인다. 공용 scope 원문과 다른 client의 연결은 변경하지 않는다.
 
-다른 existing group 속성·membership, existing OIDC client, existing user는 변경하지 않는다.
-그룹에 없는 임시 검증 ID는 생성 후 삭제하며, 기존 ID의 group을 시험 목적으로 바꾸지 않는다.
+다른 existing group 속성, existing OIDC client, existing user는 변경하지 않는다. 기존
+`/platform-users`와 `/platform-privileged`의 membership은 이행 중에도 보존하고, 해당 direct
+membership만 inventory/identity 전용 group에 복사한다. 직무 표시만으로 observability/security
+group에 사용자를 추가하지 않는다.
 IdP-initiated URL은 client의 `baseUrl`, exact redirect URI, SAML POST assertion consumer URL을
 Seoul AWS sign-in ACS로 같게 둔다. 이 값이 누락된 구버전 적용은 소유 표식을 확인하는
 `--repair`만 한 번 실행해 보정한다.
@@ -140,8 +147,10 @@ export KC01_SECRET_DIR=/home/<operator>/secrets/ktcloud4-bean/keycloak
 export AWS_ID01_SAML_PROVIDER_ARN="$(<"$AWS_ID01_SECRET_DIR/provider-arn")"
 export AWS_ID01_OBSERVER_ROLE_ARN="$(<"$AWS_ID01_SECRET_DIR/observer-role-arn")"
 export AWS_ID01_IDENTITY_READER_ROLE_ARN="$(<"$AWS_ID01_SECRET_DIR/identity-reader-role-arn")"
-infra/aws/tofu-identity/scripts/reconcile-keycloak-saml.sh --apply
-infra/aws/tofu-identity/scripts/reconcile-keycloak-saml.sh --check
+export AWS_ID02_OBSERVABILITY_READER_ROLE_ARN="$(<"$AWS_ID01_SECRET_DIR/observability-reader-role-arn")"
+export AWS_ID02_SECURITY_READER_ROLE_ARN="$(<"$AWS_ID01_SECRET_DIR/security-reader-role-arn")"
+infra/aws/tofu-identity/scripts/reconcile-keycloak-saml-aws-id-02.sh --apply
+infra/aws/tofu-identity/scripts/reconcile-keycloak-saml-aws-id-02.sh --check
 ```
 
 ## live 완료 검증
@@ -149,9 +158,9 @@ infra/aws/tofu-identity/scripts/reconcile-keycloak-saml.sh --check
 각 assertion은 mode `0600` 임시 file에서만 decode하고 즉시 삭제한다. assertion 원문은
 shell 인자, CI log, Git, terminal에 출력하지 않는다.
 
-1. daily와 privileged로 각각 browser SAML login을 수행한다. TOTP 누락은 Keycloak에서
-   거부되고, 올바른 TOTP는 AWS console POST까지 성공해야 한다.
-2. daily assertion에는 observer ARN pair 하나, privileged assertion에는 identity-reader
+1. inventory와 identity 전용 group에 이관된 기존 계정으로 browser SAML login을 수행한다.
+   TOTP 누락은 Keycloak에서 거부되고, 올바른 TOTP는 AWS console POST까지 성공해야 한다.
+2. inventory assertion에는 observer ARN pair 하나, identity assertion에는 identity-reader
    pair 하나만 존재하는지 SHA-256/개수 비교로 검증한다. 반대 role ARN은 없어야 한다.
 3. group 없는 임시 platform user(필수 TOTP)를 만들고 SAML flow를 실행한다. 새 user가
    최초 TOTP 등록/필수 profile 화면을 보이면 **그 임시 user에만** QR 기반 TOTP 등록과 profile
@@ -163,7 +172,7 @@ shell 인자, CI log, Git, terminal에 출력하지 않는다.
    `assumed-role/platform-saml-*` 형식이어야 하며 account 숫자는 mask해 출력한다.
 5. observer의 `ec2 describe-vpn-connections`는 성공하고, `s3api list-buckets`,
    `iam list-users`, `sts assume-role`(반대 role)은 모두 `AccessDenied`여야 한다.
-   identity-reader는 이 SAML provider/두 role 읽기만 성공하고 IAM 변경은 거부되어야 한다.
+   identity-reader는 이 SAML provider/네 role 읽기만 성공하고 IAM 변경은 거부되어야 한다.
 6. credential의 expiration을 기록한 뒤 900초가 지난 시점에 동일 profile의
    `sts get-caller-identity`가 expired-token 계열 오류로 실패하는지 확인한다. 대기 중에는
    이 작업 외 변경을 하지 않는다.
