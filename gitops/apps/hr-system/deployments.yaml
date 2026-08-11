@@ -81,6 +81,8 @@ spec:
     matchLabels: {app.kubernetes.io/name: hr-service}
   template:
     metadata:
+      annotations:
+        platform.imcherry5778.xyz/migration-trigger-revision: "3"
       labels:
         app.kubernetes.io/name: hr-service
         app.kubernetes.io/component: api
