@@ -63,17 +63,6 @@ routes:
             - claim/groups: /platform-users
             - claim/groups: /platform-privileged
 
-  # BOARD-DEMO-01: Pomerium은 내부 board 웹 진입만 groups claim으로 제한한다.
-  # 게시글 CRUD 권한은 데모 범위에 한정하고, DB credential은 Vault Agent가 별도로 소비한다.
-  - name: board-demo
-    description: BOARD-DEMO-01 internal signed board application
-    from: https://board.imcherry5778.xyz
-    to: http://board-demo.board-demo.svc.cluster.local:80
-    policy:
-      - allow:
-          or:
-            - claim/groups: /platform-users
-
   # AWS-HR-01: browser identity admission은 Pomerium의 OIDC groups claim으로 먼저
   # 제한한다. internal ALB에는 IPsec으로만 도달하며, DB role/is_hr 판정은 upstream
   # application이 다시 수행한다. stable private alias는 tofu-app-routing이 소유한다.

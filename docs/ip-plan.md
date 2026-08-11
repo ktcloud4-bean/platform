@@ -222,7 +222,6 @@ NetBird 단독 외부 공개 정책은 `EDGE-01`, 조건부 Cloudflare HTTP 공�
 | `netbird-01.imcherry5778.xyz` | canonical host | NetBird VM | 내부 | Unbound 등록 |
 | `sso.imcherry5778.xyz` | service alias | Keycloak | 내부 split DNS·NetBird 경유 불변; `platform` realm 사용자 프런트엔드(`/realms/platform`·`/resources`)만 `EDGE-02`로 Cloudflare proxied 공개, 그 밖은 내부 source만 | Unbound alias → `k3s-01` (`10.10.20.10`) |
 | `access.imcherry5778.xyz` | service alias | Pomerium 보호 Dashy 포털 | 내부·NetBird 경유; clientless 공개 미채택 | Unbound alias → `k3s-01` (`10.10.20.10`); POM-01 등록 |
-| `board.imcherry5778.xyz` | service alias | BOARD-DEMO-01 게시판 | Pomerium `/platform-users`, 내부·NetBird 경유; 공개 DNS/NAT 미사용 | Unbound alias → `k3s-01` (`10.10.20.10`); BOARD-DEMO-01 등록 |
 | `www.imcherry5778.xyz` | service alias | HR 직원 self-service | Pomerium `/hr-users` 또는 `/hr-admins` → private EKS internal ALB, 공개 DNS/NAT 미사용 | Unbound alias → `k3s-01` (`10.10.20.10`); AWS-HR-01 등록 |
 | `admin.imcherry5778.xyz` | service alias | HR 관리 | Pomerium `/hr-admins` 및 HR app DB role → private EKS internal ALB, 공개 DNS/NAT 미사용 | Unbound alias → `k3s-01` (`10.10.20.10`); AWS-HR-01 등록 |
 | `argo.imcherry5778.xyz` | service alias | Argo CD | Pomerium; 실제 권한은 Argo 자체 OIDC·RBAC가 판정 | Unbound alias → `k3s-01` (`10.10.20.10`); GITOPS-02 등록, 내부 AAAA·공개 A/AAAA 0건 |

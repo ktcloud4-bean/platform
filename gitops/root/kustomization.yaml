@@ -37,8 +37,6 @@ resources:
   - policy-baseline-application.yaml
   - e2e-01-project.yaml
   - e2e-01-application.yaml
-  - board-demo-project.yaml
-  - board-demo-application.yaml
   - aws-load-balancer-controller-project.yaml
   - aws-load-balancer-controller-application.yaml
   - hr-system-project.yaml
