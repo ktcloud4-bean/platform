@@ -14,7 +14,8 @@ AWS Load Balancer Controller가 `hr-system-prod` internal ALB와 그 security gr
 `10.10.20.0/24`에서 온 HTTP/80만 받고, IPsec이 전송을 암호화한다. public DNS·NAT·Internet
 Gateway는 만들지 않는다.
 
-Pomerium의 `www`와 `admin` route는 alias를 통해 같은 ALB에 도달하되, Pomerium group과
-application DB role이 각각 browser admission과 HR action 권한을 다시 판정한다. EKS VPC CNI
-network policy standard mode가 이 namespace의 default-deny·DNS·frontend/API/AWS egress 정책을
-실제로 강제한다.
+Pomerium의 `www`와 `admin` route는 alias를 통해 같은 ALB에 도달한다. `www`는 Keycloak
+`/hr-users` 또는 `/hr-admins`, `admin`은 `/hr-admins` group만 browser admission으로 허용한다.
+애플리케이션 DB의 직원 존재와 `is_hr`는 이 admission과 별도로 HR action 권한을 다시 판정한다.
+EKS VPC CNI network policy standard mode가 이 namespace의 default-deny·DNS·frontend/API/AWS
+egress 정책을 실제로 강제한다.

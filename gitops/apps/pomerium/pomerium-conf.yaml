@@ -78,7 +78,7 @@ routes:
   # 제한한다. internal ALB에는 IPsec으로만 도달하며, DB role/is_hr 판정은 upstream
   # application이 다시 수행한다. stable private alias는 tofu-app-routing이 소유한다.
   - name: hr-system-www
-    description: AWS-HR-01 employee self-service through private EKS ALB
+    description: AWS-HR-02 HR-user or HR-admin employee self-service through private EKS ALB
     from: https://www.imcherry5778.xyz
     to: http://hr-system.alb.aws.imcherry5778.xyz
     preserve_host_header: true
@@ -86,7 +86,8 @@ routes:
     policy:
       - allow:
           or:
-            - claim/groups: /platform-users
+            - claim/groups: /hr-users
+            - claim/groups: /hr-admins
 
   - name: hr-system-admin
     description: AWS-HR-01 HR administration through private EKS ALB
