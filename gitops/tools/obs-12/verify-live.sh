@@ -58,6 +58,24 @@ sudo -n /usr/local/bin/k3s kubectl -n obs exec deploy/obs-grafana -c grafana -- 
 REMOTE
 }
 
+dashboard_matches() {
+  jq -e '
+    ([.dashboard.panels[]? | (.targets // [])[]? | .expr // ""] | join("\n")) as $queries |
+    (.dashboard.uid == "obs-12-argocd-applications" and
+     .dashboard.title == "ArgoCD / Application / Overview" and
+     .dashboard.editable == false and
+     ($queries | contains("argocd_app_info")) and
+     ($queries | contains("argocd_app_sync_total")) and
+     ($queries | contains("dest_namespace")) and
+     ($queries | contains("exported_namespace") | not) and
+     ($queries | contains("cluster=\"$cluster\"") | not) and
+     ([.dashboard.templating.list[]? | .datasource.uid] | length == 6 and all(.[]; . == "prometheus")) and
+     ((.dashboard | tostring) | contains("${datasource}") | not) and
+     ([.dashboard.templating.list[]? | .name] | sort == ["application", "application_namespace", "job", "kubernetes_cluster", "namespace", "project"]) and
+     any(.dashboard.templating.list[]?; .name == "kubernetes_cluster" and (.query | contains("dest_server"))))
+  ' >/dev/null
+}
+
 pod_working_set_bytes() {
   local selector=$1 line memory
   line=$(remote_kubectl -n obs top pod -l "${selector}" --no-headers) \
@@ -176,33 +194,13 @@ echo "Metric=PASS argocd_app_info=${app_info_count} argocd_app_sync_total=${app_
 dashboard=''
 for _ in $(seq 1 36); do
   dashboard=$(grafana_dashboard 2>/dev/null || true)
-  if [[ -n ${dashboard} ]] && jq -e '
-    ([.dashboard.panels[]? | (.targets // [])[]? | .expr // ""] | join("\n")) as $queries |
-    (.dashboard.uid == "obs-12-argocd-applications" and
-     .dashboard.title == "ArgoCD / Application / Overview" and
-     .dashboard.editable == false and
-     ($queries | contains("argocd_app_info")) and
-     ($queries | contains("argocd_app_sync_total")) and
-     ($queries | contains("dest_namespace")) and
-     ($queries | contains("exported_namespace") | not) and
-     ($queries | contains("cluster=\"$cluster\"") | not))
-  ' <<<"${dashboard}" >/dev/null 2>&1; then
+  if [[ -n ${dashboard} ]] && dashboard_matches <<<"${dashboard}" 2>/dev/null; then
     break
   fi
   sleep 5
 done
-jq -e '
-  ([.dashboard.panels[]? | (.targets // [])[]? | .expr // ""] | join("\n")) as $queries |
-  (.dashboard.uid == "obs-12-argocd-applications" and
-   .dashboard.title == "ArgoCD / Application / Overview" and
-   .dashboard.editable == false and
-   ($queries | contains("argocd_app_info")) and
-   ($queries | contains("argocd_app_sync_total")) and
-   ($queries | contains("dest_namespace")) and
-   ($queries | contains("exported_namespace") | not) and
-   ($queries | contains("cluster=\"$cluster\"") | not))
-' <<<"${dashboard}" >/dev/null || fail grafana 'OBS-12 dashboard UID·read-only·정규화 query가 일치하지 않는다.'
-echo 'Grafana=PASS uid=obs-12-argocd-applications editable=false queries=normalized'
+dashboard_matches <<<"${dashboard}" || fail grafana 'OBS-12 dashboard UID·변수 datasource·정규화 query가 일치하지 않는다.'
+echo 'Grafana=PASS uid=obs-12-argocd-applications editable=false variables=prometheus queries=normalized'
 
 post_capacity=$(measure_capacity)
 capacity_gate POST "${post_capacity}"

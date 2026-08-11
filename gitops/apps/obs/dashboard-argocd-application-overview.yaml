@@ -918,7 +918,7 @@ data:
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "${datasource}"
+              "uid": "prometheus"
             },
             "includeAll": true,
             "label": "Namespace",
@@ -935,7 +935,7 @@ data:
             "allValue": ".*",
             "datasource": {
               "type": "prometheus",
-              "uid": "${datasource}"
+              "uid": "prometheus"
             },
             "includeAll": true,
             "label": "Job",
@@ -951,7 +951,7 @@ data:
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "${datasource}"
+              "uid": "prometheus"
             },
             "includeAll": true,
             "label": "Kubernetes Cluster",
@@ -967,7 +967,7 @@ data:
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "${datasource}"
+              "uid": "prometheus"
             },
             "includeAll": true,
             "label": "Project",
@@ -983,7 +983,7 @@ data:
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "${datasource}"
+              "uid": "prometheus"
             },
             "includeAll": true,
             "label": "Application Namespace",
@@ -999,7 +999,7 @@ data:
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "${datasource}"
+              "uid": "prometheus"
             },
             "label": "Application",
             "multi": true,
