@@ -61,6 +61,11 @@ spec:
       serviceAccountName: wazuh-dashboard
       automountServiceAccountToken: false
       enableServiceLinks: false
+      # Pod→node external 443 hairpin을 피하면서 issuer hostname/SNI와 TLS 검증을 유지한다.
+      hostAliases:
+        - ip: 10.43.255.250
+          hostnames:
+            - sso.imcherry5778.xyz
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

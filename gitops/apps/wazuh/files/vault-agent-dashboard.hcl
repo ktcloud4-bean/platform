@@ -38,6 +38,7 @@ DASHBOARD_USERNAME={{ .Data.data.dashboard_username }}
 DASHBOARD_PASSWORD={{ .Data.data.dashboard_password }}
 API_USERNAME={{ .Data.data.api_username }}
 API_PASSWORD={{ .Data.data.api_password }}
+OIDC_CLIENT_SECRET={{ .Data.data.oidc_client_secret }}
 {{- end -}}
 EOT
 }

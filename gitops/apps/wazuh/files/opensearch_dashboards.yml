@@ -18,3 +18,16 @@ uiSettings.overrides.defaultRoute: /app/wz-home
 opensearch_security.cookie.ttl: 900000
 opensearch_security.session.ttl: 900000
 opensearch_security.session.keepalive: true
+
+# WAZUH-02-FIX-01: Pomerium은 route 입구만 판단하고, Dashboard의 실제 사용자 세션은
+# Keycloak platform realm OIDC로 만든다. Wazuh 4.14.7이 포함한 OpenSearch Dashboards 2.19는
+# multi-auth의 OIDC default redirect 설정을 지원하지 않으므로, 지원되는 native openid 단일
+# 모드로 둔다. IdP 장애 복구는 local Dashboard form이 아니라 제한된 k3s mTLS rollback Job이
+# 소유한다.
+opensearch_security.auth.type: "openid"
+opensearch_security.openid.connect_url: "https://sso.imcherry5778.xyz/realms/platform/.well-known/openid-configuration"
+opensearch_security.openid.client_id: "wazuh"
+opensearch_security.openid.client_secret: "${OIDC_CLIENT_SECRET}"
+opensearch_security.openid.scope: "openid profile email"
+opensearch_security.openid.base_redirect_url: "https://wazuh.imcherry5778.xyz"
+opensearch_security.openid.refresh_tokens: true

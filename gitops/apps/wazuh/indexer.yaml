@@ -68,6 +68,11 @@ spec:
       serviceAccountName: wazuh-indexer
       automountServiceAccountToken: false
       enableServiceLinks: false
+      # OIDC JWT 검증은 issuer metadata/JWKS를 canonical TLS hostname으로 조회한다.
+      hostAliases:
+        - ip: 10.43.255.250
+          hostnames:
+            - sso.imcherry5778.xyz
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

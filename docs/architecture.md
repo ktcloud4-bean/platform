@@ -210,6 +210,10 @@ Keycloak은 팀 사용자, MFA, OIDC/SAML의 중앙 IdP다. 프로젝트 realm�
 - Keycloak client role은 애플리케이션 권한을 나타낸다.
 - 그룹에 client role을 매핑하고 사용자에게 직접 권한을 붙이는 것은 예외로 한다.
 - Pomerium Core는 명시적인 OIDC `claim/groups` 조건으로 Route를 허용한다.
+- Wazuh Dashboard는 Pomerium Route 통과 뒤에도 Keycloak native OIDC 세션과 Indexer RBAC를
+  별도로 판정한다. `/platform-privileged`에는 `wazuh-admin` client role만 매핑하며, Indexer의
+  기존 로컬 `admin`은 IdP 장애 때 제한된 k3s mTLS rollback Job으로 복구하는 break-glass
+  사용자로만 남긴다.
 - AWS는 전용 SAML client와 role 매핑으로 `AssumeRoleWithSAML`을 사용한다.
 - EKS 워크로드 AWS 권한은 Keycloak이 아니라 Pod Identity 또는 IRSA가 담당한다.
 

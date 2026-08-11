@@ -178,7 +178,8 @@ Dashboard에 도달하지 못한다. `wazuh-dashboard-pomerium-ingress`(이 앱)
 
 ### credential 설계
 
-Dashboard는 두 자격증명만 쓰고 둘 다 새로 만들지 않는다.
+Dashboard는 indexer·Wazuh API의 기존 두 자격증명과 WAZUH-02-FIX-01의 OIDC client secret을
+쓴다. 기존 두 값은 새로 만들지 않는다.
 
 - indexer 인증: upstream demo는 `kibanaserver` 내부 사용자를 새로 만들지만, `indexer.yaml`의
   `internal_users.yml`에는 `admin` 한 명만 둔다는 WAZUH-01 결정을 유지한다. 그래서
@@ -189,15 +190,68 @@ Dashboard는 두 자격증명만 쓰고 둘 다 새로 만들지 않는다.
   `wazuh_app_config.sh` 어느 쪽도 참조하지 않는 값)는 선언하지 않는다.
 - Wazuh API 인증: `WAZUH-01`의 manager가 이미 provisioning한 `wazuh-01-api` 사용자(`kv/wazuh/manager`의
   `api_username`/`api_password`)를 그대로 재사용한다. 새 API 사용자를 만들지 않는다.
+- 사용자 OIDC: Keycloak `platform` realm의 confidential `wazuh` client secret 하나만 새로
+  만들고 `kv/wazuh/dashboard.oidc_client_secret`에만 둔다. Kubernetes Secret·Git·컨테이너
+  image에는 원문이 없다.
 
-두 값 모두 `gitops/tools/wazuh-02/provision.sh`가 WAZUH-01 provision이 이미 만든 로컬
+기존 두 값은 `gitops/tools/wazuh-02/provision.sh`가 WAZUH-01 provision이 이미 만든 로컬
 입력(`root-ca.pem`, `indexer-admin-password`, `api-password`)에서 복사해 새 경로
 `kv/wazuh/dashboard`에 쓴다. 새 credential을 생성하지 않고, indexer·manager·bootstrap의
 policy·role·kv는 건드리지 않는다.
 
 | Vault 경로 | 소비자 | 내용 |
 |---|---|---|
-| `kv/wazuh/dashboard` | `wazuh-dashboard` SA | root CA, `dashboard_username`/`password`(admin 재사용), `api_username`/`password`(`wazuh-01-api` 재사용) |
+| `kv/wazuh/dashboard` | `wazuh-dashboard` SA | root CA, `dashboard_username`/`password`(admin 재사용), `api_username`/`password`(`wazuh-01-api` 재사용), `oidc_client_secret` |
+
+### WAZUH-02-FIX-01 Keycloak native OIDC
+
+Wazuh 4.14.7의 Indexer(OpenSearch Security)와 Dashboard는 OIDC를 별도로 사용한다. Pomerium은
+`/platform-privileged`의 **Route 입구**만 판정하며, Dashboard native OIDC token의
+`wazuh_roles` claim과 Indexer의 `all_access` mapping이 실제 Wazuh 권한을 판정한다.
+
+| 계층 | 선언 | 범위 |
+|---|---|---|
+| Keycloak | confidential client `wazuh`, client role `wazuh-admin`, flat multi-value `wazuh_roles` claim | callback `https://wazuh.imcherry5778.xyz/auth/openid/login` 하나와 기존 `/platform-privileged` group에만 role mapping; 사용자·MFA·기존 group membership 변경 0건 |
+| Dashboard | 지원되는 native `openid` 단일 모드 | 모든 일반 UI 세션은 Keycloak SSO; Wazuh 4.14.7의 Dashboard는 multi-auth OIDC 자동 선택을 지원하지 않음 |
+| Indexer | `openid_auth_domain` order 1, audience `wazuh`, `all_access.backend_roles`에 `wazuh-admin` | 기존 JWT·LDAP·proxy·client-cert·internal basic auth domain을 읽어 보존 |
+
+Indexer의 security config는 이미 초기화된 security index에 있으므로 ConfigMap mount로 덮어쓰지
+않는다. `wazuh-oidc-security-sync-v2` Job이 admin mTLS로 현재 `config` 단일 type을 읽고,
+선언과 다른 `openid_auth_domain` 또는 order 충돌이면 실패한다. 그 뒤 securityadmin으로 그
+단일 type만 동기화하고 `all_access` mapping에는 `wazuh-admin`만 추가한다. 전체 security config나
+다른 mapping을 재생성하지 않는다.
+
+Dashboard authorization-code 교환과 Indexer discovery/JWKS 요청은 canonical
+`sso.imcherry5778.xyz` TLS hostname을 유지하되, `hostAliases`의 in-cluster Traefik Service로
+보낸다. `wazuh-keycloak-egress`는 이 Service `443`과 실제 Traefik Pod `8443`만 허용한다.
+
+Wazuh 4.14.7에 포함된 Dashboard는 multi-auth에서 OIDC를 기본 선택하는 현행 OpenSearch
+설정을 지원하지 않는다. 따라서 `basicauth`를 함께 켜고 `?auto_login=false`로 고르는 방식은
+쓰지 않는다. 기존 Indexer local `admin`은 유지하되 IdP 장애 시에는 task 소유
+`oidc-security-rollback-job.yaml`을 trusted k3s mTLS 경로로 실행해 exact OIDC domain만
+제거한 뒤 기존 internal basic 경로로 복구한다.
+
+### WAZUH-02-FIX-01 설치·검증
+
+1. `gitops/tools/wazuh-02-fix-01/provision-keycloak.sh --check`으로 client·role·group diff를
+   먼저 확인하고, 승인된 적용에서만 `--apply`를 실행한다.
+2. 이어 `gitops/tools/wazuh-02-fix-01/provision-vault.sh --apply`로 기존
+   `kv/wazuh/dashboard`에 `oidc_client_secret` key 하나만 patch한다.
+3. immutable SHA의 `platform-root`와 `wazuh` child에서 sync Job·Indexer·Dashboard를 동기화한다.
+4. `WAZUH02FIX01_EXPECTED_ROOT_REVISION=<sha>`와
+   `WAZUH02FIX01_EXPECTED_WAZUH_REVISION=<sha>`를 주어
+   `gitops/tools/wazuh-02-fix-01/verify-live.sh`를 한 번 실행한다. 이 단일 verifier는
+   Keycloak/Vault exact state, security config·role mapping, native OIDC 세션으로 기존 D30·A90
+   문서 검색, immutable Argo 상태만 판정한다. WAZUH-01/02가 통과한
+   수집·Pomerium deny·active response·보존 경계는 반복하지 않는다.
+
+### 2026-08-11 완료 증거
+
+immutable root `b1339b0727e07f06a7d9d40b2a8e6fb574be367c`와 child
+`2f8f433593fc0cd9ae74552e9ff7a9c4ebc8ba58`에서 Keycloak/Vault, native OIDC domain,
+`all_access=wazuh-admin`, `imcherry5778-admin`의 Pomerium → Dashboard native OIDC → D30/A90
+검색을 한 verifier로 통과했다. 최종 root와 `wazuh` child는 main
+`2dc37f1a82ab404ff0f6cd6c2772e0b5df42391e`의 `Synced/Healthy`로 복귀했다.
 
 ### 설계 결정: 내부 TLS·PVC 없음
 
@@ -375,6 +429,27 @@ OPNsense Wazuh Agent는 `apply-opnsense.sh rollback`이 서비스 정지 → 설
 Kubernetes API audit는 `infra/ansible/roles/k3s_baseline`에서 audit 인자와 정책 파일을
 제거하고 playbook을 다시 실행해 되돌린다. Vault policy·role·KV와 저장소 밖 credential
 입력은 다음 main sync를 위해 보존하며 credential 회전은 이 rollback 범위가 아니다.
+
+### WAZUH-02-FIX-01 OIDC rollback
+
+native OIDC 검증이 실패하면 **Argo immutable SHA를 main으로 되돌리기 전에** 현재 task branch의
+다음 Job을 한 번 적용한다. 이 Job은 exact `openid_auth_domain`과 `wazuh-admin` mapping만
+제거한다. 기존 internal basic domain을 포함한 다른 auth domain은 원문 그대로 남기며, 예상 밖
+security config는 실패로 남기고 덮어쓰지 않는다.
+
+```bash
+sudo -n /usr/local/bin/k3s kubectl -n wazuh apply \
+  -f gitops/apps/wazuh/oidc-security-rollback-job.yaml
+sudo -n /usr/local/bin/k3s kubectl -n wazuh wait \
+  --for=condition=complete job/wazuh-oidc-security-rollback-v1 --timeout=180s
+sudo -n /usr/local/bin/k3s kubectl -n wazuh delete job wazuh-oidc-security-rollback-v1 --wait=true
+```
+
+그 다음 `platform-root`·`wazuh`를 기록한 main SHA로 복구하고 Dashboard rollout을 확인한 뒤,
+`gitops/tools/wazuh-02-fix-01/provision-vault.sh --rollback`과
+`gitops/tools/wazuh-02-fix-01/provision-keycloak.sh --rollback` 순서로 task 소유 Vault key와
+Keycloak client를 제거한다. 사용자·MFA·`/platform-privileged` group·기존 local `admin`은
+어느 단계에서도 지우거나 비활성화하지 않는다.
 
 ### WAZUH-02 rollback
 

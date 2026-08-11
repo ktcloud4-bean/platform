@@ -39,7 +39,7 @@ EOT
 
 template {
   destination          = "/vault/secrets/admin-key.pem"
-  perms                = "0400"
+  perms                = "0440"
   error_on_missing_key = true
   contents             = <<EOT
 {{- with secret "kv/data/wazuh/bootstrap" -}}{{ .Data.data.admin_key_pem }}{{- end -}}

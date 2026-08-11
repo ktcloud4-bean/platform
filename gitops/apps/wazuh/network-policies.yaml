@@ -92,6 +92,39 @@ spec:
         - protocol: TCP
           port: 5601
 ---
+# WAZUH-02-FIX-01: Dashboard는 authorization-code 교환, Indexer는 discovery/JWKS 조회를
+# canonical issuer로 수행한다. hostAliases가 가리키는 in-cluster Traefik Service와 실제
+# backend Pod 양쪽을 명시해 kube-router Service DNAT 전후 판정 차이를 없앤다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-keycloak-egress
+  namespace: wazuh
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [dashboard, indexer]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.43.255.250/32
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8443
+---
 # Suricata alert를 보내는 OPNsense Wazuh Agent만 manager의 등록·수집 port로 들어온다.
 # NodePort Service는 externalTrafficPolicy=Local이라 source IP가 보존된다. OPNsense는
 # 자기 인터페이스 주소로 발신하므로 MGMT(10.10.10.1)와 PLATFORM(10.10.20.1) 두 주소만 연다.

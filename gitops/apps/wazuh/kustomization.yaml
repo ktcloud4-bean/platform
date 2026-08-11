@@ -5,6 +5,7 @@ resources:
   - serviceaccounts.yaml
   - indexer.yaml
   - bootstrap-job.yaml
+  - oidc-security-sync-job.yaml
   - manager.yaml
   - dashboard.yaml
   - network-policies.yaml
@@ -42,5 +43,9 @@ configMapGenerator:
     namespace: wazuh
     files:
       - bootstrap-retention.py=files/bootstrap-retention.py
+  - name: wazuh-oidc-security-script
+    namespace: wazuh
+    files:
+      - sync-oidc-security.py=files/sync-oidc-security.py
 generatorOptions:
   disableNameSuffixHash: true

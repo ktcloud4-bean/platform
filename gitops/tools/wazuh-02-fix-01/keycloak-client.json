@@ -1,0 +1,50 @@
+{
+  "clientId": "wazuh",
+  "name": "WAZUH-02-FIX-01 Wazuh Dashboard",
+  "description": "WAZUH-02-FIX-01 Wazuh Dashboard Keycloak OIDC confidential client",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "clientAuthenticatorType": "client-secret",
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "authorizationServicesEnabled": false,
+  "consentRequired": false,
+  "frontchannelLogout": true,
+  "fullScopeAllowed": false,
+  "rootUrl": "https://wazuh.imcherry5778.xyz",
+  "baseUrl": "https://wazuh.imcherry5778.xyz/",
+  "redirectUris": [
+    "https://wazuh.imcherry5778.xyz/auth/openid/login"
+  ],
+  "webOrigins": [
+    "https://wazuh.imcherry5778.xyz"
+  ],
+  "attributes": {
+    "post.logout.redirect.uris": "https://wazuh.imcherry5778.xyz"
+  },
+  "defaultClientScopes": [
+    "profile",
+    "email"
+  ],
+  "optionalClientScopes": [],
+  "protocolMappers": [
+    {
+      "name": "wazuh-client-roles",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-client-role-mapper",
+      "consentRequired": false,
+      "config": {
+        "usermodel.clientRoleMapping.clientId": "wazuh",
+        "claim.name": "wazuh_roles",
+        "jsonType.label": "String",
+        "multivalued": "true",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }
+  ]
+}
