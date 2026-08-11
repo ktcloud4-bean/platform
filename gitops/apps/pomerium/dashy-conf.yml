@@ -143,7 +143,7 @@ sections:
             - /platform-privileged
       - title: Wazuh
         description: WAZUH-02 Wazuh Dashboard 사고 조사 UI; /platform-privileged만 허용
-        icon: favicon-local
+        icon: fas fa-binoculars
         url: https://wazuh.imcherry5778.xyz
         target: sametab
         displayData:
