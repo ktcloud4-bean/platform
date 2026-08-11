@@ -81,6 +81,36 @@ application별 sync-result panel만 그 namespace selector를 쓰지 않는다.
 Grafana Viewer 권한과 Pomerium `/platform-users` 경계는 `OBS-03`·`OBS-02`에서 이미 판정한 것을
 재사용하며, Grafana의 raw metric query로 repo label을 보이지 않게 한다.
 
+## OBS-09 Kubernetes Global inventory
+
+Grafana.com [Kubernetes / Views / Global (ID 15757)](https://grafana.com/grafana/dashboards/15757-kubernetes-views-global/)
+revision 43을 source SHA-256 `6e8a2f49237bb86a6b1e422eec28683117456875acf810e39f4ccf49230faaa3`로
+고정해 vendoring했다. [`normalize-dashboard.jq`](../../tools/obs-09/normalize-dashboard.jq)는 upstream의
+datasource·cluster 변수를 제거하고 datasource UID를 `prometheus`로 고정하며, 단일 k3s에 없는
+`cluster` label selector와 `machine_*` node capacity metric을 이 환경의 kube-state-metrics query로
+정규화한다. `container_*` cAdvisor metric을 요구하는 namespace CPU·memory·network 패널 세 개는
+현재 수집 경계에 없으므로 제외했다.
+
+Grafana native provider는 `Platform` folder에서 read-only로 이 dashboard를 mount한다. kube-state-metrics는
+기존 node·pod·PV·PVC에 Namespace, Deployment, DaemonSet, StatefulSet, ReplicaSet, Job, CronJob,
+Service, Endpoint, Ingress, HPA, NetworkPolicy, ResourceQuota만 더 수집한다. Secret·ConfigMap collector,
+metric, 대시보드 panel은 넣지 않으며 object label allow-list도 넓히지 않는다. HPA나 ResourceQuota처럼
+현재 객체가 0개인 종류는 임의 객체를 만들지 않고 collector 활성화와 dashboard의 빈 상태를 정상으로
+판정한다.
+
+### 2026-08-11 OBS-09 라이브 완료 증거
+
+immutable root `ce81ebee7fe2d0a49b8d244342828800b87e0d35`과 child
+`146dbda3099ccc3bb2adcdc081c7c5e07e5e5c79`에서 `verify-live.sh` 한 번으로 판정했다.
+
+| acceptance | 라이브 증거 | 판정 |
+|---|---|---|
+| KSM·비민감 metric | target `up=1`; Namespace 26, Deployment 44, DaemonSet 4, StatefulSet 9, ReplicaSet 85, Job 7, CronJob 2, Service 62, Endpoint 62, Ingress 5, NetworkPolicy 57 대표 series | 통과 |
+| 빈 자원·민감 경계 | HPA·ResourceQuota 객체 0개라 collector 활성화만 확인; `kube_secret_*`·`kube_configmap_*` metric family 0건 | 통과 |
+| Grafana | `obs-09-kubernetes-global`, read-only, schema 41, datasource UID `prometheus`만 사용, drill-down 표시 | 통과 |
+| 용량·범위 | head series 42,631→54,351; Prometheus 312,475,648→325,058,560 bytes, KSM 68,157,440→33,554,432 bytes; available RAM 14,742,831,104→14,297,698,304 bytes, swap 0, retention 3d/6GiB; obs Service 9·NetworkPolicy 13·PVC 2·Secret 9로 불변 | 통과 |
+| rollback | literal `main` 복구 뒤 `platform-root`·`obs`가 `dac2fe9facf2278faaac3b113887b4941a80703f`에서 `Synced/Healthy` | 통과 |
+
 `obs-default-deny`는 cross-namespace ingress도 막으므로 Pomerium egress만으로는 UI backend에
 도달하지 못한다. 세 `obs-02-*-pomerium-ingress` 정책은 Pomerium server Pod만 Grafana TCP 3000,
 Prometheus TCP 9090, Alertmanager TCP 9093에 도달하게 해 해당 egress와 정확히 짝을 이룬다.
