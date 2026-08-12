@@ -242,14 +242,19 @@ ssh "${ssh_options[@]}" "${k3s_host}" \
 echo "FimTestFile=CREATED host=${fim_test_host_name} path=${fim_test_path}"
 
 trigger_syscheck_scan() {
-  local apipass token_json token scan_json
+  # manager_exec(=ssh에 argv 여러 개)는 ssh가 원격 전송 전에 인자를 공백으로 단순
+  # join하기 때문에 "Authorization: Bearer <token>"처럼 내부 공백이 있는 인자나
+  # `sh -c "<여러 단어>"`의 인자 경계가 원격 셸에서 그대로 깨진다(실측 확인). 이
+  # 호출만은 전체 원격 명령을 이 스크립트 쪽에서 미리 한 문자열로 만들어 ssh에
+  # 인자 하나로 넘긴다.
+  local apipass token_json token scan_json remote_cmd output
   apipass=$(cat "${apipass_file}")
-  token_json=$(manager_exec curl -s -k -u "wazuh-01-api:${apipass}" \
-    -X POST 'https://localhost:55000/security/user/authenticate?raw=false') || return 1
+  remote_cmd="${kubectl_command} -n wazuh exec statefulset/wazuh-manager-master -c wazuh-manager -- curl -s -k -u wazuh-01-api:${apipass} -X POST 'https://localhost:55000/security/user/authenticate?raw=false'"
+  token_json=$(ssh "${ssh_options[@]}" "${k3s_host}" "${remote_cmd}") || return 1
   token=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["token"])' <<<"${token_json}" 2>/dev/null) || return 1
   [[ -n ${token} ]] || return 1
-  scan_json=$(manager_exec curl -s -k -H "Authorization: Bearer ${token}" \
-    -X PUT "https://localhost:55000/syscheck?agents_list=${fim_agent_id}") || return 1
+  remote_cmd="${kubectl_command} -n wazuh exec statefulset/wazuh-manager-master -c wazuh-manager -- curl -s -k -H 'Authorization: Bearer ${token}' -X PUT 'https://localhost:55000/syscheck?agents_list=${fim_agent_id}'"
+  scan_json=$(ssh "${ssh_options[@]}" "${k3s_host}" "${remote_cmd}") || return 1
   jq -e --arg id "${fim_agent_id}" '.data.affected_items | index($id) != null' <<<"${scan_json}" >/dev/null
 }
 trigger_syscheck_scan \
