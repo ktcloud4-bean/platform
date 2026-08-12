@@ -46,6 +46,7 @@ retention 실제 적용을 하지 않는다.
 | Pomerium | 기존 authorize JSON 한 건 | `time`, `request-id`, `check-request-id`, `session-id`, user/email, route, method/path/host/IP, allow/deny와 이유 | 보안 판단 record와 운영 record를 service/action으로 분리 |
 | NetBird | 기존 `events.db` row 한 건 | `timestamp`, `activity`, `id`, `initiator_id`, `target_id`, `account_id`, JSON `meta`; 시각은 timezone 포함 | 이벤트 ID는 request ID가 아니라 source-local event ID |
 | Warpgate | [WG-01 실제 감사 판정](runbook/warpgate-privileged-access.md#판정-항목) | `UserAuthenticated1`, `UserAuthenticationFailed1`, `TargetSessionStarted1`, `TargetSessionEnded1`, session/recording metadata | 로컬 host key가 인증되지 않은 경로로 새 조회하지 않음 |
+| Wazuh HIDS agent(`WAZUH-03`) | k3s-01 syscheck의 실제 "File added" alert 한 건(`rule.id=554`) | `timestamp`, `rule.{level,description,id,groups}`, `agent.{id,name,ip}`, `syscheck.{path,mode,size_after,perm_after,uid_after,gid_after,md5_after,sha1_after,sha256_after,uname_after,gname_after,mtime_after,inode_after,event}`, `decoder.name`, `location` | rootcheck는 클린 호스트에서 정상적으로 alert가 0건이라(정책 위반이 없으면 안 냄) agent 로컬 `ossec.log`의 "Starting/Ending rootcheck scan"으로 대신 실행 여부를 확인한다 |
 
 CrowdSec 필드 계약은 [공식 AppSec alert 예시](https://docs.crowdsec.net/docs/appsec/vpatch_and_crs/#alert-inspection),
 Kubernetes API 감사 필드 계약은 [공식 `audit.k8s.io/v1` Event schema](https://kubernetes.io/docs/reference/config-api/apiserver-audit.v1/#audit-k8s-io-v1-Event)를
@@ -139,6 +140,7 @@ WAL, cache, index와 collector buffer는 이 14 GiB에 기대어 k3s PVC 경계�
 | Pomerium authn/authz | JSON `time` UTC | `user`; email은 제거 | `request-id`와 관련 `check-request-id` (`request`), `session-id` (`session`) | 없음 | route ID, method, 마스킹 path/host, source IP, allow/deny와 reason |
 | NetBird product event | timezone 포함 `timestamp`를 UTC로 변환 | `initiator_id`; 대상 user/peer는 `target_id` | source-local `id` (`event`) | account ID + initiator ID + target ID + activity + 시각 | activity를 action 이름으로 매핑, account/target ID, 필요한 asset name/FQDN/IP |
 | Warpgate audit | 제품 audit 시각을 UTC로 변환 | Warpgate user ID/name; 접속 peer 별도 | session event는 session ID (`session`), 인증 event는 없음 | event type + user ID + source peer + target + 시각 | auth outcome/reason, target ID/name/protocol, session start/end와 recording 존재 여부 |
+| Wazuh HIDS syscheck/rootcheck | manager `timestamp` UTC | `actor.kind=none`; FIM은 사람 행위자가 아니라 파일 변경 자체 | 없음 | agent ID/name + syscheck.path + event(added/modified/deleted) + 시각 | rule ID/level/groups, syscheck path·checksum(md5/sha1/sha256)·perm·uid/gid before/after, event 종류 |
 
 `없음`은 결함이 아니다. 대체 조회 key는 조사 범위를 좁히는 composite일 뿐 request/trace ID로
 저장하지 않는다. 서로 다른 소스의 사건을 연결할 때는 native request/session/flow ID가 같을 때
