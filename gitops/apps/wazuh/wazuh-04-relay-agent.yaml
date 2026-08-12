@@ -61,7 +61,13 @@ spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
       securityContext:
-        fsGroup: 101
+        # 이 Pod는 manager와 달리 PVC(영구 데이터)가 없어 CHOWN으로 복원할 대상이
+        # 없다. wazuh-agent 이미지의 wazuh 사용자는 UID/GID 999다 — pol-01의
+        # baseline(runAsNonRoot 필수)을 그대로 만족한다.
+        fsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
         seccompProfile:
           type: RuntimeDefault
       initContainers:
@@ -204,13 +210,14 @@ spec:
             - name: WAZUH_AGENT_GROUP
               value: default
           securityContext:
+            # manager와 달리 이 Pod는 PVC가 없어 CHOWN으로 복원할 permanent data가
+            # 없다. pol-01-require-pod-run-as-non-root(클러스터 baseline)을
+            # 만족하는 wazuh 사용자(UID/GID 999, 위 pod securityContext)로 바로
+            # 시작한다 — 실패하면 어떤 구체적 동작이 root를 요구하는지 라이브
+            # 에러로 확인한 뒤에만 필요한 만큼만 되돌린다.
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
-              # 업스트림 wazuh-manager와 같은 이유(permanent data 복원, s6가 wazuh
-              # 사용자로 daemon을 내려 실행, chroot) — 같은 wazuh-kubernetes 계열
-              # 패키징이라 동일한 7개만 추가한다.
-              add: [CHOWN, DAC_OVERRIDE, FOWNER, KILL, SETGID, SETUID, SYS_CHROOT]
             privileged: false
             readOnlyRootFilesystem: false
             seccompProfile:
