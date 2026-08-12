@@ -13,8 +13,7 @@ spec:
   project: loki
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    # WAZUH-04 merge 전 immutable live 검증 pointer. 최종 main 선언에는 남기지 않는다.
-    targetRevision: 378595d236ae728ed31ed07cc33d998882504f86
+    targetRevision: main
     path: gitops/apps/loki
   destination:
     server: https://kubernetes.default.svc
