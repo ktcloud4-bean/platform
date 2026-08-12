@@ -169,9 +169,10 @@ spec:
         - protocol: TCP
           port: 1515
 ---
-# WAZUH-04: loki 네임스페이스의 Alloy만 새 syslog remote listener(1516)에 들어온다.
-# Alloy는 hostPath 없이 Kubernetes API로 읽은 Keycloak·Pomerium·Vault·Falco·
-# CrowdSec AppSec Pod 로그 중 필요한 라인만 골라 이 포트로 forward한다
+# WAZUH-04: loki 네임스페이스의 Alloy만 이 Pod의 1516 포트(wazuh-04-relay
+# 사이드카가 리슨, wazuh-manager 자체가 아니다 — manager.yaml)에 들어온다. Alloy는
+# hostPath 없이 Kubernetes API로 읽은 Keycloak·Pomerium·Vault·Falco·CrowdSec
+# AppSec Pod 로그 중 필요한 라인만 골라 이 포트로 forward한다
 # (gitops/apps/loki/values-alloy-01.yaml).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

@@ -6,14 +6,21 @@
 #   emptyDir에만 렌더한다. upstream의 5개 평문 Secret은 사용하지 않는다.
 # - Service type LoadBalancer -> API는 ClusterIP, agent 수집·등록만 NodePort로 노출한다.
 # - Kubernetes API audit 파일을 read-only hostPath로 붙여 소스에서 직접 수집한다.
-#   WAZUH-04에서 Keycloak·Pomerium·Vault·Falco·CrowdSec AppSec Pod stdout도
-#   같은 방식(hostPath로 /var/log/containers·/var/log/pods를 붙여 직접 tail)으로
+#   WAZUH-04에서 Keycloak·Pomerium·Vault·Falco·CrowdSec AppSec Pod stdout도 같은
+#   방식(hostPath로 /var/log/containers·/var/log/pods를 붙여 직접 tail)으로
 #   수집하려 했으나, `pol-02-wazuh-root-manager-baseline`이 이 UID 0 pod에 k3s
 #   audit 로그 hostPath 한 곳만 허용해 admission에서 막혔다(FailedCreate, 실제
-#   outage 발생). 이 노드의 다른 모든 Pod 로그까지 UID 0 프로세스가 읽게 되는
-#   실질적 권한 확장이라 정책을 넓히는 대신, 이미 hostPath 없이 Kubernetes API로만
-#   Pod 로그를 읽는 Alloy(gitops/apps/loki)가 5개 소스 중 필요한 라인만 골라 새
-#   syslog 포트(1516)로 forward하는 방식으로 다시 설계했다.
+#   outage 발생). 이어서 Alloy(hostPath 없이 K8s API로 Pod 로그를 읽는다)가 remoted의
+#   syslog remote(포트 1516)로 직접 forward하는 안도 시도했으나, Wazuh의 원격
+#   syslog(내부 queue type 2)는 로컬 파일 tailing(queue type 1)과 디코딩 경로가 달라
+#   custom decoder/rule이 전혀 매칭되지 않는 것을 라이브에서 확인했다(2026-08-12,
+#   wazuh-logtest는 정확히 같은 바이트로 성공하는데도 실제 수신 1,800건 이상 중
+#   0건 매칭 — Wazuh 자신도 이 경로를 legacy로 보고 제거를 논의 중이다). 최종적으로
+#   wazuh-04-relay 사이드카(아래, python3 stdlib만 쓰는 TCP syslog 수신기)를 같은
+#   Pod에 추가해 Alloy의 syslog를 받아 emptyDir 파일에 적고, wazuh-manager
+#   container가 그 파일을 <localfile log_format="syslog">로 다시 읽는다 — queue
+#   type 1 경로라 decoder/rule이 wazuh-logtest 그대로 매칭된다. hostPath도, remoted
+#   syslog도 쓰지 않고 노드의 다른 Pod 로그 접근도 없다.
 # - manager container는 upstream과 같이 UID 0으로 동작한다. 이 예외는 policies/의
 #   `pol-02-wazuh-*` PolicyException과 보상 Enforce 정책이 좁게 소유한다.
 apiVersion: v1
@@ -188,8 +195,6 @@ spec:
               containerPort: 1515
             - name: api
               containerPort: 55000
-            - name: syslog
-              containerPort: 1516
           startupProbe:
             tcpSocket:
               port: events
@@ -235,6 +240,9 @@ spec:
             - name: k3s-audit
               mountPath: /var/log/k3s-audit
               readOnly: true
+            - name: wazuh-04-relay-buffer
+              mountPath: /wazuh-04-forward
+              readOnly: true
             - name: wazuh-manager-master
               mountPath: /var/ossec/api/configuration
               subPath: wazuh/var/ossec/api/configuration
@@ -268,6 +276,79 @@ spec:
             - name: wazuh-manager-master
               mountPath: /var/lib/filebeat
               subPath: filebeat/var/lib/filebeat
+        # WAZUH-04: Alloy(gitops/apps/loki)의 syslog 전송을 받아 emptyDir 파일에
+        # append하는 TCP 릴레이. python3 stdlib(socketserver)만 쓴다 — 이 저장소는
+        # 커스텀 이미지 빌드 파이프라인이 없어 별도 Dockerfile 없이, 이미
+        # values-alloy-01.yaml의 kubernetes-events sidecar가 쓰는 것과 같은 base
+        # image·보안 패턴을 그대로 재사용한다. 20 MiB마다 `.1`로 rotate해 emptyDir가
+        # 무한정 자라지 않게 한다.
+        - name: wazuh-04-relay
+          image: docker.io/library/python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-u", "-c"]
+          args:
+            - |-
+              import os
+              import socketserver
+              import threading
+
+              LOG_PATH = "/wazuh-04-forward/wazuh-04.log"
+              MAX_BYTES = 20 * 1024 * 1024
+              write_lock = threading.Lock()
+
+              def rotate_if_needed():
+                  try:
+                      if os.path.getsize(LOG_PATH) >= MAX_BYTES:
+                          os.replace(LOG_PATH, LOG_PATH + ".1")
+                  except FileNotFoundError:
+                      pass
+
+              class Handler(socketserver.StreamRequestHandler):
+                  def handle(self):
+                      for raw_line in self.rfile:
+                          line = raw_line.rstrip(b"\n")
+                          if not line.strip():
+                              continue
+                          with write_lock:
+                              rotate_if_needed()
+                              with open(LOG_PATH, "ab") as f:
+                                  f.write(line + b"\n")
+
+              class Server(socketserver.ThreadingTCPServer):
+                  allow_reuse_address = True
+                  daemon_threads = True
+
+              os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+              with Server(("0.0.0.0", 1516), Handler) as srv:
+                  srv.serve_forever()
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          ports:
+            - name: syslog
+              containerPort: 1516
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: wazuh-04-relay-buffer
+              mountPath: /wazuh-04-forward
       volumes:
         - name: vault-agent-config
           configMap:
@@ -297,6 +378,9 @@ spec:
           hostPath:
             path: /var/log/k3s-audit
             type: DirectoryOrCreate
+        - name: wazuh-04-relay-buffer
+          emptyDir:
+            sizeLimit: 64Mi
         - name: vault-token
           projected:
             sources:
