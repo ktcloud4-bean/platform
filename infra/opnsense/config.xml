@@ -462,7 +462,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1786496307.08" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1786515714.00" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -2537,6 +2537,174 @@
             <shaper2 />
             <description>OBS-11: k3s-01에서 netbird-01 node_exporter TCP 9100만 허용</description>
           </rule>
+          <rule uuid="afec61b4-0105-4c48-bd62-9a1b4f9b3a40">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1121</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt3</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.30.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.20.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>WAZUH03_AGENT_PORTS</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>WAZUH-03: warpgate-01에서 Wazuh manager 등록·수집 포트만 허용</description>
+          </rule>
+          <rule uuid="8707516a-0ed1-46fa-a150-191d8019a45c">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1219</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt4</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.40.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.20.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>WAZUH03_AGENT_PORTS</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>WAZUH-03: netbird-01에서 Wazuh manager 등록·수집 포트만 허용</description>
+          </rule>
+          <rule uuid="9eff0386-36fe-4655-b60a-53d9988c3e8d">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1313</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt5</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>NET04_DATA_HOSTS</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.20.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>WAZUH03_AGENT_PORTS</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>WAZUH-03: DATA 실제 host(postgres-01·object-01)에서 Wazuh manager 등록·수집 포트만 허용</description>
+          </rule>
         </rules>
         <snatrules />
         <npt />
@@ -2545,7 +2713,7 @@
       <Lvtemplate version="0.0.1" persisted_at="1785198671.19" description="Firewall Live View filter templates">
         <templates />
       </Lvtemplate>
-      <Alias version="1.0.1" persisted_at="1786382490.14" description="Firewall aliases">
+      <Alias version="1.0.1" persisted_at="1786515708.85" description="Firewall aliases">
         <geoip>
           <url />
         </geoip>
@@ -2708,6 +2876,24 @@ EDGE02_CF_IPV6</content>
             <expire />
             <categories />
             <description>AWS-HR-01 Route 53 Resolver inbound endpoint IPv4</description>
+          </alias>
+          <alias uuid="474136f4-a24e-44dc-8779-1931e2239be1">
+            <enabled>1</enabled>
+            <name>WAZUH03_AGENT_PORTS</name>
+            <type>port</type>
+            <path_expression />
+            <proto />
+            <interface />
+            <counters>0</counters>
+            <updatefreq />
+            <content>31514
+31515</content>
+            <password />
+            <username />
+            <authtype />
+            <expire />
+            <categories />
+            <description>WAZUH-03: 6개 host agent가 쓰는 Wazuh manager 등록·수집 NodePort</description>
           </alias>
         </aliases>
       </Alias>
@@ -4030,7 +4216,7 @@ EDGE02_CF_IPV6</content>
       <ntp>0</ntp>
       <zfs>0</zfs>
     </NodeExporter>
-    <WazuhAgent version="0.0.0" persisted_at="1785748406.92" description="Wazuh Agent">
+    <WazuhAgent version="0.0.0" persisted_at="1786516128.90" description="Wazuh Agent">
       <general>
         <enabled>1</enabled>
         <server_address>10.10.20.10</server_address>
@@ -4049,13 +4235,13 @@ EDGE02_CF_IPV6</content>
         <suricata_eve_log>1</suricata_eve_log>
       </logcollector>
       <rootcheck>
-        <enabled>0</enabled>
+        <enabled>1</enabled>
       </rootcheck>
       <syscollector>
         <enabled>0</enabled>
       </syscollector>
       <syscheck>
-        <enabled>0</enabled>
+        <enabled>1</enabled>
       </syscheck>
       <active_response>
         <enabled>0</enabled>

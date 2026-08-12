@@ -1,0 +1,31 @@
+---
+# infra/ansible/roles/wazuh_agent_baseline/tasks/install-redhat.yml
+# Rocky 9 5대(k3s-01·postgres-01·object-01·warpgate-01·netbird-01) 대상.
+
+- name: Wazuh 공식 GPG 서명 키 신뢰(key ID 96B3EE5F29111145)
+  ansible.builtin.rpm_key:
+    key: "{{ wazuh_agent_gpg_key_url }}"
+    state: present
+
+- name: 캐시 디렉터리 생성
+  ansible.builtin.file:
+    path: "{{ wazuh_agent_cache_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: 고정 checksum RPM 다운로드
+  ansible.builtin.get_url:
+    url: "{{ wazuh_agent_rpm_url }}"
+    dest: "{{ wazuh_agent_cache_dir }}/wazuh-agent-{{ wazuh_agent_version }}-{{ wazuh_agent_release }}.x86_64.rpm"
+    checksum: "sha256:{{ wazuh_agent_rpm_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: wazuh-agent 패키지 설치 (GPG 서명 검증)
+  ansible.builtin.dnf:
+    name: "{{ wazuh_agent_cache_dir }}/wazuh-agent-{{ wazuh_agent_version }}-{{ wazuh_agent_release }}.x86_64.rpm"
+    state: present
+    disable_gpg_check: false

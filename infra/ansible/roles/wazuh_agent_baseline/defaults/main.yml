@@ -1,0 +1,56 @@
+---
+# infra/ansible/roles/wazuh_agent_baseline/defaults/main.yml
+# WAZUH-03: k3s-01·postgres-01·object-01·warpgate-01·netbird-01·proxmox-01 6개
+# 대상에 설치하는 checksum 고정 Wazuh agent 기준선.
+#
+# 켜는 모듈은 syscheck(최소 경로)·rootcheck뿐이다. syscollector·SCA(wodle)·
+# osquery·cis-cat·localfile·active_response·command wodle은 templates/ossec.conf.j2에
+# 아예 없으므로 비활성 상태를 유지한다. 버전은 기존 manager·indexer·dashboard와
+# 같은 4.14.7 계열로 고정한다. `latest`나 미검증 설치 스크립트, curl|sh는 쓰지 않는다.
+
+wazuh_agent_version: "4.14.7"
+wazuh_agent_release: "1"
+
+# RPM은 get_url checksum(다운로드 무결성)과 rpm_key로 가져온 Wazuh 공식
+# GPG 서명(출처 인증, key ID 96B3EE5F29111145) 둘 다로 검증한다. DEB는 낱개
+# 파일에 내장 서명이 없어 다른 role의 GitHub Release 자산과 같은 신뢰 모델
+# (TLS+공식 도메인 sha256)만 적용한다.
+wazuh_agent_rpm_sha256: "a5ef96376782262220df4b8aaa0e024925b07e303fbc6915d42f6a438aba56d7"
+wazuh_agent_rpm_url: "https://packages.wazuh.com/4.x/yum/wazuh-agent-{{ wazuh_agent_version }}-{{ wazuh_agent_release }}.x86_64.rpm"
+wazuh_agent_gpg_key_url: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+
+wazuh_agent_deb_sha256: "5276281b62e887065ecc14d4463cea529cf418529538c8edd6769c9ec550213f"
+wazuh_agent_deb_url: "https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_{{ wazuh_agent_version }}-{{ wazuh_agent_release }}_amd64.deb"
+
+wazuh_agent_cache_dir: "/var/cache/wazuh-agent-install"
+
+# 기존 manager NodePort(WAZUH-01). manager 내부 실제 listen port(1514/1515)가
+# 아니라 OPNsense agent와 같은 외부 NodePort를 그대로 쓴다.
+wazuh_agent_manager_address: "10.10.20.10"
+wazuh_agent_manager_events_port: 31514
+wazuh_agent_manager_auth_port: 31515
+
+# agent-auth 등록 전용 저장소 밖 password. WAZUH-01 provision.sh가 이미 만든
+# kv/wazuh/manager의 authd_password와 같은 값을 재사용한다(신규 credential
+# 없음). 실행 시 -e 로만 주입하고 ossec.conf에는 렌더링하지 않는다(enrollment
+# 자동 등록 대신 agent-auth를 한 번만 수동 실행).
+wazuh_agent_authd_password: ""
+
+wazuh_agent_name: "{{ inventory_hostname }}"
+
+# 모든 대상 공통 최소 syscheck 경로(SSH·sudo·systemd unit). OS 계열별 신뢰
+# 저장소 경로는 tasks/main.yml이 os_family로 판정해 더한다. 존재하지 않는
+# 경로를 선언해도 안전하다 — syscheck는 없는 경로는 경고만 남기고 건너뛴다.
+# host_vars의 wazuh_agent_extra_syscheck_directories로 대상별 인증서·설정
+# 경로를 추가한다(PGDATA·session recording·컨테이너 이미지처럼 상시 변경되는
+# 디렉터리는 절대 통째로 넣지 않는다 — D30/A90 저장 상한을 순식간에 넘긴다).
+wazuh_agent_base_syscheck_directories:
+  - /etc/ssh
+  - /etc/sudoers
+  - /etc/sudoers.d
+  - /etc/systemd/system
+
+# INI inventory는 JSON/YAML 리스트 문법을 문자열 그대로 남기고 타입 변환을 하지
+# 않는다(실측 확인). 그래서 이 값은 쉼표로만 구분한 문자열이고 tasks/main.yml이
+# split(',')로 리스트로 바꾼다.
+wazuh_agent_extra_syscheck_directories: ""

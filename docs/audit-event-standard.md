@@ -2,7 +2,7 @@
 
 - 소유 작업: `AUDIT-01`
 - 상위 결정: [ADR-0007](adr/0007-detection-and-observability-staging.md)
-- 구현 작업: `LOKI-01`, `WAZUH-01`
+- 구현 작업: `LOKI-01`, `WAZUH-01`, `WAZUH-03`
 - 용량 단일 원본: [자원 예산과 정지 기준](capacity-plan.md)
 
 이 문서는 Suricata, CrowdSec AppSec, Falco, Kubernetes, Vault, Keycloak, Pomerium,
@@ -46,6 +46,7 @@ retention 실제 적용을 하지 않는다.
 | Pomerium | 기존 authorize JSON 한 건 | `time`, `request-id`, `check-request-id`, `session-id`, user/email, route, method/path/host/IP, allow/deny와 이유 | 보안 판단 record와 운영 record를 service/action으로 분리 |
 | NetBird | 기존 `events.db` row 한 건 | `timestamp`, `activity`, `id`, `initiator_id`, `target_id`, `account_id`, JSON `meta`; 시각은 timezone 포함 | 이벤트 ID는 request ID가 아니라 source-local event ID |
 | Warpgate | [WG-01 실제 감사 판정](runbook/warpgate-privileged-access.md#판정-항목) | `UserAuthenticated1`, `UserAuthenticationFailed1`, `TargetSessionStarted1`, `TargetSessionEnded1`, session/recording metadata | 로컬 host key가 인증되지 않은 경로로 새 조회하지 않음 |
+| Wazuh HIDS agent(`WAZUH-03`) | k3s-01 syscheck의 실제 "File added" alert 한 건(`rule.id=554`) | `timestamp`, `rule.{level,description,id,groups}`, `agent.{id,name,ip}`, `syscheck.{path,mode,size_after,perm_after,uid_after,gid_after,md5_after,sha1_after,sha256_after,uname_after,gname_after,mtime_after,inode_after,event}`, `decoder.name`, `location` | rootcheck는 클린 호스트에서 정상적으로 alert가 0건이라(정책 위반이 없으면 안 냄) agent 로컬 `ossec.log`의 "Starting/Ending rootcheck scan"으로 대신 실행 여부를 확인한다 |
 
 CrowdSec 필드 계약은 [공식 AppSec alert 예시](https://docs.crowdsec.net/docs/appsec/vpatch_and_crs/#alert-inspection),
 Kubernetes API 감사 필드 계약은 [공식 `audit.k8s.io/v1` Event schema](https://kubernetes.io/docs/reference/config-api/apiserver-audit.v1/#audit-k8s-io-v1-Event)를
@@ -122,6 +123,8 @@ WAL, cache, index와 collector buffer는 이 14 GiB에 기대어 k3s PVC 경계�
 | Warpgate | 인증 성공·실패, target 인가, session 시작·종료 metadata | 보안 | Wazuh 직접 `A90` | password/cookie/key, command argument, terminal/file recording 원문 |
 | Warpgate | systemd/service, protocol listener, storage·recording writer 오류 | 운영 | Loki `O7` | 감사 event 복제본 |
 | Warpgate | terminal/file recording blob | 민감 원문 | 중앙 `C0`; 기존 제품 local `audit_retention=90days` 이상으로 늘리지 않음 | blob 전체 |
+| Wazuh HIDS agent(`WAZUH-03`) | syscheck(FIM) 변경 탐지, rootcheck(rootkit·policy check) 결과 | 보안 | Wazuh 직접, custom `A90` rule ID 범위(`100100`~`100109`) 밖이라 index 분리 pipeline이 자동으로 기본 `D30` index에 넣는다 | `report_changes`(변경 diff 원문, private key 파일이 대상에 포함되어 비활성 고정), syscollector·SCA·osquery 인벤토리, active response·remote command |
+| Wazuh HIDS agent(`WAZUH-03`) | agent 기동·연결·buffer 상태 | 운영 | 수집하지 않음(`localfile` 미선언) | `LOKI-02`가 같은 호스트의 journald를 별도로 수집; 이 agent는 로그 수집기가 아니다 |
 
 ## 5. 소스별 필드와 상관 키
 
@@ -137,6 +140,7 @@ WAL, cache, index와 collector buffer는 이 14 GiB에 기대어 k3s PVC 경계�
 | Pomerium authn/authz | JSON `time` UTC | `user`; email은 제거 | `request-id`와 관련 `check-request-id` (`request`), `session-id` (`session`) | 없음 | route ID, method, 마스킹 path/host, source IP, allow/deny와 reason |
 | NetBird product event | timezone 포함 `timestamp`를 UTC로 변환 | `initiator_id`; 대상 user/peer는 `target_id` | source-local `id` (`event`) | account ID + initiator ID + target ID + activity + 시각 | activity를 action 이름으로 매핑, account/target ID, 필요한 asset name/FQDN/IP |
 | Warpgate audit | 제품 audit 시각을 UTC로 변환 | Warpgate user ID/name; 접속 peer 별도 | session event는 session ID (`session`), 인증 event는 없음 | event type + user ID + source peer + target + 시각 | auth outcome/reason, target ID/name/protocol, session start/end와 recording 존재 여부 |
+| Wazuh HIDS syscheck/rootcheck | manager `timestamp` UTC | `actor.kind=none`; FIM은 사람 행위자가 아니라 파일 변경 자체 | 없음 | agent ID/name + syscheck.path + event(added/modified/deleted) + 시각 | rule ID/level/groups, syscheck path·checksum(md5/sha1/sha256)·perm·uid/gid before/after, event 종류 |
 
 `없음`은 결함이 아니다. 대체 조회 key는 조사 범위를 좁히는 composite일 뿐 request/trace ID로
 저장하지 않는다. 서로 다른 소스의 사건을 연결할 때는 native request/session/flow ID가 같을 때
@@ -183,3 +187,19 @@ hash를 trace ID로 승격하지 않는다.
   16 GiB 상한을 만족해야 한다. `LOKI-01`·`OBS-01` 뒤 capacity gate가 이 placement를
   수용하지 못하면 배포를 중단한다.
 - active response, 방화벽 자동 차단과 credential rotation은 계속 비활성이다.
+
+### `WAZUH-03`
+
+- syscheck(FIM)·rootcheck만 켠다. 6개 host agent의 `ossec.conf`에는 `localfile`·
+  `syscollector`·SCA·osquery·cis-cat·command wodle·`active_response`가 없고, OPNsense
+  기존 agent도 이 두 모듈만 `0`에서 `1`로 바꾼다.
+- 이 이벤트는 위 표대로 custom `A90` rule ID 범위 밖이라 기본 `D30` index로 자동
+  라우팅된다. 별도 pipeline 변경은 없다.
+- Loki에는 FIM·rootcheck event 복제본이 0건이어야 한다. `LOKI-02`가 다루는 host
+  운영 로그(O7, `sshd`·`sudo`·systemd 실패·kernel)와 소스 자체가 겹치지 않는다 — 이
+  agent는 `localfile`을 선언하지 않아 로그를 읽지 않는다.
+- 배포로 늘어난 `D30`·`A90` 합산 실측 저장 증가량이 여전히 16 GiB 상한 안에 들어야
+  한다. 미달이면 syscheck 대상 경로를 host agent 쪽에서 더 좁힌다(OPNsense agent의
+  syscheck는 플러그인이 감시 경로를 노출하지 않아 이 축소 대상이 아니다).
+- `report_changes`(diff 원문 저장)는 켜지 않는다 — 대상 경로에 `postgres-01`
+  TLS private key처럼 원문을 저장소에 남기면 안 되는 파일이 섞여 있다.
