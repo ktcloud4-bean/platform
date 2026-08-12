@@ -680,7 +680,7 @@ data:
 
     loki.source.kubernetes "falco" {
       targets    = discovery.relabel.falco.output
-      forward_to = [loki.process.falco.receiver]
+      forward_to = [loki.process.falco.receiver, loki.process.falco_wazuh.receiver]
     }
     loki.process "falco" {
       forward_to = [loki.write.local.receiver]
@@ -707,9 +707,25 @@ data:
       stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
     }
 
+    # WAZUH-04: falco의 raw JSON rule-match 라인(O7 파이프라인이 위에서 이미
+    # falco_security_json으로 drop하는 바로 그 라인)만 골라 wazuh syslog 경로로 보낸다.
+    # hostPath 없이 Alloy가 이미 K8s API로 읽고 있는 같은 스트림을 두 번째 forward_to로
+    # 분기하는 것뿐이라 wazuh-manager에는 k3s-audit 외 hostPath를 추가하지 않는다.
+    loki.process "falco_wazuh" {
+      forward_to = [otelcol.receiver.loki.wazuh.receiver]
+      stage.regex {
+        expression = `^(?P<wazuh_keep>\{)`
+      }
+      stage.drop {
+        source              = "wazuh_keep"
+        expression          = "^$"
+        drop_counter_reason = "falco_not_wazuh_target"
+      }
+    }
+
     loki.source.kubernetes "pomerium" {
       targets    = discovery.relabel.pomerium.output
-      forward_to = [loki.process.pomerium.receiver]
+      forward_to = [loki.process.pomerium.receiver, loki.process.pomerium_wazuh.receiver]
     }
     loki.process "pomerium" {
       forward_to = [loki.write.local.receiver]
@@ -757,9 +773,23 @@ data:
       stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
     }
 
+    # WAZUH-04: pomerium authorize 서비스 라인만 골라낸다. "service":"authorize" marker는
+    # wazuh-04-decoders.xml의 wazuh-04-pomerium-authorize prematch와 동일하다.
+    loki.process "pomerium_wazuh" {
+      forward_to = [otelcol.receiver.loki.wazuh.receiver]
+      stage.regex {
+        expression = `(?P<wazuh_keep>"service":"authorize")`
+      }
+      stage.drop {
+        source              = "wazuh_keep"
+        expression          = "^$"
+        drop_counter_reason = "pomerium_not_wazuh_target"
+      }
+    }
+
     loki.source.kubernetes "vault" {
       targets    = discovery.relabel.vault.output
-      forward_to = [loki.process.vault.receiver]
+      forward_to = [loki.process.vault.receiver, loki.process.vault_wazuh.receiver]
     }
     loki.process "vault" {
       forward_to = [loki.write.local.receiver]
@@ -792,9 +822,23 @@ data:
       stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
     }
 
+    # WAZUH-04: vault audit(raw JSON) 라인만 골라낸다. O7 파이프라인 위쪽의
+    # vault_audit_json drop과 정반대 선택이다.
+    loki.process "vault_wazuh" {
+      forward_to = [otelcol.receiver.loki.wazuh.receiver]
+      stage.regex {
+        expression = `^(?P<wazuh_keep>\{)`
+      }
+      stage.drop {
+        source              = "wazuh_keep"
+        expression          = "^$"
+        drop_counter_reason = "vault_not_wazuh_target"
+      }
+    }
+
     loki.source.kubernetes "keycloak" {
       targets    = discovery.relabel.keycloak.output
-      forward_to = [loki.process.keycloak.receiver]
+      forward_to = [loki.process.keycloak.receiver, loki.process.keycloak_wazuh.receiver]
     }
     loki.process "keycloak" {
       forward_to = [loki.write.local.receiver]
@@ -825,6 +869,73 @@ data:
       stage.labels { values = { level = "allowed_level" } }
       stage.structured_metadata { values = { pod_name = "", pod_uid = "", event_ingested = "" } }
       stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+    }
+
+    # WAZUH-04: org.keycloak.events 라인만 골라낸다. O7 파이프라인의
+    # keycloak_security_event drop과 정반대 선택이다.
+    loki.process "keycloak_wazuh" {
+      forward_to = [otelcol.receiver.loki.wazuh.receiver]
+      stage.regex {
+        expression = `(?P<wazuh_keep>org\.keycloak\.events)`
+      }
+      stage.drop {
+        source              = "wazuh_keep"
+        expression          = "^$"
+        drop_counter_reason = "keycloak_not_wazuh_target"
+      }
+    }
+
+    # WAZUH-04: CrowdSec AppSec는 O7/Loki 대상이 아니라 여기서 처음 수집한다.
+    # WAF block 라인만 골라 wazuh-04-d30-waf-runtime.xml 100122가 보는 것과 같은
+    # msg="WAF block: " marker로 필터한다.
+    discovery.relabel "crowdsec_appsec" {
+      targets = discovery.kubernetes.pods.targets
+      rule {
+        action        = "keep"
+        source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+        separator     = "/"
+        regex         = "crowdsec-01/crowdsec-appsec"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod_name"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_uid"]
+        target_label  = "pod_uid"
+      }
+      rule {
+        target_label = "app"
+        replacement  = "crowdsec-appsec"
+      }
+      rule {
+        target_label = "cluster"
+        replacement  = "k3s-01"
+      }
+    }
+
+    loki.source.kubernetes "crowdsec_appsec" {
+      targets    = discovery.relabel.crowdsec_appsec.output
+      forward_to = [loki.process.crowdsec_appsec_wazuh.receiver]
+    }
+    loki.process "crowdsec_appsec_wazuh" {
+      forward_to = [otelcol.receiver.loki.wazuh.receiver]
+      stage.regex {
+        expression = `(?P<wazuh_keep>msg="WAF block: )`
+      }
+      stage.drop {
+        source              = "wazuh_keep"
+        expression          = "^$"
+        drop_counter_reason = "crowdsec_appsec_not_wazuh_target"
+      }
     }
 
     loki.source.kubernetes "kubernetes_events" {
@@ -891,6 +1002,44 @@ data:
         }
       }
       stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
+    }
+
+    # WAZUH-04: 위 5개 *_wazuh tap이 골라낸 라인을 wazuh-manager의 syslog remote
+    # listener(포트 1516, gitops/apps/wazuh)로 forward한다. Alloy는 hostPath 없이
+    # Kubernetes API로만 Pod 로그를 읽으므로(gitops/apps/loki/README.md), UID 0
+    # wazuh-manager Pod의 host 파일시스템 접근 범위를 넓히지 않고도 5개 소스를
+    # 온보딩할 수 있다. otelcol.receiver.loki가 Loki entry(라벨+라인)를 OTel
+    # LogRecord로 바꾸면(라인은 body, 라벨은 attributes) transform이 wazuh 쪽
+    # decoder가 읽는 필드(message/appname/hostname)로 다시 매핑한다.
+    otelcol.receiver.loki "wazuh" {
+      output {
+        logs = [otelcol.processor.transform.wazuh_syslog.input]
+      }
+    }
+
+    otelcol.processor.transform "wazuh_syslog" {
+      error_mode = "ignore"
+      log_statements {
+        context = "log"
+        statements = [
+          `set(attributes["message"], body)`,
+          `set(attributes["appname"], attributes["app"])`,
+          `set(attributes["hostname"], "k3s-01")`,
+        ]
+      }
+      output {
+        logs = [otelcol.exporter.syslog.wazuh.input]
+      }
+    }
+
+    otelcol.exporter.syslog "wazuh" {
+      endpoint = "wazuh.wazuh.svc.cluster.local"
+      port     = 1516
+      network  = "tcp"
+      protocol = "rfc3164"
+      tls {
+        insecure = true
+      }
     }
 
     loki.write "local" {
@@ -1002,7 +1151,7 @@ spec:
     metadata:
       annotations:
         kubectl.kubernetes.io/default-container: alloy
-        checksum/config: 64d256503ed4422647551d64647617e2a8df030e94abd4c2ea799e88e321f3e
+        checksum/config: ef3e0c39c8708267f80f25dbf93adbb591b90401803054f56ef97bd65456ae0
       labels:
         app.kubernetes.io/name: alloy
         app.kubernetes.io/instance: alloy
