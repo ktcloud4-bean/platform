@@ -153,6 +153,14 @@ grafana:
           editable: false
           options:
             path: /var/lib/grafana/dashboards/platform-kubernetes-global
+        - name: platform-node-exporter-full
+          orgId: 1
+          folder: Platform
+          type: file
+          disableDeletion: true
+          editable: false
+          options:
+            path: /var/lib/grafana/dashboards/platform-node-exporter-full
   dashboardsConfigMaps:
     platform-observability: obs-02-dashboard
     platform-capacity: obs-04-capacity-sentinel
@@ -161,6 +169,7 @@ grafana:
     platform-loki-log-explorer: obs-07-loki-log-explorer
     platform-argocd-application-overview: obs-12-argocd-application-overview
     platform-kubernetes-global: obs-09-kubernetes-global
+    platform-node-exporter-full: obs-11-node-exporter-full
   datasources:
     datasources.yaml:
       apiVersion: 1

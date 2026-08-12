@@ -177,6 +177,37 @@ spec:
       ports:
         - protocol: TCP
           port: 9100
+    # OBS-11: node_exporter fleet (proxmox-01·postgres-01·object-01·warpgate-01·netbird-01)
+    - to:
+        - ipBlock:
+            cidr: 10.10.10.10/32
+      ports:
+        - protocol: TCP
+          port: 9100
+    - to:
+        - ipBlock:
+            cidr: 10.10.50.10/32
+      ports:
+        - protocol: TCP
+          port: 9100
+    - to:
+        - ipBlock:
+            cidr: 10.10.50.20/32
+      ports:
+        - protocol: TCP
+          port: 9100
+    - to:
+        - ipBlock:
+            cidr: 10.10.30.10/32
+      ports:
+        - protocol: TCP
+          port: 9100
+    - to:
+        - ipBlock:
+            cidr: 10.10.40.10/32
+      ports:
+        - protocol: TCP
+          port: 9100
     - to:
         - namespaceSelector:
             matchLabels:

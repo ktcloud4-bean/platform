@@ -12,6 +12,7 @@ resources:
   - dashboard-loki-log-explorer.yaml
   - dashboard-argocd-application-overview.yaml
   - dashboard-kubernetes-global.yaml
+  - dashboard-node-exporter-full.yaml
 configMapGenerator:
   - name: obs-grafana-runtime-config
     namespace: obs
