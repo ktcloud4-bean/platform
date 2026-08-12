@@ -16,100 +16,15 @@ data:
       "editable": false,
       "panels": [
         {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {
-            "defaults": {
-              "unit": "reqps"
-            },
-            "overrides": []
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+          "description": "Traefik의 QPS, HTTP 상태, 지연시간은 전용 drill-down에서 확인한다.",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
           "id": 1,
           "options": {
-            "colorMode": "value",
-            "graphMode": "area",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": ["lastNotNull"],
-              "fields": "",
-              "values": false
-            },
-            "textMode": "value_and_name"
+            "content": "## Traefik Traffic\\n\\n[QPS, HTTP 상태, 5xx 비율, p95/p99 지연시간과 entrypoint/router/service 상위 항목 열기](/d/obs-10-traefik-traffic)",
+            "mode": "markdown"
           },
-          "targets": [
-            {
-              "expr": "sum(rate(traefik_entrypoint_requests_total[5m])) or sum(rate(traefik_service_requests_total[5m])) or vector(0)",
-              "legendFormat": "QPS",
-              "refId": "A"
-            }
-          ],
-          "title": "Traefik QPS",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short"
-            },
-            "overrides": []
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
-          "id": 2,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "area",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": ["lastNotNull"],
-              "fields": "",
-              "values": false
-            },
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "expr": "sum(rate(traefik_entrypoint_requests_total[5m])) by (code) or sum(rate(traefik_service_requests_total[5m])) by (code)",
-              "legendFormat": "HTTP {{code}}",
-              "refId": "A"
-            }
-          ],
-          "title": "Traefik HTTP Status",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
-          "id": 3,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "area",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": ["lastNotNull"],
-              "fields": "",
-              "values": false
-            },
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "expr": "sum(rate(traefik_entrypoint_request_duration_seconds_sum[5m])) / sum(rate(traefik_entrypoint_request_duration_seconds_count[5m])) or histogram_quantile(0.95, sum(rate(traefik_entrypoint_request_duration_seconds_bucket[5m])) by (le)) or vector(0)",
-              "legendFormat": "Latency (s)",
-              "refId": "A"
-            }
-          ],
-          "title": "Traefik Latency",
-          "type": "stat"
+          "title": "Traefik traffic drill-down",
+          "type": "text"
         },
         {
           "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -341,5 +256,271 @@ data:
       "time": {"from": "now-6h", "to": "now"},
       "title": "Core Services & Traffic Infrastructure",
       "uid": "obs-05-core-services",
+      "version": 1
+    }
+  traefik-traffic.json: |
+    {
+      "annotations": {"list": []},
+      "description": "Grafana.com Traefik Official Standalone Dashboard ID 17346 revision 9에서 필요한 운영 패널만 정규화했다. upstream SHA-256: 3ad329d2737120f32f67aab083f245b554ea5c4ec8378feee7196ef6bb9f7da9.",
+      "editable": false,
+      "panels": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "entrypoint별 요청률과 상위 entrypoint를 확인한다.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"}
+              },
+              "mappings": [],
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true, "sortBy": "Max", "sortDesc": true},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "editorMode": "code",
+              "expr": "sum by (entrypoint) (rate(traefik_entrypoint_requests_total{job=\"traefik\",entrypoint=~\"$entrypoint\"}[$__rate_interval]))",
+              "legendFormat": "{{entrypoint}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Entrypoint QPS",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "HTTP 응답 상태군을 요청률로 비교한다.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1, "showPoints": "never", "stacking": {"group": "A", "mode": "normal"}},
+              "mappings": [],
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "id": 2,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true, "sortBy": "Max", "sortDesc": true},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "editorMode": "code",
+              "expr": "sum by (code) (rate(traefik_entrypoint_requests_total{job=\"traefik\",entrypoint=~\"$entrypoint\"}[$__rate_interval]))",
+              "legendFormat": "HTTP {{code}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "HTTP status QPS",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "5xx 응답이 전체 요청에서 차지하는 비율이다. 분모가 없으면 No data로 표시한다.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "auto"},
+              "mappings": [],
+              "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 0.01}, {"color": "red", "value": 0.05}]},
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "id": 3,
+          "options": {
+            "legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "single", "sort": "none"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "editorMode": "code",
+              "expr": "sum(rate(traefik_entrypoint_requests_total{job=\"traefik\",entrypoint=~\"$entrypoint\",code=~\"5..\"}[$__rate_interval])) / sum(rate(traefik_entrypoint_requests_total{job=\"traefik\",entrypoint=~\"$entrypoint\"}[$__rate_interval]))",
+              "legendFormat": "5xx ratio",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "HTTP 5xx ratio",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "entrypoint별 p95와 p99 응답 지연시간이다.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 1, "showPoints": "auto"},
+              "mappings": [],
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "id": 4,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true, "sortBy": "Max", "sortDesc": true},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.95, sum by (le, entrypoint) (rate(traefik_entrypoint_request_duration_seconds_bucket{job=\"traefik\",entrypoint=~\"$entrypoint\"}[$__rate_interval])))",
+              "legendFormat": "p95 {{entrypoint}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.99, sum by (le, entrypoint) (rate(traefik_entrypoint_request_duration_seconds_bucket{job=\"traefik\",entrypoint=~\"$entrypoint\"}[$__rate_interval])))",
+              "legendFormat": "p99 {{entrypoint}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "p95 / p99 latency",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "현재 선택한 entrypoint 범위의 상위 요청률을 확인한다.",
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "mappings": [], "unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 16},
+          "id": 5,
+          "options": {"displayMode": "gradient", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto"},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "editorMode": "code",
+              "expr": "topk(10, sum by (entrypoint) (rate(traefik_entrypoint_requests_total{job=\"traefik\",entrypoint=~\"$entrypoint\"}[$__rate_interval])))",
+              "legendFormat": "{{entrypoint}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Top entrypoints by QPS",
+          "type": "bargauge"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "router label로 집계한 상위 요청률이다.",
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "mappings": [], "unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 16},
+          "id": 6,
+          "options": {"displayMode": "gradient", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto"},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "editorMode": "code",
+              "expr": "topk(10, sum by (router) (rate(traefik_router_requests_total{job=\"traefik\",router=~\"$router\"}[$__rate_interval])))",
+              "legendFormat": "{{router}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Top routers by QPS",
+          "type": "bargauge"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "description": "service label로 집계한 상위 요청률이다.",
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "mappings": [], "unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 16},
+          "id": 7,
+          "options": {"displayMode": "gradient", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "sizing": "auto"},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "editorMode": "code",
+              "expr": "topk(10, sum by (service) (rate(traefik_service_requests_total{job=\"traefik\",service=~\"$service\"}[$__rate_interval])))",
+              "legendFormat": "{{service}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Top services by QPS",
+          "type": "bargauge"
+        }
+      ],
+      "schemaVersion": 41,
+      "tags": ["obs-10", "traefik", "ingress", "platform"],
+      "templating": {
+        "list": [
+          {
+            "allValue": ".*",
+            "current": {},
+            "datasource": {"type": "prometheus", "uid": "prometheus"},
+            "definition": "label_values(traefik_entrypoint_requests_total, entrypoint)",
+            "includeAll": true,
+            "label": "Entrypoint",
+            "multi": true,
+            "name": "entrypoint",
+            "query": {"query": "label_values(traefik_entrypoint_requests_total, entrypoint)", "refId": "StandardVariableQuery"},
+            "refresh": 2,
+            "sort": 1,
+            "type": "query"
+          },
+          {
+            "allValue": ".*",
+            "current": {},
+            "datasource": {"type": "prometheus", "uid": "prometheus"},
+            "definition": "label_values(traefik_router_requests_total, router)",
+            "includeAll": true,
+            "label": "Router",
+            "multi": true,
+            "name": "router",
+            "query": {"query": "label_values(traefik_router_requests_total, router)", "refId": "StandardVariableQuery"},
+            "refresh": 2,
+            "sort": 1,
+            "type": "query"
+          },
+          {
+            "allValue": ".*",
+            "current": {},
+            "datasource": {"type": "prometheus", "uid": "prometheus"},
+            "definition": "label_values(traefik_service_requests_total, service)",
+            "includeAll": true,
+            "label": "Service",
+            "multi": true,
+            "name": "service",
+            "query": {"query": "label_values(traefik_service_requests_total, service)", "refId": "StandardVariableQuery"},
+            "refresh": 2,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {"from": "now-6h", "to": "now"},
+      "title": "Traefik Traffic Drill-down",
+      "uid": "obs-10-traefik-traffic",
       "version": 1
     }
