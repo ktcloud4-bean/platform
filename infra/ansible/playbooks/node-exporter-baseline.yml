@@ -1,10 +1,20 @@
 ---
 # infra/ansible/playbooks/node-exporter-baseline.yml
 # OBS-11: Proxmox·postgres-01·object-01·warpgate-01·netbird-01 node-exporter 기준선.
-# k3s-01은 기존 kube-prometheus-stack DaemonSet을 재사용하므로 이 playbook의 대상이 아니다.
+# k3s-01의 다른 collector는 기존 kube-prometheus-stack DaemonSet을 재사용하므로 이
+# play의 대상이 아니다. filesystem 전용 보완 target은 아래 두 번째 play(OBS-13)를 본다.
 
 - name: Apply node_exporter baseline to the Proxmox·VM fleet
   hosts: node_exporter_fleet
+  become: true
+  roles:
+    - node_exporter_baseline
+
+# OBS-13: k3s-01 DaemonSet(port 9100)은 non-root securityContext로 filesystem
+# collector가 실패한다(OBS-11이 기존 한계로 판정). DaemonSet은 바꾸지 않고, root/PVC
+# 사용률 경보를 위해 port 9101에 같은 role을 한 번 더 적용한다.
+- name: Apply node_exporter baseline to k3s-01 for root filesystem coverage only
+  hosts: node_exporter_root_k3s01
   become: true
   roles:
     - node_exporter_baseline

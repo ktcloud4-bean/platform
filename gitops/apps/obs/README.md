@@ -17,6 +17,8 @@ node-exporter, kube-state-metrics, Grafana, 인증서 probe와 OPNsense node_exp
 | 수집 pipeline | `loki`·`alloy`, `loki_build_info`·`alloy_build_info` | `obs`의 ServiceMonitor가 기존 `loki` namespace Service를 선택 |
 | OPNsense | `opnsense-node`, CPU·memory·interface node metric | 이 앱의 외부 static target ScrapeConfig |
 | node-exporter fleet | `node-exporter-fleet`(job=`node-exporter`), CPU·memory·filesystem·disk·network·systemd node metric | `OBS-11`의 외부 static target ScrapeConfig; 대상은 `infra/ansible/roles/node_exporter_baseline` |
+| k3s-01 root filesystem | `node-exporter-root-k3s01`(job=`node-exporter-root`), `node_filesystem_avail_bytes`·`node_filesystem_size_bytes` | `OBS-13`의 외부 static target ScrapeConfig(port 9101); 기존 DaemonSet(port 9100)의 filesystem collector 권한 한계를 보완만 한다 |
+| 상시 alert 수신 | `obs-13-receiver`, `obs13_alerts_received_total` | `OBS-13`의 상시 webhook receiver; Alertmanager route가 이 Service로 4종 alert를 보낸다 |
 
 Prometheus는 `obs` namespace에 있는 `release=obs` ServiceMonitor·PrometheusRule·ScrapeConfig를
 선택한다. Velero와 Loki 선언은 수정하지 않는다. `OPN-METRICS-01`의 OPNsense static target,

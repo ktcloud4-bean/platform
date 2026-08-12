@@ -1,0 +1,70 @@
+# OBS-13: 상시 alert rule 4종.
+#
+# for·threshold 근거는 gitops/apps/obs/README.md의 "OBS-13 상시 alert rule과 실제
+# 알림 채널" 절이 소유한다. Prometheus는 release=obs label이 있는 PrometheusRule만
+# 선택한다(gitops/apps/obs/README.md의 수집 경계 절 참고).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: obs-13-alerting-rules
+  namespace: obs
+  labels:
+    release: obs
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  groups:
+    - name: obs-13-node-down
+      rules:
+        - alert: NodeDown
+          expr: up{job="node-exporter"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "node-exporter target {{ $labels.instance }}가 5분 이상 응답하지 않는다."
+    - name: obs-13-root-filesystem
+      rules:
+        - alert: RootFilesystemUsageWarning
+          expr: >-
+            100 * (1 - node_filesystem_avail_bytes{job=~"node-exporter|node-exporter-root",mountpoint="/",fstype!="tmpfs"}
+            / node_filesystem_size_bytes{job=~"node-exporter|node-exporter-root",mountpoint="/",fstype!="tmpfs"}) > 85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} root filesystem 사용률이 85%를 10분 이상 초과했다."
+        - alert: RootFilesystemUsageCritical
+          expr: >-
+            100 * (1 - node_filesystem_avail_bytes{job=~"node-exporter|node-exporter-root",mountpoint="/",fstype!="tmpfs"}
+            / node_filesystem_size_bytes{job=~"node-exporter|node-exporter-root",mountpoint="/",fstype!="tmpfs"}) > 95
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.instance }} root filesystem 사용률이 95%를 5분 이상 초과했다."
+    - name: obs-13-certificate
+      rules:
+        - alert: TLSCertificateExpiringSoon
+          expr: >-
+            (probe_ssl_earliest_cert_expiry{service="obs-blackbox",target="traefik-certificate"} - time()) < 14 * 86400
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.target }} TLS 인증서가 14일 이내 만료된다."
+    - name: obs-13-backup
+      rules:
+        - alert: VeleroBackupFailed
+          # velero_backup_failure_total(완전 실패)과 velero_backup_partial_failure_total
+          # (부분 실패)을 모두 잡는다. 라이브 실측으로 완전 실패는 실제 오브젝트 스토리지
+          # 접근 실패처럼 운영 backup 경로를 직접 건드려야만 재현되는 반면, 부분 실패는
+          # 안전한 backup 요청(예: 존재하지 않는 namespace selector)만으로도 재현되고
+          # 두 phase 모두 백업 건강 이상 신호라는 점은 같다.
+          expr: >-
+            increase(velero_backup_failure_total{namespace="velero",service="velero"}[1h]) > 0
+            or increase(velero_backup_partial_failure_total{namespace="velero",service="velero"}[1h]) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Velero backup 실패(완전 또는 부분)가 지난 1시간 안에 발생했다."
