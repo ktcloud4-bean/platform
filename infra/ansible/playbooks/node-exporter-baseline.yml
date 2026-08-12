@@ -1,0 +1,10 @@
+---
+# infra/ansible/playbooks/node-exporter-baseline.yml
+# OBS-11: Proxmox·postgres-01·object-01·warpgate-01·netbird-01 node-exporter 기준선.
+# k3s-01은 기존 kube-prometheus-stack DaemonSet을 재사용하므로 이 playbook의 대상이 아니다.
+
+- name: Apply node_exporter baseline to the Proxmox·VM fleet
+  hosts: node_exporter_fleet
+  become: true
+  roles:
+    - node_exporter_baseline

@@ -1,0 +1,102 @@
+---
+# infra/ansible/roles/node_exporter_baseline/tasks/main.yml
+# OBS-11: 대상 host/guest에 checksum 고정 node_exporter systemd unit을 선언한다.
+#
+# 이 role은 node_exporter 설치·서비스 계정·systemd unit만 소유한다. Prometheus
+# ScrapeConfig, OPNsense 방화벽, Grafana dashboard는 gitops/apps/obs가 소유한다.
+
+- name: 전제 확인 — 아키텍처·listen 주소·canary collector 허용값
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.architecture == "x86_64"
+      - node_exporter_listen_address is defined
+      - node_exporter_canary_collectors | difference(['systemd', 'processes']) | length == 0
+    fail_msg: >-
+      이 role은 x86_64만 지원한다. node_exporter_listen_address를 inventory
+      host_vars에 명시하고, node_exporter_canary_collectors는 systemd·processes만
+      허용한다.
+
+- name: 전제 확인 — SELinux Enforcing 유지 (Rocky 대상)
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.selinux.status | default('disabled') == 'enabled'
+      - ansible_facts.selinux.mode | default('disabled') == 'enforcing'
+    fail_msg: >-
+      SELinux는 Enforcing이어야 한다. 이 role은 SELinux를 완화하지 않는다.
+  when: ansible_facts.distribution == "Rocky"
+
+- name: 전용 그룹 생성
+  ansible.builtin.group:
+    name: "{{ node_exporter_group }}"
+    system: true
+    state: present
+
+- name: 전용 서비스 계정 생성 (로그인 셸·home 없음)
+  ansible.builtin.user:
+    name: "{{ node_exporter_user }}"
+    group: "{{ node_exporter_group }}"
+    system: true
+    shell: /sbin/nologin
+    create_home: false
+    password_lock: true
+    state: present
+
+- name: 캐시 디렉터리 생성
+  ansible.builtin.file:
+    path: "{{ node_exporter_cache_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: 고정 release archive 다운로드와 SHA-256 강제
+  ansible.builtin.get_url:
+    url: "{{ node_exporter_release_url }}"
+    dest: "{{ node_exporter_cache_dir }}/{{ node_exporter_release_asset }}"
+    checksum: "sha256:{{ node_exporter_release_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: 고정 release archive 압축 해제
+  ansible.builtin.unarchive:
+    src: "{{ node_exporter_cache_dir }}/{{ node_exporter_release_asset }}"
+    dest: "{{ node_exporter_cache_dir }}"
+    remote_src: true
+    creates: >-
+      {{ node_exporter_cache_dir }}/node_exporter-{{ node_exporter_version }}.{{ node_exporter_arch }}/node_exporter
+
+- name: node_exporter binary 설치
+  ansible.builtin.copy:
+    src: >-
+      {{ node_exporter_cache_dir }}/node_exporter-{{ node_exporter_version }}.{{ node_exporter_arch }}/node_exporter
+    dest: "{{ node_exporter_binary_path }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  notify: node_exporter 재시작
+
+- name: 현재 버전 symlink
+  ansible.builtin.file:
+    src: "{{ node_exporter_binary_path }}"
+    dest: "{{ node_exporter_binary_link }}"
+    state: link
+    force: true
+  notify: node_exporter 재시작
+
+- name: systemd unit 선언
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: node_exporter 재시작
+
+- name: systemd unit 활성화
+  ansible.builtin.systemd_service:
+    name: node_exporter.service
+    enabled: true
+    daemon_reload: true
+    state: started

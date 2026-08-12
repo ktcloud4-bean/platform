@@ -80,6 +80,34 @@ spec:
       labels:
         instance: opnsense.imcherry5778.xyz
 ---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: node-exporter-fleet
+  namespace: obs
+  labels:
+    release: obs
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  # OBS-11: proxmox-01·postgres-01·object-01·warpgate-01·netbird-01의 checksum 고정
+  # node_exporter systemd unit(infra/ansible/roles/node_exporter_baseline)을 읽는다.
+  # k3s-01은 기존 obs-prometheus-node-exporter DaemonSet 대상이므로 여기 포함하지
+  # 않는다. instance는 기본 __address__(ip:port)를 그대로 써서 기존 k3s-01
+  # node-exporter target(instance=10.10.20.10:9100)과 형식을 맞춘다. job만
+  # node-exporter로 덮어써 Node Exporter Full 대시보드의 job 변수를 정규화한다.
+  metricsPath: /metrics
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
+  staticConfigs:
+    - targets:
+        - 10.10.10.10:9100
+        - 10.10.50.10:9100
+        - 10.10.50.20:9100
+        - 10.10.30.10:9100
+        - 10.10.40.10:9100
+      labels:
+        job: node-exporter
+---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
