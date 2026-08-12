@@ -706,7 +706,11 @@ alloy:
       }
 
       otelcol.exporter.syslog "wazuh" {
-        endpoint = "wazuh.wazuh.svc.cluster.local"
+        // wazuh-manager Pod가 아니라 wazuh-04-relay Pod(gitops/apps/wazuh)로 보낸다.
+        // pol-02-wazuh-root-manager-baseline이 manager Pod에 두 번째 container도
+        // 새 hostPath도 허용하지 않아, 별도 Pod의 python relay + 실제 wazuh-agent가
+        // secure agent 프로토콜(1514)로 manager에 다시 전달한다.
+        endpoint = "wazuh-04-relay.wazuh.svc.cluster.local"
         port     = 1516
         network  = "tcp"
         protocol = "rfc3164"

@@ -9,6 +9,7 @@ resources:
   - manager.yaml
   - dashboard.yaml
   - network-policies.yaml
+  - wazuh-04-relay-agent.yaml
 configMapGenerator:
   - name: wazuh-vault-agent
     namespace: wazuh
@@ -17,7 +18,12 @@ configMapGenerator:
       - vault-agent-manager.hcl=files/vault-agent-manager.hcl
       - vault-agent-bootstrap.hcl=files/vault-agent-bootstrap.hcl
       - vault-agent-dashboard.hcl=files/vault-agent-dashboard.hcl
+      - vault-agent-relay-agent.hcl=files/vault-agent-relay-agent.hcl
       - vault.crt=files/vault.crt
+  - name: wazuh-04-relay-agent-conf
+    namespace: wazuh
+    files:
+      - ossec.conf=files/wazuh-04-relay-agent-ossec.conf
   - name: wazuh-dashboard-conf
     namespace: wazuh
     files:

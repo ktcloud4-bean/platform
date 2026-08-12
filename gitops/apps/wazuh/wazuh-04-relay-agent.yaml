@@ -1,0 +1,262 @@
+# WAZUH-04: Keycloak·Pomerium·Vault·Falco·CrowdSec AppSec 5개 k8s Pod stdout 소스를
+# wazuh-manager Pod를 전혀 건드리지 않고 수집한다. `pol-02-wazuh-root-manager-baseline`의
+# require-wazuh-manager-baseline이 그 Pod의 containers 배열 전체를 고정 이미지와
+# 정확히 일치하도록 강제해 hostPath 확장도, 두 번째 container 추가도 admission에서
+# 거부되는 것을 라이브로 확인했다(manager.yaml 참고). 이 Pod는 이름이
+# `wazuh-manager-master-*`가 아니라 그 정책 대상이 아니다.
+#
+# 구성: wazuh-04-relay(python stdlib TCP 수신기, Alloy의 syslog를 받아 emptyDir
+# 파일에 append)와 wazuh-04-relay-agent(실제 wazuh-agent, 그 파일을 tail해
+# WAZUH-03의 6개 host agent·OPNsense와 동일한 secure agent 프로토콜(1514)로
+# manager에 전달 — queue type 1 경로라 wazuh-04-decoders.xml/두 rule 파일이
+# wazuh-logtest로 검증된 그대로 매칭된다)가 emptyDir 하나를 공유한다.
+#
+# 새 Vault role을 만들지 않고 wazuh-manager ServiceAccount·Vault role을 그대로
+# 재사용한다(files/vault-agent-relay-agent.hcl 주석 참고) — authd_password 필드
+# 하나만 읽으며 manager가 이미 읽을 수 있는 값이라 새 권한이 생기지 않는다.
+# NetworkPolicy는 추가하지 않는다 — wazuh-internal·wazuh-dns-egress·wazuh-vault-egress가
+# 이미 `podSelector: {}`로 wazuh 네임스페이스 전체에 적용돼 이 Pod도 자동으로
+# manager의 1514/1515, DNS, Vault에 닿는다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: wazuh-04-relay
+  namespace: wazuh
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: wazuh-04-relay
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: wazuh-04-relay
+  ports:
+    - name: syslog
+      port: 1516
+      targetPort: syslog
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-04-relay
+  namespace: wazuh
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: wazuh-04-relay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh
+      app.kubernetes.io/component: wazuh-04-relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wazuh
+        app.kubernetes.io/component: wazuh-04-relay
+    spec:
+      serviceAccountName: wazuh-manager
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/vault-agent.hcl
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 100
+            runAsGroup: 101
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config/vault-agent.hcl
+              subPath: vault-agent-relay-agent.hcl
+              readOnly: true
+            - name: vault-agent-config
+              mountPath: /vault/tls/vault.crt
+              subPath: vault.crt
+              readOnly: true
+            - name: agent-secrets
+              mountPath: /vault/secrets
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+      containers:
+        # Alloy(gitops/apps/loki)의 syslog 전송을 받아 emptyDir 파일에 append하는
+        # TCP 릴레이. python3 stdlib(socketserver)만 쓴다 — 이 저장소는 커스텀
+        # 이미지 빌드 파이프라인이 없어 별도 Dockerfile 없이, 이미
+        # values-alloy-01.yaml의 kubernetes-events sidecar가 쓰는 것과 같은 base
+        # image·보안 패턴을 그대로 재사용한다. 20 MiB마다 `.1`로 rotate해
+        # emptyDir가 무한정 자라지 않게 한다.
+        - name: wazuh-04-relay
+          image: docker.io/library/python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-u", "-c"]
+          args:
+            - |-
+              import os
+              import socketserver
+              import threading
+
+              LOG_PATH = "/wazuh-04-forward/wazuh-04.log"
+              MAX_BYTES = 20 * 1024 * 1024
+              write_lock = threading.Lock()
+
+              def rotate_if_needed():
+                  try:
+                      if os.path.getsize(LOG_PATH) >= MAX_BYTES:
+                          os.replace(LOG_PATH, LOG_PATH + ".1")
+                  except FileNotFoundError:
+                      pass
+
+              class Handler(socketserver.StreamRequestHandler):
+                  def handle(self):
+                      for raw_line in self.rfile:
+                          line = raw_line.rstrip(b"\n")
+                          if not line.strip():
+                              continue
+                          with write_lock:
+                              rotate_if_needed()
+                              with open(LOG_PATH, "ab") as f:
+                                  f.write(line + b"\n")
+
+              class Server(socketserver.ThreadingTCPServer):
+                  allow_reuse_address = True
+                  daemon_threads = True
+
+              os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+              with Server(("0.0.0.0", 1516), Handler) as srv:
+                  srv.serve_forever()
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          ports:
+            - name: syslog
+              containerPort: 1516
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: wazuh-04-forward
+              mountPath: /wazuh-04-forward
+        # 실제 wazuh-agent. WAZUH-03의 6개 host agent·OPNsense와 같은 이미지·같은
+        # secure 프로토콜을 쓴다. rootcheck·syscheck는 ossec.conf에서 끈다 — 이
+        # Pod 자신의 컨테이너 파일시스템은 D30/A90 소스가 아니다.
+        - name: wazuh-04-relay-agent
+          image: docker.io/wazuh/wazuh-agent:4.14.7@sha256:460758c8de2a6227818d5e415c514199e77179f5bbaec77aca5c246c99932ed2
+          imagePullPolicy: IfNotPresent
+          command: [/bin/bash, -ec]
+          args:
+            - |
+              install -d -m 0750 /wazuh-config-mount/etc
+              install -m 0640 /vault/secrets/authd.pass /wazuh-config-mount/etc/authd.pass
+              exec /init
+          env:
+            - name: WAZUH_MANAGER_SERVER
+              value: wazuh-agents.wazuh.svc.cluster.local
+            - name: WAZUH_MANAGER_PORT
+              value: "1514"
+            - name: WAZUH_REGISTRATION_SERVER
+              value: wazuh-agents.wazuh.svc.cluster.local
+            - name: WAZUH_REGISTRATION_PORT
+              value: "1515"
+            - name: WAZUH_AGENT_NAME
+              value: wazuh-04-relay
+            - name: WAZUH_AGENT_GROUP
+              value: default
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              # 업스트림 wazuh-manager와 같은 이유(permanent data 복원, s6가 wazuh
+              # 사용자로 daemon을 내려 실행, chroot) — 같은 wazuh-kubernetes 계열
+              # 패키징이라 동일한 7개만 추가한다.
+              add: [CHOWN, DAC_OVERRIDE, FOWNER, KILL, SETGID, SETUID, SYS_CHROOT]
+            privileged: false
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          volumeMounts:
+            - name: wazuh-04-relay-agent-conf
+              mountPath: /wazuh-config-mount/etc/ossec.conf
+              subPath: ossec.conf
+              readOnly: true
+            - name: agent-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+            - name: wazuh-04-forward
+              mountPath: /wazuh-04-forward
+              readOnly: true
+      volumes:
+        - name: vault-agent-config
+          configMap:
+            name: wazuh-vault-agent
+            defaultMode: 0444
+        - name: wazuh-04-relay-agent-conf
+          configMap:
+            name: wazuh-04-relay-agent-conf
+            defaultMode: 0444
+        - name: agent-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: wazuh-04-forward
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: vault
+                  expirationSeconds: 600
