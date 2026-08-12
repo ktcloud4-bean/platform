@@ -108,6 +108,31 @@ spec:
       labels:
         job: node-exporter
 ---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: node-exporter-root-k3s01
+  namespace: obs
+  labels:
+    release: obs
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  # OBS-13: 기존 obs-prometheus-node-exporter DaemonSet(10.10.20.10:9100)은 non-root
+  # securityContext 때문에 filesystem collector만 실패한다(OBS-11이 기존 한계로
+  # 판정). DaemonSet은 바꾸지 않고, 같은 host에 별도 포트(9101)로 떠 있는 host-level
+  # node_exporter(infra/ansible/roles/node_exporter_baseline,
+  # inventory group node_exporter_root_k3s01)를 filesystem 대표 시계열 보완용으로만
+  # 추가한다. job을 fleet(job=node-exporter)과 분리해 OBS-11의 6-target 집계·대시보드
+  # job 변수를 건드리지 않는다.
+  metricsPath: /metrics
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
+  staticConfigs:
+    - targets:
+        - 10.10.20.10:9101
+      labels:
+        job: node-exporter-root
+---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:

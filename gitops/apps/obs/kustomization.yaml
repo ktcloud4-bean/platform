@@ -4,6 +4,8 @@ resources:
   - namespace.yaml
   - install.yaml
   - monitoring.yaml
+  - alerting-rules.yaml
+  - alerting-receiver.yaml
   - network-policies.yaml
   - dashboard.yaml
   - dashboard-capacity.yaml

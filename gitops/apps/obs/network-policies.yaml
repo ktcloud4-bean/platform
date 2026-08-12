@@ -171,6 +171,10 @@ spec:
       ports:
         - protocol: TCP
           port: 9100
+        # OBS-13: k3s-01 host-level node_exporter(filesystem 전용 보완, DaemonSet의
+        # 9100과 별개)
+        - protocol: TCP
+          port: 9101
     - to:
         - ipBlock:
             cidr: 10.10.10.1/32

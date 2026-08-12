@@ -26,11 +26,22 @@ alertmanager:
         - receiver: obs-01-verification
           matchers:
             - alertname = "OBS01Delivery"
+        # OBS-13: 상시 alert 4종(5개 alertname)만 실제 채널(obs-13-receiver)로 보낸다.
+        # 다른 모든 alertname은 여전히 discard로 떨어진다.
+        - receiver: obs-13-receiver
+          matchers:
+            - alertname =~ "NodeDown|RootFilesystemUsageWarning|RootFilesystemUsageCritical|TLSCertificateExpiringSoon|VeleroBackupFailed"
     receivers:
       - name: discard
       - name: obs-01-verification
         webhook_configs:
           - url: http://obs-01-alert-sink.obs-01-test.svc:8080/alerts
+            send_resolved: true
+      - name: obs-13-receiver
+        webhook_configs:
+          # alerting-receiver.yaml의 상시 receiver. obs namespace 안이라
+          # obs-internal NetworkPolicy가 이미 이 경로를 연다.
+          - url: http://obs-13-receiver.obs.svc:8080/alerts
             send_resolved: true
   alertmanagerSpec:
     automountServiceAccountToken: false

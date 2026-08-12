@@ -3,9 +3,16 @@
 # OBS-11: Proxmox·Linux VM node-exporter fleet 기준선.
 #
 # 버전과 checksum은 고정한다. `latest`나 미검증 설치 스크립트, curl|sh는 쓰지 않는다.
-# k3s-01은 기존 kube-prometheus-stack DaemonSet(v1.12.1, gitops/apps/obs/release-metadata.env)을
-# 재사용하므로 이 role의 대상이 아니다. 같은 upstream 버전을 이 role에서도 고정해
-# 두 경로의 node_exporter 버전을 맞춘다.
+# k3s-01의 cpu·memory·disk·network·systemd는 기존 kube-prometheus-stack
+# DaemonSet(v1.12.1, gitops/apps/obs/release-metadata.env, port 9100)을 재사용하므로
+# 이 role의 대상이 아니다. 같은 upstream 버전을 이 role에서도 고정해 두 경로의
+# node_exporter 버전을 맞춘다.
+#
+# OBS-13: 단, 그 DaemonSet은 non-root securityContext 때문에 filesystem collector만
+# 실패한다(OBS-11이 기존 한계로 판정, 권한을 약화하지 않는다는 원칙상 확대하지 않음).
+# root/PVC 사용률 경보를 위해 k3s-01에도 이 role을 별도 포트(9101, inventory의
+# node_exporter_root_k3s01 그룹)로 한 번 더 적용해 filesystem 대표 시계열만 보완한다.
+# DaemonSet의 port 9100·기존 collector는 바꾸지 않는다.
 
 node_exporter_version: "1.12.1"
 node_exporter_arch: "linux-amd64"

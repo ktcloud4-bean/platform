@@ -33,10 +33,21 @@
 # 실제 inventory에서 seaweedfs_s3_allowed_sources에 소비자 /32 CIDR를 선언한다.
 
 [node_exporter_fleet]
-# OBS-11: k3s-01은 기존 kube-prometheus-stack DaemonSet을 재사용하므로 제외한다.
+# OBS-11: k3s-01은 기존 kube-prometheus-stack DaemonSet(port 9100, hostNetwork)을
+# 재사용하므로 이 그룹에서는 제외한다. root filesystem 경보용 별도 target은 아래
+# node_exporter_root_k3s01 그룹을 본다.
 # node_exporter_listen_address는 각 host/guest의 실제 관리 주소로 명시한다.
 # proxmox-01 ansible_host=<docs/ip-plan.md의 proxmox-01 주소> ansible_user=root node_exporter_listen_address=<같은 주소>
 # postgres-01 ansible_host=<docs/ip-plan.md의 postgres-01 주소> ansible_user=rocky node_exporter_listen_address=<같은 주소>
 # object-01 ansible_host=<docs/ip-plan.md의 object-01 주소> ansible_user=rocky node_exporter_listen_address=<같은 주소>
 # warpgate-01 ansible_host=<docs/ip-plan.md의 warpgate-01 주소> ansible_user=rocky node_exporter_listen_address=<같은 주소>
 # netbird-01 ansible_host=<docs/ip-plan.md의 netbird-01 주소> ansible_user=rocky node_exporter_listen_address=<같은 주소>
+
+[node_exporter_root_k3s01]
+# OBS-13: 기존 DaemonSet(port 9100)은 non-root securityContext(runAsUser 65534)가
+# /proc/1/mountinfo를 읽지 못해 filesystem collector만 실패한다(OBS-11이 기존 한계로
+# 판정, 확대하지 않음). root/PVC 사용률 경보를 위해 DaemonSet은 그대로 두고 다른
+# 포트(9101)에 별도 host-level node_exporter를 하나 더 둔다. ADR-0002대로 이
+# 단일 노드 local-path 환경에서는 k3s-01 root filesystem 사용률이 곧 PVC 용량 상한
+# 신호다.
+# k3s-01 ansible_host=<docs/ip-plan.md의 k3s-01 주소> ansible_user=rocky node_exporter_listen_address=<같은 주소> node_exporter_listen_port=9101
