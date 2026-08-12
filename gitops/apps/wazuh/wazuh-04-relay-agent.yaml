@@ -190,10 +190,16 @@ spec:
         - name: wazuh-04-relay-agent
           image: docker.io/wazuh/wazuh-agent:4.14.7@sha256:460758c8de2a6227818d5e415c514199e77179f5bbaec77aca5c246c99932ed2
           imagePullPolicy: IfNotPresent
+          # /wazuh-config-mount/etc는 ConfigMap subPath가 만드는 합성 디렉터리라
+          # fsGroup이 적용되지 않아(non-root라 여기 쓰기가 막힘을 라이브로 확인,
+          # manager는 root라 우연히 통과했을 뿐이다) authd.pass를 거기 두지 않는다.
+          # 대신 이미지의 0-wazuh-init 스크립트가 지원하는 WAZUH_REGISTRATION_PASSWORD를
+          # shell에서 export한다 — Pod spec에는 값이 남지 않고, /var/ossec/etc는
+          # 이미 wazuh:wazuh group-writable이라 그 스크립트의 파일 쓰기가 그대로 된다.
           command: [/bin/bash, -ec]
           args:
             - |
-              install -m 0640 /vault/secrets/authd.pass /wazuh-config-mount/etc/authd.pass
+              export WAZUH_REGISTRATION_PASSWORD="$(cat /vault/secrets/authd.pass)"
               exec /init
           env:
             - name: WAZUH_MANAGER_SERVER
