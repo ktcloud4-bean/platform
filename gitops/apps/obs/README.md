@@ -16,6 +16,7 @@ node-exporter, kube-state-metrics, Grafana, 인증서 probe와 OPNsense node_exp
 | Traefik traffic | `obs-traefik`, `traefik_entrypoint_*`·`traefik_router_*`·`traefik_service_*` | ingress의 private `traefik-metrics:9100` Service와 `obs` ServiceMonitor |
 | 수집 pipeline | `loki`·`alloy`, `loki_build_info`·`alloy_build_info` | `obs`의 ServiceMonitor가 기존 `loki` namespace Service를 선택 |
 | OPNsense | `opnsense-node`, CPU·memory·interface node metric | 이 앱의 외부 static target ScrapeConfig |
+| node-exporter fleet | `node-exporter-fleet`(job=`node-exporter`), CPU·memory·filesystem·disk·network·systemd node metric | `OBS-11`의 외부 static target ScrapeConfig; 대상은 `infra/ansible/roles/node_exporter_baseline` |
 
 Prometheus는 `obs` namespace에 있는 `release=obs` ServiceMonitor·PrometheusRule·ScrapeConfig를
 선택한다. Velero와 Loki 선언은 수정하지 않는다. `OPN-METRICS-01`의 OPNsense static target,
