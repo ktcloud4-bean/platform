@@ -1,0 +1,26 @@
+---
+# infra/ansible/roles/wazuh_agent_baseline/tasks/install-debian.yml
+# proxmox-01(Debian 13) 전용. 낱개 .deb는 내장 서명이 없어 checksum만으로
+# 무결성을 검증한다(다른 role의 GitHub Release 자산과 같은 신뢰 모델).
+
+- name: 캐시 디렉터리 생성
+  ansible.builtin.file:
+    path: "{{ wazuh_agent_cache_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: 고정 checksum DEB 다운로드
+  ansible.builtin.get_url:
+    url: "{{ wazuh_agent_deb_url }}"
+    dest: "{{ wazuh_agent_cache_dir }}/wazuh-agent_{{ wazuh_agent_version }}-{{ wazuh_agent_release }}_amd64.deb"
+    checksum: "sha256:{{ wazuh_agent_deb_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: wazuh-agent 패키지 설치
+  ansible.builtin.apt:
+    deb: "{{ wazuh_agent_cache_dir }}/wazuh-agent_{{ wazuh_agent_version }}-{{ wazuh_agent_release }}_amd64.deb"
+    state: present

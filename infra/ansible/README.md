@@ -216,6 +216,57 @@ REG-01은 `30GB` volume 5개까지 Harbor collection에 열어 두도록 별도 
 올린다. `playbooks/harbor-seaweedfs-capacity.yml`은 전체 identity 선언을 요구하지 않고 정확히
 이 값만 바꾸며 volume → filer → S3만 한 차례 재시작한다.
 
+## Wazuh HIDS agent 기준선
+
+`playbooks/wazuh-agent-baseline.yml`과 `roles/wazuh_agent_baseline/`은 `WAZUH-03`의
+6개 대상(`k3s-01`·`postgres-01`·`object-01`·`warpgate-01`·`netbird-01`·`proxmox-01`)
+Wazuh agent를 소유한다. 기존 manager·indexer·dashboard와 같은 4.14.7 계열로
+버전을 고정하고, RPM(Rocky 9 5대)은 `get_url` checksum과 Wazuh 공식 GPG 서명
+(key ID `96B3EE5F29111145`) 둘 다로 검증한다. `proxmox-01`(Debian 13 물리 호스트)의
+DEB는 낱개 파일에 내장 서명이 없어 다른 role의 GitHub Release 자산과 같은 신뢰
+모델(TLS+공식 도메인 sha256)만 적용한다.
+
+이 role이 켜는 모듈은 `syscheck`(최소 경로)·`rootcheck`뿐이다. `templates/ossec.conf.j2`가
+전체 `ossec.conf`를 갈아 끼우며 `syscollector`·SCA(Security Configuration
+Assessment) wodle·`osquery`·`cis-cat`·`localfile`·`active_response`·command
+wodle을 아예 선언하지 않아 비활성 상태를 유지한다. `localfile`(로그 수집)이 없는
+이유는 `LOKI-02`가 같은 6개 호스트의 journald/syslog를 별도로 수집하기 때문이며,
+인증 성공/실패 이벤트가 두 경로에 중복되지 않게 소스별로 정확히 한쪽에만 보낸다.
+
+`syscheck` 감시 경로는 설정·SSH·systemd unit·인증서 관련 디렉터리로 최소화한다.
+공통 경로(`/etc/ssh`, `/etc/sudoers`, `/etc/sudoers.d`, `/etc/systemd/system`)에
+OS 계열 신뢰 저장소(RedHat `/etc/pki/tls`·`/etc/pki/ca-trust/source/anchors`, Debian
+`/etc/ssl`)와 대상별 `wazuh_agent_extra_syscheck_directories`(inventory
+host_vars)를 더한다. PGDATA 전체·session recording·컨테이너 이미지처럼 상시
+변경되는 디렉터리는 절대 통째로 넣지 않는다 — `postgres-01`은 `postgres_data_dir`
+전체가 아니라 `postgresql.conf`·`pg_hba.conf`·server CA/leaf 인증서 파일 6개만
+개별 지정한다. `realtime="no"`(예약 스캔)만 쓰고 `report_changes="no"`로 변경
+diff 원문을 저장하지 않는다(대상에 private key 파일이 섞여 있다).
+
+manager 등록은 `<client><enrollment>`를 끄고(비밀번호를 `ossec.conf`에 남기지
+않는다) `agent-auth` CLI를 `client.keys`가 비어 있을 때만 1회 실행하는 방식이다.
+`wazuh_agent_authd_password`는 `WAZUH-01` `provision.sh`가 이미 만든 저장소 밖
+`${KTC_SECRET_ROOT}/wazuh/authd-password`(Vault `kv/wazuh/manager`의
+`authd_password`와 동일 값)를 재사용하며 새 credential을 만들지 않는다. agent가
+연결하는 주소·포트는 OPNsense agent와 동일한 기존 manager NodePort
+`10.10.20.10:31514`(event)·`31515`(등록)이다.
+
+```bash
+cd infra/ansible
+export ANSIBLE_SSH_COMMON_ARGS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<저장소 밖 known_hosts> -o PasswordAuthentication=no"
+ansible-playbook -i inventory/hosts.local playbooks/wazuh-agent-baseline.yml --syntax-check
+ansible-playbook -i inventory/hosts.local -e "wazuh_agent_authd_password=$(cat <secret_root>/wazuh/authd-password)" \
+  playbooks/wazuh-agent-baseline.yml --check --diff
+# 명시적 승인 뒤에만 실제 적용
+ansible-playbook -i inventory/hosts.local -e "wazuh_agent_authd_password=$(cat <secret_root>/wazuh/authd-password)" \
+  playbooks/wazuh-agent-baseline.yml
+```
+
+OPNsense 기존 `os-wazuh-agent`(Suricata `eve.json`만 켜져 있던 상태)의
+`syscheck`·`rootcheck` 확장은 `gitops/tools/wazuh-01/apply-opnsense.sh`가
+소유하며, manager로 향하는 NetworkPolicy 확장은 `gitops/apps/wazuh/network-policies.yaml`,
+cross-VLAN 방화벽 규칙은 `infra/opnsense/`가 소유한다.
+
 ## NTP source
 
 `NET-03`은 각 project VLAN에서 **해당 VLAN gateway의 UDP 123만** 허용한다. Rocky 기본 설정의 공개 pool은 차단되므로 그대로 두면 게스트가 영원히 동기화되지 않는다.

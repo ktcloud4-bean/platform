@@ -125,9 +125,15 @@ spec:
         - protocol: TCP
           port: 8443
 ---
-# Suricata alert를 보내는 OPNsense Wazuh Agent만 manager의 등록·수집 port로 들어온다.
-# NodePort Service는 externalTrafficPolicy=Local이라 source IP가 보존된다. OPNsense는
-# 자기 인터페이스 주소로 발신하므로 MGMT(10.10.10.1)와 PLATFORM(10.10.20.1) 두 주소만 연다.
+# Suricata alert를 보내는 OPNsense Wazuh Agent와 WAZUH-03의 6개 host agent만
+# manager의 등록·수집 port로 들어온다. NodePort Service는 externalTrafficPolicy=Local이라
+# source IP가 보존된다. OPNsense는 자기 인터페이스 주소로 발신하므로 MGMT(10.10.10.1)와
+# PLATFORM(10.10.20.1) 게이트웨이 두 주소를 그대로 둔다. 6개 host agent는 게이트웨이가
+# 아니라 실제 호스트 주소(docs/ip-plan.md 고정 배정)로 발신한다 — proxmox-01
+# 10.10.10.10, k3s-01 10.10.20.10, warpgate-01 10.10.30.10, netbird-01 10.10.40.10,
+# postgres-01 10.10.50.10, object-01 10.10.50.20. k3s-01은 manager와 같은 노드라
+# NodePort 자기 접속(hairpin) source IP가 다르게 관측되면 WAZUH-03 라이브 검증에서
+# 실제 관측값으로 이 목록을 갱신한다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -145,6 +151,18 @@ spec:
             cidr: 10.10.10.1/32
         - ipBlock:
             cidr: 10.10.20.1/32
+        - ipBlock:
+            cidr: 10.10.10.10/32
+        - ipBlock:
+            cidr: 10.10.20.10/32
+        - ipBlock:
+            cidr: 10.10.30.10/32
+        - ipBlock:
+            cidr: 10.10.40.10/32
+        - ipBlock:
+            cidr: 10.10.50.10/32
+        - ipBlock:
+            cidr: 10.10.50.20/32
       ports:
         - protocol: TCP
           port: 1514

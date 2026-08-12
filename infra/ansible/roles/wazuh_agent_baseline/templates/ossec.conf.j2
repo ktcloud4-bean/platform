@@ -1,0 +1,63 @@
+<!--
+  WAZUH-03: {{ inventory_hostname }} 최소 HIDS 기준선.
+  syscheck(최소 경로)·rootcheck만 켠다. syscollector·SCA·osquery·cis-cat·
+  localfile·active_response·command wodle은 이 파일에 없으므로 비활성이다.
+  ansible이 매 적용마다 이 파일 전체를 갈아 끼운다 — 수동 편집은 다음 적용에서
+  사라진다. enrollment는 auto가 아니라 agent-auth 1회 수동 실행으로 하므로
+  password를 여기 두지 않는다.
+-->
+<ossec_config>
+  <client>
+    <server>
+      <address>{{ wazuh_agent_manager_address }}</address>
+      <port>{{ wazuh_agent_manager_events_port }}</port>
+      <protocol>tcp</protocol>
+    </server>
+    <notify_time>10</notify_time>
+    <time-reconnect>60</time-reconnect>
+    <auto_restart>yes</auto_restart>
+    <crypto_method>aes</crypto_method>
+    <enrollment>
+      <enabled>no</enabled>
+    </enrollment>
+  </client>
+
+  <client_buffer>
+    <disabled>no</disabled>
+    <queue_size>5000</queue_size>
+    <events_per_second>500</events_per_second>
+  </client_buffer>
+
+  <rootcheck>
+    <disabled>no</disabled>
+    <check_files>yes</check_files>
+    <check_trojans>yes</check_trojans>
+    <check_dev>yes</check_dev>
+    <check_sys>yes</check_sys>
+    <check_pids>yes</check_pids>
+    <check_ports>yes</check_ports>
+    <check_if>yes</check_if>
+    <frequency>43200</frequency>
+    <rootkit_files>etc/shared/rootkit_files.txt</rootkit_files>
+    <rootkit_trojans>etc/shared/rootkit_trojans.txt</rootkit_trojans>
+    <skip_nfs>yes</skip_nfs>
+  </rootcheck>
+
+  <syscheck>
+    <disabled>no</disabled>
+    <frequency>43200</frequency>
+    <scan_on_start>yes</scan_on_start>
+    <auto_ignore frequency="10" timeframe="3600">no</auto_ignore>
+{% for dir in wazuh_agent_syscheck_directories %}
+    <directories check_all="yes" realtime="no" report_changes="no">{{ dir }}</directories>
+{% endfor %}
+    <skip_nfs>yes</skip_nfs>
+    <skip_dev>yes</skip_dev>
+    <skip_proc>yes</skip_proc>
+    <skip_sys>yes</skip_sys>
+  </syscheck>
+
+  <logging>
+    <log_format>plain</log_format>
+  </logging>
+</ossec_config>

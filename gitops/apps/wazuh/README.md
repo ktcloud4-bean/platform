@@ -529,3 +529,82 @@ Keycloak client를 제거한다. 사용자·MFA·`/platform-privileged` group·�
 5. `docs/ip-plan.md`의 `wazuh.imcherry5778.xyz` 행을 제거한다.
 6. indexer `_cluster/health`와 manager `statefulset/wazuh-manager-master` rollout이 rollback
    전후로 동일하게 Healthy인지 확인해 회귀가 없음을 판정한다.
+
+## WAZUH-03 host HIDS 확장
+
+`k3s-01`·`postgres-01`·`object-01`·`warpgate-01`·`netbird-01`·`proxmox-01` 6개
+Linux 대상에 최소 HIDS(syscheck+rootcheck) agent를 설치하고, OPNsense 기존
+`os-wazuh-agent`(WAZUH-01이 `suricata_eve_log`만 켠 상태)의 `syscheck`·`rootcheck`를
+켠다. agent 설치·ossec.conf는 `infra/ansible/roles/wazuh_agent_baseline`(README는
+`infra/ansible/README.md`)이 소유하고, 이 디렉터리는 6개 host agent가 manager
+NodePort로 들어오는 경계와 OPNsense 쪽 변경만 소유한다.
+
+### NetworkPolicy 확장
+
+`network-policies.yaml`의 `wazuh-manager-agent-ingress`가 기존 OPNsense 게이트웨이
+2개(`10.10.10.1/32`, `10.10.20.1/32`)에 6개 host agent의 실제 주소(`docs/ip-plan.md`
+고정 배정) 6개를 더한다. `k3s-01`(`10.10.20.10`)은 manager와 같은 노드라 자기
+자신에게 보내는 NodePort 트래픽이 OPNsense를 거치지 않고, 이 NetworkPolicy 판정
+경로가 hairpin에서 실제로 어떤 source IP로 보이는지는 라이브 적용 때 관측해
+목록을 필요하면 갱신한다(설계 당시엔 미확정, 완료 증거에 실측값을 남긴다).
+
+### OPNsense 방화벽 — `gitops/tools/wazuh-03/apply-firewall.sh`
+
+목적지는 모두 k3s-01(`10.10.20.10`)의 manager NodePort 둘(`31514`·`31515`)이며
+새 port alias `WAZUH03_AGENT_PORTS`(`NET04_WEB_PORTS`와 같은 패턴)로 규칙 하나당
+포트 하나만 적으면 되게 묶는다.
+
+| 소스 | 인터페이스 | 방식 |
+|---|---|---|
+| `proxmox-01`(`10.10.10.10`, MGMT/`lan`) | `lan` | 새 규칙 없음 — `lan`은 여전히 `Default allow LAN to any rule`(seq=1)이라 이미 통과 |
+| `warpgate-01`(`10.10.30.10`, ACCESS) | `opt3` | 새 exact PASS 1건(seq 1121) |
+| `netbird-01`(`10.10.40.10`, DMZ) | `opt4` | 새 exact PASS 1건(seq 1219) |
+| `postgres-01`+`object-01`(DATA) | `opt5` | 새 exact PASS 1건(seq 1313), source_net은 기존 `NET04_DATA_HOSTS` alias 재사용(신규 alias 없음) |
+| `k3s-01`(`10.10.20.10`, PLATFORM) | — | manager와 동일 호스트라 OPNsense를 거치지 않음 |
+
+세 규칙 모두 NET-04가 세운 자리(DNS·NTP·서비스 exact PASS 다음, `비공개·특수용
+IPv4 기본 차단·기록` 앞)에 들어간다. `apply-firewall.sh apply`는 alias·규칙을
+disabled로 stage해 의미값을 확인한 뒤에만 toggle+apply로 켠다. `rollback
+<복구-지점>`은 규칙 3건과 alias 1건을 역순으로 지운다.
+
+### OPNsense agent 자체 HIDS — `gitops/tools/wazuh-03/apply-agent-hids.sh`
+
+`GET /api/wazuhagent/settings/get`으로 확인한 이 플러그인의 스키마는 `rootcheck`·
+`syscheck` 각각 `enabled` 토글만 있고 감시 경로(`directories`) 필드가 없다 — WAZUH-01
+`apply-opnsense.sh`가 그동안 `0`으로만 다뤄온 이유가 바로 이 필드 자체가 세분화를
+지원하지 않기 때문이다. 그래서 이 스크립트는 `rootcheck.enabled`·`syscheck.enabled`만
+`1`로 바꾸고 `general`·`auth`·`logcollector`·`syscollector`·`active_response`는
+WAZUH-01이 이미 검증한 값을 그대로 다시 보낸다(authd password는
+`${KTC_SECRET_ROOT}/wazuh/authd-password` 재사용, 새 credential 없음). 실제 감시
+범위(플러그인 내부 기본 경로)는 이 파일이 통제할 수 없으므로 라이브 검증에서
+manager에 쌓인 FIM alert의 `syscheck.path`로 사후 확인하고 결과를 완료 증거에
+그대로 남긴다. `apply` 전에는 `general`·`auth`·`logcollector`·`syscollector`·
+`active_response`가 WAZUH-01 기준값과 정확히 같은지 먼저 assert해 실수로 다른
+상태 위에 덮어쓰지 않는다. `rollback`은 두 필드를 `0`으로 되돌려 WAZUH-01
+종료 상태를 복원한다.
+
+### 설치 순서
+
+1. `gitops/tools/wazuh-03/apply-firewall.sh apply`로 OPNsense 방화벽 alias·규칙
+   3건을 켠다(복구 지점을 기록해 둔다).
+2. immutable SHA의 `platform-root`·`wazuh` child로 NetworkPolicy 확장을 동기화한다
+   (`ARGO-ROOT` 잠금 절차).
+3. `infra/ansible/playbooks/wazuh-agent-baseline.yml`을 6개 대상에 적용한다
+   (`infra/ansible/README.md`의 Wazuh HIDS agent 기준선 절 참고).
+4. `gitops/tools/wazuh-03/apply-agent-hids.sh apply`로 OPNsense 자체 agent의
+   `rootcheck`·`syscheck`를 켠다.
+5. 검증(baseline scan·테스트 파일 변경 FIM alert·rootcheck policy check·7개 agent
+   active·D30/A90 재판정·Loki 복제본 0건)을 통과한 뒤에만 `platform-root`를
+   `main`으로 되돌리고 `ARGO-ROOT` 잠금을 푼다.
+
+### Rollback
+
+1. 6개 host agent를 대상에서 제거한다(패키지 제거, `/var/ossec` 삭제, manager에서
+   agent 등록 해제).
+2. `gitops/tools/wazuh-03/apply-agent-hids.sh rollback`으로 OPNsense agent의
+   `rootcheck`·`syscheck`를 `0`으로 되돌린다.
+3. `gitops/tools/wazuh-03/apply-firewall.sh rollback <복구-지점>`으로 alias·규칙
+   3건을 제거한다.
+4. `network-policies.yaml`의 6개 host `ipBlock`을 되돌린다.
+5. `platform-root`·`wazuh` child가 rollback 커밋의 `Synced/Healthy`인지, OPNsense
+   drift가 없는지 확인한다.

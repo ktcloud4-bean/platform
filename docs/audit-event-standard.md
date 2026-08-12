@@ -2,7 +2,7 @@
 
 - 소유 작업: `AUDIT-01`
 - 상위 결정: [ADR-0007](adr/0007-detection-and-observability-staging.md)
-- 구현 작업: `LOKI-01`, `WAZUH-01`
+- 구현 작업: `LOKI-01`, `WAZUH-01`, `WAZUH-03`
 - 용량 단일 원본: [자원 예산과 정지 기준](capacity-plan.md)
 
 이 문서는 Suricata, CrowdSec AppSec, Falco, Kubernetes, Vault, Keycloak, Pomerium,
@@ -122,6 +122,8 @@ WAL, cache, index와 collector buffer는 이 14 GiB에 기대어 k3s PVC 경계�
 | Warpgate | 인증 성공·실패, target 인가, session 시작·종료 metadata | 보안 | Wazuh 직접 `A90` | password/cookie/key, command argument, terminal/file recording 원문 |
 | Warpgate | systemd/service, protocol listener, storage·recording writer 오류 | 운영 | Loki `O7` | 감사 event 복제본 |
 | Warpgate | terminal/file recording blob | 민감 원문 | 중앙 `C0`; 기존 제품 local `audit_retention=90days` 이상으로 늘리지 않음 | blob 전체 |
+| Wazuh HIDS agent(`WAZUH-03`) | syscheck(FIM) 변경 탐지, rootcheck(rootkit·policy check) 결과 | 보안 | Wazuh 직접, custom `A90` rule ID 범위(`100100`~`100109`) 밖이라 index 분리 pipeline이 자동으로 기본 `D30` index에 넣는다 | `report_changes`(변경 diff 원문, private key 파일이 대상에 포함되어 비활성 고정), syscollector·SCA·osquery 인벤토리, active response·remote command |
+| Wazuh HIDS agent(`WAZUH-03`) | agent 기동·연결·buffer 상태 | 운영 | 수집하지 않음(`localfile` 미선언) | `LOKI-02`가 같은 호스트의 journald를 별도로 수집; 이 agent는 로그 수집기가 아니다 |
 
 ## 5. 소스별 필드와 상관 키
 
@@ -183,3 +185,19 @@ hash를 trace ID로 승격하지 않는다.
   16 GiB 상한을 만족해야 한다. `LOKI-01`·`OBS-01` 뒤 capacity gate가 이 placement를
   수용하지 못하면 배포를 중단한다.
 - active response, 방화벽 자동 차단과 credential rotation은 계속 비활성이다.
+
+### `WAZUH-03`
+
+- syscheck(FIM)·rootcheck만 켠다. 6개 host agent의 `ossec.conf`에는 `localfile`·
+  `syscollector`·SCA·osquery·cis-cat·command wodle·`active_response`가 없고, OPNsense
+  기존 agent도 이 두 모듈만 `0`에서 `1`로 바꾼다.
+- 이 이벤트는 위 표대로 custom `A90` rule ID 범위 밖이라 기본 `D30` index로 자동
+  라우팅된다. 별도 pipeline 변경은 없다.
+- Loki에는 FIM·rootcheck event 복제본이 0건이어야 한다. `LOKI-02`가 다루는 host
+  운영 로그(O7, `sshd`·`sudo`·systemd 실패·kernel)와 소스 자체가 겹치지 않는다 — 이
+  agent는 `localfile`을 선언하지 않아 로그를 읽지 않는다.
+- 배포로 늘어난 `D30`·`A90` 합산 실측 저장 증가량이 여전히 16 GiB 상한 안에 들어야
+  한다. 미달이면 syscheck 대상 경로를 host agent 쪽에서 더 좁힌다(OPNsense agent의
+  syscheck는 플러그인이 감시 경로를 노출하지 않아 이 축소 대상이 아니다).
+- `report_changes`(diff 원문 저장)는 켜지 않는다 — 대상 경로에 `postgres-01`
+  TLS private key처럼 원문을 저장소에 남기면 안 되는 파일이 섞여 있다.

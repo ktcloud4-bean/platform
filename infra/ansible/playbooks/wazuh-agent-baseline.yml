@@ -1,0 +1,11 @@
+---
+# infra/ansible/playbooks/wazuh-agent-baseline.yml
+# WAZUH-03: k3s-01·postgres-01·object-01·warpgate-01·netbird-01·proxmox-01에
+# 최소 HIDS(syscheck+rootcheck) Wazuh agent를 설치해 기존 manager(10.10.20.10:
+# 31514/31515)에 등록한다. wazuh_agent_authd_password는 실행 시 -e로만 준다.
+
+- name: Apply wazuh_agent_baseline to the 6-host fleet
+  hosts: wazuh_agent_fleet
+  become: true
+  roles:
+    - wazuh_agent_baseline
