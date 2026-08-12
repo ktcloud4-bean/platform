@@ -57,12 +57,13 @@
 # wazuh_agent_authd_password는 절대 인벤토리에 두지 않고 실행 시 -e로만 준다
 # (gitops/tools/wazuh-01/provision.sh가 이미 만든 저장소 밖 authd-password 재사용).
 # wazuh_agent_extra_syscheck_directories는 대상별 설정·인증서 경로만 최소로 담는다
-# (공백 없는 JSON 리스트 — INI 인벤토리는 공백으로 토큰을 나눈다).
+# (쉼표로만 구분한 문자열 — INI 인벤토리는 JSON/YAML 리스트 문법을 타입 변환하지
+# 않고 그대로 문자열로 남긴다는 것을 실측으로 확인했다. role이 split(',')로 나눈다).
 # proxmox-01만 Debian 13 물리 호스트라 ansible_user=root, 나머지 5대는 Rocky 9
 # ansible_user=rocky다.
-# proxmox-01 ansible_host=<docs/ip-plan.md의 proxmox-01 주소> ansible_user=root wazuh_agent_extra_syscheck_directories=["/etc/pve","/etc/network"]
-# k3s-01 ansible_host=<docs/ip-plan.md의 k3s-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=["/etc/rancher/k3s","/var/lib/rancher/k3s/server/tls","/var/lib/rancher/k3s/server/token"]
-# warpgate-01 ansible_host=<docs/ip-plan.md의 warpgate-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=["/etc/warpgate.yaml","/var/lib/warpgate-acme"]
-# netbird-01 ansible_host=<docs/ip-plan.md의 netbird-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=["/etc/netbird"]
-# postgres-01 ansible_host=<docs/ip-plan.md의 postgres-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=["/var/lib/pgsql/data/postgresql.conf","/var/lib/pgsql/data/pg_hba.conf","/var/lib/pgsql/data/server-ca.crt","/var/lib/pgsql/data/server-ca.key","/var/lib/pgsql/data/server.crt","/var/lib/pgsql/data/server.key"]
-# object-01 ansible_host=<docs/ip-plan.md의 object-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=["/etc/seaweedfs"]
+# proxmox-01 ansible_host=<docs/ip-plan.md의 proxmox-01 주소> ansible_user=root wazuh_agent_extra_syscheck_directories=/etc/pve,/etc/network
+# k3s-01 ansible_host=<docs/ip-plan.md의 k3s-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/etc/rancher/k3s,/var/lib/rancher/k3s/server/tls,/var/lib/rancher/k3s/server/token
+# warpgate-01 ansible_host=<docs/ip-plan.md의 warpgate-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/etc/warpgate.yaml,/var/lib/warpgate-acme
+# netbird-01 ansible_host=<docs/ip-plan.md의 netbird-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/etc/netbird
+# postgres-01 ansible_host=<docs/ip-plan.md의 postgres-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/var/lib/pgsql/data/postgresql.conf,/var/lib/pgsql/data/pg_hba.conf,/var/lib/pgsql/data/server-ca.crt,/var/lib/pgsql/data/server-ca.key,/var/lib/pgsql/data/server.crt,/var/lib/pgsql/data/server.key
+# object-01 ansible_host=<docs/ip-plan.md의 object-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/etc/seaweedfs

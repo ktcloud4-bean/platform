@@ -23,17 +23,11 @@
 
 - name: OS 계열 기본 신뢰 저장소 경로 결정
   ansible.builtin.set_fact:
-    wazuh_agent_os_trust_directories: >-
-      {{ ['/etc/pki/tls', '/etc/pki/ca-trust/source/anchors']
-         if ansible_facts.os_family == 'RedHat'
-         else ['/etc/ssl'] }}
+    wazuh_agent_os_trust_directories: "{{ ['/etc/pki/tls', '/etc/pki/ca-trust/source/anchors'] if ansible_facts.os_family == 'RedHat' else ['/etc/ssl'] }}"
 
 - name: syscheck 감시 경로 병합
   ansible.builtin.set_fact:
-    wazuh_agent_syscheck_directories: >-
-      {{ (wazuh_agent_base_syscheck_directories
-          + wazuh_agent_os_trust_directories
-          + wazuh_agent_extra_syscheck_directories) | unique }}
+    wazuh_agent_syscheck_directories: "{{ (wazuh_agent_base_syscheck_directories + wazuh_agent_os_trust_directories + (wazuh_agent_extra_syscheck_directories.split(',') if wazuh_agent_extra_syscheck_directories else [])) | unique }}"
 
 - name: ossec.conf 선언 (syscheck·rootcheck 외 모듈 없음)
   ansible.builtin.template:

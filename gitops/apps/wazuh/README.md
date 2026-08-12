@@ -567,6 +567,20 @@ IPv4 기본 차단·기록` 앞)에 들어간다. `apply-firewall.sh apply`는 a
 disabled로 stage해 의미값을 확인한 뒤에만 toggle+apply로 켠다. `rollback
 <복구-지점>`은 규칙 3건과 alias 1건을 역순으로 지운다.
 
+### WAZUH-01 rule 100130 결함 수정
+
+라이브 검증 중 6개 host agent의 syscheck alert가 계속 0건으로 나와 원인을 추적했다.
+`files/wazuh-01-d30-suricata.xml`의 rule `100130`(`<if_group>ossec</if_group>`, level 0)이
+"manager 자신의 기동·종료·연결 상태 message만 O7로 억제한다"는 의도였지만,
+`ruleset/rules/0015-ossec_rules.xml` 전체가 `<group name="ossec,">`로 감싸여 있어 agent
+연결·해제(rule 501/503~506)와 rootcheck(509+)·syscheck(550/553/554 등) 전부가 group
+"ossec"를 상속했다. 그 결과 이 rule이 신규 host agent의 FIM·rootcheck alert까지 전부
+level 0으로 침묵시키고 있었다(WAZUH-01/02는 rootcheck·syscheck를 켠 적이 없어 지금까지
+드러나지 않았다). `if_group`을 임시로 존재하지 않는 그룹으로 바꿔 rule 100130을 무력화한
+뒤 재현 확인했고(`rule 554 File added to the system` alert가 즉시 나타남), `<if_sid>502</if_sid>`
+("Manager started" 한 rule만 정확히 가리킴)로 좁혀 고쳤다. Kubernetes API audit(A90)
+라우팅과 Suricata D30 분류는 이 rule과 무관해 영향이 없다.
+
 ### OPNsense agent 자체 HIDS — `gitops/tools/wazuh-03/apply-agent-hids.sh`
 
 `GET /api/wazuhagent/settings/get`으로 확인한 이 플러그인의 스키마는 `rootcheck`·

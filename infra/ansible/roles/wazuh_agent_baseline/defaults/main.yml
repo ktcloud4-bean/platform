@@ -50,4 +50,7 @@ wazuh_agent_base_syscheck_directories:
   - /etc/sudoers.d
   - /etc/systemd/system
 
-wazuh_agent_extra_syscheck_directories: []
+# INI inventory는 JSON/YAML 리스트 문법을 문자열 그대로 남기고 타입 변환을 하지
+# 않는다(실측 확인). 그래서 이 값은 쉼표로만 구분한 문자열이고 tasks/main.yml이
+# split(',')로 리스트로 바꾼다.
+wazuh_agent_extra_syscheck_directories: ""
