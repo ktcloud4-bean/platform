@@ -193,7 +193,6 @@ spec:
           command: [/bin/bash, -ec]
           args:
             - |
-              install -d -m 0750 /wazuh-config-mount/etc
               install -m 0640 /vault/secrets/authd.pass /wazuh-config-mount/etc/authd.pass
               exec /init
           env:
