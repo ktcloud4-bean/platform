@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
     # WAZUH-04 merge 전 immutable live 검증 pointer. 최종 main 선언에는 남기지 않는다.
-    targetRevision: a2ce23bf016eeed580103ee717a3ef259935954f
+    targetRevision: 3794f6c054dd215a37dd9188c4c46843cccd0356
     path: gitops/apps/wazuh
   destination:
     server: https://kubernetes.default.svc
