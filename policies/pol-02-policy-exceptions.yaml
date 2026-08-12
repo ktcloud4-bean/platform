@@ -320,3 +320,74 @@ spec:
             - wazuh
           names:
             - wazuh-manager-master
+---
+apiVersion: kyverno.io/v2
+kind: PolicyException
+metadata:
+  name: pol-02-wazuh-04-relay-pod-run-as-non-root
+  namespace: kyverno
+  annotations:
+    pol-02.imcherry5778.xyz/owner: platform-operations
+    pol-02.imcherry5778.xyz/reason: >-
+      WAZUH-04 wazuh-04-relay-agent container runs the official wazuh-agent
+      image, whose s6-overlay init stage requires UID 0 regardless of PVC
+      usage (confirmed live: "/var/run/s6" mkdir fails as UID 999). This Pod
+      has no PersistentVolumeClaim and adds only the same seven capabilities
+      the wazuh-manager exception already allows.
+    pol-02.imcherry5778.xyz/review-trigger: wazuh-04-relay image digest, Linux capabilities, hostPath, or ServiceAccount change.
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  background: false
+  exceptions:
+    - policyName: pol-01-require-pod-run-as-non-root
+      ruleNames:
+        - require-pod-run-as-non-root
+  match:
+    any:
+      - resources:
+          kinds:
+            - Pod
+          namespaces:
+            - wazuh
+          names:
+            - wazuh-04-relay-*
+---
+apiVersion: kyverno.io/v2
+kind: PolicyException
+metadata:
+  name: pol-02-wazuh-04-relay-deployment-run-as-non-root
+  namespace: kyverno
+  annotations:
+    pol-02.imcherry5778.xyz/owner: platform-operations
+    pol-02.imcherry5778.xyz/reason: >-
+      WAZUH-04 wazuh-04-relay-agent container runs the official wazuh-agent
+      image, whose s6-overlay init stage requires UID 0 regardless of PVC
+      usage (confirmed live: "/var/run/s6" mkdir fails as UID 999). This Pod
+      has no PersistentVolumeClaim and adds only the same seven capabilities
+      the wazuh-manager exception already allows.
+    pol-02.imcherry5778.xyz/review-trigger: wazuh-04-relay image digest, Linux capabilities, hostPath, or ServiceAccount change.
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  background: false
+  exceptions:
+    - policyName: pol-01-require-pod-run-as-non-root
+      ruleNames:
+        - autogen-require-pod-run-as-non-root
+  match:
+    any:
+      - resources:
+          kinds:
+            - Deployment
+          namespaces:
+            - wazuh
+          names:
+            - wazuh-04-relay
+      - resources:
+          kinds:
+            - ReplicaSet
+          namespaces:
+            - wazuh
+          names:
+            - wazuh-04-relay-*

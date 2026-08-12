@@ -17,6 +17,13 @@
 # NetworkPolicy는 추가하지 않는다 — wazuh-internal·wazuh-dns-egress·wazuh-vault-egress가
 # 이미 `podSelector: {}`로 wazuh 네임스페이스 전체에 적용돼 이 Pod도 자동으로
 # manager의 1514/1515, DNS, Vault에 닿는다.
+#
+# wazuh-04-relay-agent container는 wazuh-agent 이미지의 s6-overlay 초기화 자체가
+# UID 0을 요구해(PVC 유무와 무관한 이미지 구조적 요구사항, "/var/run/s6" mkdir
+# 실패를 라이브로 확인) UID 999로는 기동이 안 된다. wazuh-manager가 이미 가진
+# 것과 같은 이유·같은 형태의 policies/pol-02-policy-exceptions.yaml
+# PolicyException(pol-02-wazuh-04-relay-*-run-as-non-root)이 이 Pod 하나만 좁게
+# pol-01-require-pod-run-as-non-root에서 뺀다.
 apiVersion: v1
 kind: Service
 metadata:
@@ -61,13 +68,13 @@ spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
       securityContext:
-        # 이 Pod는 manager와 달리 PVC(영구 데이터)가 없어 CHOWN으로 복원할 대상이
-        # 없다. wazuh-agent 이미지의 wazuh 사용자는 UID/GID 999다 — pol-01의
-        # baseline(runAsNonRoot 필수)을 그대로 만족한다.
+        # wazuh-agent 이미지는 s6-overlay 초기화 단계(/var/run/s6 mkdir)에서 UID 0을
+        # 요구한다는 것을 라이브로 확인했다 — non-root(999)로는 PVC 유무와 무관하게
+        # 기동 자체가 안 된다. pol-02-wazuh-04-relay-*-run-as-non-root
+        # PolicyException(policies/pol-02-policy-exceptions.yaml)이 이 Pod만 좁게
+        # pol-01-require-pod-run-as-non-root에서 뺀다 — wazuh-manager가 이미 가진
+        # 것과 같은 종류의, 같은 근거(업스트림 이미지가 UID 0을 요구)의 예외다.
         fsGroup: 999
-        runAsNonRoot: true
-        runAsUser: 999
-        runAsGroup: 999
         seccompProfile:
           type: RuntimeDefault
       initContainers:
@@ -190,12 +197,10 @@ spec:
         - name: wazuh-04-relay-agent
           image: docker.io/wazuh/wazuh-agent:4.14.7@sha256:460758c8de2a6227818d5e415c514199e77179f5bbaec77aca5c246c99932ed2
           imagePullPolicy: IfNotPresent
-          # /wazuh-config-mount/etc는 ConfigMap subPath가 만드는 합성 디렉터리라
-          # fsGroup이 적용되지 않아(non-root라 여기 쓰기가 막힘을 라이브로 확인,
-          # manager는 root라 우연히 통과했을 뿐이다) authd.pass를 거기 두지 않는다.
-          # 대신 이미지의 0-wazuh-init 스크립트가 지원하는 WAZUH_REGISTRATION_PASSWORD를
-          # shell에서 export한다 — Pod spec에는 값이 남지 않고, /var/ossec/etc는
-          # 이미 wazuh:wazuh group-writable이라 그 스크립트의 파일 쓰기가 그대로 된다.
+          # authd.pass를 /wazuh-config-mount/etc(ConfigMap subPath가 만드는
+          # 디렉터리)에 두지 않고, 이미지의 0-wazuh-init 스크립트가 지원하는
+          # WAZUH_REGISTRATION_PASSWORD를 shell에서 export한다 — Pod spec에는
+          # 값이 남지 않는다.
           command: [/bin/bash, -ec]
           args:
             - |
@@ -215,14 +220,14 @@ spec:
             - name: WAZUH_AGENT_GROUP
               value: default
           securityContext:
-            # manager와 달리 이 Pod는 PVC가 없어 CHOWN으로 복원할 permanent data가
-            # 없다. pol-01-require-pod-run-as-non-root(클러스터 baseline)을
-            # 만족하는 wazuh 사용자(UID/GID 999, 위 pod securityContext)로 바로
-            # 시작한다 — 실패하면 어떤 구체적 동작이 root를 요구하는지 라이브
-            # 에러로 확인한 뒤에만 필요한 만큼만 되돌린다.
+            # wazuh-agent 이미지는 s6-overlay 초기화 단계에서 UID 0을 요구한다
+            # ("/var/run/s6" mkdir 실패를 라이브로 확인 — PVC 유무와 무관한 이미지
+            # 구조적 요구사항). upstream manager와 같은 이유로 같은 7개
+            # capability만 추가한다.
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
+              add: [CHOWN, DAC_OVERRIDE, FOWNER, KILL, SETGID, SETUID, SYS_CHROOT]
             privileged: false
             readOnlyRootFilesystem: false
             seccompProfile:
