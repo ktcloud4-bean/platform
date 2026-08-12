@@ -220,13 +220,41 @@ echo "Window=OPEN start=${window_start_iso} d30_start_bytes=${d30_start_bytes} a
 
 # ---------------------------------------------------------------------------
 # 증거: 테스트 파일 변경 1건의 FIM alert (baseline scan 완료를 함께 증명)
+#
+# wazuh-agent를 systemctl로 재시작해 유발하는 scan_on_start는 실측 결과 새 파일을
+# fim.db에 기록만 하고 "added" alert를 보내지 않았다(daemon 재시작 직후의 최초 스캔은
+# diff 이벤트를 내지 않는 것으로 보인다). 이미 떠 있는 agent에 Manager API
+# `PUT /syscheck?agents_list=<id>`로 즉시 재스캔을 요청하는 방식만 실측에서 정상
+# 동작했다 — 이 경로가 실제 운영 중 rescan(scheduled frequency 도달 시)과 같은
+# 코드 경로이기도 하다.
 # ---------------------------------------------------------------------------
+apipass_file=${secret_dir}/api-password
+[[ -f ${apipass_file} && ! -L ${apipass_file} ]] \
+  || fail fim 'Manager API password 입력이 없다(provision.sh가 만든 api-password 필요).'
+fim_agent_id=$(grep -A1 "Name: ${fim_test_host_name}[^A-Za-z0-9._-]" <<<"${agent_list_raw}" \
+  | head -1 | sed -n 's/^ *ID: \([0-9]\+\),.*/\1/p')
+[[ ${fim_agent_id} =~ ^[0-9]+$ ]] \
+  || fail fim "${fim_test_host_name}의 agent ID를 agent_control 출력에서 읽지 못했다."
+
 ssh "${ssh_options[@]}" "${k3s_host}" \
   "sudo -n bash -c 'printf \"# wazuh-03 fim test marker\\n\" > ${fim_test_path} && chmod 0440 ${fim_test_path}'" \
   || fail fim "${fim_test_host_name}에 테스트 파일을 만들지 못했다: ${fim_test_path}"
-ssh "${ssh_options[@]}" "${k3s_host}" 'sudo -n systemctl restart wazuh-agent' \
-  || fail fim "${fim_test_host_name}의 wazuh-agent 재시작에 실패했다(즉시 재스캔 유발용)."
 echo "FimTestFile=CREATED host=${fim_test_host_name} path=${fim_test_path}"
+
+trigger_syscheck_scan() {
+  local apipass token_json token scan_json
+  apipass=$(cat "${apipass_file}")
+  token_json=$(manager_exec curl -s -k -u "wazuh-01-api:${apipass}" \
+    -X POST 'https://localhost:55000/security/user/authenticate?raw=false') || return 1
+  token=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["token"])' <<<"${token_json}" 2>/dev/null) || return 1
+  [[ -n ${token} ]] || return 1
+  scan_json=$(manager_exec curl -s -k -H "Authorization: Bearer ${token}" \
+    -X PUT "https://localhost:55000/syscheck?agents_list=${fim_agent_id}") || return 1
+  jq -e --arg id "${fim_agent_id}" '.data.affected_items | index($id) != null' <<<"${scan_json}" >/dev/null
+}
+trigger_syscheck_scan \
+  || fail fim "${fim_test_host_name}(agent ${fim_agent_id})의 on-demand syscheck 트리거에 실패했다."
+echo "SyscheckTrigger=PASS agent_id=${fim_agent_id}"
 
 fim_query="rule.groups:syscheck AND agent.name:\"${fim_test_host_name}\" AND syscheck.path:\"${fim_test_path}\""
 fim_hits=0
@@ -242,7 +270,7 @@ echo "FimDetection=PASS hits=${fim_hits} query='${fim_query}'"
 
 # 정리: 테스트 파일을 지우고 삭제도 탐지되는지 함께 확인한다(부가 증거, 실패해도 gate는 아님).
 ssh "${ssh_options[@]}" "${k3s_host}" "sudo -n rm -f ${fim_test_path}" || true
-ssh "${ssh_options[@]}" "${k3s_host}" 'sudo -n systemctl restart wazuh-agent' || true
+trigger_syscheck_scan || true
 
 # ---------------------------------------------------------------------------
 # 창이 끝날 때까지 기다린 뒤 D30/A90 저장 증가량을 한 번 측정한다
