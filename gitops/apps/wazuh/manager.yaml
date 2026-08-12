@@ -6,11 +6,14 @@
 #   emptyDir에만 렌더한다. upstream의 5개 평문 Secret은 사용하지 않는다.
 # - Service type LoadBalancer -> API는 ClusterIP, agent 수집·등록만 NodePort로 노출한다.
 # - Kubernetes API audit 파일을 read-only hostPath로 붙여 소스에서 직접 수집한다.
-#   WAZUH-04에서 Keycloak·Pomerium·Vault·Falco·CrowdSec AppSec Pod stdout을
-#   /var/log/containers·/var/log/pods hostPath로 함께 tail하는 안을 시도했으나,
-#   `pol-02-wazuh-root-manager-baseline`이 이 UID 0 pod에 k3s audit 로그 hostPath
-#   하나만 허용해 admission에서 막혔다(FailedCreate). 정책을 넓힐지 다른 수집 경로를
-#   쓸지 결정하기 전까지 이 mount는 추가하지 않는다.
+#   WAZUH-04에서 Keycloak·Pomerium·Vault·Falco·CrowdSec AppSec Pod stdout도
+#   같은 방식(hostPath로 /var/log/containers·/var/log/pods를 붙여 직접 tail)으로
+#   수집하려 했으나, `pol-02-wazuh-root-manager-baseline`이 이 UID 0 pod에 k3s
+#   audit 로그 hostPath 한 곳만 허용해 admission에서 막혔다(FailedCreate, 실제
+#   outage 발생). 이 노드의 다른 모든 Pod 로그까지 UID 0 프로세스가 읽게 되는
+#   실질적 권한 확장이라 정책을 넓히는 대신, 이미 hostPath 없이 Kubernetes API로만
+#   Pod 로그를 읽는 Alloy(gitops/apps/loki)가 5개 소스 중 필요한 라인만 골라 새
+#   syslog 포트(1516)로 forward하는 방식으로 다시 설계했다.
 # - manager container는 upstream과 같이 UID 0으로 동작한다. 이 예외는 policies/의
 #   `pol-02-wazuh-*` PolicyException과 보상 Enforce 정책이 좁게 소유한다.
 apiVersion: v1
@@ -30,6 +33,9 @@ spec:
     - name: api
       port: 55000
       targetPort: api
+    - name: syslog
+      port: 1516
+      targetPort: syslog
 ---
 apiVersion: v1
 kind: Service
@@ -182,6 +188,8 @@ spec:
               containerPort: 1515
             - name: api
               containerPort: 55000
+            - name: syslog
+              containerPort: 1516
           startupProbe:
             tcpSocket:
               port: events
