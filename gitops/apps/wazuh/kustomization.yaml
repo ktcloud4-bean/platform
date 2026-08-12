@@ -35,6 +35,9 @@ configMapGenerator:
     files:
       - wazuh-01-a90-k8s-audit.xml=files/wazuh-01-a90-k8s-audit.xml
       - wazuh-01-d30-suricata.xml=files/wazuh-01-d30-suricata.xml
+      - wazuh-04-a90-idp-access.xml=files/wazuh-04-a90-idp-access.xml
+      - wazuh-04-d30-waf-runtime.xml=files/wazuh-04-d30-waf-runtime.xml
+      - wazuh-04-decoders.xml=files/wazuh-04-decoders.xml
   - name: wazuh-manager-cont-init
     namespace: wazuh
     files:

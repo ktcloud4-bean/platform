@@ -267,6 +267,16 @@ OPNsense 기존 `os-wazuh-agent`(Suricata `eve.json`만 켜져 있던 상태)의
 소유하며, manager로 향하는 NetworkPolicy 확장은 `gitops/apps/wazuh/network-policies.yaml`,
 cross-VLAN 방화벽 규칙은 `infra/opnsense/`가 소유한다.
 
+### WAZUH-04 Warpgate 감사 로그(journald)
+
+`wazuh_agent_localfile_journald_unit`(기본값 빈 문자열, `warpgate-01`만
+`warpgate.service`로 설정)이 있는 대상만 `<localfile log_format="journald">`
+하나를 더 갖는다. 나머지 5대는 여전히 localfile 0건이다. Warpgate가 journald에
+남기는 `_type="UserAuthenticated1"` 등 감사 event를 manager의
+`wazuh-04-warpgate-audit` decoder(`gitops/apps/wazuh/files/wazuh-04-decoders.xml`)가
+처리한다. `LOKI-02`가 다룰 host O7(`sshd`·`sudo`·systemd 실패·kernel)과는
+겹치지 않는다 — 이 unit 필터는 `warpgate.service` 하나로만 좁힌다.
+
 ## NTP source
 
 `NET-03`은 각 project VLAN에서 **해당 VLAN gateway의 UDP 123만** 허용한다. Rocky 기본 설정의 공개 pool은 차단되므로 그대로 두면 게스트가 영원히 동기화되지 않는다.

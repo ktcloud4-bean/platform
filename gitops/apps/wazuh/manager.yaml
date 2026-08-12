@@ -6,6 +6,10 @@
 #   emptyDir에만 렌더한다. upstream의 5개 평문 Secret은 사용하지 않는다.
 # - Service type LoadBalancer -> API는 ClusterIP, agent 수집·등록만 NodePort로 노출한다.
 # - Kubernetes API audit 파일을 read-only hostPath로 붙여 소스에서 직접 수집한다.
+# - WAZUH-04: Keycloak·Pomerium·Vault·Falco·CrowdSec AppSec 5개 Pod의 stdout을
+#   /var/log/containers(symlink)·/var/log/pods(실제 파일)를 함께 read-only hostPath로
+#   붙여 tail한다. symlink 대상이 /var/log/pods 안에 있어 두 경로를 같은 이름으로 함께
+#   마운트하지 않으면 컨테이너 안에서 끊긴 링크가 된다.
 # - manager container는 upstream과 같이 UID 0으로 동작한다. 이 예외는 policies/의
 #   `pol-02-wazuh-*` PolicyException과 보상 Enforce 정책이 좁게 소유한다.
 apiVersion: v1
@@ -200,6 +204,18 @@ spec:
               mountPath: /wazuh-config-mount/etc/rules/wazuh-01-d30-suricata.xml
               subPath: wazuh-01-d30-suricata.xml
               readOnly: true
+            - name: wazuh-rules
+              mountPath: /wazuh-config-mount/etc/rules/wazuh-04-a90-idp-access.xml
+              subPath: wazuh-04-a90-idp-access.xml
+              readOnly: true
+            - name: wazuh-rules
+              mountPath: /wazuh-config-mount/etc/rules/wazuh-04-d30-waf-runtime.xml
+              subPath: wazuh-04-d30-waf-runtime.xml
+              readOnly: true
+            - name: wazuh-rules
+              mountPath: /wazuh-config-mount/etc/decoders/wazuh-04-decoders.xml
+              subPath: wazuh-04-decoders.xml
+              readOnly: true
             - name: wazuh-cont-init
               mountPath: /etc/cont-init.d/3-wazuh-01-index-routing
               subPath: 3-wazuh-01-index-routing
@@ -209,6 +225,12 @@ spec:
               readOnly: true
             - name: k3s-audit
               mountPath: /var/log/k3s-audit
+              readOnly: true
+            - name: container-logs
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: pod-logs
+              mountPath: /var/log/pods
               readOnly: true
             - name: wazuh-manager-master
               mountPath: /var/ossec/api/configuration
@@ -272,6 +294,14 @@ spec:
           hostPath:
             path: /var/log/k3s-audit
             type: DirectoryOrCreate
+        - name: container-logs
+          hostPath:
+            path: /var/log/containers
+            type: Directory
+        - name: pod-logs
+          hostPath:
+            path: /var/log/pods
+            type: Directory
         - name: vault-token
           projected:
             sources:
