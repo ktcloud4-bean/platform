@@ -84,3 +84,49 @@ silence 변경 `/platform-privileged` 경계(`gitops/apps/pomerium/pomerium-conf
 - `TLSCertificateExpiringSoon`: 실측 잔여일(약 79일)이 넘도록 cutoff를 14일에서 85일로 늘린
   같은 임시 PrometheusRule.
 - `VeleroBackupFailed`: 위 안전한 PartiallyFailed backup 재현.
+
+### 2026-08-12 라이브 완료 증거
+
+immutable root `7effa4bbab1c21d314489e0eb1fa05e0d9b9b99d`와 child
+`e7e55c55fe2ebf1b5c6eb98708cf1ccf55f3aa2c`에서 판정했다.
+
+| acceptance | 라이브 증거 | 판정 |
+|---|---|---|
+| Argo | root·child 모두 해당 SHA에서 `Synced/Healthy` | 통과 |
+| 신규 target | `up{job="node-exporter-root"}`(k3s-01:9101)·`up{job="obs-13-receiver"}` 모두 1 | 통과 |
+| 배포 직후 baseline | `ALERTS{alertname=~"NodeDown\|RootFilesystemUsage(Warning\|Critical)\|TLSCertificateExpiringSoon\|VeleroBackupFailed"}` 0건 | 통과 |
+| `NodeDown` | netbird-01 `node_exporter` 정지 5분 후 firing → Alertmanager active → `obs-13-receiver` 수신(`RECEIVED alertname=NodeDown ... status=firing`), 재기동 뒤 resolved 수신 | 통과 |
+| `RootFilesystemUsageWarning`/`Critical` | 임시 rule(임계값 1%)로 fleet 5대+k3s-01 실측값이 10분/5분 뒤 firing → active → 수신 다건 확인 | 통과 |
+| `TLSCertificateExpiringSoon` | 임시 rule(cutoff 85일)로 실측 잔여 약 79일이 10분 뒤 firing → active → 수신 확인 | 통과 |
+| `VeleroBackupFailed` | 안전한 `includedNamespaces` 존재하지 않는 backup으로 `velero_backup_partial_failure_total` 증가 → firing → active(라우팅 `obs-13-receiver` 확인) → 수신(`RECEIVED alertname=VeleroBackupFailed severity=critical status=firing`·`status=resolved`) 확인. 같은 immutable SHA, Alertmanager PVC 재생성 직후 실측(아래 "Alertmanager 발송 지연 이상" 참고) | 통과 |
+| cleanup 후 복귀 | 유발한 조건 원복(node_exporter 재기동, 임시 rule·backup 삭제) 뒤 `ALERTS` 다시 0건 | 통과 |
+| 용량 | `prometheus_tsdb_head_series` 38,659→45,391; available RAM 14,223,941,632→13,773,803,520 bytes(swap 0); PVC 선언 합계 119,319,560,192 bytes 불변(OBS-13은 신규 PVC 없음); guest root 여유 77% 불변 | 통과 |
+| rollback | 검증 뒤 `platform-root`를 main SHA `f7ea23546e67b2e85c2603db6769febb787ac9b8`로 복귀, `platform-root`·`obs` 모두 `Synced/Healthy` | 통과 |
+
+### Alertmanager 발송 지연 이상과 조치
+
+`VeleroBackupFailed`만 유독 Prometheus firing과 Alertmanager routing(`/api/v2/alerts`가
+`receivers: [obs-13-receiver]`로 정확히 보여줌)까지는 정상인데 실제 webhook 발송
+(`alertmanager_notifications_total{integration="webhook"}`)이 15분 넘게 단 한 번도 시도되지
+않는 현상을 두 번의 독립된 clean 검증에서 재현했다. Alertmanager pod 재시작으로는 풀리지
+않았다. 원인은 검증 준비 단계에서 Velero 실패 metric 동작을 확인하려고 같은
+namespace=velero·alertname=VeleroBackupFailed 조합으로 수동 테스트를 여러 번 반복한 것이
+Alertmanager PVC(`alertmanager-obs-alertmanager-db-*`, silence·notification log 저장, 실제
+silence는 0건)에 이 fingerprint 전용의 이상 상태를 남긴 것으로 보인다. Alertmanager
+StatefulSet의 PVC를 삭제하고(`kubectl delete pvc` → 자동 재생성, 삭제 시점 저장된 silence
+0건이라 손실 없음) pod를 재기동하자 같은 fingerprint가 즉시 정상 발송됐다. 향후 이 receiver의
+alertname을 대상으로 반복 수동 테스트가 필요하면 라이브 verify 직전에 몰아서 하지 말고
+검증 자체와 분리하는 편이 안전하다.
+
+## Rollback
+
+- `gitops/apps/obs/alerting-rules.yaml`(PrometheusRule 4종), `alerting-receiver.yaml`
+  (obs-13-receiver Deployment/Service/ServiceMonitor), `monitoring.yaml`의
+  `node-exporter-root-k3s01` ScrapeConfig, `network-policies.yaml`의 k3s-01 port 9101
+  egress 한 줄, `values-kube-prometheus-stack-01.yaml`의 Alertmanager
+  `obs-13-receiver` route/receiver를 제거하면 `obs` Application이 자동으로 원복한다.
+- Ansible: k3s-01의 host-level node_exporter(port 9101)는
+  `infra/ansible/playbooks/node-exporter-baseline.yml`의 `node_exporter_root_k3s01` play
+  대상에서 제외하거나 `systemctl disable --now node_exporter`로 정지한다.
+- 라이브 검증 중 임시로 만든 `obs-13-verify-thresholds` PrometheusRule, `obs-13-verify-backup`
+  Backup은 git 밖 ad-hoc 객체라 각 검증 세션의 trap이 즉시 정리하며 최종 선언에 남지 않는다.
