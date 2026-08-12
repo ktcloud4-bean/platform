@@ -253,21 +253,29 @@ prom_query() {
 
 readonly alertnames='NodeDown|RootFilesystemUsageWarning|RootFilesystemUsageCritical|TLSCertificateExpiringSoon|VeleroBackupFailed'
 
-echo '== 신규 target up =='
-result=$(prom_query 'up{job="node-exporter-root"}')
-python3 -c "
+echo '== 신규 target up (첫 scrape 대기, 최대 90s) =='
+wait_target_up() {
+  local query=$1 min_count=$2 label=$3 ok=false
+  for _ in $(seq 1 18); do
+    result=$(prom_query "${query}" || true)
+    if python3 -c "
 import json,sys
-d=json.loads(sys.stdin.read())
-r=d['data']['result']
-assert len(r)==1 and r[0]['value'][1]=='1', r
-" <<<"${result}" || fail metrics 'node-exporter-root(k3s-01:9101) target up=1이 아니다.'
-result=$(prom_query 'up{job="obs-13-receiver"}')
-python3 -c "
-import json,sys
-d=json.loads(sys.stdin.read())
-r=d['data']['result']
-assert len(r)>=1 and all(v['value'][1]=='1' for v in r), r
-" <<<"${result}" || fail metrics 'obs-13-receiver target up=1이 아니다.'
+try:
+    d=json.loads(sys.stdin.read())
+    r=d['data']['result']
+    sys.exit(0 if len(r)>=${min_count} and all(v['value'][1]=='1' for v in r) else 1)
+except Exception:
+    sys.exit(1)
+" <<<"${result}"; then
+      ok=true
+      break
+    fi
+    sleep 5
+  done
+  [[ ${ok} == true ]] || fail metrics "${label} target up=1이 되지 않았다."
+}
+wait_target_up 'up{job="node-exporter-root"}' 1 'node-exporter-root(k3s-01:9101)'
+wait_target_up 'up{job="obs-13-receiver"}' 1 'obs-13-receiver'
 echo 'NewTargets=PASS node-exporter-root obs-13-receiver'
 
 echo '== 배포 직후 baseline 0 firing =='
