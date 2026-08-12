@@ -707,10 +707,10 @@ data:
       stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
     }
 
-    # WAZUH-04: falco의 raw JSON rule-match 라인(O7 파이프라인이 위에서 이미
-    # falco_security_json으로 drop하는 바로 그 라인)만 골라 wazuh syslog 경로로 보낸다.
-    # hostPath 없이 Alloy가 이미 K8s API로 읽고 있는 같은 스트림을 두 번째 forward_to로
-    # 분기하는 것뿐이라 wazuh-manager에는 k3s-audit 외 hostPath를 추가하지 않는다.
+    // WAZUH-04: falco의 raw JSON rule-match 라인(O7 파이프라인이 위에서 이미
+    // falco_security_json으로 drop하는 바로 그 라인)만 골라 wazuh syslog 경로로 보낸다.
+    // hostPath 없이 Alloy가 이미 K8s API로 읽고 있는 같은 스트림을 두 번째 forward_to로
+    // 분기하는 것뿐이라 wazuh-manager에는 k3s-audit 외 hostPath를 추가하지 않는다.
     loki.process "falco_wazuh" {
       forward_to = [otelcol.receiver.loki.wazuh.receiver]
       stage.regex {
@@ -773,8 +773,8 @@ data:
       stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
     }
 
-    # WAZUH-04: pomerium authorize 서비스 라인만 골라낸다. "service":"authorize" marker는
-    # wazuh-04-decoders.xml의 wazuh-04-pomerium-authorize prematch와 동일하다.
+    // WAZUH-04: pomerium authorize 서비스 라인만 골라낸다. "service":"authorize" marker는
+    // wazuh-04-decoders.xml의 wazuh-04-pomerium-authorize prematch와 동일하다.
     loki.process "pomerium_wazuh" {
       forward_to = [otelcol.receiver.loki.wazuh.receiver]
       stage.regex {
@@ -822,8 +822,8 @@ data:
       stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
     }
 
-    # WAZUH-04: vault audit(raw JSON) 라인만 골라낸다. O7 파이프라인 위쪽의
-    # vault_audit_json drop과 정반대 선택이다.
+    // WAZUH-04: vault audit(raw JSON) 라인만 골라낸다. O7 파이프라인 위쪽의
+    // vault_audit_json drop과 정반대 선택이다.
     loki.process "vault_wazuh" {
       forward_to = [otelcol.receiver.loki.wazuh.receiver]
       stage.regex {
@@ -871,8 +871,8 @@ data:
       stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
     }
 
-    # WAZUH-04: org.keycloak.events 라인만 골라낸다. O7 파이프라인의
-    # keycloak_security_event drop과 정반대 선택이다.
+    // WAZUH-04: org.keycloak.events 라인만 골라낸다. O7 파이프라인의
+    // keycloak_security_event drop과 정반대 선택이다.
     loki.process "keycloak_wazuh" {
       forward_to = [otelcol.receiver.loki.wazuh.receiver]
       stage.regex {
@@ -885,9 +885,9 @@ data:
       }
     }
 
-    # WAZUH-04: CrowdSec AppSec는 O7/Loki 대상이 아니라 여기서 처음 수집한다.
-    # WAF block 라인만 골라 wazuh-04-d30-waf-runtime.xml 100122가 보는 것과 같은
-    # msg="WAF block: " marker로 필터한다.
+    // WAZUH-04: CrowdSec AppSec는 O7/Loki 대상이 아니라 여기서 처음 수집한다.
+    // WAF block 라인만 골라 wazuh-04-d30-waf-runtime.xml 100122가 보는 것과 같은
+    // msg="WAF block: " marker로 필터한다.
     discovery.relabel "crowdsec_appsec" {
       targets = discovery.kubernetes.pods.targets
       rule {
@@ -1004,13 +1004,13 @@ data:
       stage.label_keep { values = ["cluster", "namespace", "app", "container", "level", "event_class", "retention"] }
     }
 
-    # WAZUH-04: 위 5개 *_wazuh tap이 골라낸 라인을 wazuh-manager의 syslog remote
-    # listener(포트 1516, gitops/apps/wazuh)로 forward한다. Alloy는 hostPath 없이
-    # Kubernetes API로만 Pod 로그를 읽으므로(gitops/apps/loki/README.md), UID 0
-    # wazuh-manager Pod의 host 파일시스템 접근 범위를 넓히지 않고도 5개 소스를
-    # 온보딩할 수 있다. otelcol.receiver.loki가 Loki entry(라벨+라인)를 OTel
-    # LogRecord로 바꾸면(라인은 body, 라벨은 attributes) transform이 wazuh 쪽
-    # decoder가 읽는 필드(message/appname/hostname)로 다시 매핑한다.
+    // WAZUH-04: 위 5개 *_wazuh tap이 골라낸 라인을 wazuh-manager의 syslog remote
+    // listener(포트 1516, gitops/apps/wazuh)로 forward한다. Alloy는 hostPath 없이
+    // Kubernetes API로만 Pod 로그를 읽으므로(gitops/apps/loki/README.md), UID 0
+    // wazuh-manager Pod의 host 파일시스템 접근 범위를 넓히지 않고도 5개 소스를
+    // 온보딩할 수 있다. otelcol.receiver.loki가 Loki entry(라벨+라인)를 OTel
+    // LogRecord로 바꾸면(라인은 body, 라벨은 attributes) transform이 wazuh 쪽
+    // decoder가 읽는 필드(message/appname/hostname)로 다시 매핑한다.
     otelcol.receiver.loki "wazuh" {
       output {
         logs = [otelcol.processor.transform.wazuh_syslog.input]
@@ -1151,7 +1151,7 @@ spec:
     metadata:
       annotations:
         kubectl.kubernetes.io/default-container: alloy
-        checksum/config: ef3e0c39c8708267f80f25dbf93adbb591b90401803054f56ef97bd65456ae0
+        checksum/config: 182c9d90bfdb2f5fcd12e4e95602f53c8a7c61361925c6b432d54e8271a0f5c
       labels:
         app.kubernetes.io/name: alloy
         app.kubernetes.io/instance: alloy
@@ -1171,7 +1171,7 @@ spec:
             - --server.http.listen-addr=0.0.0.0:12345
             - --server.http.ui-path-prefix=/
             - --disable-reporting
-            - --stability.level=generally-available
+            - --stability.level=public-preview
           env:
             - name: ALLOY_DEPLOY_MODE
               value: "helm"
