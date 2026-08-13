@@ -47,6 +47,19 @@ seaweedfs_volume_port: 8080
 seaweedfs_volume_grpc_port: 18080
 seaweedfs_filer_port: 8888
 seaweedfs_filer_grpc_port: 18888
+
+# S3-02: weed admin 웹 UI. filer(loopback 전용, 변경 없음)와 달리 관리 콘솔이라
+# 자체 로그인·TLS를 갖는다. -ip.bind 옵션이 없어 항상 0.0.0.0으로 듣지만,
+# systemd IPAddressAllow와 OPNsense PF가 k3s-01(Pomerium) 하나로만 도달을 제한한다.
+seaweedfs_admin_port: 23646
+seaweedfs_admin_grpc_port: 0
+seaweedfs_admin_dir: "{{ seaweedfs_data_dir }}/admin"
+seaweedfs_admin_allowed_sources:
+  - "10.10.20.10/32"
+seaweedfs_admin_user: "admin"
+# 저장소 밖 extra-vars로만 주입한다. 빈 값이면 role이 실패한다(평문 미인증 관리
+# 콘솔을 만들지 않기 위해).
+seaweedfs_admin_password: ""
 # 기존 collection 10개에 더해 REG-01 Harbor가 30GB volume 5개까지 사용할 수 있도록
 # 승인된 slot이다. max는 예약 용량이나 quota가 아니며 minFreeSpace가 디스크 하한을 지킨다.
 seaweedfs_volume_max_count: 15

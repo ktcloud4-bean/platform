@@ -325,7 +325,7 @@ state checksum 2개와 active lock 0개가 남았다. remote backend `validate`�
 | `AWS-ID-02 DONE` | 단일 AWS 계정의 Keycloak SAML 읽기 role을 inventory·observability·security group으로 분리하고 Dashy AWS Console 타일을 등록 | `AWS-ID-01`, `POM-01`, `IAM-01` | `TOFU-STATE`, `IDENTITY-LIVE`, `ARGO-ROOT` | 팀 5명 AWS 조회 | 기존 일상·특권 SAML membership을 새 전용 group으로 무중단 이관, SAML provider trust·900초 요청·사람용 IAM user/access key 0건 유지, 세 reader role은 쓰기·`PassRole`·`AssumeRole`·S3 backup 접근 없이 허용 목록만 조회, Dashy 타일은 AWS group만 표시, immutable Pomerium 및 최신 main `Synced/Healthy` |
 | `VAULT-03 DONE` | Vault UI를 Pomerium 우회 표준 Ingress와 Vault OIDC auth method로 노출 (`gitops/apps/vault/`) | `VAULT-02`, `KC-01`, `INGRESS-01`, `KMS-01` | `VAULT-CONFIG`, `OPNSENSE-LIVE` | Vault 일상 운영·복구 독립성 | Vault OIDC auth method와 전용 Keycloak client 연결로 UI 사용자가 자기 policy 경로만 읽고 타 경로·`sys/mounts`는 403, Pomerium을 경유하지 않는 표준 Ingress와 자체서명 backend TLS 신뢰 설정, Pomerium Pod 정지 중 Vault UI 로그인 성공으로 복구 독립성 실증, root token·port-forward break-glass 보존 확인, audit device에 UI 로그인 event 기록과 token 원문 0건, `vault` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건과 `ip-plan.md` 노출 정의 갱신, Traefik 정적 설정·Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Vault Agent 소비자 회귀 없음 |
 | `GITOPS-02 DONE` | Argo CD UI Pomerium Route와 최소권한 RBAC 연결 | `GITOPS-01`, `POM-01` | `OPNSENSE-LIVE` | GitOps 일상 조회 | Pomerium 통과만으로 Argo 권한이 생기지 않음을 Argo 자체 OIDC·RBAC의 allow/deny로 실증, 조회 계정의 `platform-root`·child `Synced/Healthy` 조회 성공과 수동 sync·삭제·repo credential 조회 거부, `pomerium`→`argocd` NetworkPolicy egress 명시, `argo` alias 내부 A 1건·내부 AAAA·공개 A/AAAA 0건, 표준 Ingress만 사용해 HelmChartConfig·Traefik Pod UID·restart 불변, Argo child `Synced/Healthy`, rollback 뒤 기존 Route와 root Application 회귀 없음 |
-| `S3-02 READY` | SeaweedFS filer 웹 UI(`filer.imcherry5778.xyz`)를 Pomerium Route로 노출해 `/platform-privileged`(`imcherry5778-admin`)만 접근하도록 제한 | `S3-01`, `POM-01` | `OPNSENSE-LIVE`, `ARGO-ROOT` | `object-01` 운영 가시성 | filer 바인딩을 `127.0.0.1`에서 DATA 주소로 확장하되 신규 PF rule로 k3s-01(`10.10.20.10/32`) 단일 source만 허용(기존 8333 rule과 동일 패턴)하고 master(9333)·volume(8080) 관리 포트는 loopback 유지, Unbound alias `filer.imcherry5778.xyz` → `k3s-01`(`10.10.20.10`) 등록과 `ip-plan.md` 노출 정의 갱신, Pomerium Route는 `/platform-privileged`만 allow(`/platform-users`·미인증 요청 403/redirect 실측), `pomerium`→`object-01` NetworkPolicy egress 명시, `imcherry5778-admin`의 실제 로그인과 filer tree 조회 성공, filer는 자체 bucket 단위 ACL이 없어 이 Route가 전체 filer 네임스페이스에 대한 all-or-nothing 접근권이며 `S3-01`의 bucket-scoped credential 최소권한 모델과 별개 경계라는 사실을 runbook에 명시, 기존 S3 API 8333 경로·PF rule·credential 모델 회귀 없음, `ARGO-ROOT` 잠금 아래 `platform-root`·`pomerium` 커밋 SHA 검증 후 main·Synced/Healthy 복귀, rollback은 Pomerium Route·PF rule 제거와 filer 바인딩 loopback 원복 |
+| `S3-02 DONE` | SeaweedFS admin 웹 UI(`object-admin.imcherry5778.xyz`)를 Pomerium Route로 노출해 `/platform-privileged`(`imcherry5778-admin`)만 접근하도록 제한 | `S3-01`, `POM-01` | `OPNSENSE-LIVE`, `ARGO-ROOT` | `object-01` 운영 가시성 | 신규 `seaweedfs-admin` systemd unit(자체 TLS `security.toml [https.admin]`·자체 로그인 `WEED_ADMIN_USER/PASSWORD`)을 선언, 신규 PF rule(`opt2` sequence `1000`, k3s-01 `10.10.20.10/32` 단일 source, TCP 23646)만 허용하고 master(9333)·volume(8080)·filer(8888, 변경 없음) 관리 포트는 loopback 유지, Unbound alias `object-admin.imcherry5778.xyz` → `k3s-01`(`10.10.20.10`) 등록과 `ip-plan.md` 노출 정의 갱신, Pomerium Route는 `/platform-privileged`만 allow하고 backend는 admin 자체 TLS(`tls_skip_verify`, `S3-01` leaf 재사용)로 연결, `pomerium`→`object-01` NetworkPolicy egress(TCP 23646) 명시, 미인증 요청이 Pomerium sign-in으로 302/307 redirect됨을 `object-admin.imcherry5778.xyz`와 k3s-01 Pod→`10.10.50.20:23646` 양쪽에서 실측, admin 자체 인증(`WEED_ADMIN_PASSWORD`) 성공(세션 쿠키 발급·`/admin` 200)과 실패(`Invalid credentials`) 양쪽을 object-01 loopback에서 실측, Let's Encrypt 실제 인증서 발급 확인, admin이 filer보다 넓은 관리 권한(volume 재배치·EC·maintenance worker·설정 변경)을 가진다는 한계를 runbook에 명시, `weed admin`이 한때 가졌던 `ALPHA` 라벨이 2026-03-05 PR #8525로 제거됐고 고정한 4.40(2026-07-20 배포)은 그 이후임을 SeaweedFS 공식 커밋 이력과 실제 기동 화면 양쪽으로 확인, 기존 S3 API 8333·filer loopback 경로·PF rule·credential 모델(라이브 identity 7개 semantic diff로 무변경 확인) 회귀 없음, 실행 중 발견한 `S3-01` role의 identity action 정규식이 라이브 `loki-01`의 `Delete` action을 허용하지 않던 드리프트를 정규식 확장으로 함께 보정, `ARGO-ROOT` 잠금 아래 `platform-root`·`pomerium` 커밋 SHA 검증 후 main·Synced/Healthy 복귀 확인, rollback은 Pomerium Route·NetworkPolicy·Ingress host·Unbound alias·OPNsense PF rule·`seaweedfs-admin` unit·`security.toml`·`admin.env` 제거. Keycloak SSO를 통한 `imcherry5778-admin`의 실제 브라우저 로그인·Dashy 타일 노출은 사용자가 직접 확인 |
 
 2026-08-14 세션 논의로 `S3-02`를 신설한다. SeaweedFS는 MinIO 콘솔과 달리 컴포넌트별
 UI가 분산돼 있고 그중 filer(8888)만 브라우저에서 버킷 내용을 탐색할 수 있는데, `S3-01`
@@ -338,6 +338,19 @@ bucket-scoped credential 최소권한 모델을 이 UI 세션 하나가 우회�
 계정(Warpgate 로컬 `admin` 등)은 IdP 장애 전용으로 전 ADR에 걸쳐 일관되게 못박혀 있어
 이 용도로 쓰지 않고, 기존 정상 특권 SSO 계정 `imcherry5778-admin`(`/platform-privileged`)을
 그대로 재사용한다. 선행 `S3-01`·`POM-01`이 모두 `DONE`이므로 곧바로 `READY`로 연다.
+
+실행 중 filer 대신 SeaweedFS 다섯 번째 컴포넌트 `weed admin`(cluster 관리 콘솔)으로
+대상을 바꿨다. admin은 한때 `ALPHA` 라벨이 있었지만 SeaweedFS 원작자(chrislusf)가
+2026-03-05 PR #8525로 제거했고, 이 작업이 고정한 릴리스 4.40(2026-07-20 배포)은 그
+이후라 실물 배포본에서 라벨이 없음을 직접 기동해 확인했다. filer는 인증이 전혀 없어
+Pomerium 세션 하나가 전체 filer 네임스페이스에 all-or-nothing으로 접근했지만, admin은
+자체 로그인(`WEED_ADMIN_USER`/`PASSWORD`)과 자체 TLS(`security.toml`)를 가져 그 공백을
+메운다. 대신 admin은 volume 재배치·EC·maintenance worker·설정 변경까지 다루는 더 넓은
+권한을 가지므로, 최종 트레이드오프는 "인증 계층 추가"와 "권한 범위 확대"를 맞바꾼
+것이다. filer는 이 작업으로 바뀌지 않고 계속 loopback 전용으로 남는다. 라이브 검증
+중 `S3-01` role의 identity action 정규식이 이미 라이브에 있던 `loki-01`의 `Delete`
+action을 허용하지 않아 role 실행 자체가 막히는 것을 발견해(role 밖에서 부여된
+드리프트), 정규식에 `Delete`를 추가해 함께 보정했다. 따라서 `S3-02`를 완료한다.
 
 2026-08-04 팀 인터뷰 결과를 [ADR-0017](adr/0017-team-identity-and-shuffle-rbac.md)로 확정하고
 `IAM-01`과 `IAM-MIG-01`을 신설한다. GitHub는 인증 공급자로 추가하지 않고 username의 단일

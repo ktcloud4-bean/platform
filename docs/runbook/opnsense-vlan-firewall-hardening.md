@@ -30,6 +30,7 @@ deny가 처리한다.
 | `k3s-01/32` | PLATFORM gateway | UDP 123 | `opt2` inbound | ALLOW | `NET-04`; 노드 시간 동기화 |
 | `k3s-01/32` | `postgres-01/32` | TCP 5432 | `opt2` inbound | ALLOW | `NET-03A`, `VAULT-02`; TLS PostgreSQL |
 | `k3s-01/32` | `object-01/32` | TCP 8333 | `opt2` inbound | ALLOW | `S3-01`, `BKP-01`~`BKP-05`; TLS S3 |
+| `k3s-01/32` | `object-01/32` | TCP 23646 | `opt2` inbound | ALLOW | `S3-02`; Pomerium이 전달하는 SeaweedFS admin 웹 UI(자체 TLS·로그인) |
 | `k3s-01/32` | `warpgate-01/32` | TCP 8888 | `opt2` inbound | ALLOW | `OBS-17`; private TLS 만료 probe |
 | `warpgate-01/32` | ACCESS gateway | TCP·UDP 53 | `opt3` inbound | ALLOW | `NET-04`; Warpgate 이름 해석 |
 | `warpgate-01/32` | ACCESS gateway | UDP 123 | `opt3` inbound | ALLOW | `NET-04`; Warpgate 시간 동기화 |

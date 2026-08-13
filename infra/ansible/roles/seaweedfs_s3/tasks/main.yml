@@ -13,6 +13,14 @@
       - seaweedfs_s3_bind_address == ansible_default_ipv4.address
     fail_msg: Rocky Linux 9/amd64, 고정 release, license, bind 주소와 최소 source 입력을 확인한다.
 
+- name: admin 콘솔 credential 최소 길이 확인
+  ansible.builtin.assert:
+    that:
+      - seaweedfs_admin_user | length > 0
+      - seaweedfs_admin_password | length >= 16
+    fail_msg: weed admin은 평문 미인증 관리 콘솔을 만들지 않도록 저장소 밖 extra-vars의 계정·충분한 길이의 비밀번호가 필요하다.
+  no_log: true
+
 - name: S3 허용 source가 단일 host CIDR 형식인지 확인
   ansible.builtin.assert:
     that:
@@ -30,7 +38,7 @@
       - item.credentials | length > 0
       - item.actions is defined
       - item.actions | length > 0
-      - item.actions | reject('regex', '^(Admin|Read|List|Tagging|Write):[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$') | list | length == 0
+      - item.actions | reject('regex', '^(Admin|Read|List|Tagging|Write|Delete):[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$') | list | length == 0
     fail_msg: 각 S3 identity에는 name, credential과 제한된 action이 필요하다.
   loop: "{{ seaweedfs_s3_identities }}"
   no_log: true
@@ -103,6 +111,7 @@
     - { path: "{{ seaweedfs_master_dir }}", owner: "{{ seaweedfs_user }}", group: "{{ seaweedfs_group }}", mode: "0750" }
     - { path: "{{ seaweedfs_volume_dir }}", owner: "{{ seaweedfs_user }}", group: "{{ seaweedfs_group }}", mode: "0750" }
     - { path: "{{ seaweedfs_filer_dir }}", owner: "{{ seaweedfs_user }}", group: "{{ seaweedfs_group }}", mode: "0750" }
+    - { path: "{{ seaweedfs_admin_dir }}", owner: "{{ seaweedfs_user }}", group: "{{ seaweedfs_group }}", mode: "0750" }
 
 - name: SeaweedFS release archive 기존 상태 확인
   ansible.builtin.stat:
@@ -378,6 +387,25 @@
     mode: "0644"
   when: not ansible_check_mode or seaweedfs_tls_files.results[0].stat.exists
 
+- name: admin TLS security.toml 선언
+  ansible.builtin.template:
+    src: security.toml.j2
+    dest: "{{ seaweedfs_config_dir }}/security.toml"
+    owner: root
+    group: "{{ seaweedfs_group }}"
+    mode: "0640"
+  notify: SeaweedFS admin 재시작
+
+- name: admin credential EnvironmentFile 선언
+  ansible.builtin.template:
+    src: admin.env.j2
+    dest: "{{ seaweedfs_config_dir }}/admin.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: SeaweedFS admin 재시작
+
 - name: S3 static identity configuration 선언
   ansible.builtin.template:
     src: s3.json.j2
@@ -401,6 +429,7 @@
     - seaweedfs-volume
     - seaweedfs-filer
     - seaweedfs-s3
+    - seaweedfs-admin
   notify: SeaweedFS stack 재시작
 
 - name: 설치된 weed binary 상태 확인
@@ -408,7 +437,7 @@
     path: "{{ seaweedfs_binary_path }}"
   register: seaweedfs_binary_after
 
-- name: SeaweedFS 네 구성요소 enabled·started 선언
+- name: SeaweedFS 다섯 구성요소 enabled·started 선언
   ansible.builtin.systemd:
     name: "{{ item }}.service"
     enabled: true
@@ -419,6 +448,7 @@
     - seaweedfs-volume
     - seaweedfs-filer
     - seaweedfs-s3
+    - seaweedfs-admin
   when: not ansible_check_mode
 
 - name: 변경 handler 적용
@@ -450,7 +480,7 @@
     - seaweedfs_binary_after.stat.exists
     - not ansible_check_mode or seaweedfs_config_dir_before.stat.exists
 
-- name: SeaweedFS 네 구성요소 active 상태 확인
+- name: SeaweedFS 다섯 구성요소 active 상태 확인
   ansible.builtin.command:
     argv: [systemctl, is-active, "{{ item }}.service"]
   loop:
@@ -458,6 +488,7 @@
     - seaweedfs-volume
     - seaweedfs-filer
     - seaweedfs-s3
+    - seaweedfs-admin
   register: seaweedfs_active_units
   changed_when: false
   check_mode: false
@@ -475,17 +506,21 @@
     - seaweedfs_binary_after.stat.exists
     - not ansible_check_mode or seaweedfs_tls_files.results[0].stat.exists
 
-- name: 내부 endpoint loopback과 외부 TLS S3 bind 검증
+- name: 내부 endpoint loopback과 외부 TLS S3·admin bind 검증
   ansible.builtin.assert:
     that:
       - "('127.0.0.1:' ~ seaweedfs_master_port) in seaweedfs_listeners.stdout"
       - "('127.0.0.1:' ~ seaweedfs_volume_port) in seaweedfs_listeners.stdout"
       - "('127.0.0.1:' ~ seaweedfs_filer_port) in seaweedfs_listeners.stdout"
       - "(seaweedfs_s3_bind_address ~ ':' ~ seaweedfs_s3_port) in seaweedfs_listeners.stdout"
+      - "('*:' ~ seaweedfs_admin_port) in seaweedfs_listeners.stdout"
       - "('0.0.0.0:' ~ seaweedfs_master_port) not in seaweedfs_listeners.stdout"
       - "('0.0.0.0:' ~ seaweedfs_volume_port) not in seaweedfs_listeners.stdout"
       - "('0.0.0.0:' ~ seaweedfs_filer_port) not in seaweedfs_listeners.stdout"
-    fail_msg: master·volume·filer는 loopback, S3만 DATA 주소의 TLS port에 있어야 한다.
+    fail_msg: >-
+      master·volume·filer는 loopback 전용이어야 한다. admin은 -ip.bind 옵션이
+      없어 항상 0.0.0.0으로 듣지만 k3s-01만 systemd IPAddressAllow·OPNsense
+      PF로 허용하고, S3는 DATA 주소의 TLS port에 있어야 한다.
   when:
     - seaweedfs_binary_after.stat.exists
     - not ansible_check_mode or seaweedfs_tls_files.results[0].stat.exists
