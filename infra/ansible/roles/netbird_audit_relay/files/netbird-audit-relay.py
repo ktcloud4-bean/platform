@@ -12,6 +12,7 @@ email·표시명은 여기서 제거한다(6절). 마스킹은 allowlist 방식�
 """
 import json
 import os
+import re
 import sqlite3
 import sys
 
@@ -133,6 +134,30 @@ def mask_meta(raw_meta):
     return {k: v for k, v in meta.items() if k in META_ALLOWLIST}
 
 
+SQLITE_TS_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(\.\d+)?([+-]\d{2}:\d{2})?$"
+)
+
+
+def to_iso8601(sqlite_timestamp):
+    """"YYYY-MM-DD HH:MM:SS.nnnnnnnnn+00:00"(SQLite, 공백 구분자·나노초)를
+    "YYYY-MM-DDTHH:MM:SS.nnnnnn+00:00"(ISO 8601, 마이크로초까지)로 바꾼다.
+
+    다른 WAZUH-04 소스가 이미 이 인덱스의 data.timestamp를 ISO 8601 date
+    필드로 먼저 매핑해 뒀다 — 공백 구분자·나노초 원문을 그대로 보내면
+    mapper_parsing_exception으로 문서 전체가 조용히 drop된다는 것을
+    라이브로 확인했다(docs/backlog.md 참고). 필드 이름 자체도 event_time으로
+    바꿔 그 기존 매핑과 아예 겹치지 않게 한다.
+    """
+    match = SQLITE_TS_RE.match(sqlite_timestamp)
+    if not match:
+        return sqlite_timestamp
+    date, time, frac, offset = match.groups()
+    frac = (frac or ".0")[:7]
+    offset = offset or "+00:00"
+    return f"{date}T{time}{frac}{offset}"
+
+
 def rotate_if_needed():
     try:
         if os.path.getsize(OUTPUT_PATH) >= MAX_BYTES:
@@ -167,7 +192,7 @@ def main():
             bucket = ACTIVITY_BUCKET.get(action) if action else None
             if bucket:
                 event = {
-                    "timestamp": row["timestamp"],
+                    "event_time": to_iso8601(row["timestamp"]),
                     "event_id": row["id"],
                     "action": action,
                     "bucket": bucket,
