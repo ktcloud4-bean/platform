@@ -218,6 +218,19 @@ management 중 하나가 5분간 `up=0`일 때, `PostgreSQLDatabaseMetricsDown`�
 DB 자체에 연결하지 못할 때 Alertmanager로 보낸다. Wazuh는 security event 조사 경계이므로
 이 숫자형 상태 지표의 소비처가 아니다.
 
+### OBS-16-FIX-01 receiver route 검증
+
+두 OBS-16 alertname은 기존 `obs-13-receiver` route에만 추가한다. 다른 기존 5개 route,
+기본 `discard`, alert rule의 `for`·임계값, 외부 egress와 서비스·exporter·방화벽은 바꾸지
+않는다. merge 전 검증은 `NativeMetricsTargetDown`과 같은 alertname, `test=true`, 자동 만료
+시각을 가진 Alertmanager API test alert 정확히 한 건을 보내 firing·receiver 수신과 자동
+만료 뒤 resolved 수신을 확인한다. 이 방식은 실제 metric target을 멈추거나 경보 임계값을
+낮추지 않는다.
+
+`gitops/tools/obs-16-fix-01/apply-live.sh`는 `ARGO-ROOT` 잠금에서 immutable
+`platform-root`·`obs` revision과 runtime matcher를 확인하고, 성공·실패와 무관하게 literal
+`main`으로 복구한다. rollback은 두 alertname을 해당 matcher에서만 제거하는 것이다.
+
 적용은 기존 identity/OIDC 선언 전체를 다시 적용하지 않는 전용 playbook을 쓴다.
 
 ```bash

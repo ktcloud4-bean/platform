@@ -26,11 +26,11 @@ alertmanager:
         - receiver: obs-01-verification
           matchers:
             - alertname = "OBS01Delivery"
-        # OBS-13: 상시 alert 4종(5개 alertname)만 실제 채널(obs-13-receiver)로 보낸다.
+        # OBS-13·OBS-16: 상시 alert 6종(7개 alertname)만 실제 채널(obs-13-receiver)로 보낸다.
         # 다른 모든 alertname은 여전히 discard로 떨어진다.
         - receiver: obs-13-receiver
           matchers:
-            - alertname =~ "NodeDown|RootFilesystemUsageWarning|RootFilesystemUsageCritical|TLSCertificateExpiringSoon|VeleroBackupFailed"
+            - alertname =~ "NodeDown|RootFilesystemUsageWarning|RootFilesystemUsageCritical|TLSCertificateExpiringSoon|VeleroBackupFailed|NativeMetricsTargetDown|PostgreSQLDatabaseMetricsDown"
     receivers:
       - name: discard
       - name: obs-01-verification
