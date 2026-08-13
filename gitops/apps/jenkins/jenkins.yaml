@@ -82,6 +82,26 @@ jenkins:
                   - envVar:
                       key: "REGISTRY_AUTH_FILE"
                       value: "/home/build/auth.json"
+              # AWX-04의 collection은 rootless Buildah RUN 대신 실제 AWX EE
+              # runtime에서 workspace에 준비해 final image로 COPY한다.
+              - name: "awx-ee"
+                image: "quay.io/ansible/awx-ee@sha256:eaab9b09f731e3561ee0d932123a9971c76095555520f71da7ff4f2d433b4c99"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                command: "sleep"
+                args: "infinity"
+                ttyEnabled: false
+                resourceRequestCpu: "100m"
+                resourceRequestMemory: "256Mi"
+                resourceLimitCpu: "1"
+                resourceLimitMemory: "1Gi"
+                envVars:
+                  - envVar:
+                      key: "HOME"
+                      value: "/tmp"
+                  - envVar:
+                      key: "USER"
+                      value: "awx"
               - name: "node"
                 image: "docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32"
                 alwaysPullImage: false
@@ -98,7 +118,9 @@ jenkins:
                       key: "HOME"
                       value: "/home/node"
               - name: "python"
-                image: "docker.io/library/python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+                # AWX-04 EE venv와 runtime base의 Python ABI를 일치시킨다. 이 image는
+                # rootless agent에서 workspace에만 dependency를 준비한다.
+                image: "docker.io/library/python:3.13-alpine@sha256:540c7d91f98ff6880174c40e99067bf5941eb54d818a7a5e094d188b196a934d"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"
@@ -112,6 +134,9 @@ jenkins:
                   - envVar:
                       key: "HOME"
                       value: "/tmp"
+                  - envVar:
+                      key: "USER"
+                      value: "awx"
               - name: "awscli"
                 image: "public.ecr.aws/aws-cli/aws-cli:2.27.18@sha256:244dcb5bd64c98d0c624b0f8951be872b6aa43a6587da6cbb5c7f30c2bd89e58"
                 alwaysPullImage: false
@@ -241,6 +266,17 @@ jenkins:
                       - name: buildah-config
                         mountPath: /etc/ci-01
                         readOnly: true
+                  - name: awx-ee
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: false
+                      seccompProfile:
+                        type: RuntimeDefault
+                      capabilities:
+                        drop: ["ALL"]
                   - name: node
                     securityContext:
                       runAsNonRoot: true
@@ -557,12 +593,31 @@ credentials:
               privateKeySource:
                 directEntry:
                   privateKey: "${hr_system_gitea_ssh_private_key}"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "gitea-awx04"
+              description: "AWX-04 platform pull-mirror read-only deploy key"
+              username: "git"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${awx04_gitea_ssh_private_key}"
           - usernamePassword:
               scope: GLOBAL
               id: "harbor-robot-ci01"
               description: "CI-01 Harbor project-scoped robot"
               username: "${harbor_robot_name}"
               password: "${harbor_robot_secret}"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "harbor-robot-awx04"
+              description: "AWX-04 Execution Environment project-scoped push robot"
+              username: "${awx04_harbor_robot_name}"
+              password: "${awx04_harbor_robot_secret}"
+          - string:
+              scope: GLOBAL
+              id: "gitea-known-hosts-awx04"
+              description: "AWX-04 authenticated Gitea SSH host key"
+              secret: "${awx04_gitea_known_hosts}"
           - string:
               scope: GLOBAL
               id: "cosign-private-key-sign01"
@@ -664,6 +719,31 @@ jobs:
               }
             }
             scriptPath('Jenkinsfile')
+            lightweight(false)
+          }
+        }
+      }
+      pipelineJob('awx04-ee-build') {
+        description('AWX-04: Gitea platform mirror의 실제 role·collection을 EE로 build, scan, SBOM, Cosign digest handoff')
+        logRotator {
+          numToKeep(20)
+          artifactNumToKeep(0)
+        }
+        parameters {
+          stringParam('SOURCE_REVISION', '', 'Gitea pull-mirror에 존재하는 승인된 40자리 source SHA만 허용합니다.')
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git')
+                  credentials('github-platform-readonly-aws-ci-fix-01')
+                }
+                branch('*/main')
+              }
+            }
+            scriptPath('gitops/tools/awx-04/Jenkinsfile')
             lightweight(false)
           }
         }

@@ -18,6 +18,7 @@ data:
     BASE = "http://awx-service.awx.svc.cluster.local"
     API = BASE + "/api/v2"
     runtime = json.load(open("/vault/secrets/runtime.json", encoding="utf-8"))
+    scm = json.load(open("/vault/secrets/scm.json", encoding="utf-8"))
     admin_password = runtime["admin_password"]
     auth = base64.b64encode(f"awx-recovery:{admin_password}".encode()).decode()
 
@@ -52,6 +53,25 @@ data:
                 print(f"AWX API 준비 대기: {attempt + 1}/180")
             time.sleep(5)
         raise RuntimeError("AWX API 준비 시간이 초과됨")
+
+    def update_project(project):
+        requested = api("POST", f"/projects/{project['id']}/update/", {}, expected=(202,))
+        update_id = requested.get("project_update") or requested.get("id")
+        if not isinstance(update_id, int):
+            raise RuntimeError(f"project update 식별자가 없다: {requested}")
+        for attempt in range(120):
+            update = api("GET", f"/project_updates/{update_id}/")
+            status = update.get("status")
+            if status == "successful":
+                revision = update.get("scm_revision")
+                if not revision:
+                    raise RuntimeError("SCM update가 성공했지만 revision이 비어 있다")
+                print(f"AWX-04 SCM sync 성공: {revision}")
+                return revision
+            if status in ("failed", "error", "canceled"):
+                raise RuntimeError(f"SCM update 실패: {update.get('id')} status={status}")
+            time.sleep(5)
+        raise RuntimeError("SCM project update 시간이 초과됨")
 
     def one(endpoint, filters):
         query = urllib.parse.urlencode(filters)
@@ -196,6 +216,64 @@ data:
         "credential": None, "local_path": "awx01",
     })
 
+    vault_lookup_type = one("credential_types", {"name": "HashiCorp Vault Secret Lookup"})
+    source_control_type = one("credential_types", {"name": "Source Control"})
+    if vault_lookup_type is None or source_control_type is None:
+        raise RuntimeError("AWX built-in Vault 또는 Source Control credential type을 찾지 못했다")
+    vault_lookup = ensure("credentials", {"name": "AWX-04 Vault SCM lookup", "organization": organization["id"]}, {
+        "name": "AWX-04 Vault SCM lookup", "organization": organization["id"],
+        "description": "Gitea deploy key는 Vault external lookup으로만 읽는다.",
+        "credential_type": vault_lookup_type["id"],
+        "inputs": {
+            "url": "https://vault.vault.svc.cluster.local:8200",
+            "cacert": open("/trust/vault.crt", encoding="utf-8").read(),
+            "role_id": scm["vault_role_id"], "secret_id": scm["vault_secret_id"],
+            "default_auth_path": "approle", "api_version": "v2",
+        },
+    })
+    scm_credential = ensure("credentials", {"name": "AWX-04 platform mirror read-only", "organization": organization["id"]}, {
+        "name": "AWX-04 platform mirror read-only", "organization": organization["id"],
+        "description": "deploy key 원문은 저장하지 않고 AWX Vault external input source로만 조회",
+        "credential_type": source_control_type["id"], "inputs": {"username": "git"},
+    }, update=False)
+    ensure("credential_input_sources", {
+        "target_credential": scm_credential["id"], "input_field_name": "ssh_key_data",
+    }, {
+        "target_credential": scm_credential["id"], "source_credential": vault_lookup["id"],
+        "input_field_name": "ssh_key_data",
+        "metadata": {
+            "secret_backend": "kv", "secret_path": "awx/scm", "auth_path": "approle",
+            "secret_key": "gitea_deploy_key",
+        },
+    })
+    scm_project = ensure("projects", {"name": "AWX-04 platform 운영 원본", "organization": organization["id"]}, {
+        "name": "AWX-04 platform 운영 원본", "organization": organization["id"],
+        "description": "GitHub SSOT의 private Gitea pull-mirror. branch override와 project persistence는 금지.",
+        "scm_type": "git",
+        "scm_url": "ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/ktcloud4-bean/platform.git",
+        "scm_branch": "main", "scm_refspec": "",
+        "scm_clean": True, "scm_delete_on_update": True, "scm_track_submodules": False,
+        "scm_update_on_launch": False, "allow_override": False,
+        "credential": scm_credential["id"],
+    })
+    update_project(scm_project)
+    platform_ee = ensure("execution_environments", {"name": "AWX-04 platform EE"}, {
+        "name": "AWX-04 platform EE",
+        "description": "Jenkins Trivy·SBOM·Cosign을 통과한 Harbor digest 전용 EE",
+        "image": "harbor.imcherry5778.xyz/awx-ee/platform-ee@sha256:8a50355c48b8ffde5e86cbc552400194aba2c93b5ad169bb78305abc804905fe",
+        "credential": None, "pull": "",
+    })
+    scm_template = ensure("job_templates", {"name": "AWX-04 운영 원본 정보", "organization": organization["id"]}, {
+        "name": "AWX-04 운영 원본 정보", "organization": organization["id"],
+        "description": "SCM main에 고정된 catalog check를 표시만 한다. 실행 권한·branch override·credential use는 없다.",
+        "project": scm_project["id"], "inventory": boundary["id"],
+        "playbook": "infra/ansible/playbooks/node-exporter-baseline.yml", "job_type": "check",
+        "execution_environment": platform_ee["id"],
+        "ask_limit_on_launch": False, "ask_inventory_on_launch": False,
+        "ask_credential_on_launch": False, "ask_job_type_on_launch": False,
+        "ask_scm_branch_on_launch": False, "forks": 1, "verbosity": 0,
+    })
+
     common_template = {
         "project": project["id"], "inventory": boundary["id"],
         "playbook": "verify-credential.yml",
@@ -251,6 +329,8 @@ data:
     give_team_role(allowed_credential, "use_role", operators)
     give_team_role(check_template, "execute_role", operators)
     give_team_role(workflow, "execute_role", operators)
+    give_team_role(scm_project, "read_role", operators)
+    give_team_role(scm_template, "read_role", operators)
     give_team_role(workflow, "approval_role", approvers)
 
     # 이전 AWX-01 또는 UI 변경으로 생길 수 있는 과잉 team role을 정확한 최소 집합으로
@@ -260,6 +340,8 @@ data:
         object_role(allowed_credential, "use_role"),
         object_role(check_template, "execute_role"),
         object_role(workflow, "execute_role"),
+        object_role(scm_project, "read_role"),
+        object_role(scm_template, "read_role"),
     }
     approver_role_ids = {object_role(workflow, "approval_role")}
     for team, allowed_role_ids in ((operators, operator_role_ids), (approvers, approver_role_ids)):
@@ -270,4 +352,4 @@ data:
 
     # 실행 금지 인벤토리, denied credential, denied/apply JT에는 Operators role을
     # 절대 붙이지 않는다. 다음 단계 verify-live.sh가 이를 같은 시점에 대조한다.
-    print("AWX-01 선언 provisioning 완료")
+    print("AWX-01/AWX-04 선언 provisioning 완료")

@@ -55,6 +55,7 @@ spec:
           volumeMounts:
             - {name: script, mountPath: /scripts, readOnly: true}
             - {name: rendered, mountPath: /vault/secrets, readOnly: true}
+            - {name: trust, mountPath: /trust, readOnly: true}
             - {name: tmp, mountPath: /tmp}
       volumes:
         - name: vault-agent-config

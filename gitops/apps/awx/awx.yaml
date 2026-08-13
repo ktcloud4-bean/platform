@@ -12,6 +12,7 @@ spec:
   secret_key_secret: awx-secret-key
   postgres_configuration_secret: awx-postgres-configuration
   bundle_cacert_secret: awx-bundle-ca
+  ee_pull_credentials_secret: awx-ee-pull
 
   # 외부 postgres-01만 사용한다. 검증 playbook은 read-only ConfigMap으로 공급한다.
   projects_persistence: false
@@ -45,6 +46,9 @@ spec:
     - setting: DEFAULT_EXECUTION_QUEUE_POD_SPEC_OVERRIDE
       value: >-
         '{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":1000,"runAsGroup":0,"fsGroup":1000,"fsGroupChangePolicy":"OnRootMismatch","seccompProfile":{"type":"RuntimeDefault"}}}}'
+    - setting: AWX_TASK_ENV
+      value: >-
+        '{"GIT_SSH_COMMAND":"ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/awx-scm/known_hosts -o GlobalKnownHostsFile=/dev/null"}'
 
   image: quay.io/ansible/awx
   image_version: 24.6.1@sha256:5d47e132014ae4c6a026a2e8f19ce7b3cf3c8f313d59e44fdfa95cd9f3669209
@@ -54,6 +58,8 @@ spec:
   ee_images:
     - name: AWX EE 24.6.1
       image: quay.io/ansible/awx-ee:24.6.1@sha256:89593d2a0268acacdbd1c075d8810ab50d961cf7769e36de19219bb6cb4efcc1
+    - name: AWX-04 platform EE
+      image: harbor.imcherry5778.xyz/awx-ee/platform-ee@sha256:8a50355c48b8ffde5e86cbc552400194aba2c93b5ad169bb78305abc804905fe
   redis_image: docker.io/library/redis
   redis_image_version: 7.2.5@sha256:3aaec283e6e593bde528077d60280ac1589887067a39273348860837c9346d7e
   image_pull_policy: IfNotPresent
@@ -63,9 +69,16 @@ spec:
       configMap:
         name: awx-manual-project
         defaultMode: 0444
+    - name: awx-scm-known-hosts
+      secret:
+        secretName: awx-scm-known-hosts
+        defaultMode: 0444
   task_extra_volume_mounts: |
     - name: awx-manual-project
       mountPath: /var/lib/awx/projects/awx01
+      readOnly: true
+    - name: awx-scm-known-hosts
+      mountPath: /etc/awx-scm
       readOnly: true
   web_extra_volume_mounts: |
     - name: awx-manual-project

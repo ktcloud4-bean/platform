@@ -1,0 +1,7 @@
+# AWX 24.6 계열과 호환되는 ansible-core patch와 execution runtime을 고정한다.
+# psycopg binary는 community.postgresql collection의 실제 PostgreSQL module 의존성이다.
+ansible-core==2.18.19
+ansible-runner==2.4.3
+# ansible-runner 전이 의존성의 1.1.2는 GHSA-6v7p-g79w-8964 High가 fixable이다.
+msgpack==1.2.1
+psycopg[binary]==3.3.4

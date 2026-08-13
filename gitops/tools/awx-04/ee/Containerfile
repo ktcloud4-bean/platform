@@ -1,0 +1,26 @@
+# upstream AWX EE의 2026-08 Trivy DB에는 fixable High가 남아 있다. Python image의
+# pip/ensurepip vendor도 같은 scanner 결과에 섞이므로, 동일 Alpine base에 CI가 추출한
+# Python runtime(개발·package installer 제외)과 고정 package만 COPY한다.
+ARG ALPINE_BASE=docker.io/library/alpine@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+FROM ${ALPINE_BASE}
+
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.title="AWX-04 platform execution environment" \
+      org.opencontainers.image.source="https://github.com/ktcloud4-bean/platform" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}"
+
+# AWX Project가 SCM으로 내려받은 playbook은 image 안의 동일 role·collection만
+# 해석한다. build context 전체를 runtime project로 쓰지 않는다.
+COPY .awx04-python-runtime/usr/ /usr/
+COPY .awx04-python-packages/ /opt/awx-python/
+COPY .awx04-bin/ /opt/awx-bin/
+COPY infra/ansible/roles/ /usr/share/ansible/roles/
+COPY .awx04-collections/ansible_collections/ /usr/share/ansible/collections/ansible_collections/
+
+ENV PATH=/opt/awx-bin:$PATH \
+    PYTHONPATH=/opt/awx-python \
+    ANSIBLE_ROLES_PATH=/usr/share/ansible/roles \
+    ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections \
+    HOME=/tmp \
+    USER=awx
+USER 1000

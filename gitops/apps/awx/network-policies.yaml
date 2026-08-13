@@ -35,6 +35,57 @@ spec:
       ports:
         - {protocol: TCP, port: 8052}
 ---
+# SCM project update를 수행하는 task Pod만 private Gitea SSH service에 연결한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-task-gitea-scm-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: awx-task
+      app.kubernetes.io/component: awx
+      app.kubernetes.io/managed-by: awx-operator
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gitea
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gitea
+              app.kubernetes.io/component: server
+      ports:
+        - {protocol: TCP, port: 2222}
+---
+# Vault external credential resolver는 SCM task Pod에서만 HTTPS로 접근한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-task-vault-external-credential-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: awx-task
+      app.kubernetes.io/component: awx
+      app.kubernetes.io/managed-by: awx-operator
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
+        - {protocol: TCP, port: 8200}
+---
 # provision Hook도 AWX API 준비·수렴에 같은 web endpoint만 사용한다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

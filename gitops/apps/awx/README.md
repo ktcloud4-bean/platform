@@ -154,6 +154,37 @@ Pomerium→web ingress를 함께 확인한다.
 Rollback은 AWX child를 시작 main SHA로 먼저 sync해 NetworkPolicy를 prune하고, web/task Ready를
 확인한 다음 root를 literal `main`으로 복원한다. AWX CR·DB·PVC·runtime Secret은 삭제하지 않는다.
 
+## AWX-04 SCM 운영 원본과 전용 EE
+
+`AWX-04 platform 운영 원본`은 GitHub SSOT의 private Gitea pull-mirror만 `main`으로
+동기화한다. project는 `scm_clean=true`, `scm_delete_on_update=true`,
+`scm_update_on_launch=false`, `allow_override=false`이며 `projects_persistence=false`를
+유지해 project PVC를 만들지 않는다. task Pod의 strict `known_hosts`는 bootstrap Hook이
+인증된 Gitea host key를 Vault `kv/awx/scm-hostkeys`에서 읽어 Secret으로만 만든다.
+
+Gitea read-only deploy key는 AWX credential에 저장하지 않는다. Source Control credential의
+`ssh_key_data`는 built-in `HashiCorp Vault Secret Lookup` input source가 `kv/awx/scm`에서
+읽고, provision Hook은 별도 AppRole bootstrap(`kv/awx/scm-lookup`)만 읽는다. bootstrap,
+provisioner, runtime policy는 서로 이 키·Harbor pull credential·AppRole 값을 읽을 수 없다.
+
+전용 `AWX-04 platform EE`는 Harbor digest
+`sha256:8a50355c48b8ffde5e86cbc552400194aba2c93b5ad169bb78305abc804905fe`만 사용한다.
+Jenkins build #12는 source `8d3f99396cef7b349b88b2207f606bebeca4485f`에서
+`community.postgresql 3.5.0`, 실제 role과 33개 playbook syntax를 확인한 뒤 Trivy,
+CycloneDX SBOM, Cosign sign/verify를 통과했다. EE는 rootless builder의 `RUN` 없이 최신
+Alpine Python runtime과 고정 Ansible package를 COPY하며, installer는 runtime image에 넣지
+않는다.
+
+일상 `AWX Operators`에는 이 project와 `AWX-04 운영 원본 정보` check template의 read role만
+부여한다. template에는 execute·credential use 권한이 없고 branch override도 받지 않으며,
+운영 대상 job은 0개다. browser 검증은 `imcherry5778`의 project revision/template read 200과
+project·EE·credential 수정 및 branch override 403을 같은 OIDC session으로 확인한다.
+
+Rollback은 먼저 AWX child를 적용 전 main SHA로 sync하여 AWX-04 EE, SCM project와 Hook을
+되돌리고 task/web Ready를 확인한다. 이어 `platform-root`와 child targetRevision을 literal
+`main`으로 복원한다. GitHub/Gitea deploy key와 Vault path는 이 task의 rollback 범위에서만
+삭제하며 기존 AWX-01 runtime Secret·DB·PVC·NetworkPolicy는 삭제하지 않는다.
+
 ## 적용 순서와 검증
 
 1. `prepare-secret-input.sh`, `provision.sh --check`, `provision.sh --apply`로 DB,

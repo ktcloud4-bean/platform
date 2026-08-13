@@ -47,6 +47,22 @@ data:
     {{- with secret "kv/data/awx/runtime" -}}{{ .Data.data.secret_key }}{{- end -}}
     EOT
     }
+    template {
+      destination = "/vault/secrets/ee-pull.json"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/awx/pull" -}}{{ .Data.data | toJSON }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/vault/secrets/scm-known-hosts"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/awx/scm-hostkeys" -}}{{ .Data.data.gitea_known_hosts }}{{- end -}}
+    EOT
+    }
   provision.hcl: |
     exit_after_auth = true
     pid_file = "/tmp/vault-agent.pid"
@@ -59,7 +75,7 @@ data:
       method "kubernetes" {
         mount_path = "auth/kubernetes"
         config = {
-          role       = "awx"
+          role       = "awx-provisioner"
           token_path = "/var/run/secrets/vault/token"
         }
       }
@@ -70,6 +86,14 @@ data:
       error_on_missing_key = true
       contents = <<EOT
     {{- with secret "kv/data/awx/runtime" -}}{{ .Data.data | toJSON }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/vault/secrets/scm.json"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/awx/scm-lookup" -}}{{ .Data.data | toJSON }}{{- end -}}
     EOT
     }
   verifier.hcl: |

@@ -1,0 +1,170 @@
+// AWX-04 전용 EE release handoff. source는 GitHub SSOT의 private Gitea
+// pull-mirror이며, 입력 SHA를 정확히 checkout한 뒤 Harbor digest로만 넘긴다.
+node('ci01-buildah') {
+    def revision = (params.SOURCE_REVISION ?: '').trim()
+    if (!(revision ==~ /^[0-9a-f]{40}$/)) {
+        error('SOURCE_REVISION은 승인된 40자리 Git SHA여야 합니다.')
+    }
+
+    def registry = 'harbor.imcherry5778.xyz'
+    def repository = "${registry}/awx-ee/platform-ee"
+    def tag = "git-${revision.take(12)}"
+    def localImage = "localhost/awx04-ee:${tag}"
+
+    stage('Gitea mirror source') {
+        withCredentials([
+            sshUserPrivateKey(credentialsId: 'gitea-awx04', keyFileVariable: 'GITEA_KEY'),
+            string(credentialsId: 'gitea-known-hosts-awx04', variable: 'GITEA_KNOWN_HOSTS')
+        ]) {
+            sh '''
+set -eu
+umask 077
+mkdir -p "$WORKSPACE/.ssh"
+printf '%s\n' "$GITEA_KNOWN_HOSTS" >"$WORKSPACE/.ssh/known_hosts"
+export GIT_SSH_COMMAND="ssh -i $GITEA_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$WORKSPACE/.ssh/known_hosts"
+git clone --no-checkout ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/ktcloud4-bean/platform.git source
+git -C source checkout --detach "$SOURCE_REVISION"
+test "$(git -C source rev-parse HEAD)" = "$SOURCE_REVISION"
+printf 'awx04-source-revision=%s\n' "$SOURCE_REVISION"
+'''
+        }
+    }
+
+    stage('collection dependencies and all playbook syntax') {
+        container('awx-ee') {
+            withEnv(["AWX04_REVISION=${revision}"]) {
+                sh '''
+set -eu
+cd "$WORKSPACE/source"
+ansible-galaxy collection install --force-with-deps \
+  --requirements-file gitops/tools/awx-04/ee/requirements.yml \
+  --collections-path "$WORKSPACE/source/.awx04-collections"
+test -d "$WORKSPACE/source/.awx04-collections/ansible_collections/community/postgresql"
+count=0
+for playbook in infra/ansible/playbooks/*.yml; do
+  ANSIBLE_ROLES_PATH="$WORKSPACE/source/infra/ansible/roles" \
+    ANSIBLE_COLLECTIONS_PATH="$WORKSPACE/source/.awx04-collections" \
+    ansible-playbook --syntax-check -i /dev/null "$playbook"
+  count=$((count + 1))
+done
+test "$count" -gt 0
+printf 'AWX04_COLLECTIONS=PASS community.postgresql=3.5.0\n'
+printf 'AWX04_SYNTAX=PASS playbooks=%s\n' "$count"
+'''
+            }
+        }
+    }
+
+    stage('pinned Ansible runtime') {
+        container('python') {
+            sh '''
+set -eu
+cd "$WORKSPACE/source"
+export USER=awx HOME=/tmp
+runtime="$WORKSPACE/source/.awx04-python-runtime"
+packages="$WORKSPACE/source/.awx04-python-packages"
+bin_dir="$WORKSPACE/source/.awx04-bin"
+mkdir -p "$runtime/usr" "$packages" "$bin_dir"
+cp -R /usr/local "$runtime/usr/"
+cp -R /usr/lib "$runtime/usr/"
+# final EE에는 installer와 bundled third-party package metadata를 넣지 않는다.
+rm -rf "$runtime/usr/local/lib/python3.13/ensurepip" \
+  "$runtime/usr/local/lib/python3.13/site-packages/pip"
+find "$runtime/usr/local/lib/python3.13/site-packages" -maxdepth 1 -name 'pip-*.dist-info' -exec rm -rf {} +
+python3 -m pip install --no-cache-dir --target "$packages" \
+  --requirement gitops/tools/awx-04/ee/python-requirements.txt
+printf '%s\n' '#!/bin/sh' 'exec /usr/local/bin/python3 -c "from ansible.cli.playbook import main; main()" "$@"' >"$bin_dir/ansible-playbook"
+printf '%s\n' '#!/bin/sh' 'exec /usr/local/bin/python3 -c "from ansible_runner.__main__ import main; main()" "$@"' >"$bin_dir/ansible-runner"
+chmod 0555 "$bin_dir/ansible-playbook" "$bin_dir/ansible-runner"
+PYTHONPATH="$packages" "$bin_dir/ansible-playbook" --version >/dev/null
+PYTHONPATH="$packages" "$bin_dir/ansible-runner" --version >/dev/null
+printf 'AWX04_RUNTIME=PASS ansible_core=2.18.19 runner=2.4.3 msgpack=1.2.1 psycopg=3.3.4\n'
+'''
+        }
+    }
+
+    stage('build EE') {
+        container('buildah') {
+            withEnv(["AWX04_LOCAL_IMAGE=${localImage}", "AWX04_REVISION=${revision}"]) {
+                sh '''
+set -eu
+cd "$WORKSPACE/source"
+buildah bud --isolation chroot --layers=false \
+  --build-arg "SOURCE_REVISION=${AWX04_REVISION}" \
+  --tag "$AWX04_LOCAL_IMAGE" \
+  --file gitops/tools/awx-04/ee/Containerfile .
+'''
+            }
+        }
+    }
+
+    stage('Trivy, SBOM, Harbor push and Cosign') {
+        withCredentials([
+            usernamePassword(credentialsId: 'harbor-robot-awx04', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_SECRET'),
+            string(credentialsId: 'cosign-private-key-sign01', variable: 'COSIGN_PRIVATE_KEY'),
+            string(credentialsId: 'cosign-password-sign01', variable: 'COSIGN_PASSWORD'),
+            string(credentialsId: 'cosign-public-key-sign01', variable: 'COSIGN_PUBLIC_KEY')
+        ]) {
+            withEnv(["AWX04_LOCAL_IMAGE=${localImage}", "AWX04_REPOSITORY=${repository}", "AWX04_TAG=${tag}"]) {
+                container('buildah') {
+                    sh '''
+set -eu
+unset REGISTRY_AUTH_FILE
+buildah push --format docker "$AWX04_LOCAL_IMAGE" "docker-archive:$WORKSPACE/awx04-ee.tar:$AWX04_LOCAL_IMAGE"
+printf '%s' "$HARBOR_SECRET" | buildah login --username "$HARBOR_USER" --password-stdin harbor.imcherry5778.xyz
+buildah push --digestfile "$WORKSPACE/awx04-ee.digest" "$AWX04_LOCAL_IMAGE" "$AWX04_REPOSITORY:$AWX04_TAG"
+buildah logout harbor.imcherry5778.xyz >/dev/null
+'''
+                }
+                container('trivy') {
+                    sh '''
+set -eu
+trivy image --cache-dir /var/cache/trivy --cache-backend memory --input "$WORKSPACE/awx04-ee.tar" --scanners vuln \
+  --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --skip-db-update --skip-java-db-update \
+  --skip-check-update --skip-version-check --no-progress
+trivy image --cache-dir /var/cache/trivy --cache-backend memory --input "$WORKSPACE/awx04-ee.tar" --scanners vuln \
+  --format cyclonedx --output "$WORKSPACE/awx04-ee.sbom.cdx.json" --skip-db-update \
+  --skip-java-db-update --skip-check-update --skip-version-check --no-progress
+grep -Eq '"bomFormat"[[:space:]]*:[[:space:]]*"CycloneDX"' "$WORKSPACE/awx04-ee.sbom.cdx.json"
+'''
+                }
+                container('oras') {
+                    sh '''
+set -eu
+digest=$(cat "$WORKSPACE/awx04-ee.digest")
+printf '%s' "$HARBOR_SECRET" | oras login harbor.imcherry5778.xyz --username "$HARBOR_USER" --password-stdin
+oras attach --disable-path-validation --distribution-spec v1.1-referrers-api --artifact-type application/vnd.cyclonedx+json \
+  --format go-template --template '{{.digest}}' "$AWX04_REPOSITORY@$digest" \
+  "$WORKSPACE/awx04-ee.sbom.cdx.json:application/vnd.cyclonedx+json" >"$WORKSPACE/awx04-ee.sbom.digest"
+oras logout harbor.imcherry5778.xyz >/dev/null
+'''
+                }
+                container('cosign') {
+                    sh '''
+set -eu
+umask 077
+export COSIGN_EXPERIMENTAL=1
+key=/home/cosign/awx04.key
+pub=/home/cosign/awx04.pub
+trap 'rm -f "$key" "$pub"; cosign logout harbor.imcherry5778.xyz >/dev/null 2>&1 || true' EXIT HUP INT TERM
+set +x
+printf '%s' "$COSIGN_PRIVATE_KEY" >"$key"
+printf '%s' "$COSIGN_PUBLIC_KEY" >"$pub"
+printf '%s' "$HARBOR_SECRET" | cosign login harbor.imcherry5778.xyz --username "$HARBOR_USER" --password-stdin >/dev/null
+set -x
+for subject in "$AWX04_REPOSITORY@$(cat "$WORKSPACE/awx04-ee.digest")" "$AWX04_REPOSITORY@$(cat "$WORKSPACE/awx04-ee.sbom.digest")"; do
+  cosign sign --yes --key "$key" --tlog-upload=false --use-signing-config=false --registry-referrers-mode=oci-1-1 "$subject"
+  cosign verify --key "$pub" --insecure-ignore-tlog=true "$subject" >/dev/null
+done
+'''
+                }
+                sh '''
+set -eu
+printf 'AWX04_EE_DIGEST=%s\n' "$(cat "$WORKSPACE/awx04-ee.digest")"
+printf 'AWX04_SBOM_DIGEST=%s\n' "$(cat "$WORKSPACE/awx04-ee.sbom.digest")"
+printf 'AWX04_SUPPLY_CHAIN=PASS trivy=pass sbom=cyclonedx cosign=pass\n'
+'''
+            }
+        }
+    }
+}

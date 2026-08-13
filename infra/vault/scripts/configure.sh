@@ -65,12 +65,19 @@ vault write auth/kubernetes/role/pomerium \
   token_no_default_policy=true \
   token_ttl=15m token_max_ttl=1h
 vault write auth/kubernetes/role/awx \
-  bound_service_account_names="awx-vault-bootstrap,awx-provisioner,awx-verifier" \
+  bound_service_account_names="awx-vault-bootstrap,awx-verifier" \
   bound_service_account_namespaces="awx" \
   audience="vault" \
   token_policies="awx" \
   token_no_default_policy=true \
   token_ttl=15m token_max_ttl=1h
+vault write auth/kubernetes/role/awx-provisioner \
+  bound_service_account_names="awx-provisioner" \
+  bound_service_account_namespaces="awx" \
+  audience="vault" \
+  token_policies="awx-provisioner" \
+  token_no_default_policy=true \
+  token_ttl=10m token_max_ttl=15m
 vault write auth/kubernetes/role/renovate \
   bound_service_account_names="renovate" \
   bound_service_account_namespaces="renovate" \
@@ -85,6 +92,16 @@ vault write auth/kubernetes/role/harbor \
   token_policies="harbor" \
   token_no_default_policy=true \
   token_ttl=15m token_max_ttl=1h
+
+# AWX에는 deploy key 원문을 저장하지 않는다. provision Hook은 이 AppRole bootstrap 값만
+# 받고, AWX의 built-in Vault external lookup이 `kv/awx/scm`에서 private key를 읽는다.
+vault auth list 2>/dev/null | grep -q '^approle/' \
+  || vault auth enable -description="AWX SCM external credential lookup" approle
+vault write auth/approle/role/awx-04-scm-lookup \
+  token_policies="awx-scm-lookup" \
+  token_no_default_policy=true \
+  token_ttl=10m token_max_ttl=15m \
+  secret_id_ttl=1h secret_id_num_uses=0
 EOF
 
 echo "== 5. 내부 PKI =="

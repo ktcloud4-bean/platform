@@ -74,15 +74,34 @@ spec:
               readOnly: true
         - name: plugins
           # 상시 container와 같은 image로 고정 버전 플러그인 집합만 설치한다.
-          # 버전은 plugins.txt가 전이 의존성까지 전부 고정한다.
+          # 버전은 plugins.txt가 전이 의존성까지 전부 고정한다. 이미 정확한 PVC
+          # cache가 있으면 update-center metadata 재조회로 controller rollout을
+          # 지연시키지 않는다. 하나라도 없거나 버전이 다를 때만 download한다.
           image: docker.io/jenkins/jenkins:2.568.1-lts-jdk21@sha256:f4f65e6cd1405cd889b7f5ac33f9d5cdc2a099de6b87fe8a3933b9c5d53d1d02
           imagePullPolicy: IfNotPresent
           command:
-            - jenkins-plugin-cli
-            - --jenkins-version=2.568.1
-            - --plugin-file=/opt/ci-01/plugins.txt
-            - --plugin-download-directory=/var/jenkins_home/plugins
-            - --latest=false
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              complete=true
+              while IFS=: read -r plugin version; do
+                [ -n "$plugin" ] || continue
+                archive="/var/jenkins_home/plugins/${plugin}.jpi"
+                actual="$(unzip -p "$archive" META-INF/MANIFEST.MF 2>/dev/null | tr -d '\r' | sed -n 's/^Plugin-Version: //p' | head -n 1 || true)"
+                if [ "$actual" != "$version" ]; then
+                  complete=false
+                  break
+                fi
+              done </opt/ci-01/plugins.txt
+              if [ "$complete" = true ]; then
+                exit 0
+              fi
+              exec jenkins-plugin-cli \
+                --jenkins-version=2.568.1 \
+                --plugin-file=/opt/ci-01/plugins.txt \
+                --plugin-download-directory=/var/jenkins_home/plugins \
+                --latest=false
           env:
             - name: HOME
               value: /var/jenkins_home

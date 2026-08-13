@@ -1,0 +1,6 @@
+---
+# 저장소에서 실제 사용하는 외부 collection만 고정한다. 나머지 모듈은
+# ansible.builtin이며 모든 역할은 같은 image에 복사한다.
+collections:
+  - name: community.postgresql
+    version: 3.5.0
