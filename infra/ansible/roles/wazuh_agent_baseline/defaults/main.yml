@@ -44,6 +44,12 @@ wazuh_agent_name: "{{ inventory_hostname }}"
 # manager의 wazuh-04-warpgate-audit decoder가 처리한다.
 wazuh_agent_localfile_journald_unit: ""
 
+# WAZUH-05: 빈 문자열이면 JSON localfile을 전혀 선언하지 않는다(6대 중 5대의
+# 기본값). netbird-01만 inventory에서 netbird_audit_relay 역할의 출력 경로
+# (/var/lib/wazuh-05-netbird-relay/netbird-audit.log)로 설정해 그 파일 하나만
+# JSON 한 줄씩 tail한다 — manager의 wazuh-05-netbird-audit decoder가 처리한다.
+wazuh_agent_localfile_json_path: ""
+
 # 모든 대상 공통 최소 syscheck 경로(SSH·sudo·systemd unit). OS 계열별 신뢰
 # 저장소 경로는 tasks/main.yml이 os_family로 판정해 더한다. 존재하지 않는
 # 경로를 선언해도 안전하다 — syscheck는 없는 경로는 경고만 남기고 건너뛴다.

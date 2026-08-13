@@ -1,0 +1,95 @@
+---
+# infra/ansible/roles/netbird_audit_relay/tasks/main.yml
+# WAZUH-05: events.db polling 전용 non-root user 생성 → 상태 디렉터리 →
+# 스크립트 배치 → events.db read-only ACL 부여 → systemd service/timer.
+
+- name: 전제 확인 — events.db와 python3
+  ansible.builtin.stat:
+    path: "{{ netbird_audit_relay_events_db }}"
+  register: netbird_audit_relay_db_stat
+
+- name: 전제 확인 실패 시 중단
+  ansible.builtin.assert:
+    that:
+      - netbird_audit_relay_db_stat.stat.exists
+    fail_msg: >-
+      {{ netbird_audit_relay_events_db }}가 없다 — NetBird management 서버가
+      이 host에 없거나 경로가 바뀌었다. 라이브 상태가 전제와 다르므로 변경하지
+      않고 중단한다.
+
+- name: 전용 system group 선언
+  ansible.builtin.group:
+    name: "{{ netbird_audit_relay_group }}"
+    system: true
+    state: present
+
+- name: 전용 비로그인 system user 선언
+  ansible.builtin.user:
+    name: "{{ netbird_audit_relay_user }}"
+    group: "{{ netbird_audit_relay_group }}"
+    home: "{{ netbird_audit_relay_state_dir }}"
+    create_home: false
+    shell: /sbin/nologin
+    system: true
+    password_lock: true
+    state: present
+
+- name: 상태·출력 디렉터리 선언
+  ansible.builtin.file:
+    path: "{{ netbird_audit_relay_state_dir }}"
+    state: directory
+    owner: "{{ netbird_audit_relay_user }}"
+    group: "{{ netbird_audit_relay_group }}"
+    mode: "0750"
+
+- name: polling 스크립트 배치
+  ansible.builtin.copy:
+    src: netbird-audit-relay.py
+    dest: "{{ netbird_audit_relay_script_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: events.db 현재 ACL 조회
+  ansible.builtin.command:
+    argv:
+      - getfacl
+      - --absolute-names
+      - --omit-header
+      - "{{ netbird_audit_relay_events_db }}"
+  register: netbird_audit_relay_acl_current
+  changed_when: false
+
+- name: events.db에 전용 user read-only ACL 부여
+  ansible.builtin.command:
+    argv:
+      - setfacl
+      - -m
+      - "u:{{ netbird_audit_relay_user }}:r"
+      - "{{ netbird_audit_relay_events_db }}"
+  when: "('user:' + netbird_audit_relay_user + ':r--') not in netbird_audit_relay_acl_current.stdout"
+
+- name: systemd service unit 선언
+  ansible.builtin.template:
+    src: netbird-audit-relay.service.j2
+    dest: /etc/systemd/system/netbird-audit-relay.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: netbird-audit-relay 타이머 재기동
+
+- name: systemd timer unit 선언
+  ansible.builtin.template:
+    src: netbird-audit-relay.timer.j2
+    dest: /etc/systemd/system/netbird-audit-relay.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify: netbird-audit-relay 타이머 재기동
+
+- name: netbird-audit-relay 타이머 활성화 및 기동
+  ansible.builtin.systemd_service:
+    name: netbird-audit-relay.timer
+    enabled: true
+    daemon_reload: true
+    state: started

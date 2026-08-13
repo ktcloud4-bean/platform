@@ -66,6 +66,8 @@
 # WAZUH-04: warpgate-01만 wazuh_agent_localfile_journald_unit=warpgate.service를
 # 더해 journald의 Warpgate 감사 event를 manager로 보낸다(나머지 5대는 없음).
 # warpgate-01 ansible_host=<docs/ip-plan.md의 warpgate-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/etc/warpgate.yaml,/var/lib/warpgate-acme wazuh_agent_localfile_journald_unit=warpgate.service
-# netbird-01 ansible_host=<docs/ip-plan.md의 netbird-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/etc/netbird
+# WAZUH-05: netbird-01만 wazuh_agent_localfile_json_path를 더해
+# netbird_audit_relay 역할이 쓰는 JSON 감사 로그를 manager로 보낸다.
+# netbird-01 ansible_host=<docs/ip-plan.md의 netbird-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/etc/netbird wazuh_agent_localfile_json_path=/var/lib/wazuh-05-netbird-relay/netbird-audit.log
 # postgres-01 ansible_host=<docs/ip-plan.md의 postgres-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/var/lib/pgsql/data/postgresql.conf,/var/lib/pgsql/data/pg_hba.conf,/var/lib/pgsql/data/server-ca.crt,/var/lib/pgsql/data/server-ca.key,/var/lib/pgsql/data/server.crt,/var/lib/pgsql/data/server.key
 # object-01 ansible_host=<docs/ip-plan.md의 object-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/etc/seaweedfs

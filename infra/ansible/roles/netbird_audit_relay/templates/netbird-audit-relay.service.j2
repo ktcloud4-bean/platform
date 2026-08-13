@@ -1,0 +1,40 @@
+[Unit]
+Description=WAZUH-05 NetBird events.db 감사 event polling
+Documentation=https://github.com/ktcloud4-bean/platform/blob/main/docs/audit-event-standard.md
+After=netbird.service
+ConditionPathExists={{ netbird_audit_relay_events_db }}
+
+[Service]
+Type=oneshot
+User={{ netbird_audit_relay_user }}
+Group={{ netbird_audit_relay_group }}
+UMask=0027
+ExecStart=/usr/bin/python3 {{ netbird_audit_relay_script_path }}
+TimeoutStartSec=30
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateNetwork=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+ReadWritePaths={{ netbird_audit_relay_state_dir }}
+RestrictAddressFamilies=
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+IPAddressDeny=any

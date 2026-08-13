@@ -224,6 +224,10 @@ spec:
               mountPath: /wazuh-config-mount/etc/decoders/wazuh-04-decoders.xml
               subPath: wazuh-04-decoders.xml
               readOnly: true
+            - name: wazuh-rules
+              mountPath: /wazuh-config-mount/etc/rules/wazuh-05-a90-netbird-audit.xml
+              subPath: wazuh-05-a90-netbird-audit.xml
+              readOnly: true
             - name: wazuh-cont-init
               mountPath: /etc/cont-init.d/3-wazuh-01-index-routing
               subPath: 3-wazuh-01-index-routing

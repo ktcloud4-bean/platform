@@ -277,6 +277,25 @@ cross-VLAN 방화벽 규칙은 `infra/opnsense/`가 소유한다.
 처리한다. `LOKI-02`가 다룰 host O7(`sshd`·`sudo`·systemd 실패·kernel)과는
 겹치지 않는다 — 이 unit 필터는 `warpgate.service` 하나로만 좁힌다.
 
+### WAZUH-05 NetBird 감사 event(`events.db` polling)
+
+NetBird 감사 기록은 로그 파일이 아니라 `netbird-01`의 SQLite `/var/lib/netbird/events.db`다.
+`netbird_audit_relay` 역할(`playbooks/netbird-audit-relay.yml`, `netbird_server` 그룹)이
+전용 non-root system user(`wazuh05-relay`)를 만들고 `events.db`에 그 user 하나에만
+read-only POSIX ACL(`setfacl -m u:wazuh05-relay:r`)을 부여한 뒤, `netbird-audit-relay.timer`
+(60초 간격)가 `roles/netbird_audit_relay/files/netbird-audit-relay.py`를 반복 실행한다.
+스크립트는 `events.db`를 URI `mode=ro`로만 열어 마지막 처리 row id 이후 새 row만 읽고,
+`docs/audit-event-standard.md` 4절 표에 정의된 "account·user·peer·policy·setup-key 변경과
+접근 event" 범위 밖(route·DNS·network·service·integration·posture check 등)은 activity
+코드 allowlist에서 걸러 아예 전송하지 않는다. `meta`도 allowlist 방식이라 `name`·`fqdn`·`ip`·
+`ipv6`·`group`·`group_id`·`type`·`is_service_user`·`pending_approval`·`created_at`만
+통과하고, setup key 값(`key`)·geo/city(`location_*`)·이메일·표시명은 항상 제거한다(6절).
+출력은 `/var/lib/wazuh-05-netbird-relay/netbird-audit.log`(JSON 한 줄) — `wazuh_agent_baseline`의
+`wazuh_agent_localfile_json_path`가 이 파일을 `<localfile log_format="json">`으로 tail한다.
+systemd 서비스는 `PrivateNetwork=true`를 포함한 전면 hardening 아래 순수 로컬 파일 I/O만
+한다(네트워크 접근 자체가 없다). 상태 파일(마지막 처리 row id)은 tmp write 후 rename으로
+원자적으로 갱신해 재시작 뒤에도 중복·누락 없이 이어 읽는다.
+
 ## NTP source
 
 `NET-03`은 각 project VLAN에서 **해당 VLAN gateway의 UDP 123만** 허용한다. Rocky 기본 설정의 공개 pool은 차단되므로 그대로 두면 게스트가 영원히 동기화되지 않는다.
