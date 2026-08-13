@@ -1,0 +1,9 @@
+---
+- name: OBS-16 NetBird native metrics만 적용
+  hosts: netbird_server
+  become: true
+  tasks:
+    - name: NetBird metrics role 부분 적용
+      ansible.builtin.include_role:
+        name: netbird_server
+        tasks_from: metrics.yml

@@ -38,6 +38,10 @@ services:
       - "info"
       - "--disable-anonymous-metrics=true"
       - "--disable-geolite-update=true"
+      - "--metrics-port"
+      - "{{ netbird_management_metrics_port }}"
+    ports:
+      - "{{ netbird_management_metrics_listen_address }}:{{ netbird_management_metrics_port }}:{{ netbird_management_metrics_port }}"
     volumes:
       - "{{ netbird_data_dir }}:/var/lib/netbird"
       - "{{ netbird_config_dir }}/management.json:/etc/netbird/management.json:ro"

@@ -25,6 +25,17 @@ seaweedfs_s3_port: 8333
 seaweedfs_s3_grpc_port: 18333
 seaweedfs_s3_allowed_sources: []
 
+# OBS-16: native Prometheus endpoint는 S3 endpoint와 분리된 관리 주소에서만 연다.
+# component마다 같은 host에서 기동하므로 TCP port도 분리한다.
+seaweedfs_metrics_bind_address: "{{ seaweedfs_s3_bind_address }}"
+seaweedfs_metrics_enabled: true
+seaweedfs_master_metrics_port: 9325
+seaweedfs_volume_metrics_port: 9326
+seaweedfs_filer_metrics_port: 9327
+seaweedfs_s3_metrics_port: 9328
+seaweedfs_metrics_allowed_sources:
+  - "10.10.20.10/32"
+
 # 실제 자격증명은 저장소 밖 extra-vars에서만 주입한다. 빈 목록이면 template이
 # credential·action 없는 disabled sentinel identity를 넣어 SeaweedFS 인증 경로를
 # 활성화한다. SeaweedFS는 identity가 0개면 allow-all이므로 빈 JSON으로 두지 않는다.

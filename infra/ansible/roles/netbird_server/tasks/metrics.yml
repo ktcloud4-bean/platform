@@ -1,0 +1,36 @@
+---
+# OBS-16은 기존 OIDC·account·relay 설정을 다시 적용하지 않는다. 현재 compose의 management
+# command와 host publish 한 쌍만 정확히 추가하고, 바뀐 경우에만 compose stack을 재생성한다.
+- name: OBS-16 NetBird metrics 입력 검증
+  ansible.builtin.assert:
+    that:
+      - netbird_management_metrics_listen_address == ansible_default_ipv4.address
+      - netbird_management_metrics_port is integer
+      - netbird_management_metrics_port >= 1024
+      - netbird_management_metrics_port <= 65535
+    fail_msg: OBS-16 NetBird metrics는 관리 주소와 비특권 TCP port가 필요하다.
+
+- name: OBS-16 기존 NetBird management compose 경계 확인
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/grep
+      - -F
+      - --
+      - --disable-geolite-update=true
+      - "{{ netbird_config_dir }}/docker-compose.yml"
+  changed_when: false
+  no_log: true
+
+- name: OBS-16 NetBird management metrics command와 management publish 추가
+  ansible.builtin.replace:
+    path: "{{ netbird_config_dir }}/docker-compose.yml"
+    regexp: '      - "--disable-geolite-update=true"\n    volumes:'
+    replace: '      - "--disable-geolite-update=true"\n      - "--metrics-port"\n      - "{{ netbird_management_metrics_port }}"\n    ports:\n      - "{{ netbird_management_metrics_listen_address }}:{{ netbird_management_metrics_port }}:{{ netbird_management_metrics_port }}"\n    volumes:'
+  register: obs16_netbird_metrics_compose
+  no_log: true
+
+- name: OBS-16 NetBird compose stack 재생성
+  ansible.builtin.systemd:
+    name: netbird-compose.service
+    state: restarted
+  when: obs16_netbird_metrics_compose.changed

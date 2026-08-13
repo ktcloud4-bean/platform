@@ -1,0 +1,14 @@
+---
+- name: OBS-16 NetBird metrics publish 선언 rollback
+  ansible.builtin.replace:
+    path: "{{ netbird_config_dir }}/docker-compose.yml"
+    regexp: '      - "--disable-geolite-update=true"\n      - "--metrics-port"\n      - "{{ netbird_management_metrics_port }}"\n    ports:\n      - "{{ netbird_management_metrics_listen_address }}:{{ netbird_management_metrics_port }}:{{ netbird_management_metrics_port }}"\n    volumes:'
+    replace: '      - "--disable-geolite-update=true"\n    volumes:'
+  register: obs16_netbird_metrics_rollback
+  no_log: true
+
+- name: OBS-16 NetBird compose stack rollback 적용
+  ansible.builtin.systemd:
+    name: netbird-compose.service
+    state: restarted
+  when: obs16_netbird_metrics_rollback.changed

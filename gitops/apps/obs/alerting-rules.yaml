@@ -68,3 +68,19 @@ spec:
             severity: critical
           annotations:
             summary: "Velero backup 실패(완전 또는 부분)가 지난 1시간 안에 발생했다."
+    - name: obs-16-native-metrics
+      rules:
+        - alert: NativeMetricsTargetDown
+          expr: up{job=~"postgres-exporter|seaweedfs|netbird-management"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.job }} {{ $labels.component }} target {{ $labels.instance }}가 5분 이상 응답하지 않는다."
+        - alert: PostgreSQLDatabaseMetricsDown
+          expr: pg_up{job="postgres-exporter",instance="postgres-01.imcherry5778.xyz"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "postgres_exporter가 PostgreSQL 자체에 연결하지 못한다."

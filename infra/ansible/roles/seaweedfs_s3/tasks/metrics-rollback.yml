@@ -1,0 +1,5 @@
+---
+- name: OBS-16 SeaweedFS native metrics listener 비활성화
+  ansible.builtin.include_tasks: metrics.yml
+  vars:
+    seaweedfs_metrics_enabled: false

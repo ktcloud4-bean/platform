@@ -16,7 +16,12 @@ ExecStart={{ seaweedfs_binary_path }} s3 \
   -port={{ seaweedfs_s3_port }} \
   -port.grpc={{ seaweedfs_s3_grpc_port }} \
   -port.iceberg=0 \
+{% if seaweedfs_metrics_enabled %}
+  -metricsIp={{ seaweedfs_metrics_bind_address }} \
+  -metricsPort={{ seaweedfs_s3_metrics_port }} \
+{% else %}
   -metricsPort=0 \
+{% endif %}
   -iam=false \
   -config={{ seaweedfs_config_dir }}/s3.json \
   -cert.file={{ seaweedfs_tls_cert_path }} \

@@ -17,7 +17,12 @@ ExecStart={{ seaweedfs_binary_path }} master \
   -mdir={{ seaweedfs_master_dir }} \
   -peers=none \
   -telemetry=false \
+{% if seaweedfs_metrics_enabled %}
+  -metricsIp={{ seaweedfs_metrics_bind_address }} \
+  -metricsPort={{ seaweedfs_master_metrics_port }}
+{% else %}
   -metricsPort=0
+{% endif %}
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=30s
@@ -48,6 +53,12 @@ MemoryDenyWriteExecute=true
 CapabilityBoundingSet=
 AmbientCapabilities=
 IPAddressAllow=localhost
+{% if seaweedfs_metrics_enabled %}
+IPAddressAllow={{ seaweedfs_metrics_bind_address }}/32
+{% for source in seaweedfs_metrics_allowed_sources %}
+IPAddressAllow={{ source }}
+{% endfor %}
+{% endif %}
 IPAddressDeny=any
 
 [Install]

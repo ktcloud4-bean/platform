@@ -199,6 +199,39 @@ immutable root `b701ef681b061c9098b0e188dc1cedf2da110b81`와 child
 `Synced/Healthy`로 복구됐다. 상세는
 [`docs/evidence/obs-15/README.md`](../../../docs/evidence/obs-15/README.md)가 소유한다.
 
+## OBS-16 SeaweedFS·NetBird native metric과 운영 화면
+
+`object-01`의 SeaweedFS master·volume·filer·S3는 각각 관리 주소 TCP
+9325·9326·9327·9328에서만 `/metrics`를 열고, systemd `IPAddressDeny=any` 아래
+Prometheus `k3s-01`(`10.10.20.10/32`)만 추가 허용한다. 기존 S3 TLS TCP 8333과
+credential·object 경로는 바꾸지 않는다. `netbird-01`은 management 컨테이너의 native
+TCP 9090만 management host 주소에 publish하며 Traefik route·공개 DNS·NAT에는 넣지 않는다.
+
+Prometheus는 `seaweedfs`(component=`master|volume|filer|s3`)와
+`netbird-management` job을 30초마다 static `ScrapeConfig`로 읽는다. `Service Native
+Metrics` Grafana dashboard는 target health, PostgreSQL database reachability·transaction,
+SeaweedFS volume used/available·disk error, NetBird connected streams·peer status update만
+표시한다. query text, S3 object name, NetBird peer identity는 query·label·panel에 없다.
+
+`NativeMetricsTargetDown`은 PostgreSQL exporter·SeaweedFS 네 component·NetBird
+management 중 하나가 5분간 `up=0`일 때, `PostgreSQLDatabaseMetricsDown`은 exporter가
+DB 자체에 연결하지 못할 때 Alertmanager로 보낸다. Wazuh는 security event 조사 경계이므로
+이 숫자형 상태 지표의 소비처가 아니다.
+
+적용은 기존 identity/OIDC 선언 전체를 다시 적용하지 않는 전용 playbook을 쓴다.
+
+```bash
+cd infra/ansible
+export ANSIBLE_SSH_COMMON_ARGS='-o StrictHostKeyChecking=yes -o PasswordAuthentication=no'
+ansible-playbook -i <저장소 밖 S3 inventory> playbooks/seaweedfs-metrics.yml
+ansible-playbook -i <저장소 밖 NetBird inventory> playbooks/netbird-metrics.yml
+```
+
+rollback은 `seaweedfs-metrics-rollback.yml`·`netbird-metrics-rollback.yml`, OBS-16
+`ScrapeConfig`·NetworkPolicy·dashboard·PrometheusRule 원복, 그리고
+`gitops/tools/obs-16/apply-firewall.sh rollback <STATE_DIR>` 순서다. 이 범위만 되돌리며
+기존 SeaweedFS S3·NetBird control/relay·PostgreSQL TCP 5432와 node_exporter는 보존한다.
+
 ## OBS-03 Grafana Keycloak 로그인과 Editor 경계
 
 Grafana는 Keycloak `platform` realm의 confidential client `grafana`를 `generic_oauth` provider로

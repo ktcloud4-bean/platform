@@ -1,0 +1,51 @@
+---
+# OBS-16은 이미 검증된 S3 identity·TLS·data 설정을 다시 렌더링하지 않는다. 네 unit의
+# native metrics listener만 바꾸고, 변경됐을 때만 기존 stack 순서로 재시작한다.
+- name: OBS-16 SeaweedFS metrics 입력 검증
+  ansible.builtin.assert:
+    that:
+      - seaweedfs_metrics_enabled is boolean
+      - not seaweedfs_metrics_enabled or seaweedfs_metrics_bind_address == ansible_default_ipv4.address
+      - not seaweedfs_metrics_enabled or seaweedfs_master_metrics_port is integer
+      - not seaweedfs_metrics_enabled or seaweedfs_volume_metrics_port is integer
+      - not seaweedfs_metrics_enabled or seaweedfs_filer_metrics_port is integer
+      - not seaweedfs_metrics_enabled or seaweedfs_s3_metrics_port is integer
+      - not seaweedfs_metrics_enabled or "[seaweedfs_master_metrics_port, seaweedfs_volume_metrics_port, seaweedfs_filer_metrics_port, seaweedfs_s3_metrics_port] | unique | length == 4"
+      - not seaweedfs_metrics_enabled or "[seaweedfs_master_metrics_port, seaweedfs_volume_metrics_port, seaweedfs_filer_metrics_port, seaweedfs_s3_metrics_port] | min >= 1024"
+      - not seaweedfs_metrics_enabled or "[seaweedfs_master_metrics_port, seaweedfs_volume_metrics_port, seaweedfs_filer_metrics_port, seaweedfs_s3_metrics_port] | max <= 65535"
+      - not seaweedfs_metrics_enabled or seaweedfs_metrics_allowed_sources | length == 1
+      - not seaweedfs_metrics_enabled or seaweedfs_metrics_allowed_sources[0] == '10.10.20.10/32'
+    fail_msg: OBS-16 SeaweedFS metrics는 관리 주소, 서로 다른 비특권 TCP port 네 개와 Prometheus /32 하나가 필요하다.
+
+- name: OBS-16 SeaweedFS native metrics unit 선언
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "/etc/systemd/system/{{ item.unit }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - { src: seaweedfs-master.service.j2, unit: seaweedfs-master.service }
+    - { src: seaweedfs-volume.service.j2, unit: seaweedfs-volume.service }
+    - { src: seaweedfs-filer.service.j2, unit: seaweedfs-filer.service }
+    - { src: seaweedfs-s3.service.j2, unit: seaweedfs-s3.service }
+  register: obs16_seaweedfs_metrics_units
+
+- name: OBS-16 변경된 SeaweedFS unit의 systemd daemon-reload
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: obs16_seaweedfs_metrics_units.results | selectattr('changed') | list | length > 0
+
+- name: OBS-16 변경된 SeaweedFS component만 재시작
+  ansible.builtin.systemd:
+    name: "{{ item.item.unit }}"
+    state: restarted
+  loop: "{{ obs16_seaweedfs_metrics_units.results }}"
+  when: item.changed
+
+# filer 재시작은 Requires=seaweedfs-filer.service인 S3 gateway를 멈출 수 있다.
+# 이미 active면 재시작하지 않고, 멈춘 경우에만 다시 시작해 S3 경로를 보존한다.
+- name: OBS-16 SeaweedFS S3 gateway dependency 복구
+  ansible.builtin.systemd:
+    name: seaweedfs-s3.service
+    state: started

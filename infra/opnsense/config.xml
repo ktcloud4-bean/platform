@@ -462,7 +462,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1786601593.67" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1786603771.14" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -2928,6 +2928,286 @@
             <shaper1 />
             <shaper2 />
             <description>OBS-15: k3s-01에서 postgres-01 postgres_exporter TCP 9187만 허용</description>
+          </rule>
+          <rule uuid="6e013c2d-3bbd-4322-95e5-55b40f64f678">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1009</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.50.20</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>9325</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>OBS-16: k3s-01에서 object-01 SeaweedFS master metrics TCP 9325만 허용</description>
+          </rule>
+          <rule uuid="a282b400-548a-431f-9a06-d94c08e3300f">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1010</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.50.20</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>9326</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>OBS-16: k3s-01에서 object-01 SeaweedFS volume metrics TCP 9326만 허용</description>
+          </rule>
+          <rule uuid="357fce7b-a72f-4ea3-84d0-78e66a4a3f7c">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1011</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.50.20</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>9327</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>OBS-16: k3s-01에서 object-01 SeaweedFS filer metrics TCP 9327만 허용</description>
+          </rule>
+          <rule uuid="3395bbc3-9a0c-43d2-9aa3-09d51217e631">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1014</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.50.20</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>9328</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>OBS-16: k3s-01에서 object-01 SeaweedFS S3 metrics TCP 9328만 허용</description>
+          </rule>
+          <rule uuid="7fb14611-b2a6-47b3-9d06-d89c64430a63">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1016</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.40.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>9090</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>OBS-16: k3s-01에서 netbird-01 management metrics TCP 9090만 허용</description>
           </rule>
         </rules>
         <snatrules />

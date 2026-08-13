@@ -20,7 +20,7 @@ data:
           "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
           "id": 1,
           "options": {
-            "content": "## Traefik Traffic\\n\\n[QPS, HTTP 상태, 5xx 비율, p95/p99 지연시간과 entrypoint/router/service 상위 항목 열기](/d/obs-10-traefik-traffic)",
+            "content": "## Drill-down\\n\\n[Traefik QPS, HTTP 상태, 5xx 비율, p95/p99 지연시간과 entrypoint/router/service 상위 항목](/d/obs-10-traefik-traffic)\\n\\n[PostgreSQL·SeaweedFS·NetBird native metrics 상태와 용량](/d/obs-16-service-native-metrics)",
             "mode": "markdown"
           },
           "title": "Traefik traffic drill-down",
@@ -114,7 +114,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(rate(pg_stat_database_xact_commit[5m])) + sum(rate(pg_stat_database_xact_rollback[5m])) or sum(rate(pg_stat_database_calls_total[5m])) or vector(0)",
+              "expr": "sum(rate(pg_stat_database_xact_commit{job=\"postgres-exporter\",instance=\"postgres-01.imcherry5778.xyz\"}[5m])) + sum(rate(pg_stat_database_xact_rollback{job=\"postgres-exporter\",instance=\"postgres-01.imcherry5778.xyz\"}[5m]))",
               "legendFormat": "Queries/sec",
               "refId": "A"
             }
@@ -146,7 +146,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(pg_stat_activity_count) or sum(pg_stat_database_numbackends) or vector(0)",
+              "expr": "sum(pg_stat_database_numbackends{job=\"postgres-exporter\",instance=\"postgres-01.imcherry5778.xyz\"})",
               "legendFormat": "Connections",
               "refId": "A"
             }
@@ -178,12 +178,12 @@ data:
           },
           "targets": [
             {
-              "expr": "pg_stat_wal_bytes or pg_stat_wal_records or vector(0)",
-              "legendFormat": "WAL Bytes",
+              "expr": "min(pg_up{job=\"postgres-exporter\",instance=\"postgres-01.imcherry5778.xyz\"})",
+              "legendFormat": "pg_up",
               "refId": "A"
             }
           ],
-          "title": "PostgreSQL WAL",
+          "title": "PostgreSQL Database Reachability",
           "type": "stat"
         },
         {
@@ -522,5 +522,99 @@ data:
       "time": {"from": "now-6h", "to": "now"},
       "title": "Traefik Traffic Drill-down",
       "uid": "obs-10-traefik-traffic",
+      "version": 1
+    }
+  service-native-metrics.json: |
+    {
+      "annotations": {"list": []},
+      "description": "OBS-15 PostgreSQL과 OBS-16 SeaweedFS·NetBird의 native metrics만 표시한다. query text, S3 object name, peer identity는 수집하거나 표시하지 않는다.",
+      "editable": false,
+      "panels": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"color": "red", "index": 0, "text": "DOWN"}, "1": {"color": "green", "index": 1, "text": "UP"}}, "type": "value"}], "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "id": 1,
+          "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+          "targets": [{"expr": "min by (job, component, instance) (up{job=~\"postgres-exporter|seaweedfs|netbird-management\"})", "legendFormat": "{{job}} {{component}}", "refId": "A"}],
+          "title": "Native Metrics Target Health",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"color": "red", "index": 0, "text": "DB DOWN"}, "1": {"color": "green", "index": 1, "text": "DB UP"}}, "type": "value"}], "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+          "id": 2,
+          "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+          "targets": [{"expr": "min(pg_up{job=\"postgres-exporter\",instance=\"postgres-01.imcherry5778.xyz\"})", "legendFormat": "pg_up", "refId": "A"}],
+          "title": "PostgreSQL Database Reachability",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "qps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+          "id": 3,
+          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+          "targets": [{"expr": "sum(rate(pg_stat_database_xact_commit{job=\"postgres-exporter\",instance=\"postgres-01.imcherry5778.xyz\"}[5m])) + sum(rate(pg_stat_database_xact_rollback{job=\"postgres-exporter\",instance=\"postgres-01.imcherry5778.xyz\"}[5m]))", "legendFormat": "transactions/s", "refId": "A"}],
+          "title": "PostgreSQL Transactions",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+          "id": 4,
+          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+          "targets": [{"expr": "max(SeaweedFS_volumeServer_resource{job=\"seaweedfs\",component=\"volume\",type=\"used\"})", "legendFormat": "used", "refId": "A"}],
+          "title": "SeaweedFS Volume Used",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+          "id": 5,
+          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+          "targets": [{"expr": "min(SeaweedFS_volumeServer_resource{job=\"seaweedfs\",component=\"volume\",type=\"avail\"})", "legendFormat": "available", "refId": "A"}],
+          "title": "SeaweedFS Volume Available",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"color": "green", "index": 0, "text": "OK"}, "1": {"color": "red", "index": 1, "text": "ERROR"}}, "type": "value"}], "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+          "id": 6,
+          "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+          "targets": [{"expr": "max(SeaweedFS_volumeServer_disk_error_status{job=\"seaweedfs\",component=\"volume\",type=\"error\"})", "legendFormat": "disk error", "refId": "A"}],
+          "title": "SeaweedFS Volume Disk Error",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "id": 7,
+          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+          "targets": [{"expr": "max(management_grpc_connected_streams_ratio{job=\"netbird-management\",instance=\"netbird-01.imcherry5778.xyz\"})", "legendFormat": "connected streams", "refId": "A"}],
+          "title": "NetBird Management Connected Streams",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+          "id": 8,
+          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "value_and_name"},
+          "targets": [{"expr": "sum(rate(management_account_peer_status_update_counter_total{job=\"netbird-management\",instance=\"netbird-01.imcherry5778.xyz\"}[5m]))", "legendFormat": "peer status updates/s", "refId": "A"}],
+          "title": "NetBird Peer Status Update Rate",
+          "type": "stat"
+        }
+      ],
+      "schemaVersion": 41,
+      "tags": ["obs-15", "obs-16", "native-metrics", "platform"],
+      "time": {"from": "now-6h", "to": "now"},
+      "title": "Service Native Metrics",
+      "uid": "obs-16-service-native-metrics",
       "version": 1
     }

@@ -1,0 +1,9 @@
+---
+- name: OBS-16 SeaweedFS native metrics만 적용
+  hosts: object_nodes
+  become: true
+  tasks:
+    - name: SeaweedFS metrics role 부분 적용
+      ansible.builtin.include_role:
+        name: seaweedfs_s3
+        tasks_from: metrics.yml

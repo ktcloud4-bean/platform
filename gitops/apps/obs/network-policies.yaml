@@ -255,6 +255,15 @@ spec:
       ports:
         - protocol: TCP
           port: 9100
+        # OBS-16: SeaweedFS master·volume·filer·S3의 native metrics 전용 port.
+        - protocol: TCP
+          port: 9325
+        - protocol: TCP
+          port: 9326
+        - protocol: TCP
+          port: 9327
+        - protocol: TCP
+          port: 9328
     - to:
         - ipBlock:
             cidr: 10.10.30.10/32
@@ -267,6 +276,9 @@ spec:
       ports:
         - protocol: TCP
           port: 9100
+        # OBS-16: NetBird management native metrics. dashboard·Traefik에는 열지 않는다.
+        - protocol: TCP
+          port: 9090
     - to:
         - namespaceSelector:
             matchLabels:

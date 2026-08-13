@@ -154,6 +154,61 @@ spec:
         job: postgres-exporter
         instance: postgres-01.imcherry5778.xyz
 ---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: seaweedfs-native
+  namespace: obs
+  labels:
+    release: obs
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  # OBS-16: object-01의 네 SeaweedFS component가 같은 host에서 각각의 native
+  # metrics port를 쓴다. S3 serving TCP 8333와 완전히 분리된 관리 endpoint다.
+  metricsPath: /metrics
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
+  staticConfigs:
+    - targets: [10.10.50.20:9325]
+      labels:
+        job: seaweedfs
+        instance: object-01.imcherry5778.xyz
+        component: master
+    - targets: [10.10.50.20:9326]
+      labels:
+        job: seaweedfs
+        instance: object-01.imcherry5778.xyz
+        component: volume
+    - targets: [10.10.50.20:9327]
+      labels:
+        job: seaweedfs
+        instance: object-01.imcherry5778.xyz
+        component: filer
+    - targets: [10.10.50.20:9328]
+      labels:
+        job: seaweedfs
+        instance: object-01.imcherry5778.xyz
+        component: s3
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: netbird-management-native
+  namespace: obs
+  labels:
+    release: obs
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  # OBS-16: management container의 native /metrics만 host 관리 주소 TCP 9090에서 읽는다.
+  metricsPath: /metrics
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
+  staticConfigs:
+    - targets: [10.10.40.10:9090]
+      labels:
+        job: netbird-management
+        instance: netbird-01.imcherry5778.xyz
+---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:

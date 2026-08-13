@@ -24,6 +24,10 @@ netbird_data_dir: "/var/lib/netbird"
 netbird_idp_data_dir: "/var/lib/netbird/idp"
 netbird_letsencrypt_dir: "/var/lib/netbird/letsencrypt"
 
+# OBS-16: management container의 native metrics는 관리 주소 하나에만 publish한다.
+netbird_management_metrics_listen_address: "{{ ansible_default_ipv4.address }}"
+netbird_management_metrics_port: 9090
+
 # Fixed container image digests. NB-02 keeps the v0.73.0 control-plane version;
 # the separate images are required because v0.73.0 combined mode always enables
 # the embedded IdP and ignores external IdP settings.
