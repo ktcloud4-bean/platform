@@ -1,0 +1,40 @@
+---
+# LOKI-02 rollback: this playbook removes only paths and identities created by
+# roles/loki_host_journald. It does not touch system journald or WAZUH-03.
+- name: Roll back Loki O7 journald collector from the six-host fleet
+  hosts: loki_host_journald
+  become: true
+  tasks:
+    - name: collector 중지 및 비활성화
+      ansible.builtin.systemd_service:
+        name: alloy-loki-02.service
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: LOKI-02 전용 systemd unit 제거
+      ansible.builtin.file:
+        path: /etc/systemd/system/alloy-loki-02.service
+        state: absent
+
+    - name: LOKI-02 전용 binary·설정·cursor·cache 제거
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/alloy-loki-02
+        - /usr/local/bin/alloy-1.18.0
+        - /etc/alloy-loki-02
+        - /var/lib/alloy-loki-02
+        - /var/cache/loki-host-journald/1.18.0
+
+    - name: LOKI-02 전용 reader 계정 제거
+      ansible.builtin.user:
+        name: alloy_loki
+        state: absent
+        remove: false
+
+    - name: LOKI-02 전용 reader 그룹 제거
+      ansible.builtin.group:
+        name: alloy_loki
+        state: absent

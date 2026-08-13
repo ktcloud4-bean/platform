@@ -1,0 +1,24 @@
+---
+# LOKI-02: GitHub immutable release asset checksum is the installation trust
+# boundary. The collector reads journald only; it never tails arbitrary files
+# and client WAL is disabled so raw lines are not spooled locally.
+loki_host_journald_alloy_version: "1.18.0"
+loki_host_journald_asset: "alloy-linux-amd64.zip"
+loki_host_journald_asset_url: "https://github.com/grafana/alloy/releases/download/v{{ loki_host_journald_alloy_version }}/{{ loki_host_journald_asset }}"
+loki_host_journald_asset_sha256: "92f4c950aec4ec16a7fdbf6f805be4334d4d5fbbe458eecf514319c1c491bef4"
+loki_host_journald_cache_dir: "/var/cache/loki-host-journald/{{ loki_host_journald_alloy_version }}"
+loki_host_journald_controller_cache_dir: "{{ lookup('ansible.builtin.env', 'HOME') }}/.cache/loki-host-journald"
+loki_host_journald_controller_asset_path: "{{ loki_host_journald_controller_cache_dir }}/{{ loki_host_journald_alloy_version }}-{{ loki_host_journald_asset }}"
+loki_host_journald_binary_path: "/usr/local/bin/alloy-{{ loki_host_journald_alloy_version }}"
+loki_host_journald_binary_link: "/usr/local/bin/alloy-loki-02"
+loki_host_journald_config_dir: "/etc/alloy-loki-02"
+loki_host_journald_config_path: "/etc/alloy-loki-02/config.alloy"
+loki_host_journald_state_dir: "/var/lib/alloy-loki-02"
+loki_host_journald_user: "alloy_loki"
+loki_host_journald_group: "alloy_loki"
+
+# The private LoadBalancer address belongs to k3s-01. Host-local canonical DNS
+# may map its own name to loopback, so agents use the declared private address;
+# the OPNsense rule and Service source ranges restrict it to this exact fleet.
+loki_host_journald_gateway_url: "http://10.10.20.10:3100/loki/api/v1/push"
+loki_host_journald_hostname: "{{ inventory_hostname }}"

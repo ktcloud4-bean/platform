@@ -24,6 +24,20 @@ Prometheus는 `obs` namespace에 있는 `release=obs` ServiceMonitor·Prometheus
 선택한다. Velero와 Loki 선언은 수정하지 않는다. `OPN-METRICS-01`의 OPNsense static target,
 Prometheus egress와 방화벽 rule은 이 앱을 확장하며 OBS-01의 과거 증거에는 포함하지 않는다.
 
+### LOKI-02 host journald ingress
+
+`obs-loki-host-gateway`는 기존 Loki ClusterIP를 외부에 열지 않고, 여섯 관리 host가 보내는
+O7 Loki push payload만 private LoadBalancer TCP 3100에서 받아 같은 cluster 내부 Loki Service로
+전달한다. Pod에는 ServiceAccount·Secret·PVC가 없고 Alloy client WAL과 storage는 memory
+`emptyDir` 32 MiB로 제한한다. `source=host`·`hostname`·`unit` selector는 OBS-07 Log Explorer가
+Kubernetes O7과 host O7을 구분하는 데만 쓰며 PID·세션·사용자·command·원문은 저장하지 않는다.
+
+노출 경계는 Service `loadBalancerSourceRanges`, gateway ingress NetworkPolicy, gateway→Loki egress
+NetworkPolicy, OPNsense의 세 exact cross-VLAN PASS 규칙으로 겹친다. `proxmox-01`은 기존 LAN
+allow를 재사용하고 `k3s-01`은 같은 private address로 loopback한다. 공개 DNS·Ingress·Pomerium·
+credential·Loki runtime 설정은 바꾸지 않는다. 실패 rollback은 gateway Deployment/Service/
+NetworkPolicy와 host collector·LOKI-02 OPNsense rule만 제거하며 기존 K8s O7 수집은 보존한다.
+
 `TRAEFIK-METRICS`의 ServiceMonitor도 `obs` namespace에만 두고 `kube-system`의
 `traefik-metrics` ClusterIP Service를 선택한다. Prometheus Pod egress는 Traefik Pod의 TCP
 9100 한 포트로만 추가한다. 이 경로는 외부 serving Service·Ingress·DNS·NAT와 독립적이며,

@@ -462,7 +462,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1786515714.00" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1786598026.17" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -1197,7 +1197,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1122</sequence>
+            <sequence>1221</sequence>
             <action>block</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1253,7 +1253,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1132</sequence>
+            <sequence>1271</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1309,7 +1309,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1202</sequence>
+            <sequence>1321</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1365,7 +1365,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1212</sequence>
+            <sequence>1371</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1421,7 +1421,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1218</sequence>
+            <sequence>1421</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1477,7 +1477,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1222</sequence>
+            <sequence>1521</sequence>
             <action>block</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1533,7 +1533,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1232</sequence>
+            <sequence>1571</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1589,7 +1589,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1302</sequence>
+            <sequence>1621</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1645,7 +1645,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1312</sequence>
+            <sequence>1671</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1701,7 +1701,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1322</sequence>
+            <sequence>1771</sequence>
             <action>block</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1757,7 +1757,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1332</sequence>
+            <sequence>1821</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -2597,7 +2597,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1219</sequence>
+            <sequence>1471</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -2653,7 +2653,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1313</sequence>
+            <sequence>1721</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -2704,6 +2704,174 @@
             <shaper1 />
             <shaper2 />
             <description>WAZUH-03: DATA 실제 host(postgres-01·object-01)에서 Wazuh manager 등록·수집 포트만 허용</description>
+          </rule>
+          <rule uuid="d12a488f-3ff4-4aba-8bb5-fd768acb3413">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1171</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt3</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.30.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.20.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>3100</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>LOKI-02: warpgate-01에서 private Loki gateway TCP 3100만 허용</description>
+          </rule>
+          <rule uuid="b56258fe-d670-4441-a090-df8c079f79bc">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1496</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt4</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.40.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.20.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>3100</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>LOKI-02: netbird-01에서 private Loki gateway TCP 3100만 허용</description>
+          </rule>
+          <rule uuid="77ca735b-e402-4fa9-84f7-ddcb2f4b0f18">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1746</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt5</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>NET04_DATA_HOSTS</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.20.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>3100</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>LOKI-02: DATA 실제 host(postgres-01·object-01)에서 private Loki gateway TCP 3100만 허용</description>
           </rule>
         </rules>
         <snatrules />

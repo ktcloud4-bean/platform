@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: obs-loki-host-gateway
+  namespace: obs
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: obs-loki-host-gateway
+    app.kubernetes.io/component: log-ingest
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  config.alloy: |-
+    logging {
+      level  = "info"
+      format = "logfmt"
+    }
+
+    loki.source.api "host_o7" {
+      http {
+        listen_address = "0.0.0.0"
+        listen_port    = 3100
+      }
+      forward_to = [loki.process.host_o7.receiver]
+    }
+
+    loki.process "host_o7" {
+      forward_to = [loki.write.local.receiver]
+      stage.static_labels {
+        values = {
+          event_class = "operation",
+          retention   = "O7",
+          source      = "host",
+        }
+      }
+      stage.label_keep {
+        values = ["hostname", "unit", "source", "event_class", "retention"]
+      }
+    }
+
+    loki.write "local" {
+      endpoint {
+        url        = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+        batch_size = "128KiB"
+        batch_wait = "1s"
+      }
+      wal {
+        enabled = false
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: obs-loki-host-gateway
+  namespace: obs
+  labels:
+    app.kubernetes.io/name: obs-loki-host-gateway
+    app.kubernetes.io/component: log-ingest
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: obs-loki-host-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: obs-loki-host-gateway
+        app.kubernetes.io/component: log-ingest
+        app.kubernetes.io/part-of: platform-gitops
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 473
+        runAsGroup: 473
+        fsGroup: 473
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: alloy
+          image: docker.io/grafana/alloy@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --storage.path=/var/lib/alloy
+            - --server.http.listen-addr=127.0.0.1:12345
+            - --disable-reporting
+            - --stability.level=public-preview
+          ports:
+            - name: loki-push
+              containerPort: 3100
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: loki-push
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: loki-push
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+              readOnly: true
+            - name: storage
+              mountPath: /var/lib/alloy
+      volumes:
+        - name: config
+          configMap:
+            name: obs-loki-host-gateway
+        - name: storage
+          emptyDir:
+            medium: Memory
+            sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: obs-loki-host-gateway
+  namespace: obs
+  labels:
+    app.kubernetes.io/name: obs-loki-host-gateway
+    app.kubernetes.io/component: log-ingest
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  loadBalancerSourceRanges:
+    - 10.10.10.10/32
+    - 10.10.20.10/32
+    - 10.10.30.10/32
+    - 10.10.40.10/32
+    - 10.10.50.10/32
+    - 10.10.50.20/32
+  selector:
+    app.kubernetes.io/name: obs-loki-host-gateway
+  ports:
+    - name: loki-push
+      port: 3100
+      targetPort: loki-push
+      protocol: TCP

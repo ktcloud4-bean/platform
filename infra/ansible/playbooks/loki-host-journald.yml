@@ -1,0 +1,7 @@
+---
+# LOKI-02: six host journald O7 collector baseline.
+- name: Apply Loki O7 journald collector to the six-host fleet
+  hosts: loki_host_journald
+  become: true
+  roles:
+    - loki_host_journald

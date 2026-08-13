@@ -123,6 +123,7 @@ WAL, cache, index와 collector buffer는 이 14 GiB에 기대어 k3s PVC 경계�
 | Warpgate | 인증 성공·실패, target 인가, session 시작·종료 metadata | 보안 | Wazuh 직접 `A90` | password/cookie/key, command argument, terminal/file recording 원문 |
 | Warpgate | systemd/service, protocol listener, storage·recording writer 오류 | 운영 | Loki `O7` | 감사 event 복제본 |
 | Warpgate | terminal/file recording blob | 민감 원문 | 중앙 `C0`; 기존 제품 local `audit_retention=90days` 이상으로 늘리지 않음 | blob 전체 |
+| Linux host 6대 | journald의 `sshd`·`sudo` 운영 오류, systemd unit 실패, kernel 심각 오류 | 운영 | Loki `O7` | 인증 성공·실패, sudo `COMMAND`, user·PID·session·IP, 원문 line, 임의 파일 |
 | Wazuh HIDS agent(`WAZUH-03`) | syscheck(FIM) 변경 탐지, rootcheck(rootkit·policy check) 결과 | 보안 | Wazuh 직접, custom `A90` rule ID 범위(`100100`~`100109`) 밖이라 index 분리 pipeline이 자동으로 기본 `D30` index에 넣는다 | `report_changes`(변경 diff 원문, private key 파일이 대상에 포함되어 비활성 고정), syscollector·SCA·osquery 인벤토리, active response·remote command |
 | Wazuh HIDS agent(`WAZUH-03`) | agent 기동·연결·buffer 상태 | 운영 | 수집하지 않음(`localfile` 미선언) | `LOKI-02`가 같은 호스트의 journald를 별도로 수집; 이 agent는 로그 수집기가 아니다 |
 
@@ -176,6 +177,22 @@ hash를 trace ID로 승격하지 않는다.
 - user, request, trace, session, flow, Pod UID 같은 high-cardinality 값은 label이 아니라
   structured field로 둔다.
 - 마스킹 전 원문을 local spool에 남기지 않는다.
+
+### `LOKI-02`
+
+- `k3s-01`·`postgres-01`·`object-01`·`warpgate-01`·`netbird-01`·`proxmox-01`의
+  journald만 읽는다. 파일 전체 tail, client WAL과 원문 spool은 금지한다.
+- source는 `sshd`·`sudo`의 운영 오류, `systemd` unit 실패, kernel 심각 오류로 한정한다.
+  인증 성공·실패와 sudo `COMMAND` 원문은 security event이거나 민감 원문이므로 Loki에
+  넣지 않는다. `WAZUH-03` FIM·rootcheck와 같은 record를 두 저장소에 복제하지 않는다.
+- 수집 전 원문을 고정 O7 JSON으로 바꾸며 dynamic label은 `hostname`·`unit`만 허용한다.
+  `source=host`, `event_class=operation`, `retention=O7`은 고정 label이고 PID·사용자·세션·
+  command·IP는 label/structured metadata/line 어느 곳에도 남기지 않는다.
+- host → `obs-loki-host-gateway`는 private LoadBalancer TCP 3100 하나만 사용한다.
+  Service source range, `obs` NetworkPolicy와 OPNsense exact PASS가 같은 여섯 source로
+  겹쳐야 하며 DNS·공개 route·Pomerium·credential을 새로 만들지 않는다.
+- 고정 관측창의 SeaweedFS `loki-chunks` 실제 증가량을 일 환산해 2 GiB/일 이하와 retained
+  14 GiB 이하를 함께 판정한다. 초과하면 storage를 늘리지 않고 allowlist를 더 좁힌다.
 
 ### `WAZUH-01`
 

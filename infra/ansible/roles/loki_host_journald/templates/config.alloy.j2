@@ -1,0 +1,124 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// LOKI-02 keeps the raw journal line only in memory long enough to decide
+// whether it is an O7 record. stage.output replaces every accepted line with
+// a fixed, non-sensitive JSON event before loki.write sends it.
+loki.source.journal "sshd" {
+  matches    = "SYSLOG_IDENTIFIER=sshd"
+  // 최초 기동 때 과거 journald backlog가 Loki ingest를 압박하지 않도록 1분만
+  // 읽고, 이후에는 cursor로 연속 수집한다.
+  max_age    = "1m"
+  labels     = { hostname = "{{ loki_host_journald_hostname }}", unit = "sshd.service" }
+  forward_to = [loki.process.sshd.receiver]
+}
+
+loki.process "sshd" {
+  forward_to = [loki.write.gateway.receiver]
+  stage.drop {
+    expression          = `(?i)(accepted|failed password|authentication failure|invalid user|pam_unix|session (opened|closed)|publickey|keyboard-interactive)`
+    drop_counter_reason = "host_sshd_security_event"
+  }
+  stage.regex { expression = `(?i)(?P<o7_keep>error|fatal|disconnect|connection reset|listen failure)` }
+  stage.drop {
+    source              = "o7_keep"
+    expression          = "^$"
+    drop_counter_reason = "host_sshd_not_o7"
+  }
+  stage.template {
+    source   = "safe_line"
+    template = `{"event.class":"operation","event.action":"sshd_error","event.outcome":"unknown","event.source":"host","event.dataset":"journald","observer.type":"host","actor.kind":"none","correlation.kind":"none"}`
+  }
+  stage.output { source = "safe_line" }
+  stage.static_labels { values = { event_class = "operation", retention = "O7", source = "host" } }
+  stage.label_keep { values = ["hostname", "unit", "source", "event_class", "retention"] }
+}
+
+loki.source.journal "sudo" {
+  matches    = "SYSLOG_IDENTIFIER=sudo"
+  max_age    = "1m"
+  labels     = { hostname = "{{ loki_host_journald_hostname }}", unit = "sudo" }
+  forward_to = [loki.process.sudo.receiver]
+}
+
+loki.process "sudo" {
+  forward_to = [loki.write.gateway.receiver]
+  stage.drop {
+    expression          = `(?i)(command=|authentication|pam_unix|session (opened|closed)|incorrect password|not in sudoers)`
+    drop_counter_reason = "host_sudo_security_or_command"
+  }
+  stage.regex { expression = `(?i)(?P<o7_keep>error|failure|unable to|not permitted)` }
+  stage.drop {
+    source              = "o7_keep"
+    expression          = "^$"
+    drop_counter_reason = "host_sudo_not_o7"
+  }
+  stage.template {
+    source   = "safe_line"
+    template = `{"event.class":"operation","event.action":"sudo_error","event.outcome":"unknown","event.source":"host","event.dataset":"journald","observer.type":"host","actor.kind":"none","correlation.kind":"none"}`
+  }
+  stage.output { source = "safe_line" }
+  stage.static_labels { values = { event_class = "operation", retention = "O7", source = "host" } }
+  stage.label_keep { values = ["hostname", "unit", "source", "event_class", "retention"] }
+}
+
+loki.source.journal "systemd" {
+  matches    = "SYSLOG_IDENTIFIER=systemd"
+  max_age    = "1m"
+  labels     = { hostname = "{{ loki_host_journald_hostname }}", unit = "systemd.service" }
+  forward_to = [loki.process.systemd.receiver]
+}
+
+loki.process "systemd" {
+  forward_to = [loki.write.gateway.receiver]
+  stage.regex { expression = `(?i)(?P<o7_keep>failed|failure|timed out|timeout|out of memory|oom|killed process)` }
+  stage.drop {
+    source              = "o7_keep"
+    expression          = "^$"
+    drop_counter_reason = "host_systemd_not_failure"
+  }
+  stage.template {
+    source   = "safe_line"
+    template = `{"event.class":"operation","event.action":"systemd_unit_failure","event.outcome":"failure","event.source":"host","event.dataset":"journald","observer.type":"host","actor.kind":"none","correlation.kind":"none"}`
+  }
+  stage.output { source = "safe_line" }
+  stage.static_labels { values = { event_class = "operation", retention = "O7", source = "host" } }
+  stage.label_keep { values = ["hostname", "unit", "source", "event_class", "retention"] }
+}
+
+loki.source.journal "kernel" {
+  matches    = "_TRANSPORT=kernel"
+  max_age    = "1m"
+  labels     = { hostname = "{{ loki_host_journald_hostname }}", unit = "kernel" }
+  forward_to = [loki.process.kernel.receiver]
+}
+
+loki.process "kernel" {
+  forward_to = [loki.write.gateway.receiver]
+  stage.regex { expression = `(?i)(?P<o7_keep>kernel panic|oops|bug:|out of memory|i/o error|segfault)` }
+  stage.drop {
+    source              = "o7_keep"
+    expression          = "^$"
+    drop_counter_reason = "host_kernel_not_o7"
+  }
+  stage.template {
+    source   = "safe_line"
+    template = `{"event.class":"operation","event.action":"kernel_error","event.outcome":"failure","event.source":"host","event.dataset":"journald","observer.type":"host","actor.kind":"none","correlation.kind":"none"}`
+  }
+  stage.output { source = "safe_line" }
+  stage.static_labels { values = { event_class = "operation", retention = "O7", source = "host" } }
+  stage.label_keep { values = ["hostname", "unit", "source", "event_class", "retention"] }
+}
+
+loki.write "gateway" {
+  endpoint {
+    url        = "{{ loki_host_journald_gateway_url }}"
+    batch_size = "128KiB"
+    batch_wait = "1s"
+  }
+  wal {
+    enabled = false
+  }
+}

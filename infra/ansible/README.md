@@ -296,6 +296,41 @@ systemd 서비스는 `PrivateNetwork=true`를 포함한 전면 hardening 아래 
 한다(네트워크 접근 자체가 없다). 상태 파일(마지막 처리 row id)은 tmp write 후 rename으로
 원자적으로 갱신해 재시작 뒤에도 중복·누락 없이 이어 읽는다.
 
+## Loki host journald collector
+
+`playbooks/loki-host-journald.yml`과 `roles/loki_host_journald/`은 `LOKI-02`의 6개 대상
+(`k3s-01`·`postgres-01`·`object-01`·`warpgate-01`·`netbird-01`·`proxmox-01`)을 소유한다.
+Grafana Alloy 1.18.0 Linux AMD64 release asset은 GitHub release SHA-256으로 고정한다. controller가
+checksum 검증 다운로드를 한 번만 수행한 뒤 여섯 host cache로 복사하므로 외부 release download를
+host별로 반복하지 않는다. package repository나 `latest`, `curl | sh`는 쓰지 않는다.
+
+전용 non-root `alloy_loki` 계정은 `systemd-journal` group으로 journald만 읽는다. arbitrary file
+tail·hostPath·client WAL·원문 spool은 없고, state 디렉터리에는 journal cursor만 남는다. `sshd`·
+`sudo`의 security/authentication·sudo `COMMAND` record는 source에서 drop하고, 허용된 오류·
+systemd unit failure·kernel 심각 오류도 원문 대신 고정 O7 JSON으로 바꾼다. dynamic label은
+`hostname`·`unit`만 허용한다. 신규 collector 기동 때 journald backlog가 ingester를 압박하지 않도록
+각 source의 초기 lookback은 1분으로 고정하고 이후 cursor로만 연속 수집한다. Alloy 1.18의 RE2/WASM 초기화는 executable mmap이 필요해
+`MemoryDenyWriteExecute`만 제외한다. 그 외 non-root·capability drop·strict filesystem·namespace·
+syscall hardening은 유지한다.
+
+전송 endpoint는 Service의 private LoadBalancer 주소(`docs/ip-plan.md`의 k3s-01)만 사용한다. host
+자신의 canonical DNS가 loopback으로 해석되는 경우에도 gateway self-hairpin으로 빠지지 않게 한다.
+
+```bash
+cd infra/ansible
+export ANSIBLE_SSH_COMMON_ARGS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<저장소 밖 known_hosts> -o PasswordAuthentication=no"
+ansible-playbook -i inventory/hosts.local playbooks/loki-host-journald.yml --syntax-check
+ansible-playbook -i inventory/hosts.local playbooks/loki-host-journald.yml --check --diff
+# 승인된 OPNsense gateway rule과 obs gateway가 준비된 뒤 실제 적용
+ansible-playbook -i inventory/hosts.local playbooks/loki-host-journald.yml
+# 실패 rollback: 이 task가 만든 agent만 제거
+ansible-playbook -i inventory/hosts.local playbooks/loki-host-journald-rollback.yml
+```
+
+gateway·Loki retention과 Grafana host selector는 `gitops/apps/obs/`, O7 분류는
+`docs/audit-event-standard.md`, cross-VLAN TCP 3100 PASS와 UUID rollback은
+`gitops/tools/loki-02/`가 소유한다.
+
 ## NTP source
 
 `NET-03`은 각 project VLAN에서 **해당 VLAN gateway의 UDP 123만** 허용한다. Rocky 기본 설정의 공개 pool은 차단되므로 그대로 두면 게스트가 영원히 동기화되지 않는다.

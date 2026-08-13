@@ -59,9 +59,9 @@ DATA↔VPC selector는 유지하지만 DATA에서 VPC로 시작하는 통신은 
 | interface | sequence와 UUID | 의미 |
 |---|---|---|
 | `opt2` | `1002` `b5756159-a650-4b13-b474-ff61efa2a3f3`; `1012` `25d7180e-7ef7-47a3-bdd6-b11e3014070f`; `1018` `c10373d1-3158-45ff-83f0-199385d46671`; `1022` `72723db0-524d-4098-8e84-a54f8548610c`; `1032` `23d19d9b-dd08-4920-8082-19cc0bbcf890` | k3s DNS, NTP, PostgreSQL, non-public BLOCK, public Web |
-| `opt3` | `1102` `fc3cea96-d45e-4694-bf5e-ba0fa7113dcb`; `1112` `ca0af6b5-5356-4572-8646-e03e2b88d665`; `1117` `7e9fcac3-e5da-43e1-96a3-dee968e28a9b`; `1118` `21422214-412c-4596-84e5-062bba81b2da`; `1120` `cdb5d60d-91be-4144-b4eb-e74dcd652dfb`; `1122` `f1ec0a02-e42e-455b-b09c-98ba69a54f1d`; `1132` `f4d8cbe0-4ba0-48b3-8a1f-6981339324e2` | Warpgate DNS, NTP, OIDC, SSH, PostgreSQL TLS relay, non-public BLOCK, public Web |
-| `opt4` | `1202` `590dc3ac-13b4-4855-8bcf-806c2bd58a87`; `1212` `da27944c-dc48-40ce-bcbf-056686579ac9`; `1218` `b0ba06fb-54b9-4cbd-9830-106d2ca71f22`; `1222` `be877eb8-4ccf-4f72-839f-a5074efa83ec`; `1232` `3f6fa0bd-614d-4cb4-8612-69148cf30b2b` | NetBird DNS, NTP, Keycloak/control, non-public BLOCK, public Web |
-| `opt5` | `1302` `2ee3f199-b683-4671-ba61-d000667ed165`; `1312` `6326c0ae-ba05-4933-a8ad-405d5fb00480`; `1322` `4afe287d-be72-4330-a9f8-35ea64b1a38f`; `1332` `6f28ee7a-87e4-4a97-8b15-6267c28ca483` | 두 DATA host DNS, NTP, non-public BLOCK, public Web |
+| `opt3` | `1102` `fc3cea96-d45e-4694-bf5e-ba0fa7113dcb`; `1112` `ca0af6b5-5356-4572-8646-e03e2b88d665`; `1117` `7e9fcac3-e5da-43e1-96a3-dee968e28a9b`; `1118` `21422214-412c-4596-84e5-062bba81b2da`; `1221` `f1ec0a02-e42e-455b-b09c-98ba69a54f1d`; `1271` `f4d8cbe0-4ba0-48b3-8a1f-6981339324e2` | Warpgate DNS, NTP, OIDC, SSH, non-public BLOCK, public Web |
+| `opt4` | `1321` `590dc3ac-13b4-4855-8bcf-806c2bd58a87`; `1371` `da27944c-dc48-40ce-bcbf-056686579ac9`; `1421` `b0ba06fb-54b9-4cbd-9830-106d2ca71f22`; `1521` `be877eb8-4ccf-4f72-839f-a5074efa83ec`; `1571` `3f6fa0bd-614d-4cb4-8612-69148cf30b2b` | NetBird DNS, NTP, Keycloak/control, non-public BLOCK, public Web |
+| `opt5` | `1621` `2ee3f199-b683-4671-ba61-d000667ed165`; `1671` `6326c0ae-ba05-4933-a8ad-405d5fb00480`; `1771` `4afe287d-be72-4330-a9f8-35ea64b1a38f`; `1821` `6f28ee7a-87e4-4a97-8b15-6267c28ca483` | 두 DATA host DNS, NTP, non-public BLOCK, public Web |
 
 `S3-01`의 기존 exact rule `58525b66-bc90-484e-893a-a51bfd5aa346`은 의미값과
 sequence `1015`를 바꾸지 않고 보존했다. 최종 alias UUID는 다음과 같다.

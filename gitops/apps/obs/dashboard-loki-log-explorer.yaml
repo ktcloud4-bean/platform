@@ -37,6 +37,28 @@ data:
             "multi": true,
             "includeAll": true,
             "current": {"text": "All", "value": "$__all"}
+          },
+          {
+            "name": "hostname",
+            "label": "Host",
+            "type": "query",
+            "datasource": {"type": "loki", "uid": "loki"},
+            "query": "label_values({source=\"host\"}, hostname)",
+            "refresh": 1,
+            "multi": true,
+            "includeAll": true,
+            "current": {"text": "All", "value": "$__all"}
+          },
+          {
+            "name": "unit",
+            "label": "Host unit",
+            "type": "query",
+            "datasource": {"type": "loki", "uid": "loki"},
+            "query": "label_values({source=\"host\", hostname=~\"$hostname\"}, unit)",
+            "refresh": 1,
+            "multi": true,
+            "includeAll": true,
+            "current": {"text": "All", "value": "$__all"}
           }
         ]
       },
@@ -79,6 +101,26 @@ data:
           ],
           "title": "Log Stream (dynamic filter)",
           "type": "logs"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "gridPos": {"h": 14, "w": 24, "x": 0, "y": 24},
+          "id": 3,
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": false,
+            "enableLogDetails": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          },
+          "targets": [
+            {"expr": "{source=\"host\", hostname=~\"$hostname\", unit=~\"$unit\"}", "refId": "A"}
+          ],
+          "title": "Host O7 Stream (hostname/unit selector)",
+          "type": "logs"
         }
       ],
       "schemaVersion": 41,
@@ -86,5 +128,5 @@ data:
       "time": {"from": "now-6h", "to": "now"},
       "title": "Loki Operational Log Explorer",
       "uid": "obs-07-loki-log-explorer",
-      "version": 1
+      "version": 2
     }

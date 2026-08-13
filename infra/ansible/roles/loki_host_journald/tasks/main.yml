@@ -1,0 +1,160 @@
+---
+# LOKI-02: install a checksum-pinned Alloy binary and read four narrow journal
+# sources. This role owns only the host collector; the in-cluster gateway is
+# declared under gitops/apps/obs.
+- name: 전제 확인 — 지원 OS·아키텍처·gateway URL
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.architecture == "x86_64"
+      - ansible_facts.os_family in ["RedHat", "Debian"]
+      - loki_host_journald_gateway_url is match('^http://10\\.10\\.20\\.10:3100/loki/api/v1/push$')
+      - loki_host_journald_hostname is match('^[a-z0-9-]+$')
+    fail_msg: >-
+      이 role은 RedHat·Debian x86_64와 선언된 private Loki gateway URL만 지원한다.
+
+- name: journald reader group 조회
+  ansible.builtin.getent:
+    database: group
+    key: systemd-journal
+
+- name: 전제 확인 — systemd-journal group
+  ansible.builtin.assert:
+    that:
+      - "'systemd-journal' in ansible_facts.getent_group"
+    fail_msg: systemd-journal group이 없어 journald 전용 reader를 만들 수 없다.
+
+- name: 전용 그룹 생성
+  ansible.builtin.group:
+    name: "{{ loki_host_journald_group }}"
+    system: true
+    state: present
+
+- name: 전용 journald reader 계정 생성
+  ansible.builtin.user:
+    name: "{{ loki_host_journald_user }}"
+    group: "{{ loki_host_journald_group }}"
+    groups: systemd-journal
+    append: true
+    system: true
+    shell: /sbin/nologin
+    create_home: false
+    password_lock: true
+    state: present
+
+- name: Alloy ZIP extractor 설치
+  ansible.builtin.package:
+    name: unzip
+    state: present
+
+- name: controller checksum 고정 release cache 디렉터리 생성
+  ansible.builtin.file:
+    path: "{{ loki_host_journald_controller_cache_dir }}"
+    state: directory
+    mode: "0755"
+  become: false
+  delegate_to: localhost
+  run_once: true
+
+- name: controller가 Alloy release archive 한 번만 다운로드하고 SHA-256 강제
+  ansible.builtin.get_url:
+    url: "{{ loki_host_journald_asset_url }}"
+    dest: "{{ loki_host_journald_controller_asset_path }}"
+    checksum: "sha256:{{ loki_host_journald_asset_sha256 }}"
+    mode: "0644"
+  become: false
+  delegate_to: localhost
+  run_once: true
+
+- name: host checksum 고정 release cache 디렉터리 생성
+  ansible.builtin.file:
+    path: "{{ loki_host_journald_cache_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: controller artifact를 host cache로 복사하고 SHA-256 강제
+  ansible.builtin.copy:
+    src: "{{ loki_host_journald_controller_asset_path }}"
+    dest: "{{ loki_host_journald_cache_dir }}/{{ loki_host_journald_asset }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: host cache artifact SHA-256 조회
+  ansible.builtin.stat:
+    path: "{{ loki_host_journald_cache_dir }}/{{ loki_host_journald_asset }}"
+    checksum_algorithm: sha256
+  register: loki_host_journald_host_asset
+
+- name: host cache artifact SHA-256 전제 확인
+  ansible.builtin.assert:
+    that:
+      - loki_host_journald_host_asset.stat.checksum == loki_host_journald_asset_sha256
+    fail_msg: host cache Alloy artifact SHA-256이 고정 release 값과 다르다.
+
+- name: Alloy release archive 압축 해제
+  ansible.builtin.unarchive:
+    src: "{{ loki_host_journald_cache_dir }}/{{ loki_host_journald_asset }}"
+    dest: "{{ loki_host_journald_cache_dir }}"
+    remote_src: true
+    creates: "{{ loki_host_journald_cache_dir }}/alloy-linux-amd64"
+
+- name: Alloy binary 설치
+  ansible.builtin.copy:
+    src: "{{ loki_host_journald_cache_dir }}/alloy-linux-amd64"
+    dest: "{{ loki_host_journald_binary_path }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  notify: loki host journald collector 재시작
+
+- name: 현재 Alloy binary symlink
+  ansible.builtin.file:
+    src: "{{ loki_host_journald_binary_path }}"
+    dest: "{{ loki_host_journald_binary_link }}"
+    state: link
+    force: true
+  notify: loki host journald collector 재시작
+
+- name: Alloy 설정 디렉터리 생성
+  ansible.builtin.file:
+    path: "{{ loki_host_journald_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: journald cursor state 디렉터리 생성
+  ansible.builtin.file:
+    path: "{{ loki_host_journald_state_dir }}"
+    state: directory
+    owner: "{{ loki_host_journald_user }}"
+    group: "{{ loki_host_journald_group }}"
+    mode: "0750"
+
+- name: O7 allowlist Alloy 설정 선언
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: "{{ loki_host_journald_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: loki host journald collector 재시작
+
+- name: hardened systemd unit 선언
+  ansible.builtin.template:
+    src: alloy-loki-02.service.j2
+    dest: /etc/systemd/system/alloy-loki-02.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: loki host journald collector 재시작
+
+- name: loki host journald collector 활성화 및 기동
+  ansible.builtin.systemd_service:
+    name: alloy-loki-02.service
+    enabled: true
+    daemon_reload: true
+    state: started

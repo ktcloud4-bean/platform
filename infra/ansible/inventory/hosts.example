@@ -71,3 +71,13 @@
 # netbird-01 ansible_host=<docs/ip-plan.md의 netbird-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/etc/netbird wazuh_agent_localfile_json_path=/var/lib/wazuh-05-netbird-relay/netbird-audit.log
 # postgres-01 ansible_host=<docs/ip-plan.md의 postgres-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/var/lib/pgsql/data/postgresql.conf,/var/lib/pgsql/data/pg_hba.conf,/var/lib/pgsql/data/server-ca.crt,/var/lib/pgsql/data/server-ca.key,/var/lib/pgsql/data/server.crt,/var/lib/pgsql/data/server.key
 # object-01 ansible_host=<docs/ip-plan.md의 object-01 주소> ansible_user=rocky wazuh_agent_extra_syscheck_directories=/etc/seaweedfs
+
+[loki_host_journald]
+# LOKI-02: journald만 읽는 checksum 고정 Alloy collector 6대. 인증 시도와 sudo
+# COMMAND 원문은 수집 전에 버리고, hostname·unit 외 동적 label을 만들지 않는다.
+# proxmox-01 ansible_host=<docs/ip-plan.md의 proxmox-01 주소> ansible_user=root
+# k3s-01 ansible_host=<docs/ip-plan.md의 k3s-01 주소> ansible_user=rocky
+# postgres-01 ansible_host=<docs/ip-plan.md의 postgres-01 주소> ansible_user=rocky
+# object-01 ansible_host=<docs/ip-plan.md의 object-01 주소> ansible_user=rocky
+# warpgate-01 ansible_host=<docs/ip-plan.md의 warpgate-01 주소> ansible_user=rocky
+# netbird-01 ansible_host=<docs/ip-plan.md의 netbird-01 주소> ansible_user=rocky

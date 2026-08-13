@@ -1,0 +1,51 @@
+[Unit]
+Description=Grafana Alloy Loki O7 journald collector
+Documentation=https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.journal/
+After=network-online.target systemd-journald.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ loki_host_journald_user }}
+Group={{ loki_host_journald_group }}
+SupplementaryGroups=systemd-journal
+ExecStart={{ loki_host_journald_binary_link }} run {{ loki_host_journald_config_path }} \
+  --storage.path={{ loki_host_journald_state_dir }} \
+  --server.http.listen-addr=127.0.0.1:12345 \
+  --disable-reporting \
+  --stability.level=public-preview
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+StateDirectory=alloy-loki-02
+StateDirectoryMode=0750
+UMask=0077
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ReadOnlyPaths=/run/log/journal /var/log/journal
+ReadWritePaths={{ loki_host_journald_state_dir }}
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
