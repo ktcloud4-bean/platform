@@ -795,6 +795,18 @@ Application 22개는 모두 `Synced/Healthy`(commit `dfdd2c29091d40de146a1ba725a
 image는 `release-metadata.env`가 고정한 digest와 정확히 일치했다. 상세 배포·검증 절차는
 [`gitops/apps/shuffle/README.md`](../gitops/apps/shuffle/README.md)가 소유한다.
 
+### `SOAR-01` 실행 계층 재판정 기준
+
+`SOAR-01`은 이미 배포된 Dashboard 위에 정적 Orborus 1개, worker 1개, 오프라인 보강 app 1개와
+User Input 내부 runtime 1개만 더한다. 선언 request 합계는 CPU `200m`(50m + 100m + 25m +
+25m), memory `512Mi`(128Mi + 256Mi + 64Mi + 64Mi)이고, limit 합계는 CPU `950m`, memory
+`1024Mi`다. 새 PVC·hostPath·Docker socket은 없다.
+
+따라서 적용 직전에는 기존 `SOAR-01` available 12 GiB 진입선 이상, swap 0, root 여유 20% 이상을
+재측정하고, 적용 뒤에는 same-node available과 PVC 합계가 8 GiB·120 GiB 정지선 안인지 한 번만
+확인한다. 현재 수치는 시점 의존적이므로 이 절의 선언 합계로 과거 `SOAR-DASH-01` 실측을 대체하지
+않는다.
+
 ## 재검토 시점
 
 - `VM-01` 직후: 실제 배정과 기준표를 대조하고 차이를 기록한다.

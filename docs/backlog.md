@@ -2269,7 +2269,7 @@ Grafana persistence가 꺼져 있어 검증 배포를 되돌릴 때 OIDC org use
 | ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
 |---|---|---|---|---|---|
 | `SOAR-DASH-01 DONE` | Shuffle 엔진·대시보드만 배포(자체 OpenSearch 백엔드 포함, 워크플로·앱 연동 없음) | `OBS-01`, `WAZUH-01`, `WAZUH-02`, `FALCO-01`, `CAP-04`, `CAP-05` | `K3S-HEAVY` | `SOAR-01` | 배포 직전 capacity gate 통과, Wazuh indexer와 분리한 자체 OpenSearch 단일 노드, 고정 version·image digest, 내부 전용 노출(Pomerium Route)과 관리자 로그인 확인, 워크플로·앱·webhook 연동 0건, 재부팅 후 유지, PVC·available 정지선 통과, Argo child `Synced/Healthy` |
-| `SOAR-01 READY` | 이미 배포된 Shuffle 위에 경보 수신→정보 보강→통지→승인 흐름을 연동(사람 승인형, read-only) | `IAM-ENROLL-01` | 없음 | 사고대응 | `imcherry5778`을 reader에서 제거한 뒤 operator로 이동해 Shuffle role 하나만 발급, 나머지 팀 reader의 조회 성공과 쓰기·실행 거부, 대표 Wazuh 경보의 수신·정보 보강·통지·승인 각 단계 실동작, 자동 대응(격리·차단·계정 변경 등) 0건, 최소권한 credential, rollback 뒤 dashboard 기존 상태 회귀 없음 |
+| `SOAR-01 DONE` | 이미 배포된 Shuffle 위에 경보 수신→정보 보강→통지→승인 흐름을 연동(사람 승인형, read-only) | `IAM-ENROLL-01` | 없음 | 사고대응 | `imcherry5778`을 reader에서 제거한 뒤 operator로 이동해 Shuffle role 하나만 발급, 나머지 팀 reader의 조회 성공과 쓰기·실행 거부, 대표 Wazuh 경보의 수신·정보 보강·통지·승인 각 단계 실동작, 자동 대응(격리·차단·계정 변경 등) 0건, 최소권한 credential, rollback 뒤 dashboard 기존 상태 회귀 없음 |
 | `SOAR-02 DEFERRED` | 되돌릴 수 있는 대응 한 가지 자동화 | `SOAR-01`, 검증된 incident runbook | 없음 | 접근 정책 | 반복 시험, 승인·감사·rollback; 방화벽·계정 무인 파괴 금지 |
 
 2026-08-04 `CAP-05` 완료로 `SOAR-01`(원래 범위: Shuffle 배포 + 자체 OpenSearch + 경보 수신→
@@ -2325,6 +2325,19 @@ Orborus는 배포하지 않아 backend가 시도한 `shuffler.io`·`github.com/s
 `SOAR-01`에서만 승격하며, 그 전까지 모든 팀 일상 계정은 동일한 reader 권한을 가진다.
 
 Shuffle은 Jenkins·Argo CD·AWX의 배포 자동화를 대체하지 않는다. 보안 사건에 반응하는 흐름만 소유한다.
+
+2026-08-13 `SOAR-01`을 완료했다. `snsd-hybirdinfra` reader는 Dashboard 조회만 가능하고
+Save·Execute가 거부됨을 직접 확인했으며, `imcherry5778`은 `/soar-readers`에서 제거한 뒤
+`/soar-operators` 하나만 가진 operator 상태에서 작업했다. Wazuh에 저장된 level 7 대표 alert를
+기존 Vault-rendered 내부 webhook으로 전달해 오프라인 지표 보강이 성공했고, Dashboard 실행 카드가
+만든 수동 Form을 사람에게 노출해 `imcherry5778`의 Continue 입력을 받았다. API 실행 기록은 해당
+승인 노드 `SUCCESS`, `clicked=true`이며 입력 note 원문은 기록하지 않았다. 선언된 실행 노드는
+오프라인 보강 하나와 `User Input` 하나뿐이므로 외부 알림 전송·격리·방화벽 변경·계정 변경·삭제는
+0건이다. SOAR-01이 만든 hook·workflow·app과 Vault KV field를 rollback해 모두 absent, 사용자 role을
+reader 하나로 복원한 뒤 같은 도구로 다시 apply해 최종 `operator`·app·workflow·hook present를
+확인했다. immutable root `65daaf679631e2659dc5414d5c12a92e27d06ba8`와 child `shuffle`·`wazuh`는
+동일 SHA에서 `Synced/Healthy`였고, 검증 종료 시 literal `main`으로 복구한다. `SOAR-02`는 검증된
+incident runbook이라는 추가 선행이 없으므로 `DEFERRED`를 유지한다.
 
 2026-08-06 그라파나(Grafana) 관측성 강화를 위해 `OBS-04`~`OBS-07` 4개 대시보드 백로그 작업을 신설한다. 기존 최소 대시보드(`obs-02-overview`)를 대체하여 인프라 자원 안전(Capacity Gate), 핵심 서비스 트래픽, 백업 파이프라인, Loki 운영 로그 탐색을 계층별로 독립 관리한다. 선행 작업인 `OBS-03`이 `DONE` 상태이므로 `OBS-04`를 `READY`로 연다. `OBS-05`~`OBS-07`은 의존성에 따라 순차적으로 `BLOCKED` 상태로 관리한다.
 

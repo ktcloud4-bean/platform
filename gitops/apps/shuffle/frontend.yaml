@@ -77,6 +77,49 @@ spec:
           volumeMounts:
             - name: nginx-conf-writable
               mountPath: /nginx-conf-writable
+        # Shuffle 2.2.1 Form은 링크에 있던 source_node를 승인 callback에 다시 넣지 않는다.
+        # User Input trigger를 정확히 식별할 수 있게 고정 bundle의 한 query만 보정한다.
+        # image digest가 바뀌어 원문이 달라지면 grep에서 멈춰 조용한 우회를 막는다.
+        - name: patch-form-source-node
+          image: ghcr.io/shuffle/shuffle-frontend:2.2.1@sha256:0561dd421382f70d15cada11a324b40762f0930522fcc1b51edcce9c87cc0f00
+          imagePullPolicy: IfNotPresent
+          command: [/bin/sh, -ec]
+          args:
+            - |
+              cp -R /usr/share/nginx/html/. /frontend-html/
+              bundle=/frontend-html/assets/index-C5fsQI9Y.js
+              grep -F 'on+=`?reference_execution=${Ve}&authorization=${at}&answer=${ot}`' "$bundle"
+              sed -i 's|on+=`?reference_execution=${Ve}&authorization=${at}&answer=${ot}`|on+=`?reference_execution=${Ve}\&authorization=${at}\&answer=${ot}\&source_node=${oe}`|' "$bundle"
+              grep -F 'on+=`?reference_execution=${Ve}&authorization=${at}&answer=${ot}&source_node=${oe}`' "$bundle"
+              # User Input runtime은 내부 shuffle-subflow app을 사용한다. upstream 실행 상세는
+              # 이를 child workflow로 오인해 첫 parameter(안내 문구)를 workflow ID로 열고
+              # execution_id=undefined를 붙인다. 이 결과에만 manual Form capability를 ↗에 연결한다.
+              grep -F 'U.action.app_name==="shuffle-subflow"&&Ke.result.success!==void 0&&Ke.result.success===!0?' "$bundle"
+              sed -i 's|U\.action\.app_name==="shuffle-subflow"&&Ke\.result\.success!==void 0&&Ke\.result\.success===!0?|U.action.name==="run_userinput"\&\&Ke.valid\&\&Ke.result.links!==void 0\&\&Ke.result.links!==null\&\&Ke.result.links.frontend_no_answer!==void 0\&\&Ke.result.links.frontend_no_answer!==null?l.jsx("span",{style:{flex:10,float:"right",textAlign:"right"},children:l.jsx("a",{rel:"noopener noreferrer",href:Ke.result.links.frontend_no_answer,target:"_blank",style:{textDecoration:"none",color:d.palette.linkColor},onClick:qr=>{},children:l.jsx(cl,{})})}):U.action.app_name==="shuffle-subflow"\&\&Ke.result.success!==void 0\&\&Ke.result.success===!0?|' "$bundle"
+              grep -F 'U.action.name==="run_userinput"&&Ke.valid&&Ke.result.links!==void 0&&Ke.result.links!==null&&Ke.result.links.frontend_no_answer!==void 0&&Ke.result.links.frontend_no_answer!==null?' "$bundle"
+              # parent execution은 SDK가 User Input 결과를 WAITING으로 남긴 직후에도 FINISHED가 된다.
+              # Form은 source_node 결과가 WAITING이면 상위 상태만으로 승인 버튼을 잠그면 안 된다.
+              grep -F 'Ct!=null&&Ve!==void 0&&Ve!==null&&Ct.length>0&&Ve.length>0&&L===!1&&(on==null?void 0:on.status)!==""&&(on==null?void 0:on.status)!=="WAITING"&&(console.log("IN here 1"),D(!0))' "$bundle"
+              sed -i 's|Ct!=null&&Ve!==void 0&&Ve!==null&&Ct.length>0&&Ve.length>0&&L===!1&&(on==null?void 0:on.status)!==""&&(on==null?void 0:on.status)!=="WAITING"&&|Ct!=null\&\&Ve!==void 0\&\&Ve!==null\&\&Ct.length>0\&\&Ve.length>0\&\&L===!1\&\&(on==null?void 0:on.status)!==""\&\&(on==null?void 0:on.status)!=="WAITING"\&\&!(on.results!==void 0\&\&on.results!==null\&\&on.results.some(Fr=>Fr.action!==void 0\&\&Fr.action!==null\&\&Fr.action.id===oe\&\&Fr.status==="WAITING"))\&\&|' "$bundle"
+              grep -F 'on.results.some(Fr=>Fr.action!==void 0&&Fr.action!==null&&Fr.action.id===oe&&Fr.status==="WAITING")' "$bundle"
+          volumeMounts:
+            - name: frontend-html
+              mountPath: /frontend-html
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            privileged: false
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
       containers:
         - name: shuffle-frontend
           image: ghcr.io/shuffle/shuffle-frontend:2.2.1@sha256:0561dd421382f70d15cada11a324b40762f0930522fcc1b51edcce9c87cc0f00
@@ -127,6 +170,9 @@ spec:
               mountPath: /var/cache/nginx
             - name: tmp
               mountPath: /tmp
+            - name: frontend-html
+              mountPath: /usr/share/nginx/html
+              readOnly: true
       volumes:
         - name: nginx-conf-tmpl
           configMap:
@@ -139,5 +185,8 @@ spec:
           emptyDir:
             sizeLimit: 16Mi
         - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: frontend-html
           emptyDir:
             sizeLimit: 16Mi

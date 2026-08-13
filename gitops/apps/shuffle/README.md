@@ -32,8 +32,54 @@
 | backend `shuffle-apps`(hotload) | emptyDir 256Mi | 아직 앱을 hotload하지 않아 영속 불필요 |
 | frontend limit | cpu 200m, memory 256Mi | nginx 정적 서빙 + `/api/v(1\|2)` reverse proxy |
 
-Shuffle PVC 합계는 정확히 20 GiB로 `CAP-04`가 잡은 상한과 같다. orborus·worker는 배포하지
-않아 추가 RAM·PVC를 쓰지 않는다.
+Shuffle PVC 합계는 정확히 20 GiB로 `CAP-04`가 잡은 상한과 같다. 이 최초 dashboard 배포에는
+orborus·worker가 없었다. 후속 `SOAR-01`은 정적 orborus·worker, 하나의 오프라인 보강 app과
+User Input 내부 runtime을 추가하지만 PVC를 추가하지 않는다. 실행 계층의 request 합계는 CPU
+`200m`, memory `512Mi`(limit CPU `950m`, memory `1024Mi`)이며 재판정 기준은
+[`docs/capacity-plan.md`](../../../docs/capacity-plan.md)의 `SOAR-01` 절이다.
+
+## SOAR-01 실행·승인 경계
+
+`execution.yaml`은 upstream Orborus가 Kubernetes workload 또는 RoleBinding을 동적으로
+만드는 경로를 사용하지 않는다. 고정 `creator-all` compatibility RoleBinding은 empty Role만
+참조하고, Orborus와 worker ServiceAccount는 필요한 Deployment `list` 외에
+create/update/delete 권한이 없다. worker와 보강 app에는 Docker socket·hostPath가 없다.
+
+`soar01-enrichment.yaml`의 보강 app은 IPv4·URL·SHA-256 추출만 한다. shell·subprocess·외부
+URL·Kubernetes credential이 없고, 결과 callback은 static worker Service로만 보낸다.
+`execution.yaml`의 고정 User Input runtime은 upstream `shuffle-subflow:1.1.0` image를 비특권
+8080으로만 실행한다. worker가 생성할 Deployment와 Service를 미리 선언한 것이며, user-input의
+subflow·email·SMS 파라미터는 비워 실제 child workflow·외부 알림을 호출하지 않는다.
+`BASE_URL`과 workflow의 User Input `backend_url`은 내부 backend가 아니라 Pomerium의 canonical
+Shuffle HTTPS 주소다. upstream은 non-empty `backend_url`을 우선하므로 두 값을 함께 고정해
+Continue/Abort Form 링크가 사용자 browser에서 같은 보호 Route로 열린다. app Pod는 blank
+subflow·email·SMS 때문에 그 주소로 요청을 보내지 않는다.
+고정 image의 User Input SDK는 실행 요청의 worker callback 주소로 `self.base_url`을 다시 덮어쓰고,
+app은 그것을 Form query에도 넣는다. initContainer는 `/app/app.py`를 `emptyDir`로 복사한 뒤 Form
+링크용 `backend_url`을 canonical URL literal로 치환한다. upstream 결과 카드가
+`frontend_continue`를 우선 열면 `answer=true` query로 Form이 자동 응답되는 문제가 있으므로, 네
+frontend/API 결과 링크도 먼저 answer 없는 수동 Form으로 통일한다. 실제 Continue/Stop callback은
+그 Form 버튼을 사람이 눌렀을 때만 생성된다. 결과 callback은 SDK의 internal worker 주소를 그대로
+사용한다. 원문이 달라지면 `grep`에서 Pod가 실패하므로 image update가 조용히 이 보정을 무효화하지
+않는다.
+Shuffle frontend 2.2.1도 같은 image digest의 Form bundle에서 `source_node` query를 승인 callback에
+누락한다. frontend initContainer는 정적 site를 `emptyDir`로 복사하고 callback query 한 곳에만
+`source_node`를 보존한다. Workflow·승인 link에 포함된 capability나 사용자의 browser cookie는
+변경하거나 기록하지 않는다.
+같은 bundle은 내부 `shuffle-subflow` runtime으로 실행된 `User Input` 결과의 ↗를 child workflow로
+오인해 안내 문구를 workflow ID로 열고 `execution_id=undefined`를 붙인다. 그 결과에 한해 ↗가
+이미 생성된 `frontend_no_answer` 수동 Form으로 향하게 보정한다. 이때도 capability는 생성·기록·
+변경하지 않고, 사용자가 Form에서 Continue 또는 Stop을 선택하기 전 callback은 없다.
+또한 이 SDK는 `User Input` 결과를 `WAITING`으로 남긴 뒤 상위 execution을 `FINISHED`로 표시한다.
+Form은 query의 `source_node` 결과가 실제로 `WAITING`인 동안에는 그 상위 상태만으로 Continue/Stop을
+비활성화하지 않는다. 다른 종료 상태나 이미 응답된 입력은 upstream 판정을 그대로 따른다.
+`gitops/tools/soar-01/provision.py`가 Dashboard의 webhook → 보강 → `User Input` manual 승인
+대기를 만든다. 자동 response action은 0건이다.
+
+Wazuh upstream `shuffle` integration은 hook URL을 integration log에 남기므로 사용하지 않는다.
+대신 `custom-soar01`이 Vault Agent가 memory volume에 렌더한 URL만 읽어 내부 backend에 전송한다.
+URL은 `ossec.conf`나 integration argv에 없으며 Vault field가 없거나 URL 검증에 실패하면 전송하지
+않고 종료한다.
 
 ## 보안 결정
 

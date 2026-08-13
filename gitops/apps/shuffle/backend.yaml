@@ -140,6 +140,11 @@ spec:
               value: "true"
             - name: SHUFFLE_APP_HOTLOAD_FOLDER
               value: /shuffle-apps
+            # SOAR-01은 GitHub 기본 app 자동 import를 쓰지 않는다. 값이 비어 있으면
+            # upstream 2.2.1이 외부 python-apps를 기본값으로 되살리므로 loopback의
+            # 실패 endpoint로 명시해 외부 app 유입 자체를 차단한다.
+            - name: SHUFFLE_APP_DOWNLOAD_LOCATION
+              value: http://127.0.0.1:9/disabled
             - name: SHUFFLE_FILE_LOCATION
               value: /shuffle-files
             - name: BASE_URL

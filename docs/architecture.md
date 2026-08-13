@@ -107,8 +107,8 @@ Git에는 PVC 선언만 저장하고 PVC 데이터나 노드 디렉터리명을 
 | Kubernetes 백업 | Velero + node-agent/Kopia | k3s |
 | 운영 로그 | Loki | k3s, 후순위 |
 | 메트릭·경보 | kube-prometheus-stack | k3s, 최종 단계 |
-| 보안 관제·SIEM/HIDS | Wazuh | 배치 미정; 최종 capacity gate에서 결정 |
-| SOAR | Shuffle | 배치 미정; Wazuh·경보·runbook 이후 마지막 단계 |
+| 보안 관제·SIEM/HIDS | Wazuh | k3s; 보안 이벤트 직접 수집·Dashboard 조사 경로 |
+| SOAR | Shuffle | k3s; Wazuh 경보를 read-only 보강 후 사람 승인 대기로 전달 |
 | 외부 웹 WAF | Cloudflare WAF | 외부 서비스 |
 | 오프사이트 백업 | AWS S3 | 외부 서비스 |
 

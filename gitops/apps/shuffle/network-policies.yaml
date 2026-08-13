@@ -129,3 +129,58 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+---
+# SOAR-01: Wazuh manager custom integration만 private Shuffle hook endpoint로 보낸다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shuffle-backend-wazuh-ingress
+  namespace: shuffle
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: shuffle
+      app.kubernetes.io/component: backend
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: wazuh
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: wazuh
+              app.kubernetes.io/component: manager
+      ports:
+        - protocol: TCP
+          port: 5001
+---
+# SOAR-01: Orborus와 정적 worker는 이미 선언된 enrichment Deployment를 발견할 때만
+# Kubernetes API를 읽는다. create/update/delete 권한은 Role에 없고, API Service 하나의
+# TCP 443만 연다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shuffle-execution-kubernetes-api-egress
+  namespace: shuffle
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [orborus, worker]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.1/32
+      ports:
+        - protocol: TCP
+          port: 443
+    # kube-router는 Service DNAT 뒤 k3s server endpoint를 egress 정책에 대조한다.
+    - to:
+        - ipBlock:
+            cidr: 10.10.20.10/32
+      ports:
+        - protocol: TCP
+          port: 6443

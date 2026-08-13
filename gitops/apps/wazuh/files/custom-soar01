@@ -1,0 +1,86 @@
+#!/var/ossec/framework/python/bin/python3
+"""SOAR-01 Wazuh integration: Vault-only local Shuffle webhook delivery.
+
+The upstream ``shuffle`` integration logs its hook URL before sending. This
+custom integration deliberately has no <hook_url> in ossec.conf, reads the
+capability from the in-memory Vault Agent volume, and emits no alert, URL or
+response content on stdout/stderr.
+"""
+
+import json
+import sys
+import urllib.parse
+import urllib.request
+
+
+HOOK_FILE = "/wazuh/runtime/soar01-hook-url"
+EXPECTED_HOST = "shuffle-backend.shuffle.svc.cluster.local"
+EXPECTED_PORT = 5001
+EXPECTED_PATH = "/api/v1/hooks/webhook_"
+
+
+def fail(code):
+    sys.exit(code)
+
+
+def load_hook():
+    try:
+        with open(HOOK_FILE, encoding="utf-8") as handle:
+            hook = handle.read().strip()
+        parsed = urllib.parse.urlsplit(hook)
+        if (
+            parsed.scheme != "http"
+            or parsed.hostname != EXPECTED_HOST
+            or parsed.port != EXPECTED_PORT
+            or not parsed.path.startswith(EXPECTED_PATH)
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("invalid hook")
+        return hook
+    except (OSError, ValueError):
+        fail(4)
+
+
+def alert_message(alert):
+    rule = alert.get("rule", {})
+    level = int(rule.get("level", 0))
+    severity = 1 if level <= 4 else 2 if level <= 7 else 3
+    return {
+        "severity": severity,
+        "pretext": "WAZUH Alert",
+        "title": rule.get("description", "N/A"),
+        "text": alert.get("full_log"),
+        "rule_id": rule.get("id"),
+        "timestamp": alert.get("timestamp"),
+        "id": alert.get("id"),
+        "all_fields": alert,
+    }
+
+
+def main():
+    if len(sys.argv) < 2:
+        fail(2)
+    try:
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            alert = json.load(handle)
+        message = json.dumps(alert_message(alert), ensure_ascii=False).encode()
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        fail(3)
+
+    request = urllib.request.Request(
+        load_hook(),
+        data=message,
+        headers={"Content-Type": "application/json", "Accept-Charset": "UTF-8"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            if response.status < 200 or response.status >= 300:
+                fail(5)
+    except OSError:
+        fail(5)
+
+
+if __name__ == "__main__":
+    main()
