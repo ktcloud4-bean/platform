@@ -1166,6 +1166,13 @@ SeaweedFS journal에는 비밀이 아닌 access-key 식별자만 음성 시험 �
 | `AWS-HR-03-FIX-01 DONE` | live UI에서 추가된 `foxgeun`·`jaeeyun`의 `/hr-admins` membership을 HR 포털 권한 선언 원본으로 수렴 | `AWS-HR-03` | `IDENTITY-LIVE` | 내부 HR 관리자 | `portal-group-members.json`의 `/hr-users` 4명·`/hr-admins` 3명 exact set과 enabled Keycloak user 각 1건, 허용하지 않은 두 일상 ID의 `/hr-admins` 0건, check `employee_users=4/4 admin_users=3/3 employee_add_needed=0 admin_add_needed=0`, UI 변경을 Git 선언·검증으로 흡수하고 사용자 생성/삭제·Pomerium/Dashy/AWS/HR DB 변경 0건 |
 | `QUALITY-01 DONE` | SonarQube | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | CI quality gate | 분석·quality gate·restore·SSO·배포 직후 capacity stop/go |
 | `AWX-01 DONE` | AWX | `CAP-02`, `PG-01`, `VAULT-02`, `POM-01` | 없음 | VM 구성 자동화 | inventory·credential 격리, check/apply 승인 경계 |
+| `AWX-BACKLOG-01 DONE` | 설치 상태에 머문 AWX를 운영 자동화에 도입하는 보수적 직렬 백로그를 확정 ([ADR-0001](adr/0001-proxmox-bootstrap-reproducibility.md), [ADR-0004](adr/0004-zero-trust-identity-and-management-access.md)) | `AWX-01`, `SCM-02`, `NET-04`, `OBS-11`, `IAM-MIG-01` | 없음 | `AWX-02` | 저장소 선언과 완료 증거를 대조해 현재 AWX가 내부 HTTP verifier만 실행하고 운영 VM SSH·SCM project·운영 EE 증거는 없음을 명시, `imcherry5778` 실행 요청과 `imcherry5778-admin` 승인만 허용하는 RBAC·정확한 대상·가역 canary·용량 정지선을 `AWX-02`~`AWX-07`의 직렬 gate로 분리, 기존 OpenTofu·Argo CD·Prometheus 소유권과 공개 경계는 바꾸지 않음 |
+| `AWX-02 READY` | 만료 예정 AWX `runAsNonRoot` PolicyException 제거와 신규 ID 기준 최소권한 수렴 (`gitops/apps/awx/`, `policies/`) | `AWX-BACKLOG-01`, `POL-02`, `IAM-MIG-01` | `ARGO-ROOT`, `IDENTITY-LIVE` | `AWX-03` | 2026-09-03 00:00 KST 전 task·web Pod-level `runAsNonRoot` 선언과 migration Job의 별도 admission 경로를 검증한 뒤 AWX 예외 제거, operator reconciliation·migration·web/task Ready와 root·AWX·policy-baseline 최신 main `Synced/Healthy`; 첫 SSO 뒤 `imcherry5778`은 `Platform/AWX Operators`, `imcherry5778-admin`은 `Platform/AWX Approvers`만 exact membership이고 legacy 멤버십 0, 두 계정 모두 superuser·organization admin 아님, 일상 계정의 direct apply·approval과 특권 계정의 임의 execute·권한 관리 403; secret 원문 0건과 예외·CR rollback 절차 |
+| `AWX-03 BLOCKED` | AWX namespace 기본 deny와 현재 필수 흐름만 허용하는 NetworkPolicy (`gitops/apps/awx/`) | `AWX-02` | `ARGO-ROOT` | `AWX-04` | 적용 전 live socket·Service·로그로 operator, web, task, execution 구성요소의 실제 흐름을 한 번 산출하고 DNS, 구성요소 내부 통신, Pomerium→web, Kubernetes API가 필요한 주체, PostgreSQL 5432, Vault 8200, Keycloak 443만 exact 허용; 기존 OIDC 로그인과 내부 verifier workflow 성공, 허용 밖 RFC1918·TCP 22 음성 대조, OPNsense·공개 DNS/NAT 변경 0건, policy 제거 rollback과 최신 main root·AWX `Synced/Healthy` |
+| `AWX-04 BLOCKED` | Gitea read-only SCM Project와 공급망 검증된 전용 Execution Environment를 AWX 운영 원본으로 고정 (`gitops/apps/awx/`, `gitops/tools/awx-04/`) | `AWX-03`, `SCM-02`, `REG-01`, `CI-01`, `SCAN-01`, `SIGN-01` | `VAULT-CONFIG`, `ARGO-ROOT` | `AWX-05` | GitHub SSOT와 Gitea private pull-mirror의 main SHA가 같은 시점에 AWX project `scm_revision`과 일치하고 SSH deploy key는 read-only·인증된 host key·Vault external lookup만 사용; 저장소의 실제 collection·role 의존성을 포함한 EE를 Jenkins→Harbor로 build해 Trivy·SBOM·Cosign 통과 digest로 고정하고 모든 Ansible playbook syntax check 성공; `projects_persistence=false`, 신규 PVC 0, 운영 대상 job 0, `imcherry5778`은 project revision·허용 template read만 가능하고 project·EE·credential 수정과 branch override 불가, secret 원문 0건·rollback·최신 main root·AWX `Synced/Healthy` |
+| `AWX-05 BLOCKED` | 같은 노드 `k3s-01` 한 대에 대한 무변경 SSH canary로 AWX machine credential·host key·실행 격리 검증 (`gitops/apps/awx/`, `infra/ansible/`) | `AWX-04` | `VAULT-CONFIG`, `ARGO-ROOT` | `AWX-06` | 전용 비인간 Linux 계정과 source 제한 authorized key, 인증된 host key, Vault external lookup Machine credential을 사용하고 sudo·become 없이 `k3s-01` exact inventory·limit, forks 1, simultaneous 금지, check 전용 template로 ping/facts 성공과 `changed=0`; AWX task→`k3s-01` TCP 22 NetworkPolicy 한 경로 외 다른 운영 host SSH와 허용 밖 port 실패, OPNsense 변경 0건, job·Pod 로그 secret 원문 0건, 실행 중 guest available 8 GiB 이상·swap 0·신규 PVC 0, 계정·key·Vault·AWX 객체 rollback과 최신 main root·AWX `Synced/Healthy` |
+| `AWX-06 BLOCKED` | `netbird-01` 한 대의 가역 marker로 첫 cross-VLAN check→사람 승인→apply 경계와 rollback 검증 (`gitops/apps/awx/`, `infra/ansible/`, `infra/opnsense/`) | `AWX-05`, `NET-04` | `OPNSENSE-LIVE`, `VAULT-CONFIG`, `ARGO-ROOT` | `AWX-07` | 적용 전 OPNsense drift 없음과 인증된 host key를 확인하고 AWX task/k3s-01→`netbird-01` TCP 22만 NetworkPolicy·OPNsense exact 허용; sudo·become 없는 전용 계정 home의 marker 하나에 대해 check가 예상 변경 1건, `imcherry5778`이 workflow를 시작한 뒤 `imcherry5778-admin` 승인 전 변경 0, 승인 뒤 apply 성공·두 번째 check `changed=0`, 승인 범위에 포함된 cleanup 뒤 marker 부재; 일상 계정 direct apply·approval 403, 특권 계정은 승인·거절만 가능하고 execute·템플릿/credential 수정 403, actor·target·SCM revision·approver 감사 기록과 secret 원문 0건, 실패 시 방화벽·NetworkPolicy·계정/key rollback 및 drift 없음·최신 main root·AWX `Synced/Healthy` |
+| `AWX-07 BLOCKED` | 기존 `node_exporter_baseline`을 `netbird-01` 한 대에서만 AWX의 첫 실제 운영 역할로 이관 (`gitops/apps/awx/`, `infra/ansible/`) | `AWX-06`, `OBS-11` | `VAULT-CONFIG`, `ARGO-ROOT` | VM 구성 자동화의 제한적 운영 시작 | digest 고정 EE·고정 SCM main revision·exact inventory/limit·forks 1·simultaneous/branch/extra-vars override 금지 아래 check template과 approval workflow만 노출; `imcherry5778` check·workflow 시작, `imcherry5778-admin` 승인·거절만 가능하고 양쪽의 금지 권한은 403; 승인 전 변경 0, 승인 apply 뒤 재실행 `changed=0`, `node_exporter.service` enabled·active와 Prometheus `up{job="node-exporter",instance="10.10.40.10:9100"}=1`; job에 actor·target·SCM revision·approver가 남고 secret 원문 0건, 실행 중 guest available 8 GiB 이상·swap 0·신규 PVC 0; rollback은 AWX privileged credential·sudo/key·template 권한만 회수하고 기존 node_exporter와 `OBS-11` 관측 경로는 보존, 최신 main root·AWX `Synced/Healthy` |
 | `UPDATE-01 DONE` | Renovate | `SCM-01`, `VAULT-02` | 없음 | 의존성 변경 | 제한된 repo 권한, PR 생성, 자동 merge 금지 기준 |
 | `SCAN-01 DONE` | Trivy image/config/SBOM 검사 | `CI-01`, `REG-01` | 없음 | 서명·배포 gate | 취약점 기준·SBOM 저장·실패 pipeline |
 
@@ -1335,7 +1342,20 @@ available은 `15,598MiB`, swap 0으로 12/8GiB 경고·정지 기준 밖이어�
 `dabfd737fae340b3259e22a689512d5a0ea04814`에서 root·AWX·Pomerium이 `Synced/Healthy`였고,
 시작 main `ee5c0280df4e9f29dc5f3dbdd1db9891ab8f2322`로 rollback해 root의
 `Synced/Healthy`와 AWX 리소스 정리를 확인했다. 최종 child 선언은 `main`이다. 현재 백로그에서
-`AWX-01`을 선행으로 갖는 작업은 없어 새로 `READY`로 여는 직접 후속은 없다.
+당시 `AWX-01`을 선행으로 갖는 작업은 없어 새로 `READY`로 연 직접 후속은 없었다.
+
+2026-08-13 `AWX-BACKLOG-01`에서 이 내부 verifier 완료 증거를 운영 SSH 성공으로 확대 해석하지
+않고, `AWX-02`부터 `AWX-07`까지 한 단계가 다음 단계의 권한·네트워크 전제가 되는 직렬 lane으로
+분리했다. 첫 실행 대상은 데이터·접근 중계 VM이 아닌 기존 관측 canary `netbird-01` 한 대이며,
+`AWX-06`은 sudo 없는 marker로 실제 변경·승인·cleanup을 먼저 증명하고 `AWX-07`에서만 기존
+`node_exporter_baseline`의 privileged 실행을 허용한다. `imcherry5778`은 check와 workflow 시작,
+`imcherry5778-admin`은 승인·거절만 담당하며 어느 계정에도 AWX 관리자 권한을 주지 않는다.
+
+`AWX-07` 완료만으로 fleet 확대·schedule·job slicing·동시 실행·ad hoc command·Proxmox·OPNsense·
+OpenTofu·k3s server 재시작 자동화를 열지 않는다. 같은 고정 대상의 수동 실행이 서로 다른 날에
+3회 연속 성공하고 각 실행의 두 번째 check가 `changed=0`, Prometheus 정상, capacity 정지선 미진입,
+권한 우회 0건일 때만 별도 백로그로 재검토한다. AWX는 Git의 desired state, Argo CD의 Kubernetes
+application 소유권, Prometheus의 지속 상태 판정을 대체하지 않는다.
 
 2026-08-02 `UPDATE-01`에서 Renovate `44.6.0` 공식 image를 digest로 고정하고 전용
 AppProject·child Application·namespace·ServiceAccount와 매주 단발 `CronJob`으로 배포했다.
