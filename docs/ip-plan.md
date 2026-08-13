@@ -243,6 +243,7 @@ NetBird 단독 외부 공개 정책은 `EDGE-01`, 조건부 Cloudflare HTTP 공�
 | `warpgate.imcherry5778.xyz` | service alias | Warpgate 서비스 | 내부·NetBird 경유 | Unbound alias → `warpgate-01` (`10.10.30.10`); WG-02 등록 |
 | `postgres.imcherry5778.xyz` | service alias | PostgreSQL | 내부, 비 HTTP | 미등록 |
 | `s3.imcherry5778.xyz` | service alias | SeaweedFS S3 API | 내부, 비 Pomerium 데이터 경로 | Unbound alias 등록; TLS S3 TCP 8333 |
+| `filer.imcherry5778.xyz` | service alias | SeaweedFS filer 웹 UI | Pomerium; `/platform-privileged`만 허용 | Unbound alias → `k3s-01`(`10.10.20.10`) 등록(S3-02); Pomerium이 k3s-01→object-01 TCP 8888로 전달, 내부 AAAA·공개 A/AAAA 0건 |
 
 canonical host의 주소는 이 문서의 고정 배정 표를 참조한다. `Unbound 등록`은 내부 host override 상태이며 공개 DNS 상태와는 별개다. service alias는 해당 서비스와 진입 경로를 검증한 뒤 등록한다.
 

@@ -12,8 +12,8 @@ Group={{ seaweedfs_group }}
 UMask=0027
 ExecStart={{ seaweedfs_binary_path }} filer \
   -master=127.0.0.1:{{ seaweedfs_master_port }} \
-  -ip=127.0.0.1 \
-  -ip.bind=127.0.0.1 \
+  -ip={{ seaweedfs_filer_bind_address }} \
+  -ip.bind=0.0.0.0 \
   -port={{ seaweedfs_filer_port }} \
   -port.grpc={{ seaweedfs_filer_grpc_port }} \
   -defaultStoreDir={{ seaweedfs_filer_dir }} \
@@ -54,6 +54,10 @@ MemoryDenyWriteExecute=true
 CapabilityBoundingSet=
 AmbientCapabilities=
 IPAddressAllow=localhost
+IPAddressAllow={{ seaweedfs_filer_bind_address }}/32
+{% for source in seaweedfs_filer_allowed_sources %}
+IPAddressAllow={{ source }}
+{% endfor %}
 {% if seaweedfs_metrics_enabled %}
 IPAddressAllow={{ seaweedfs_metrics_bind_address }}/32
 {% for source in seaweedfs_metrics_allowed_sources %}

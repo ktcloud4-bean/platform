@@ -47,6 +47,15 @@ seaweedfs_volume_port: 8080
 seaweedfs_volume_grpc_port: 18080
 seaweedfs_filer_port: 8888
 seaweedfs_filer_grpc_port: 18888
+
+# S3-02: filer 웹 UI를 DATA 주소에서도 듣게 하되(0.0.0.0 bind로 기존 loopback
+# 127.0.0.1:8888 소비자인 S3 gateway 연결은 그대로 유지), systemd IPAddressAllow는
+# Pomerium이 있는 k3s-01만 명시적으로 허용한다. metrics 허용 목록과 값은 같지만
+# seaweedfs_metrics_enabled가 나중에 꺼져도 filer 노출 경계가 조용히 사라지지
+# 않도록 별도 목록으로 관리한다.
+seaweedfs_filer_bind_address: "{{ ansible_default_ipv4.address }}"
+seaweedfs_filer_allowed_sources:
+  - "10.10.20.10/32"
 # 기존 collection 10개에 더해 REG-01 Harbor가 30GB volume 5개까지 사용할 수 있도록
 # 승인된 slot이다. max는 예약 용량이나 quota가 아니며 minFreeSpace가 디스크 하한을 지킨다.
 seaweedfs_volume_max_count: 15

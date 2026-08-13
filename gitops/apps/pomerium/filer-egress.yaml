@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: s3-02-pomerium-to-object-01-filer
+  namespace: pomerium
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: pomerium
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pomerium
+      app.kubernetes.io/component: server
+  policyTypes: [Egress]
+  # object-01은 클러스터 밖 DATA VLAN 독립 VM이라 namespaceSelector를 쓸 수 없다.
+  # OPNsense opt2 exact PASS rule(S3-02, k3s-01 -> object-01 TCP 8888)과 같은
+  # 목적지·포트로 이중 제한한다.
+  egress:
+    - to: [{ipBlock: {cidr: 10.10.50.20/32}}]
+      ports: [{protocol: TCP, port: 8888}]
