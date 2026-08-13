@@ -161,7 +161,7 @@ sections:
             - /platform-privileged
       - title: SeaweedFS Filer
         description: S3-02 filer 웹 UI; bucket 단위 ACL 없는 raw 파일트리라 /platform-privileged만 허용
-        icon: fas fa-box
+        icon: favicon-local
         url: https://filer.imcherry5778.xyz
         target: sametab
         displayData:
