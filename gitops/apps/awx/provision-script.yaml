@@ -76,6 +76,12 @@ data:
             return
         api("POST", path, {"id": object_id})
 
+    def detach(path, object_id):
+        current = api("GET", path)
+        if not any(item["id"] == object_id for item in current.get("results", [])):
+            return
+        api("POST", path, {"id": object_id, "disassociate": True})
+
     def object_role(obj, role_name):
         return obj["summary_fields"]["object_roles"][role_name]["id"]
 
@@ -246,6 +252,21 @@ data:
     give_team_role(check_template, "execute_role", operators)
     give_team_role(workflow, "execute_role", operators)
     give_team_role(workflow, "approval_role", approvers)
+
+    # 이전 AWX-01 또는 UI 변경으로 생길 수 있는 과잉 team role을 정확한 최소 집합으로
+    # 수렴한다. Organization member는 team membership의 상위 전제일 뿐 admin 권한이 아니다.
+    operator_role_ids = {
+        object_role(boundary, "use_role"),
+        object_role(allowed_credential, "use_role"),
+        object_role(check_template, "execute_role"),
+        object_role(workflow, "execute_role"),
+    }
+    approver_role_ids = {object_role(workflow, "approval_role")}
+    for team, allowed_role_ids in ((operators, operator_role_ids), (approvers, approver_role_ids)):
+        assigned = api("GET", f"/teams/{team['id']}/roles/?page_size=200")
+        for role in assigned.get("results", []):
+            if role["id"] not in allowed_role_ids:
+                detach(f"/roles/{role['id']}/teams/", team["id"])
 
     # 실행 금지 인벤토리, denied credential, denied/apply JT에는 Operators role을
     # 절대 붙이지 않는다. 다음 단계 verify-live.sh가 이를 같은 시점에 대조한다.

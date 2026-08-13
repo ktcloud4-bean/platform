@@ -22,6 +22,30 @@ spec:
   web_replicas: 1
   task_replicas: 1
 
+  # Operator 2.19.1은 이 값을 web/task Pod spec.securityContext에 그대로
+  # 렌더링한다. Redis image의 기본 USER는 비어 있으므로 runAsNonRoot만 두지
+  # 않고 UID 1000을 고정한다. AWX image의 시작 스크립트가 group 0 write로
+  # 준비된 /etc/passwd·supervisor·rsyslog 경로를 사용하므로 upstream runtime
+  # contract와 같은 GID 0을 유지하고, emptyDir는 fsGroup 1000으로 제한한다.
+  # migration Job은 이 필드를 상속하지 않아 policy-baseline의 좁은 admission
+  # mutation이 별도로 소유한다.
+  security_context_settings:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 0
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+
+  # default container group가 만드는 automation-job-* Pod는 web/task CR field나
+  # migration Job mutation을 상속하지 않는다. Operator가 read-only AWX setting으로
+  # 공급한 Pod spec override만 이 실행 경로에 적용한다.
+  extra_settings:
+    - setting: DEFAULT_EXECUTION_QUEUE_POD_SPEC_OVERRIDE
+      value: >-
+        '{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":1000,"runAsGroup":0,"fsGroup":1000,"fsGroupChangePolicy":"OnRootMismatch","seccompProfile":{"type":"RuntimeDefault"}}}}'
+
   image: quay.io/ansible/awx
   image_version: 24.6.1@sha256:5d47e132014ae4c6a026a2e8f19ce7b3cf3c8f313d59e44fdfa95cd9f3669209
   control_plane_ee_image: quay.io/ansible/awx-ee:24.6.1@sha256:89593d2a0268acacdbd1c075d8810ab50d961cf7769e36de19219bb6cb4efcc1

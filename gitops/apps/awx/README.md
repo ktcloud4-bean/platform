@@ -53,8 +53,8 @@ OPNsense 경로를 열지 않는다.
 
 | Keycloak 사용자 | 그룹 | AWX team | 허용 |
 |---|---|---|---|
-| `imcherry` | `/platform-users` | `AWX Operators` | 검증 inventory use, 허용 credential use, check 실행, 승인 workflow 시작 |
-| `imcherry-admin` | `/platform-privileged` | `AWX Approvers` | workflow approval |
+| `imcherry5778` | `/platform-users` | `AWX Operators` | 검증 inventory use, 허용 credential use, check 실행, 승인 workflow 시작 |
+| `imcherry5778-admin` | `/platform-privileged` | `AWX Approvers` | workflow approval |
 
 두 팀 모두 AWX superuser나 organization admin이 아니다. `AWX Operators`에는 운영 VM
 inventory, 음성 대조 credential/template, apply Job Template 권한을 부여하지 않는다.
@@ -96,6 +96,46 @@ workflow가 이 대상에 보내는 요청은 read-only HTTP GET뿐이다. 따�
 
 위 job 실행은 모두 `awx-verifier.awx.svc.cluster.local`의 read-only HTTP GET이다. 선택지
 (b)에 따른 이 결과는 **실제 운영 대상의 cross-VLAN 접근 증거가 아니다**.
+
+## AWX-02 non-root와 신규 ID 경계
+
+AWX Operator `2.19.1`의 `security_context_settings`는 web/task Pod에만 렌더링된다. AWX와
+EE image는 UID 1000이지만 Redis image는 OCI `USER`가 비어 있으므로 `runAsNonRoot: true`만
+선언하면 kubelet이 Redis를 시작하지 못한다. 따라서 web/task는 Pod 수준 UID 1000과 fsGroup
+1000, RuntimeDefault seccomp를 고정한다. AWX image의 시작 스크립트는 upstream image가
+group 0 write로 준비한 `/etc/passwd`, supervisor, rsyslog 경로를 사용하므로 primary GID는
+기존 image contract와 같은 0을 유지한다. 모든 container의 UID는 1000이며 root user로
+실행되지 않는다. Operator reconciliation이 이 선언으로 Deployment와 Pod를 다시 만들며
+개별 container에 중복 선언하지 않는다.
+
+AWX default container group는 별도 `automation-job-*` Pod를 만든다. 이 경로는 CR의 web/task
+`security_context_settings`와 migration Job mutation 어느 쪽도 상속하지 않는다. 따라서 CR의
+read-only `DEFAULT_EXECUTION_QUEUE_POD_SPEC_OVERRIDE`에 같은 Pod security context를 선언한다.
+생성 Pod 이름·label을 넓게 admission mutation하지 않으며, 실제 check/apply 실행이 이 선언과
+Enforce 정책의 결합 증거다.
+
+별도 `awx-migration-*` Job template은 이 CR 필드를 상속하지 않는다. 정책 child의
+`pol-02-awx-migration-run-as-non-root`는 `awx` namespace, `Job/awx-migration-*`,
+`component=awx`와 `managed-by=awx-operator`가 모두 일치하는 CREATE admission에만 같은 Pod
+security context를 주입한다. 범위 밖 Job은 기존 Enforce 정책이 계속 거부한다. 이 두 경로가
+준비된 뒤 만료형 `pol-02-awx-run-as-non-root` 예외를 제거한다.
+
+SSO mapping의 현재 exact set은 일상 `imcherry5778` → `Platform/AWX Operators`, 특권
+`imcherry5778-admin` → `Platform/AWX Approvers`다. 두 계정의 최초 SSO가 AWX user와 membership을
+만들며 legacy user의 잔존 Organization/Team membership은 허용하지 않는다. 두 team에 부여할
+object role도 provision Job이 allowlist 밖 role을 제거해 수렴한다. 어느 계정도 superuser나
+Organization admin이 아니다.
+
+`gitops/tools/awx-02/verify-live.sh platform`은 CR·web/task·migration admission·예외 제거와
+root/AWX/policy child를 한 번 판정한다. `identity-state`는 두 사람의 첫 SSO 뒤 exact membership을,
+`browser-rbac`은 사람이 제공한 현재 MFA 입력으로 금지 API의 실제 403을 판정한다. `secrets`는
+사람 세션 없이 Git 추적 파일과 현재 AWX Pod 로그의 secret 원문 0건을 판정한다. 사람의 첫
+로그인과 MFA를 서버 측 검증기가 대신하지 않는다.
+
+Rollback은 policy-baseline child를 시작 main SHA로 먼저 돌려 mutation 제거와 만료형 AWX
+예외 복원을 확인한 다음 AWX child를 같은 SHA로 돌려 CR의 `security_context_settings`를 제거한다.
+Operator가 기존 web/task spec을 복구하고 둘 다 Ready가 되면 root와 두 child를 literal `main`으로
+복원한다. AWX CR·DB·PVC·runtime Secret은 삭제하지 않는다.
 
 ## 적용 순서와 검증
 

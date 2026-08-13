@@ -24,7 +24,8 @@ function parseArgs(argv) {
     if (!key?.startsWith('--') || value === undefined) fail('invalid arguments');
     result[key.slice(2)] = value;
   }
-  for (const key of ['connect-ip', 'daily-password-file', 'daily-totp-file',
+  for (const key of ['connect-ip', 'daily-username', 'privileged-username',
+    'daily-password-file', 'daily-totp-file',
     'privileged-password-file', 'privileged-totp-file', 'object-file', 'secret-env-file']) {
     if (!result[key]) fail(`missing --${key}`);
   }
@@ -70,9 +71,34 @@ async function keycloakLogin(page, username, passwordFile, totpFile) {
   await page.locator('input[name="username"]').fill(username);
   await page.locator('input[name="password"]').fill(readPrivate(passwordFile));
   await page.locator('#kc-login').click();
-  await page.locator('input[name="otp"]').waitFor({state: 'visible', timeout: 30000});
+  await page.waitForFunction(() => Boolean(
+    document.querySelector('input[name="otp"]') ||
+    document.querySelector('.alert-error, .pf-v5-c-alert, #input-error, .kc-feedback-text') ||
+    location.hostname === 'awx.imcherry5778.xyz'
+  ), null, {timeout: 30000});
+  if (new URL(page.url()).hostname === 'awx.imcherry5778.xyz') return;
+  if (!await page.locator('input[name="otp"]').isVisible()) {
+    const state = await page.evaluate(() => ({
+      url: location.href,
+      inputs: [...document.querySelectorAll('input')].map((input) => input.name || input.type || 'unnamed'),
+      errors: [...document.querySelectorAll('.alert-error, .pf-v5-c-alert, #input-error, .kc-feedback-text')]
+        .map((element) => element.textContent.trim()).filter(Boolean),
+    }));
+    fail(`Keycloak password 단계가 OTP로 전환되지 않았다: ${JSON.stringify(state)}`);
+  }
   await page.locator('input[name="otp"]').fill(await currentTotp(totpFile));
   await page.locator('form#kc-otp-login-form button[type="submit"], form#kc-otp-login-form input[type="submit"]').first().click();
+  await page.waitForFunction(() => location.hostname !== 'sso.imcherry5778.xyz' || Boolean(
+    document.querySelector('.alert-error, #input-error')
+  ), null, {timeout: 30000});
+  if (new URL(page.url()).hostname === 'sso.imcherry5778.xyz') {
+    const state = await page.evaluate(() => ({
+      inputs: [...document.querySelectorAll('input')].map((input) => input.name || input.type || 'unnamed'),
+      errors: [...document.querySelectorAll('.alert-error, #input-error')]
+        .map((element) => element.textContent.trim()).filter(Boolean),
+    }));
+    fail(`Keycloak TOTP가 거부되었거나 재사용됐다: ${JSON.stringify(state)}`);
+  }
 }
 async function api(page, method, path, body, expected) {
   const response = await page.evaluate(async ({methodArg, pathArg, bodyArg}) => {
@@ -141,9 +167,9 @@ async function main() {
   const rules = APPROVED_HOSTS.map((host) => `MAP ${host} ${args['connect-ip']}`).join(',');
   const browser = await chromium.launch({headless: true, args: [`--host-resolver-rules=${rules}`, '--no-proxy-server']});
   try {
-    const operator = await awxLogin(browser, args['connect-ip'], 'imcherry',
+    const operator = await awxLogin(browser, args['connect-ip'], args['daily-username'],
       args['daily-password-file'], args['daily-totp-file']);
-    const approver = await awxLogin(browser, args['connect-ip'], 'imcherry-admin',
+    const approver = await awxLogin(browser, args['connect-ip'], args['privileged-username'],
       args['privileged-password-file'], args['privileged-totp-file']);
 
     await api(operator.page, 'GET', `/api/v2/credentials/${objects.allowed_credential}/`, null, [200]);
@@ -153,6 +179,10 @@ async function main() {
     await waitJob(operator.page, 'jobs', checkId, 'successful');
     await api(operator.page, 'POST', `/api/v2/job_templates/${objects.denied_template}/launch/`, {}, [403]);
     await api(operator.page, 'POST', `/api/v2/job_templates/${objects.apply_template}/launch/`, {}, [403]);
+    await api(approver.page, 'POST', `/api/v2/job_templates/${objects.check_template}/launch/`, {}, [403]);
+    await api(approver.page, 'POST', `/api/v2/workflow_job_templates/${objects.workflow}/launch/`, {}, [403]);
+    await api(approver.page, 'PATCH', `/api/v2/teams/${objects.operators_team}/`,
+      {name: 'AWX Operators'}, [403]);
 
     const stdout = await api(operator.page, 'GET', `/api/v2/jobs/${checkId}/stdout/?format=json`, null, [200]);
     const stdoutText = JSON.stringify(stdout.body);
@@ -186,7 +216,8 @@ async function main() {
     const applyNode = afterNodes.body.results.find((node) => node.identifier === 'approved-apply');
     if (applyNode?.summary_fields?.job?.status !== 'successful') fail('approved apply node did not succeed');
     console.log(`APPROVAL_BOUNDARY before=${before} operator_approve=403 after=successful workflow=${workflowId}`);
-    console.log('OIDC_RBAC imcherry=AWX_Operators imcherry-admin=AWX_Approvers');
+    console.log(`OIDC_RBAC ${args['daily-username']}=AWX_Operators ${args['privileged-username']}=AWX_Approvers`);
+    console.log('FORBIDDEN_RBAC daily_apply=403 daily_approval=403 privileged_execute=403 privileged_permission_manage=403');
 
     await operator.context.close();
     await approver.context.close();

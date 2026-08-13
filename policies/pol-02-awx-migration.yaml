@@ -1,0 +1,46 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pol-02-awx-migration-run-as-non-root
+  annotations:
+    policies.kyverno.io/title: AWX migration non-root admission
+    policies.kyverno.io/category: Pod Security Baseline
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Job
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  rules:
+    - name: set-awx-migration-pod-security-context
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds:
+                - Job
+              operations:
+                - CREATE
+              namespaces:
+                - awx
+              names:
+                - awx-migration-*
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: awx
+                  app.kubernetes.io/managed-by: awx-operator
+      mutate:
+        patchStrategicMerge:
+          spec:
+            template:
+              spec:
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                  runAsGroup: 0
+                  fsGroup: 1000
+                  fsGroupChangePolicy: OnRootMismatch
+                  seccompProfile:
+                    type: RuntimeDefault

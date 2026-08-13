@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - kyverno-audit.yaml
   - pol-02-falco-root-sensor.yaml
+  - pol-02-awx-migration.yaml
   - pol-02-wazuh-root-manager.yaml
   - pol-02-policy-exceptions.yaml
   - pomerium-networkpolicy.yaml

@@ -5,12 +5,19 @@
 [`gitops/apps/kyverno/README.md`](../gitops/apps/kyverno/README.md)가 소유한다.
 
 `POL-02`는 `POL-01`에서 Audit한 Pod-level `runAsNonRoot` 규칙 한 건만 `Enforce`로
-승격한다. 적용 전 PolicyReport에서 확인한 `argocd`, `awx`, `crowdsec-01`, `velero`의 기존
-workload만 정확한 kind·이름·policy rule로 예외 처리한다. 이 네 예외는 `kyverno`
+승격한다. 적용 전 PolicyReport에서 확인한 `argocd`, `crowdsec-01`, `velero`의 기존
+workload만 정확한 kind·이름·policy rule로 예외 처리한다. 이 세 예외는 `kyverno`
 namespace에서만 인식되며 `2026-09-02T15:00:00Z` 뒤에는 `time_now_utc()` 조건이 거짓이 되어
 같은 위반 입력을 admission에서 거부한다. 소유자와 보정 사유는 각 `PolicyException`
 annotation이 소유한다. background report에는 예외를 적용하지 않아 남은 위반을 숨기지
 않는다.
+
+`AWX-02`는 AWX web/task에 Operator CR의 Pod-level non-root 값을 선언하고 기존 만료형 AWX
+예외를 제거했다. Operator `2.19.1`이 같은 CR 값을 migration Job에는 전달하지 않으므로,
+`pol-02-awx-migration-run-as-non-root` mutation이 정확한 namespace·Job 이름·두 upstream label의
+CREATE 요청에만 UID 1000·GID 0·fsGroup 1000과 RuntimeDefault seccomp를 주입한다. GID 0은
+AWX image가 group-write로 준비한 시작 경로를 쓰기 위한 upstream runtime contract다. selector가 다르면
+mutation하지 않으며 기존 Enforce가 누락된 `runAsNonRoot`를 거부한다.
 
 ## Falco root sensor 경계
 

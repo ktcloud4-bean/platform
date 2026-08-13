@@ -135,6 +135,8 @@ echo "INVENTORY_EVIDENCE production_hosts=5 dynamic_sources=0 boundary_hosts=1 j
 echo "증거 2·3/4 credential 격리와 check/apply 사람 승인 경계를 실제 SSO 사용자로 대조한다."
 node "${repo_root}/gitops/tools/awx-01/browser-verify.js" \
   --connect-ip "${connect_ip}" \
+  --daily-username "${AWX_DAILY_USERNAME:-imcherry5778}" \
+  --privileged-username "${AWX_PRIVILEGED_USERNAME:-imcherry5778-admin}" \
   --daily-password-file "${kc_secret_dir}/daily-password" \
   --daily-totp-file "${kc_secret_dir}/daily-totp" \
   --privileged-password-file "${kc_secret_dir}/privileged-password" \
