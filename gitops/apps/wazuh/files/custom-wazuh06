@@ -1,0 +1,82 @@
+#!/var/ossec/framework/python/bin/python3
+"""WAZUH-06 Wazuh integration: level>=14 보안 사건만 in-cluster notifier로 넘긴다.
+
+이 스크립트는 manager Pod 안에서만 돌고 Slack webhook을 알지 못한다. 목적지는
+같은 네임스페이스의 wazuh-06-notifier Service 하나로 고정돼 있고(비밀이 아니라
+상수), 실제 외부 전송과 webhook 보관은 그 Pod가 소유한다.
+
+boundary:
+- integratord의 <level>14</level>가 이미 거르지만 같은 기준을 여기서 다시 확인한다.
+- ALLOWED payload만 만든다. full_log·data.*·srcip·dstuser·decoder·location 등
+  원문 계열 필드는 애초에 읽지 않으므로 manager 밖으로 나가지 않는다.
+- SOAR-01의 custom-soar01과 같이 alert·URL·응답 내용을 stdout/stderr에 남기지 않는다.
+- 어떤 능동 대응도 하지 않는다. 읽고, 줄이고, 한 번 POST할 뿐이다.
+"""
+
+import json
+import sys
+import urllib.request
+
+NOTIFIER_URL = "http://wazuh-06-notifier.wazuh.svc.cluster.local:8080/alert"
+MIN_LEVEL = 14
+TEST_GROUP = "wazuh_06_test"
+MAX_GROUPS = 12
+TIMEOUT = 10
+
+
+def fail(code):
+    sys.exit(code)
+
+
+def build(alert):
+    rule = alert.get("rule") or {}
+    level = int(rule.get("level", 0))
+    if level < MIN_LEVEL:
+        # integratord가 이미 걸렀어야 하는 경로. 조용히 끝낸다.
+        sys.exit(0)
+
+    agent = alert.get("agent") or {}
+    groups = [str(group) for group in (rule.get("groups") or [])][:MAX_GROUPS]
+
+    return {
+        "level": level,
+        "rule_id": str(rule.get("id", "")),
+        "rule_description": str(rule.get("description", "")),
+        "rule_groups": groups,
+        # agent alias만 보낸다 — agent.ip는 읽지 않는다.
+        "agent_name": str(agent.get("name", "")),
+        "agent_id": str(agent.get("id", "")),
+        "timestamp": str(alert.get("timestamp", "")),
+        "test": TEST_GROUP in groups,
+    }
+
+
+def main():
+    if len(sys.argv) < 2:
+        fail(2)
+    try:
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            alert = json.load(handle)
+        payload = build(alert)
+        if not payload["rule_id"]:
+            fail(3)
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        fail(3)
+
+    request = urllib.request.Request(
+        NOTIFIER_URL,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            if response.status < 200 or response.status >= 300:
+                fail(5)
+    except OSError:
+        fail(5)
+
+
+if __name__ == "__main__":
+    main()

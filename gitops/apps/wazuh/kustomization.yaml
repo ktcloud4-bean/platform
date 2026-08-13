@@ -10,6 +10,7 @@ resources:
   - dashboard.yaml
   - network-policies.yaml
   - wazuh-04-relay-agent.yaml
+  - wazuh-06-notifier.yaml
 configMapGenerator:
   - name: wazuh-vault-agent
     namespace: wazuh
@@ -19,6 +20,7 @@ configMapGenerator:
       - vault-agent-bootstrap.hcl=files/vault-agent-bootstrap.hcl
       - vault-agent-dashboard.hcl=files/vault-agent-dashboard.hcl
       - vault-agent-relay-agent.hcl=files/vault-agent-relay-agent.hcl
+      - vault-agent-wazuh-06-notifier.hcl=files/vault-agent-wazuh-06-notifier.hcl
       - vault.crt=files/vault.crt
   - name: wazuh-04-relay-agent-conf
     namespace: wazuh
@@ -53,6 +55,14 @@ configMapGenerator:
     namespace: wazuh
     files:
       - custom-soar01=files/custom-soar01
+  - name: wazuh-manager-wazuh06-integration
+    namespace: wazuh
+    files:
+      - custom-wazuh06=files/custom-wazuh06
+  - name: wazuh-06-notifier-app
+    namespace: wazuh
+    files:
+      - wazuh-06-notifier.py=files/wazuh-06-notifier.py
   - name: wazuh-bootstrap-script
     namespace: wazuh
     files:

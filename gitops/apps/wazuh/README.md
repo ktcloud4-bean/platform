@@ -622,3 +622,162 @@ manager에 쌓인 FIM alert의 `syscheck.path`로 사후 확인하고 결과를 
 4. `network-policies.yaml`의 6개 host `ipBlock`을 되돌린다.
 5. `platform-root`·`wazuh` child가 rollback 커밋의 `Synced/Healthy`인지, OPNsense
    drift가 없는지 확인한다.
+
+## WAZUH-06 high-severity 보안 사건 Slack 통지
+
+`level >= 14` 보안 사건만 `#security-alerts`로 내보내는 단방향 relay다. `SOAR-01`의
+Shuffle read-only·사람 승인 흐름(level 7)은 그대로 두고 그 옆에 나란히 붙는다.
+
+### 왜 manager가 직접 보내지 않는가
+
+| 후보 | 판정 |
+|---|---|
+| manager Pod에 sidecar 추가 | 불가. `pol-02-wazuh-root-manager-baseline`의 `require-wazuh-manager-baseline`이 `containers` 배열 전체를 고정 이미지와 일치시켜 두 번째 container를 admission에서 거부한다(`WAZUH-04`에서 라이브 확인) |
+| manager container가 Slack에 직접 POST | 하지 않는다. manager가 webhook을 읽고 외부로 나갈 수 있게 되면 "중앙 수집기는 외부로 나가지 않는다"는 경계가 정책 수준에서 사라진다 |
+| upstream `slack` integration | 쓰지 않는다. hook URL을 로그에 남기고 `full_log`를 그대로 보낸다 |
+| **별도 notifier Pod (채택)** | manager는 in-cluster로 allowlist payload만 넘기고, webhook 보관과 외부 TCP 443 egress는 notifier Pod가 단독으로 갖는다 |
+
+### 경로
+
+```text
+alert(level>=14)
+  → wazuh-integratord
+  → files/custom-wazuh06        (manager Pod, webhook 모름, allowlist 1차)
+  → wazuh-06-notifier.wazuh.svc:8080   (in-cluster HTTP)
+  → files/wazuh-06-notifier.py  (notifier Pod, allowlist 2차 + webhook host 고정)
+  → https://hooks.slack.com/services/…  (#security-alerts)
+```
+
+`custom-soar01`(level 7)과 `custom-wazuh06`(level 14)은 같은 `integratord`가 독립적으로
+호출한다. level 7~13은 Shuffle로만 가고 외부로 나가지 않는다.
+
+### payload allowlist
+
+Slack 본문에 들어갈 수 있는 값의 유일한 원본이다. 여기 없는 것은 manager를 떠나지
+못하고, 설령 떠나더라도 notifier의 `ALLOWED_FIELDS`가 다시 버린다(2중 방어).
+
+| 필드 | 출처 | 비고 |
+|---|---|---|
+| `level` | `rule.level` | 14 미만이면 notifier가 거부 |
+| `rule_id` | `rule.id` | |
+| `rule_description` | `rule.description` | 제어문자 제거, 300자 절단 |
+| `rule_groups` | `rule.groups` | 최대 12개 |
+| `agent_name` | `agent.name` | **alias만**. `agent.ip`는 읽지 않는다 |
+| `agent_id` | `agent.id` | |
+| `timestamp` | `alert.timestamp` | |
+| `test` | `rule.groups`에 `wazuh_06_test` 포함 여부 | `[TEST]` 접두 |
+
+보내지 않는 것: `full_log`·`previous_output`(raw log), `data.*`(srcip·dstuser·srcport·
+token 등 request body 계열), `decoder`·`location`(수집 경로), `manager`, `mitre`,
+`agent.ip`. `<`·`>`·`@`는 본문 조립 전에 제거해 Slack 마크업·멘션 주입도 막는다 —
+`@channel` 멘션은 우리가 만든 접두 한 곳에만 남는다.
+
+`resolved` 통지는 만들지 않는다. 보안 사건은 상태 경보가 아니라 사실 기록이므로
+"해제"라는 상태가 없다. notifier는 상태를 저장하지 않는 단방향 relay다.
+
+### credential 경계
+
+| Vault 경로 | 소비자 | 내용 |
+|---|---|---|
+| `kv/wazuh/security-notifier` | `wazuh-06-notifier` SA | `slack_webhook_url` 한 field |
+
+`WAZUH-04`가 `wazuh-manager` role을 재사용한 것과 반대로 여기서는 **재사용하지
+않는다**. 전용 policy·role이 있어야 "manager는 Slack webhook을 읽을 수 없다"가
+Vault 정책으로 성립한다. `OBS-18`이 쓸 운영 Slack 경로(`kv/obs/alertmanager`,
+`#platform-alerts`)와는 secret·채널·receiver·권한 어느 것도 공유하지 않는다.
+
+`gitops/tools/wazuh-06/provision.sh`가 이 policy·role·KV만 만든다. 입력은 저장소 밖
+mode 0600 파일 `${KTC_SECRET_ROOT}/wazuh/security-notifier-slack-webhook-url` 하나이고,
+스크립트는 어떤 모드에서도 webhook 값을 출력하지 않는다.
+
+### 외부 egress 경계
+
+목적지를 좁히는 책임은 두 계층으로 나뉜다.
+
+| 계층 | 무엇을 좁히는가 | 왜 |
+|---|---|---|
+| NetworkPolicy `wazuh-06-notifier-slack-egress` | **어느 Pod가** 나갈 수 있는가 | `wazuh-default-deny` 아래에서 notifier Pod 하나만 public IPv4 TCP 443을 얻는다. RFC1918·cluster CIDR은 `except`로 빼서 이 규칙이 내부 우회로가 되지 않게 한다 |
+| `files/wazuh-06-notifier.py`의 `EXPECTED_HOST` | **어느 host로** 나가는가 | NetworkPolicy는 FQDN을 모른다. webhook이 `https://hooks.slack.com/services/…`가 아니면 기동 시점에 실패하고 전송하지 않는다 |
+
+OPNsense에는 이 작업이 규칙을 추가하지 않았다. `NET-04` 최종 경계가 이미
+`opt2` seq `1032`(`k3s-01` → public IPv4 TCP 80/443)로 이 경로를 포함하고 있어,
+`hooks.slack.com` FQDN alias PASS 규칙을 더해도 아무것도 좁히지 못하는 중복 규칙이
+된다. 실제로 좁히려면 seq `1032`를 축소해야 하는데 그 규칙은 `NET-04`가 소유하고
+ACME·image pull·Renovate 등 기존 경로가 함께 매달려 있어 이 작업 범위가 아니다.
+`WAZUH-03`이 MGMT `lan`의 기존 allow-all 때문에 신규 규칙을 만들지 않은 것과 같은
+판단이다. 포괄 egress를 **새로 여는** 완화는 하지 않았다 — 이 작업이 연 것은
+notifier Pod 하나의 NetworkPolicy뿐이다.
+
+### 임시 test event
+
+`level >= 14`는 이 랩에서 평상시 0건이다(전체 보존 기간 실측: 최대 level 8, 12건).
+그래서 전달 경로는 승인된 임시 event 한 건으로만 판정할 수 있고, 그 수명주기 전체를
+[`run-test-event.sh`](../../tools/wazuh-06/run-test-event.sh)가 소유한다.
+
+```bash
+gitops/tools/wazuh-06/run-test-event.sh stage    # 임시 rule 100129(level 14) 설치
+gitops/tools/wazuh-06/run-test-event.sh fire     # queue socket으로 한 건 주입·판정
+gitops/tools/wazuh-06/run-test-event.sh cleanup  # rule·alerts.json·indexer 문서 제거
+```
+
+임시 rule은 의도적으로 Argo 선언(`files/`)에 **넣지 않는다**. `main`에 남으면 안 되는
+검증용 객체이므로 라이브에만 존재했다가 `cleanup`으로 사라진다. ID `100129`는 D30
+headroom(`100123`~`100129`)의 마지막이라 A90 라우팅 범위 밖이고, `no_full_log`로 alert
+자체에도 원문을 남기지 않는다. 주입은 analysisd queue socket으로 하므로 선언된
+`ossec.conf`에 `<localfile>`을 추가하지 않는다.
+
+### 완료 증거
+
+[`verify-live.sh`](../../tools/wazuh-06/verify-live.sh) 하나가 아래만 판정한다.
+`WAZUH-01`~`05`가 이미 판정한 수집·D30/A90 라우팅·보존·Pomerium 경계는 반복하지 않는다.
+
+1. notifier가 전용 SA로 뜨고 webhook을 `0440`으로 렌더했으며 host 검증을 통과
+2. manager는 SA token이 자동 mount되지 않고 그 Vault role에 notifier policy가 없음
+3. `custom-wazuh06`(level 14)과 `custom-soar01`(level 7)이 공존하고 integratord running
+4. manager Pod는 `hooks.slack.com`에 도달하지 못하고 notifier Pod만 도달
+5. active-response disabled·`ar.conf` 차단성 명령 0건·Shuffle 외부 egress ipBlock 0건
+6. 지정한 SHA에서 `platform-root`·`wazuh`가 `Synced/Healthy`
+
+실제 Slack 수신과 본문에 원문이 없다는 것은 `run-test-event.sh fire`가 판정한다
+(notifier 전송 기록·alert의 `full_log` 부재는 기계 판정, 채널에 뜬 메시지 한 건은
+사람 확인).
+
+마스킹 경계 자체는 라이브와 무관하게
+[`tests/test_notifier_allowlist.py`](../../tools/wazuh-06/tests/test_notifier_allowlist.py)가
+지킨다. allowlist를 넓히면 이 테스트가 깨지므로 위 payload 표와 같은 변경에서 갱신한다.
+
+```bash
+python3 -m unittest discover -s gitops/tools/wazuh-06/tests -v
+```
+
+### 설치 순서
+
+1. Slack `#security-alerts`에 Incoming Webhook을 만들고 URL을 저장소 밖 mode 0600
+   파일 `${KTC_SECRET_ROOT}/wazuh/security-notifier-slack-webhook-url`에 둔다.
+2. `gitops/tools/wazuh-06/provision.sh apply`로 Vault policy·role·KV를 만든다
+   (`WAZUH-01`/`02`의 policy·role·kv는 건드리지 않는다).
+3. `ARGO-ROOT` 잠금 아래 immutable SHA의 `platform-root`·`wazuh`로 notifier
+   Deployment와 manager integration을 동기화한다.
+4. `WAZUH06_EXPECTED_ROOT_REVISION`·`WAZUH06_EXPECTED_WAZUH_REVISION`을 주어
+   `verify-live.sh`를 한 번 실행한다.
+5. `run-test-event.sh stage` → `fire` → 사람 확인 → `cleanup`.
+6. `platform-root`를 main SHA로 되돌리고 `ARGO-ROOT` 잠금을 푼다.
+
+### Rollback
+
+1. `kustomization.yaml`에서 `wazuh-06-notifier.yaml`과 `wazuh-manager-wazuh06-integration`·
+   `wazuh-06-notifier-app` configMapGenerator 항목, `vault-agent-wazuh-06-notifier.hcl`을
+   빼고, `files/ossec.conf`의 `custom-wazuh06` `<integration>`, `manager.yaml`의
+   ConfigMap volume·mount·`install` 한 줄, `serviceaccounts.yaml`의
+   `wazuh-06-notifier` SA, `network-policies.yaml`의
+   `wazuh-06-notifier-slack-egress`를 지운 뒤 커밋한다.
+2. Argo가 notifier Deployment/Service/ConfigMap과 NetworkPolicy를 prune하고 manager를
+   `SOAR-01` 종료 상태로 재기동한다. indexer·manager PVC·ISM 정책·D30/A90 데이터는
+   kustomization에 그대로 남아 건드려지지 않는다.
+3. `run-test-event.sh cleanup`으로 임시 rule·기록이 남아 있지 않은지 확인한다.
+4. `gitops/tools/wazuh-06/provision.sh rollback`으로 `kv/wazuh/security-notifier`와
+   `wazuh-06-notifier` policy·role만 지운다. `kv/wazuh/{indexer,manager,bootstrap,dashboard}`는
+   손대지 않는다.
+5. Slack Incoming Webhook은 Slack 쪽에서 폐기한다(credential 회전은 이 rollback 범위가
+   아니라 별도 판단이다).
+6. OPNsense에는 되돌릴 변경이 없다(이 작업이 추가한 규칙·alias 0건).

@@ -1,0 +1,191 @@
+# WAZUH-06: Wazuh high-severity(level>=14) 보안 사건의 분리된 Slack 통지 relay.
+#
+# 왜 별도 Pod인가
+# - wazuh-manager Pod는 `pol-02-wazuh-root-manager-baseline`이 container 배열을
+#   고정 이미지와 정확히 일치시키므로 두 번째 container를 붙일 수 없다(WAZUH-04에서
+#   라이브로 확인). 그리고 manager가 Slack webhook을 읽고 직접 외부로 나가면
+#   "중앙 수집기는 외부로 나가지 않는다"는 경계가 무너진다.
+# - 그래서 manager는 in-cluster로 allowlist payload만 넘기고(files/custom-wazuh06),
+#   webhook 보관과 유일한 외부 TCP 443 egress는 이 Pod가 단독으로 갖는다.
+#
+# 경계 요약
+# - Vault: 전용 role `wazuh-06-notifier`가 kv/data/wazuh/security-notifier 한 경로만
+#   읽는다. 운영(OBS) Slack secret·receiver·채널과 어떤 것도 공유하지 않는다.
+# - NetworkPolicy: network-policies.yaml의 `wazuh-06-notifier-slack-egress`가 이
+#   Pod에만 public IPv4 TCP 443을 연다. 나머지 wazuh Pod는 default-deny 그대로다.
+# - 상태 없음: PVC도 emptyDir 영속 파일도 두지 않는다. 보안 이벤트는 상태 경보가
+#   아니므로 resolved 통지를 만들지 않는다.
+# - Kyverno: 새 PolicyException이 없다. 두 container 모두 non-root로 뜨고
+#   `drop: [ALL]` 뒤에 추가하는 capability가 없다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: wazuh-06-notifier
+  namespace: wazuh
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: wazuh-06-notifier
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: wazuh-06-notifier
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-06-notifier
+  namespace: wazuh
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  labels:
+    app.kubernetes.io/name: wazuh
+    app.kubernetes.io/component: wazuh-06-notifier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh
+      app.kubernetes.io/component: wazuh-06-notifier
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wazuh
+        app.kubernetes.io/component: wazuh-06-notifier
+    spec:
+      serviceAccountName: wazuh-06-notifier
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        # pol-01-require-pod-run-as-non-root는 container가 아니라 Pod spec의
+        # securityContext.runAsNonRoot를 본다. 두 container 모두 이미 non-root
+        # (vault-agent uid 100, notifier uid 65532)이므로 PolicyException 없이
+        # Pod 수준에 그대로 선언한다.
+        runAsNonRoot: true
+        # Vault Agent(uid 100)가 0440으로 렌더한 webhook 파일을 notifier(uid 65532)가
+        # group으로 읽는다. manager가 fsGroup 101로 같은 일을 하는 것과 같은 구조다.
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent
+          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          imagePullPolicy: IfNotPresent
+          args:
+            - agent
+            - -config=/vault/config/vault-agent.hcl
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 100
+            runAsGroup: 101
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config/vault-agent.hcl
+              subPath: vault-agent-wazuh-06-notifier.hcl
+              readOnly: true
+            - name: vault-agent-config
+              mountPath: /vault/tls/vault.crt
+              subPath: vault.crt
+              readOnly: true
+            - name: notifier-secrets
+              mountPath: /vault/secrets
+            - name: vault-agent-tmp
+              mountPath: /tmp
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+      containers:
+        # 이 저장소에는 커스텀 이미지 빌드 파이프라인이 없다. wazuh-04-relay와 같은
+        # 고정 base image에 python3 stdlib만 쓰는 프로그램을 ConfigMap으로 얹는다.
+        # 고정한 digest의 이미지가 CA 번들(x509 142개)을 포함하고 Slack까지 검증된
+        # TLS로 도달하는 것을 배포 전에 노드에서 직접 확인했다.
+        - name: wazuh-06-notifier
+          image: docker.io/library/python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844
+          imagePullPolicy: IfNotPresent
+          command: [python3, -u, /app/wazuh-06-notifier.py]
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          # 다른 wazuh Pod와 같이 tcpSocket만 쓴다. main()이 listen 전에 webhook을
+          # 읽고 형식을 검증하므로, 포트가 열렸다는 것 자체가 "Vault 렌더 성공 +
+          # webhook 형식 정상"의 증거다.
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - name: notifier-app
+              mountPath: /app
+              readOnly: true
+            - name: notifier-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+      volumes:
+        - name: vault-agent-config
+          configMap:
+            name: wazuh-vault-agent
+            defaultMode: 0444
+        - name: notifier-app
+          configMap:
+            name: wazuh-06-notifier-app
+            defaultMode: 0444
+        - name: notifier-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: vault-agent-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: vault
+                  expirationSeconds: 600
