@@ -52,6 +52,11 @@
 # 신호다.
 # k3s-01 ansible_host=<docs/ip-plan.md의 k3s-01 주소> ansible_user=rocky node_exporter_listen_address=<같은 주소> node_exporter_listen_port=9101
 
+[postgres_exporter]
+# OBS-15: postgres_exporter는 DB TCP listener가 아니라 local Unix peer 인증을 쓰고,
+# Prometheus HTTP endpoint만 postgres-01의 docs/ip-plan.md 관리 주소 TCP 9187에 bind한다.
+# postgres-01 ansible_host=<docs/ip-plan.md의 postgres-01 주소> ansible_user=rocky postgres_exporter_listen_address=<같은 주소>
+
 [wazuh_agent_fleet]
 # WAZUH-03: 6개 대상에 최소 HIDS(syscheck+rootcheck) agent를 설치한다.
 # wazuh_agent_authd_password는 절대 인벤토리에 두지 않고 실행 시 -e로만 준다

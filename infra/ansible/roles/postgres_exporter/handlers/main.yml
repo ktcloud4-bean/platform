@@ -1,0 +1,6 @@
+---
+- name: postgres_exporter 재시작
+  ansible.builtin.systemd_service:
+    name: postgres_exporter.service
+    daemon_reload: true
+    state: restarted

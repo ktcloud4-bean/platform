@@ -17,6 +17,7 @@ node-exporter, kube-state-metrics, Grafana, 인증서 probe와 OPNsense node_exp
 | 수집 pipeline | `loki`·`alloy`, `loki_build_info`·`alloy_build_info` | `obs`의 ServiceMonitor가 기존 `loki` namespace Service를 선택 |
 | OPNsense | `opnsense-node`, CPU·memory·interface node metric | 이 앱의 외부 static target ScrapeConfig |
 | node-exporter fleet | `node-exporter-fleet`(job=`node-exporter`), CPU·memory·filesystem·disk·network·systemd node metric | `OBS-11`의 외부 static target ScrapeConfig; 대상은 `infra/ansible/roles/node_exporter_baseline` |
+| PostgreSQL | `postgres-exporter`(job=`postgres-exporter`), `pg_up`·`pg_stat_database_xact_commit` | `OBS-15`의 postgres-01 native exporter와 외부 static `ScrapeConfig` |
 | k3s-01 root filesystem | `node-exporter-root-k3s01`(job=`node-exporter-root`), `node_filesystem_avail_bytes`·`node_filesystem_size_bytes` | `OBS-13`의 외부 static target ScrapeConfig(port 9101); 기존 DaemonSet(port 9100)의 filesystem collector 권한 한계를 보완만 한다 |
 | 상시 alert 수신 | `obs-13-receiver`, `obs13_alerts_received_total` | `OBS-13`의 상시 webhook receiver; Alertmanager route가 이 Service로 4종 alert를 보낸다 |
 
@@ -148,9 +149,55 @@ backslash 0건이고 Prometheus API parse 성공임을 확인했다. collector·
 Prometheus TCP 9090, Alertmanager TCP 9093에 도달하게 해 해당 egress와 정확히 짝을 이룬다.
 
 NetworkPolicy는 `obs`를 ingress·egress default deny로 시작한다. namespace 내부 통신, CoreDNS,
-Kubernetes API, node-exporter의 node IP TCP 9100, OPNsense 관리 주소 TCP 9100 한 건, 기존
-Velero·Loki·Alloy metric port, Grafana init→Vault TCP 8200, blackbox→Traefik TCP 8443과
+Kubernetes API, node-exporter의 node IP TCP 9100, OPNsense 관리 주소 TCP 9100 한 건,
+postgres-01 TCP 9187 한 건, 기존 Velero·Loki·Alloy metric port, Grafana init→Vault TCP 8200, blackbox→Traefik TCP 8443과
 `obs-01-verification` label의 임시 receiver TCP 8080만 연다.
+
+## OBS-15 PostgreSQL native metric
+
+`postgres_exporter` v0.20.1은 GitHub Release Linux AMD64 asset SHA-256
+`89d4f7e7920cad48fdc3133f789556ef5253c330a9f5fdace3bdb6344c0a8b5a`로 고정한다.
+`postgres-01`의 명시적 관리 주소 TCP 9187에만 bind하고, DB에는 TCP가 아닌
+`/var/run/postgresql` Unix socket peer 인증으로 접속한다. 따라서 DB 비밀번호·Secret·
+`pg_hba.conf`·TCP 5432 listener는 새로 만들거나 바꾸지 않는다.
+
+DB role `postgres_exporter`는 passwordless `LOGIN`, `postgres` DB `CONNECT`와
+PostgreSQL 16 built-in `pg_read_all_stats`만 가진다. superuser·database/role creation·
+replication·BYPASSRLS·`pg_monitor`·`pg_read_all_data`는 없다. exporter는 필요한
+`stat_database` collector만 남겨 `pg_stat_database_xact_commit`을 노출하며,
+`pg_stat_statements`와 query text 수집은 활성화하지 않는다.
+
+Prometheus egress와 OPNsense `opt2` ingress는 `k3s-01`에서
+`postgres-01:9187` 한 쌍만 허용한다. 기존 5432·9100 경계, Service/Ingress/DNS/PVC/Secret은
+바꾸지 않는다. 방화벽 적용·rollback은
+[`gitops/tools/obs-15/apply-firewall.sh`](../../tools/obs-15/apply-firewall.sh)가 소유한다.
+Argo 검증은 [`apply-live.sh`](../../tools/obs-15/apply-live.sh)가 `platform-root`와 `obs`의
+immutable SHA 일치를 판정하고 성공·실패와 무관하게 literal `main`으로 복구한다.
+
+실제 적용은 `OPNSENSE-LIVE`와 `ARGO-ROOT`를 순차로 소유한 작업자만 한다.
+
+```bash
+cd infra/ansible
+export ANSIBLE_SSH_COMMON_ARGS='-o StrictHostKeyChecking=yes -o PasswordAuthentication=no'
+ansible-playbook -i <저장소 밖 inventory> playbooks/postgres-exporter.yml
+# rollback: exporter unit·DB role·ScrapeConfig·NetworkPolicy·OBS-15 방화벽 rule만 원복
+ansible-playbook -i <저장소 밖 inventory> playbooks/postgres-exporter-rollback.yml
+```
+
+### 2026-08-13 OBS-15 라이브 완료 증거
+
+`postgres_exporter` v0.20.1의 checksum 고정 unit과 passwordless local peer DB role을
+`postgres-01`에 적용했다. role은 `pg_read_all_stats`와 `postgres` DB `CONNECT`만 가지며
+관리·데이터 읽기 role은 없다. OPNsense `opt2`에는 `k3s-01`→`postgres-01:9187` 단일
+PASS(UUID `32241b15-a17d-4214-b617-fdbc9538d046`, sequence `1008`, PF rule 1개)를 적용했고
+정규화 snapshot과 일반 drift 검사가 일치한다.
+
+immutable root `b701ef681b061c9098b0e188dc1cedf2da110b81`와 child
+`d1b7febb60916dd858a49ed1d9d5232727b782ab`에서 `postgres-exporter` target
+`up=1`, `pg_stat_database_xact_commit` 9 series를 한 번 확인했다. 검증 뒤 literal
+`main` `4b435d8acb1aafd79f3d739d775f3a2c9f3d6570`의 `platform-root`·`obs`가
+`Synced/Healthy`로 복구됐다. 상세는
+[`docs/evidence/obs-15/README.md`](../../../docs/evidence/obs-15/README.md)가 소유한다.
 
 ## OBS-03 Grafana Keycloak 로그인과 Editor 경계
 

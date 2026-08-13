@@ -1,0 +1,59 @@
+[Unit]
+Description=Prometheus PostgreSQL Exporter
+Documentation=https://github.com/prometheus-community/postgres_exporter
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User={{ postgres_exporter_user }}
+Group={{ postgres_exporter_group }}
+# 비밀번호 없이 local peer 인증을 사용한다. TCP DB listener·pg_hba는 바꾸지 않는다.
+Environment="DATA_SOURCE_NAME=user={{ postgres_exporter_db_role }} host={{ postgres_exporter_socket_dir }} dbname={{ postgres_exporter_database }} sslmode=disable"
+Environment="PG_EXPORTER_COLLECTION_TIMEOUT=15s"
+ExecStart={{ postgres_exporter_binary_path }} \
+  --web.listen-address={{ postgres_exporter_listen_address }}:{{ postgres_exporter_listen_port }} \
+  --no-collector.database \
+  --no-collector.locks \
+  --no-collector.replication \
+  --no-collector.replication_slots \
+  --no-collector.settings \
+  --no-collector.stat_activity \
+  --no-collector.stat_archiver \
+  --no-collector.stat_bgwriter \
+  --no-collector.stat_replication \
+  --no-collector.stat_user_tables \
+  --no-collector.statio_user_tables \
+  --no-collector.wal
+
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

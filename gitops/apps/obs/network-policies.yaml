@@ -245,6 +245,10 @@ spec:
       ports:
         - protocol: TCP
           port: 9100
+        # OBS-15: postgres-01 native exporter. 기존 node_exporter 9100과 별도 port이며
+        # 이 Prometheus Pod 외에는 NetworkPolicy egress를 추가하지 않는다.
+        - protocol: TCP
+          port: 9187
     - to:
         - ipBlock:
             cidr: 10.10.50.20/32

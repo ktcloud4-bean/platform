@@ -1,0 +1,20 @@
+---
+# OBS-15: postgres-01 native Prometheus exporter. 공식 release asset과 checksum을
+# 고정하고 패키지 repository, latest tag, curl | sh를 사용하지 않는다.
+postgres_exporter_version: "0.20.1"
+postgres_exporter_arch: "linux-amd64"
+postgres_exporter_release_sha256: "89d4f7e7920cad48fdc3133f789556ef5253c330a9f5fdace3bdb6344c0a8b5a"
+postgres_exporter_release_asset: "postgres_exporter-{{ postgres_exporter_version }}.{{ postgres_exporter_arch }}.tar.gz"
+postgres_exporter_release_url: "https://github.com/prometheus-community/postgres_exporter/releases/download/v{{ postgres_exporter_version }}/{{ postgres_exporter_release_asset }}"
+
+postgres_exporter_cache_dir: "/var/cache/postgres_exporter"
+postgres_exporter_binary_path: "/usr/local/bin/postgres_exporter-{{ postgres_exporter_version }}"
+postgres_exporter_binary_link: "/usr/local/bin/postgres_exporter"
+postgres_exporter_user: "postgres_exporter"
+postgres_exporter_group: "postgres_exporter"
+
+# inventory가 docs/ip-plan.md의 postgres-01 관리 주소를 명시해 공급한다.
+postgres_exporter_listen_port: 9187
+postgres_exporter_socket_dir: "/var/run/postgresql"
+postgres_exporter_database: "postgres"
+postgres_exporter_db_role: "postgres_exporter"

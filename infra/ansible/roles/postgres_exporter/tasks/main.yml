@@ -1,0 +1,204 @@
+---
+# OBS-15: systemd exporter와 PostgreSQL의 read-only stats role만 소유한다.
+
+- name: 전제 확인 — postgres-01·x86_64·관리 bind 주소
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.hostname == 'postgres-01'
+      - ansible_facts.architecture == 'x86_64'
+      - postgres_exporter_listen_address is defined
+      - postgres_exporter_listen_address is match('^[0-9]{1,3}(\\.[0-9]{1,3}){3}$')
+      - postgres_exporter_listen_port | int == 9187
+      - postgres_exporter_db_role == 'postgres_exporter'
+      - postgres_exporter_database == 'postgres'
+      - postgres_exporter_socket_dir == '/var/run/postgresql'
+    fail_msg: >-
+      OBS-15는 postgres-01의 명시적인 관리 IPv4 TCP 9187과 /var/run/postgresql
+      Unix socket, postgres_exporter role, postgres database만 지원한다.
+
+- name: 전제 확인 — Rocky SELinux Enforcing 유지
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Rocky'
+      - ansible_facts.selinux.status | default('disabled') == 'enabled'
+      - ansible_facts.selinux.mode | default('disabled') == 'enforcing'
+    fail_msg: OBS-15는 SELinux Enforcing을 완화하지 않는다.
+
+- name: PostgreSQL service active 확인
+  ansible.builtin.command:
+    argv: [systemctl, is-active, postgresql.service]
+  register: postgres_exporter_postgresql_active
+  changed_when: false
+  check_mode: false
+
+- name: PostgreSQL service active 전제 판정
+  ansible.builtin.assert:
+    that:
+      - postgres_exporter_postgresql_active.stdout == 'active'
+    fail_msg: PostgreSQL이 active여야 exporter를 설치한다.
+
+- name: exporter 전용 그룹 생성
+  ansible.builtin.group:
+    name: "{{ postgres_exporter_group }}"
+    system: true
+    state: present
+
+- name: exporter 전용 OS 계정 생성
+  ansible.builtin.user:
+    name: "{{ postgres_exporter_user }}"
+    group: "{{ postgres_exporter_group }}"
+    system: true
+    shell: /sbin/nologin
+    create_home: false
+    password_lock: true
+    state: present
+
+- name: checksum 고정 release cache 생성
+  ansible.builtin.file:
+    path: "{{ postgres_exporter_cache_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: checksum 고정 postgres_exporter release 다운로드
+  ansible.builtin.get_url:
+    url: "{{ postgres_exporter_release_url }}"
+    dest: "{{ postgres_exporter_cache_dir }}/{{ postgres_exporter_release_asset }}"
+    checksum: "sha256:{{ postgres_exporter_release_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: postgres_exporter release 압축 해제
+  ansible.builtin.unarchive:
+    src: "{{ postgres_exporter_cache_dir }}/{{ postgres_exporter_release_asset }}"
+    dest: "{{ postgres_exporter_cache_dir }}"
+    remote_src: true
+    creates: >-
+      {{ postgres_exporter_cache_dir }}/postgres_exporter-{{ postgres_exporter_version }}.{{ postgres_exporter_arch }}/postgres_exporter
+
+- name: postgres_exporter binary 설치
+  ansible.builtin.copy:
+    src: >-
+      {{ postgres_exporter_cache_dir }}/postgres_exporter-{{ postgres_exporter_version }}.{{ postgres_exporter_arch }}/postgres_exporter
+    dest: "{{ postgres_exporter_binary_path }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  notify: postgres_exporter 재시작
+
+- name: postgres_exporter 현재 버전 symlink
+  ansible.builtin.file:
+    src: "{{ postgres_exporter_binary_path }}"
+    dest: "{{ postgres_exporter_binary_link }}"
+    state: link
+    force: true
+  notify: postgres_exporter 재시작
+
+- name: read-only PostgreSQL exporter role 선언
+  community.postgresql.postgresql_user:
+    name: "{{ postgres_exporter_db_role }}"
+    role_attr_flags: LOGIN,INHERIT,NOSUPERUSER,NOCREATEDB,NOCREATEROLE,NOREPLICATION,NOBYPASSRLS
+    state: present
+  become: true
+  become_user: postgres
+
+- name: exporter role의 DB password 제거
+  community.postgresql.postgresql_query:
+    login_db: postgres
+    query: ALTER ROLE postgres_exporter PASSWORD NULL
+  become: true
+  become_user: postgres
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: exporter role에 postgres DB CONNECT만 허용
+  community.postgresql.postgresql_privs:
+    login_db: postgres
+    type: database
+    objs: "{{ postgres_exporter_database }}"
+    roles: "{{ postgres_exporter_db_role }}"
+    privs: CONNECT
+    state: present
+  become: true
+  become_user: postgres
+
+- name: exporter role에 pg_read_all_stats만 부여
+  community.postgresql.postgresql_membership:
+    groups: pg_read_all_stats
+    target_roles: "{{ postgres_exporter_db_role }}"
+    state: present
+  become: true
+  become_user: postgres
+
+- name: exporter role의 금지된 관리 role 회수
+  community.postgresql.postgresql_query:
+    login_db: postgres
+    query: >-
+      REVOKE pg_monitor, pg_read_all_settings, pg_read_all_data, pg_write_all_data,
+      pg_database_owner, pg_signal_backend, pg_execute_server_program,
+      pg_read_server_files, pg_write_server_files, pg_checkpoint
+      FROM postgres_exporter
+  become: true
+  become_user: postgres
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: PostgreSQL exporter role·권한 live 조회
+  community.postgresql.postgresql_query:
+    login_db: postgres
+    query: >-
+      SELECT r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolreplication,
+             r.rolbypassrls, r.rolcanlogin, r.rolpassword IS NULL AS passwordless,
+             r.rolinherit,
+             pg_has_role(r.rolname, 'pg_read_all_stats', 'member') AS read_all_stats_member,
+             pg_has_role(r.rolname, 'pg_read_all_stats', 'usage') AS read_all_stats_usage,
+             pg_has_role(r.rolname, 'pg_monitor', 'member') AS pg_monitor,
+             pg_has_role(r.rolname, 'pg_read_all_data', 'member') AS read_all_data,
+             has_database_privilege(r.rolname, 'postgres', 'CONNECT') AS postgres_connect
+        FROM pg_authid r
+       WHERE r.rolname = 'postgres_exporter'
+  register: postgres_exporter_role_state
+  become: true
+  become_user: postgres
+  changed_when: false
+  check_mode: false
+
+- name: PostgreSQL exporter 최소권한 판정
+  ansible.builtin.assert:
+    that:
+      - postgres_exporter_role_state.query_result | length == 1
+      - not postgres_exporter_role_state.query_result[0].rolsuper
+      - not postgres_exporter_role_state.query_result[0].rolcreatedb
+      - not postgres_exporter_role_state.query_result[0].rolcreaterole
+      - not postgres_exporter_role_state.query_result[0].rolreplication
+      - not postgres_exporter_role_state.query_result[0].rolbypassrls
+      - postgres_exporter_role_state.query_result[0].rolcanlogin
+      - postgres_exporter_role_state.query_result[0].passwordless
+      - postgres_exporter_role_state.query_result[0].rolinherit
+      - postgres_exporter_role_state.query_result[0].read_all_stats_member
+      - postgres_exporter_role_state.query_result[0].read_all_stats_usage
+      - not postgres_exporter_role_state.query_result[0].pg_monitor
+      - not postgres_exporter_role_state.query_result[0].read_all_data
+      - postgres_exporter_role_state.query_result[0].postgres_connect
+    fail_msg: >-
+      postgres_exporter는 passwordless LOGIN과 pg_read_all_stats·postgres CONNECT만
+      가지며 관리·데이터 읽기 권한이 없어야 한다.
+
+- name: postgres_exporter systemd unit 선언
+  ansible.builtin.template:
+    src: postgres_exporter.service.j2
+    dest: /etc/systemd/system/postgres_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: postgres_exporter 재시작
+
+- name: postgres_exporter service 활성화
+  ansible.builtin.systemd_service:
+    name: postgres_exporter.service
+    enabled: true
+    daemon_reload: true
+    state: started

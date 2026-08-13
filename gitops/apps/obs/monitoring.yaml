@@ -133,6 +133,27 @@ spec:
       labels:
         job: node-exporter-root
 ---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: postgres-exporter
+  namespace: obs
+  labels:
+    release: obs
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  # OBS-15: postgres-01의 local peer + pg_read_all_stats exporter를 관리 주소 TCP
+  # 9187에서만 scrape한다. PostgreSQL TCP 5432·pg_hba·Secret은 바꾸지 않는다.
+  metricsPath: /metrics
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
+  staticConfigs:
+    - targets:
+        - 10.10.50.10:9187
+      labels:
+        job: postgres-exporter
+        instance: postgres-01.imcherry5778.xyz
+---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:

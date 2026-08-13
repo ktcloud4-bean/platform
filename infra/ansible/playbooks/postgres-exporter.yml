@@ -1,0 +1,7 @@
+---
+# OBS-15: postgres-01의 native PostgreSQL metric exporter만 선언한다.
+- name: Apply PostgreSQL exporter baseline
+  hosts: postgres_exporter
+  become: true
+  roles:
+    - postgres_exporter

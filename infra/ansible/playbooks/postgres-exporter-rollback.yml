@@ -1,0 +1,64 @@
+---
+# OBS-15 rollback: 이 작업이 만든 exporter unit·binary·OS/DB role만 제거한다.
+- name: Roll back PostgreSQL exporter baseline
+  hosts: postgres_exporter
+  become: true
+  tasks:
+    - name: postgres_exporter service 중지·비활성화
+      ansible.builtin.systemd_service:
+        name: postgres_exporter.service
+        enabled: false
+        state: stopped
+      failed_when: false
+
+    - name: postgres_exporter systemd unit 제거
+      ansible.builtin.file:
+        path: /etc/systemd/system/postgres_exporter.service
+        state: absent
+
+    - name: postgres_exporter systemd 재적재
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: postgres_exporter binary·cache 제거
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/postgres_exporter
+        - /usr/local/bin/postgres_exporter-0.20.1
+        - /var/cache/postgres_exporter
+
+    - name: PostgreSQL exporter DB CONNECT 회수
+      community.postgresql.postgresql_privs:
+        login_db: postgres
+        type: database
+        objs: postgres
+        roles: postgres_exporter
+        privs: CONNECT
+        state: absent
+      become_user: postgres
+
+    - name: PostgreSQL exporter read-only stats membership 회수
+      community.postgresql.postgresql_membership:
+        groups: pg_read_all_stats
+        target_roles: postgres_exporter
+        state: absent
+      become_user: postgres
+
+    - name: PostgreSQL exporter DB role 제거
+      community.postgresql.postgresql_user:
+        name: postgres_exporter
+        state: absent
+      become_user: postgres
+
+    - name: postgres_exporter OS 계정·그룹 제거
+      ansible.builtin.user:
+        name: postgres_exporter
+        state: absent
+        remove: false
+
+    - name: postgres_exporter OS 그룹 제거
+      ansible.builtin.group:
+        name: postgres_exporter
+        state: absent
