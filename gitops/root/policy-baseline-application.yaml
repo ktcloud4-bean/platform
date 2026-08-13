@@ -13,7 +13,8 @@ spec:
   project: policy-baseline
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: main
+    # WAZUH-04 merge 전 immutable live 검증 pointer. 최종 main 선언에는 남기지 않는다.
+    targetRevision: 0da7a2752458af715e99464127091b3f4019aa1c
     path: policies
   destination:
     server: https://kubernetes.default.svc
