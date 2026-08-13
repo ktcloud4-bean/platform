@@ -169,6 +169,35 @@ spec:
         - protocol: TCP
           port: 1515
 ---
+# WAZUH-04: loki 네임스페이스의 Alloy만 wazuh-04-relay Pod(wazuh-manager가
+# 아니라 별도 Pod, wazuh-04-relay-agent.yaml — pol-02-wazuh-root-manager-baseline이
+# manager Pod 자체에 두 번째 container도 새 hostPath도 허용하지 않아 분리했다)의
+# 1516 포트에 들어온다. Alloy는 hostPath 없이 Kubernetes API로 읽은
+# Keycloak·Pomerium·Vault·Falco·CrowdSec AppSec Pod 로그 중 필요한 라인만 골라
+# 이 포트로 forward한다(gitops/apps/loki/values-alloy-01.yaml).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-04-relay-alloy-ingress
+  namespace: wazuh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh
+      app.kubernetes.io/component: wazuh-04-relay
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loki
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alloy
+      ports:
+        - protocol: TCP
+          port: 1516
+---
 # SOAR-01: manager의 custom integration만 Shuffle backend webhook API로 나간다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

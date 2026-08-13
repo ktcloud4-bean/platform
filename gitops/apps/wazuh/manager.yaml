@@ -5,7 +5,18 @@
 # - Secret/authd password/API credential은 Git에 두지 않고 Vault Agent init이 memory
 #   emptyDir에만 렌더한다. upstream의 5개 평문 Secret은 사용하지 않는다.
 # - Service type LoadBalancer -> API는 ClusterIP, agent 수집·등록만 NodePort로 노출한다.
-# - Kubernetes API audit 파일을 read-only hostPath로 붙여 소스에서 직접 수집한다.
+# - Kubernetes API audit 파일을 read-only hostPath로 붙여 소스에서 직접 수집한다. 이
+#   manager Pod 자체는 WAZUH-04의 k8s Pod stdout 5개 소스(Keycloak·Pomerium·Vault·
+#   Falco·CrowdSec AppSec) 수집에 관여하지 않는다 — hostPath 확장(Kyverno가 막음),
+#   remoted syslog remote 직접 수신(Wazuh 자신의 queue type 2 디코딩 경로 버그로
+#   custom rule이 매칭되지 않음), sidecar 추가(`pol-02-wazuh-root-manager-baseline`의
+#   require-wazuh-manager-baseline이 containers 배열의 모든 원소에 고정 이미지 일치를
+#   강제해 두 번째 container 자체가 거부됨)를 모두 시도했으나 이 pod 안에서는 어떤
+#   형태로도 불가능함을 라이브로 확인했다(2026-08-12). 최종적으로 이 5개 소스는
+#   wazuh-04-relay-agent.yaml의 별도 Pod(python relay + 실제 wazuh-agent)가 기존
+#   secure agent 프로토콜(1514, WAZUH-03의 6개 host agent·OPNsense와 동일한 이미
+#   검증된 queue type 1 경로)로 이 manager에 전달한다 — manager 쪽 설정은 하나도
+#   바뀌지 않는다.
 # - manager container는 upstream과 같이 UID 0으로 동작한다. 이 예외는 policies/의
 #   `pol-02-wazuh-*` PolicyException과 보상 Enforce 정책이 좁게 소유한다.
 apiVersion: v1
@@ -200,6 +211,18 @@ spec:
             - name: wazuh-rules
               mountPath: /wazuh-config-mount/etc/rules/wazuh-01-d30-suricata.xml
               subPath: wazuh-01-d30-suricata.xml
+              readOnly: true
+            - name: wazuh-rules
+              mountPath: /wazuh-config-mount/etc/rules/wazuh-04-a90-idp-access.xml
+              subPath: wazuh-04-a90-idp-access.xml
+              readOnly: true
+            - name: wazuh-rules
+              mountPath: /wazuh-config-mount/etc/rules/wazuh-04-d30-waf-runtime.xml
+              subPath: wazuh-04-d30-waf-runtime.xml
+              readOnly: true
+            - name: wazuh-rules
+              mountPath: /wazuh-config-mount/etc/decoders/wazuh-04-decoders.xml
+              subPath: wazuh-04-decoders.xml
               readOnly: true
             - name: wazuh-cont-init
               mountPath: /etc/cont-init.d/3-wazuh-01-index-routing

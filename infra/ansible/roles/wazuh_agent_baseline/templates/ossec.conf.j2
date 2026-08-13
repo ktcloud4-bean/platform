@@ -1,10 +1,15 @@
 <!--
   WAZUH-03: {{ inventory_hostname }} 최소 HIDS 기준선.
   syscheck(최소 경로)·rootcheck만 켠다. syscollector·SCA·osquery·cis-cat·
-  localfile·active_response·command wodle은 이 파일에 없으므로 비활성이다.
+  active_response·command wodle은 이 파일에 없으므로 비활성이다.
   ansible이 매 적용마다 이 파일 전체를 갈아 끼운다 — 수동 편집은 다음 적용에서
   사라진다. enrollment는 auto가 아니라 agent-auth 1회 수동 실행으로 하므로
   password를 여기 두지 않는다.
+
+  WAZUH-04: wazuh_agent_localfile_journald_unit이 설정된 대상(warpgate-01)만
+  journald localfile 하나를 더 갖는다. 다른 5대는 이 값이 비어 있어 그대로
+  localfile 0건이다. LOKI-02가 다룰 host O7(sshd·sudo·systemd 실패·kernel)과는
+  겹치지 않는다 — 이 localfile은 지정한 systemd unit 하나로만 좁힌다.
 -->
 <ossec_config>
   <client>
@@ -56,6 +61,14 @@
     <skip_proc>yes</skip_proc>
     <skip_sys>yes</skip_sys>
   </syscheck>
+
+{% if wazuh_agent_localfile_journald_unit %}
+  <localfile>
+    <log_format>journald</log_format>
+    <location>journald</location>
+    <query>_SYSTEMD_UNIT={{ wazuh_agent_localfile_journald_unit }}</query>
+  </localfile>
+{% endif %}
 
   <logging>
     <log_format>plain</log_format>

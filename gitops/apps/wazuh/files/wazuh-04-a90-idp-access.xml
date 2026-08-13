@@ -1,0 +1,66 @@
+<!--
+  WAZUH-04 사용자 ruleset. Keycloak·Pomerium·Vault·Warpgate 4개 소스를 A90으로 분류한다.
+  분류 키는 group `wazuh_a90`이고, index 분리 pipeline은 custom rule ID 범위
+  `100100`~`100109`(A90) 밖은 자동으로 기본 D30 index를 쓴다(`files/3-wazuh-01-index-routing`
+  참고). 이 파일이 쓰는 ID는 `100102`~`100107`이고 `100108`~`100109`는 `WAZUH-05`(NetBird)를
+  위해 비워 둔다.
+
+  decoder는 `<rule_dir>`가 아니라 `<decoder_dir>etc/decoders</decoder_dir>`에서만 로드된다
+  (라이브 dry-run으로 확인, `files/wazuh-04-decoders.xml` 소유). 이 파일은 rule만 갖는다.
+
+  마스킹(docs/audit-event-standard.md 6절): Pomerium은 cookie·token/header·email·query value를
+  description에 넣지 않는다(원본 email/user 필드가 이미 빈 문자열로만 관측됨). Vault는
+  request.headers·response.data(HMAC 값이라도)를 넣지 않는다. Keycloak은 redirect_uri·code_id·
+  token/assertion을 넣지 않고 event type만 노출한다. Warpgate는 credentials 필드가 실제 비밀번호
+  값이 아니라 인증 수단 이름("password"/"SSO (keycloak)")이라 그대로 둬도 안전하지만
+  related_users의 내부 식별자 형식은 그대로 둔다(사용자 식별자이지 자격증명이 아님).
+  네 소스 모두 `<options>no_full_log</options>`로 원문 저장을 막아 위 마스킹 대상이 `full_log`로
+  새지 않게 한다.
+-->
+<group name="wazuh_a90,idp_access,">
+
+  <!-- $(method)·$(path)는 렌더되지만 JSON boolean 필드(allow/deny)는 라이브 dry-run에서
+       description 치환이 비어 나왔다(값 자체는 data.allow/data.deny로 계속 검색 가능).
+       description에는 문자열 필드만 넣는다. -->
+  <rule id="100102" level="3">
+    <decoded_as>wazuh-04-pomerium-authorize</decoded_as>
+    <description>Pomerium authorize: $(method) $(path)</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <!-- 중첩 JSON path($(request.operation) 등)는 라이브 dry-run에서 description 치환이
+       비어 나왔다(값 자체는 data.request.operation 등으로 계속 검색 가능). rule
+       description은 고정 문구로 두고 실제 조사는 인덱서 필드 검색으로 한다. -->
+  <rule id="100103" level="3">
+    <decoded_as>wazuh-04-vault-audit</decoded_as>
+    <description>Vault audit request/response</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100104" level="3">
+    <decoded_as>wazuh-04-keycloak-event</decoded_as>
+    <description>Keycloak event: $(extra_data)</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100105" level="5">
+    <if_sid>100104</if_sid>
+    <match>type="LOGIN_ERROR",|type="REFRESH_TOKEN_ERROR",|type="LOGOUT_ERROR",|type="CODE_TO_TOKEN_ERROR",</match>
+    <description>Keycloak 인증 실패: $(extra_data)</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100106" level="3">
+    <decoded_as>wazuh-04-warpgate-audit</decoded_as>
+    <description>Warpgate audit: $(extra_data)</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100107" level="5">
+    <if_sid>100106</if_sid>
+    <match>_type="UserAuthenticationFailed1"</match>
+    <description>Warpgate 인증 실패: $(extra_data)</description>
+    <options>no_full_log</options>
+  </rule>
+
+</group>
