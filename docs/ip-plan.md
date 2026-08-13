@@ -85,6 +85,7 @@ VLAN 번호는 보안 등급 순서가 아니라 역할 식별자다. 실제 신
 | 대역 | 용도 | 상태 |
 |---|---|---|
 | `10.42.0.0/24` | 단일 `k3s-01` node의 Pod CIDR | `LIVE`; Node `spec.podCIDR` 실측 |
+| `10.43.0.1/32` | `kubernetes.default.svc` API Service | `LIVE`; SOAR-01의 선언된 worker/Orborus 조회 경로는 TCP 443만 사용 |
 
 이 node slice만 Keycloak의 신뢰 proxy 범위로 쓴다. Traefik 밖 출발지가
 `X-Forwarded-*`를 보내도 Keycloak이 신뢰하지 않는다. 노드 추가로 Pod CIDR이 늘어나면

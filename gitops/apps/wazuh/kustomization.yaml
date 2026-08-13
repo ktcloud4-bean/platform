@@ -39,6 +39,10 @@ configMapGenerator:
     namespace: wazuh
     files:
       - 3-wazuh-01-index-routing=files/3-wazuh-01-index-routing
+  - name: wazuh-manager-soar01-integration
+    namespace: wazuh
+    files:
+      - custom-soar01=files/custom-soar01
   - name: wazuh-bootstrap-script
     namespace: wazuh
     files:

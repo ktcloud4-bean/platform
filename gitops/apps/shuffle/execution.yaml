@@ -1,0 +1,409 @@
+# SOAR-01은 dynamic worker/app 생성 모델을 사용하지 않는다. Orborus와 worker는 이
+# 선언 파일의 정적 Deployment만 list해서 발견한다. 이 Role은 create/update/delete를
+# 주지 않으므로 workflow가 임의 Kubernetes workload로 확장될 수 없다.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: shuffle-orborus-discovery
+  namespace: shuffle
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [list]
+  # upstream Orborus 2.2.1은 고정 이름 creator-all RoleBinding의 존재만 확인한다.
+  # 아래 무권한 binding을 읽게 해 upstream이 default SA에 권한을 만드는 경로를 막는다.
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [rolebindings]
+    resourceNames: [creator-all]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shuffle-orborus-discovery
+  namespace: shuffle
+subjects:
+  - kind: ServiceAccount
+    name: shuffle-orborus
+    namespace: shuffle
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: shuffle-orborus-discovery
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: shuffle-worker-discovery
+  namespace: shuffle
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shuffle-worker-discovery
+  namespace: shuffle
+subjects:
+  - kind: ServiceAccount
+    name: shuffle-worker
+    namespace: shuffle
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: shuffle-worker-discovery
+---
+# Orborus 2.2.1 compatibility sentinel. The upstream process only tests that
+# this binding exists and contains default SA; this empty Role deliberately
+# grants that SA nothing.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: shuffle-orborus-compat-noop
+  namespace: shuffle
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: creator-all
+  namespace: shuffle
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: shuffle
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: shuffle-orborus-compat-noop
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shuffle-workers
+  namespace: shuffle
+  labels:
+    app.kubernetes.io/name: shuffle-worker
+    app.kubernetes.io/component: worker
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: shuffle-worker
+    app.kubernetes.io/component: worker
+  ports:
+    - name: worker-api
+      port: 33333
+      targetPort: worker-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shuffle-workers
+  namespace: shuffle
+  labels:
+    app.kubernetes.io/name: shuffle-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: shuffle
+    app.kubernetes.io/managed-by: shuffle-orborus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shuffle-worker
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shuffle-worker
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: shuffle
+        app.kubernetes.io/managed-by: shuffle-orborus
+    spec:
+      serviceAccountName: shuffle-worker
+      # Role은 정적 app Deployment list만 허용한다. worker image에는 Docker socket도
+      # hostPath도 주지 않는다.
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: shuffle-worker
+          image: ghcr.io/shuffle/shuffle-worker:2.2.1@sha256:9541c1fef2bc8511727610b565adbd0f7c817c53afee2dd9fef6aad8a971ffb1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: IS_KUBERNETES
+              value: "true"
+            - name: KUBERNETES_NAMESPACE
+              value: shuffle
+            - name: ENVIRONMENT_NAME
+              value: Shuffle
+            - name: TZ
+              value: Asia/Seoul
+            - name: CLEANUP
+              value: "false"
+            - name: SHUFFLE_SWARM_CONFIG
+              value: run
+            - name: SHUFFLE_APP_EXPOSED_PORT
+              value: "80"
+            - name: SHUFFLE_WORKER_SERVER_URL
+              value: http://shuffle-workers.shuffle.svc.cluster.local:33333
+            - name: WORKER_HOSTNAME
+              value: shuffle-workers.shuffle.svc.cluster.local
+            - name: BASE_URL
+              value: http://shuffle-backend.shuffle.svc.cluster.local:5001
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          ports:
+            - name: worker-api
+              containerPort: 33333
+          startupProbe:
+            tcpSocket:
+              port: worker-api
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: worker-api
+            periodSeconds: 10
+            failureThreshold: 6
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shuffle-orborus
+  namespace: shuffle
+  labels:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: orborus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shuffle
+      app.kubernetes.io/component: orborus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shuffle
+        app.kubernetes.io/component: orborus
+    spec:
+      serviceAccountName: shuffle-orborus
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: shuffle-orborus
+          image: ghcr.io/shuffle/shuffle-orborus:2.2.1@sha256:3519810b3ca4fe568acefdf15ce6f2deba0ae6f0ff6b84412354d59d663dff31
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: RUNNING_MODE
+              value: kubernetes
+            - name: IS_KUBERNETES
+              value: "true"
+            - name: KUBERNETES_NAMESPACE
+              value: shuffle
+            - name: ENVIRONMENT_NAME
+              value: Shuffle
+            - name: TZ
+              value: Asia/Seoul
+            - name: BASE_URL
+              value: http://shuffle-backend.shuffle.svc.cluster.local:5001
+            - name: SHUFFLE_WORKER_SERVER_URL
+              value: http://shuffle-workers.shuffle.svc.cluster.local:33333
+            - name: SHUFFLE_WORKER_IMAGE
+              value: ghcr.io/shuffle/shuffle-worker:2.2.1@sha256:9541c1fef2bc8511727610b565adbd0f7c817c53afee2dd9fef6aad8a971ffb1
+            - name: SHUFFLE_WORKER_SERVICE_ACCOUNT_NAME
+              value: shuffle-worker
+            - name: SHUFFLE_ORBORUS_EXECUTION_CONCURRENCY
+              value: "1"
+            - name: SHUFFLE_AUTO_IMAGE_DOWNLOAD
+              value: "false"
+            - name: SHUFFLE_SKIP_PIPELINES
+              value: "true"
+            - name: CLEANUP
+              value: "false"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+---
+# Shuffle의 User Input trigger는 내부 shuffle-subflow:1.1.0 app으로 승인 링크를 만든다.
+# 이 고정 runtime은 worker가 동적으로 Deployment를 만들 필요를 없애고, subflow 파라미터를
+# 비워 child workflow·email·SMS 호출을 하지 않는다.
+apiVersion: v1
+kind: Service
+metadata:
+  # worker는 version dots를 Kubernetes Service DNS label의 hyphen으로 바꿔 호출한다.
+  name: shuffle-subflow-1-1-0
+  namespace: shuffle
+  labels:
+    app.kubernetes.io/name: shuffle-app
+    app.kubernetes.io/component: soar01-user-input
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: shuffle-app
+    app.kubernetes.io/component: soar01-user-input
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # upstream worker가 shuffle-subflow_1-1-0의 underscore를 hyphen으로 정규화해 발견한다.
+  name: shuffle-subflow-1-1-0
+  namespace: shuffle
+  labels:
+    app.kubernetes.io/name: shuffle-app
+    app.kubernetes.io/component: soar01-user-input
+    app.kubernetes.io/part-of: shuffle
+    app.kubernetes.io/managed-by: platform-gitops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shuffle-app
+      app.kubernetes.io/component: soar01-user-input
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shuffle-app
+        app.kubernetes.io/component: soar01-user-input
+        app.kubernetes.io/part-of: shuffle
+        app.kubernetes.io/managed-by: platform-gitops
+    spec:
+      serviceAccountName: shuffle-soar01-user-input
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # pinned upstream User Input은 worker가 준 internal backend_url을 Form browser callback에도
+      # 재사용한다. initContainer는 upstream source를 emptyDir로 복사한 뒤 그 한 값만 canonical
+      # Pomerium URL로 바꿔 browser가 cluster DNS를 받지 않게 한다.
+      volumes:
+        - name: user-input-app
+          emptyDir:
+            sizeLimit: 32Mi
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: patch-user-input-form-url
+          image: docker.io/frikky/shuffle@sha256:b569ed551f2f840dbf4a2483789d639b6fbc642baa504dbab7ca12cc81defd0c
+          imagePullPolicy: IfNotPresent
+          command: [/bin/sh, -ec]
+          args:
+            - |
+              cp -R /app/. /work/
+              grep -Fx '        if len(str(backend_url)) > 0:' /work/app.py
+              sed -i 's|        if len(str(backend_url)) > 0:|        backend_url = "https://shuffle.imcherry5778.xyz"\n        if len(str(backend_url)) > 0:|' /work/app.py
+              grep -Fx '        backend_url = "https://shuffle.imcherry5778.xyz"' /work/app.py
+              # 결과 카드가 frontend_continue를 우선 열면 answer=true query가 Form을
+              # 렌더하기 전 실행을 끝낸다. 모든 결과 링크는 먼저 수동 Form으로 향하게 하고,
+              # 실제 Continue/Stop callback은 Form 버튼을 눌렀을 때만 만들게 한다.
+              grep -Fx '        frontend_abort_url = "%s/forms/%s?authorization=%s&reference_execution=%s&answer=false&source_node=%s&backend_url=%s" % (frontend_url, self.full_execution["workflow"]["id"], self.full_execution["authorization"], self.full_execution["execution_id"], source_node, backend_url)' /work/app.py
+              sed -i '/^        frontend_abort_url = /a\        frontend_continue_url = explore_path\n        frontend_abort_url = explore_path\n        api_continue_url = explore_path\n        api_abort_url = explore_path' /work/app.py
+              grep -Fx '        frontend_continue_url = explore_path' /work/app.py
+              grep -Fx '        frontend_abort_url = explore_path' /work/app.py
+              grep -Fx '        api_continue_url = explore_path' /work/app.py
+              grep -Fx '        api_abort_url = explore_path' /work/app.py
+          volumeMounts:
+            - name: user-input-app
+              mountPath: /work
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+      containers:
+        - name: user-input
+          image: docker.io/frikky/shuffle@sha256:b569ed551f2f840dbf4a2483789d639b6fbc642baa504dbab7ca12cc81defd0c
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TZ
+              value: Asia/Seoul
+            # Service는 worker가 요구하는 80을 받고, SDK는 비특권 8080에서 listen한다.
+            - name: SHUFFLE_APP_EXPOSED_PORT
+              value: "8080"
+            - name: SHUFFLE_SWARM_CONFIG
+              value: run
+            # User Input의 Continue/Abort Form은 사용자의 Pomerium browser에서 열려야 한다.
+            # 내부 backend URL을 쓰면 upstream이 relative /forms 링크를 만들어 Dashboard로 되돌린다.
+            - name: BASE_URL
+              value: https://shuffle.imcherry5778.xyz
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: user-input-app
+              mountPath: /app
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            failureThreshold: 6

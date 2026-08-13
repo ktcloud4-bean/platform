@@ -1,0 +1,204 @@
+# The only app SOAR-01 registers in Shuffle. Its protocol has exactly one
+# offline parser action; it has no shell, subprocess, external URL, secret or
+# Kubernetes credential capability.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shuffle-soar01-enrichment
+  namespace: shuffle
+  labels:
+    app.kubernetes.io/name: shuffle
+    app.kubernetes.io/component: soar01-enrichment
+data:
+  server.py: |
+    import json
+    import re
+    import time
+    import urllib.request
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    MAX_BODY = 65536
+    CALLBACK = "http://shuffle-workers.shuffle.svc.cluster.local:33333/api/v1/streams"
+    IPV4 = re.compile(r"(?<![0-9.])(?:25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)){3}(?![0-9.])")
+    URL = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+    SHA256 = re.compile(r"\b[a-fA-F0-9]{64}\b")
+
+    def indicators(value):
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        values = []
+        for pattern, kind in ((IPV4, "ipv4"), (URL, "url"), (SHA256, "sha256")):
+            for match in pattern.findall(text):
+                if kind == "ipv4" and (match.startswith("10.") or match.startswith("127.") or match.startswith("192.168.") or match.startswith("169.254.")):
+                    continue
+                entry = {"type": kind, "value": match}
+                if entry not in values:
+                    values.append(entry)
+                if len(values) >= 32:
+                    return values
+        return values
+
+    class Handler(BaseHTTPRequestHandler):
+        server_version = "SOAR01/1"
+
+        def log_message(self, _format, *_args):
+            return
+
+        def reply(self, code, payload):
+            body = json.dumps(payload, ensure_ascii=False).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            if self.path == "/api/v1/health":
+                self.reply(200, {"success": True})
+            else:
+                self.reply(404, {"success": False})
+
+        def do_POST(self):
+            if self.path != "/api/v1/run":
+                self.reply(404, {"success": False})
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length < 1 or length > MAX_BODY:
+                    raise ValueError("body")
+                request = json.loads(self.rfile.read(length))
+                action = request["action"]
+                if action.get("name") != "extract_indicators":
+                    raise ValueError("action")
+                if request.get("base_url") != "http://shuffle-workers.shuffle.svc.cluster.local:33333":
+                    raise ValueError("callback")
+                execution_id = request["execution_id"]
+                authorization = request["authorization"]
+                if not isinstance(execution_id, str) or not isinstance(authorization, str) or not execution_id or not authorization:
+                    raise ValueError("execution")
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                self.reply(400, {"success": False})
+                return
+
+            found = indicators(request.get("full_execution", {}))
+            result = json.dumps({"mode": "read-only", "indicator_count": len(found), "indicators": found}, ensure_ascii=False)
+            now = int(time.time())
+            callback = {
+                "action": action,
+                "authorization": authorization,
+                "execution_id": execution_id,
+                "result": result,
+                "status": "SUCCESS",
+                "started_at": now,
+                "completed_at": now,
+            }
+            try:
+                wire = json.dumps(callback).encode()
+                call = urllib.request.Request(CALLBACK, data=wire, headers={"Content-Type": "application/json", "Authorization": "Bearer " + authorization}, method="POST")
+                with urllib.request.urlopen(call, timeout=10) as response:
+                    if response.status < 200 or response.status >= 300:
+                        raise OSError("callback")
+            except OSError:
+                self.reply(502, {"success": False})
+                return
+            self.reply(200, {"success": True})
+
+    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # Shuffle worker derives this exact name from SOAR-01 Local Enrichment:1.0.0.
+  name: soar-01-local-enrichment-1-0-0
+  namespace: shuffle
+  labels:
+    app.kubernetes.io/name: shuffle-app
+    app.kubernetes.io/component: soar01-enrichment
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: shuffle-app
+    app.kubernetes.io/component: soar01-enrichment
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: soar-01-local-enrichment-1-0-0
+  namespace: shuffle
+  labels:
+    app.kubernetes.io/name: shuffle-app
+    app.kubernetes.io/component: soar01-enrichment
+    app.kubernetes.io/part-of: shuffle
+    app.kubernetes.io/managed-by: platform-gitops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shuffle-app
+      app.kubernetes.io/component: soar01-enrichment
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shuffle-app
+        app.kubernetes.io/component: soar01-enrichment
+        app.kubernetes.io/part-of: shuffle
+        app.kubernetes.io/managed-by: platform-gitops
+    spec:
+      serviceAccountName: shuffle-soar01-enrichment
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: enrichment
+          image: docker.io/library/python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
+          imagePullPolicy: IfNotPresent
+          command: [python, /app/server.py]
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: app
+          configMap:
+            name: shuffle-soar01-enrichment
+            defaultMode: 0444
+        - name: tmp
+          emptyDir:
+            sizeLimit: 8Mi

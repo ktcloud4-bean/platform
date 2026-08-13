@@ -70,3 +70,17 @@ API_PASSWORD={{ .Data.data.api_password }}
 {{- end -}}
 EOT
 }
+
+# SOAR-01 webhook capability는 Wazuh manager만 읽는다. ossec.conf와 integration
+# argv에는 넣지 않아 Wazuh integrations.log에 URL이 남지 않는다.
+template {
+  destination          = "/vault/secrets/soar01-hook-url"
+  perms                = "0440"
+  # rollback은 hook key를 지워 integration을 fail-closed로 만든다. 이 template는 빈
+  # 값을 렌더해야 manager Pod 자체가 멈추지 않으며, custom-soar01은 빈 값을 URL로
+  # 인정하지 않는다.
+  error_on_missing_key = false
+  contents             = <<EOT
+{{- with secret "kv/data/wazuh/manager" -}}{{ .Data.data.soar01_hook_url }}{{- end -}}
+EOT
+}

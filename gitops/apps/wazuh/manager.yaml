@@ -134,6 +134,7 @@ spec:
             - |
               install -d -m 0750 /wazuh-config-mount/etc
               install -m 0640 /wazuh/runtime/authd.pass /wazuh-config-mount/etc/authd.pass
+              install -o root -g 101 -m 0750 /wazuh/soar01-integration/custom-soar01 /var/ossec/integrations/custom-soar01
               set -a
               . /wazuh/runtime/wazuh.env
               set +a
@@ -204,6 +205,9 @@ spec:
               mountPath: /etc/cont-init.d/3-wazuh-01-index-routing
               subPath: 3-wazuh-01-index-routing
               readOnly: true
+            - name: wazuh-soar01-integration
+              mountPath: /wazuh/soar01-integration
+              readOnly: true
             - name: manager-secrets
               mountPath: /wazuh/runtime
               readOnly: true
@@ -259,6 +263,10 @@ spec:
         - name: wazuh-cont-init
           configMap:
             name: wazuh-manager-cont-init
+            defaultMode: 0555
+        - name: wazuh-soar01-integration
+          configMap:
+            name: wazuh-manager-soar01-integration
             defaultMode: 0555
         - name: manager-secrets
           emptyDir:

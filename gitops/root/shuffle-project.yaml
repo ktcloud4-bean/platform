@@ -9,7 +9,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: platform-gitops
 spec:
-  description: SOAR-DASH-01 Shuffle engine and dashboard, no workflow/app connectors yet
+  description: SOAR-01 read-only enrichment workflow with human approval only
   sourceRepos:
     - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
   destinations:
@@ -33,3 +33,7 @@ spec:
       kind: Deployment
     - group: networking.k8s.io
       kind: NetworkPolicy
+    - group: rbac.authorization.k8s.io
+      kind: Role
+    - group: rbac.authorization.k8s.io
+      kind: RoleBinding

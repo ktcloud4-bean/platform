@@ -6,6 +6,8 @@ resources:
   - opensearch.yaml
   - backend.yaml
   - frontend.yaml
+  - execution.yaml
+  - soar01-enrichment.yaml
   - network-policies.yaml
 configMapGenerator:
   - name: shuffle-vault-agent
