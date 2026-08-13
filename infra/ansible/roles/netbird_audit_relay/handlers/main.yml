@@ -1,0 +1,7 @@
+---
+# infra/ansible/roles/netbird_audit_relay/handlers/main.yml
+- name: netbird-audit-relay 타이머 재기동
+  ansible.builtin.systemd_service:
+    name: netbird-audit-relay.timer
+    state: restarted
+    daemon_reload: true

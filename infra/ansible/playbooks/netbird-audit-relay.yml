@@ -1,0 +1,11 @@
+---
+# infra/ansible/playbooks/netbird-audit-relay.yml
+# WAZUH-05: netbird-01의 events.db를 read-only polling해 account·user·peer·
+# policy·setup-key 변경과 접근 event만 A90으로 보낼 수 있게 JSON으로 정규화한다.
+# WAZUH-03의 host agent(<localfile log_format="json">)가 그 출력 파일을 tail한다.
+
+- name: Apply netbird_audit_relay to netbird-01
+  hosts: netbird_server
+  become: true
+  roles:
+    - netbird_audit_relay

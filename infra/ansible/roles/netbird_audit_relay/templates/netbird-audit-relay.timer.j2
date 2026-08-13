@@ -1,0 +1,11 @@
+[Unit]
+Description=WAZUH-05 NetBird events.db 감사 event polling 정기 실행
+
+[Timer]
+OnBootSec={{ netbird_audit_relay_timer_oncalendar_boot_sec }}
+OnUnitActiveSec={{ netbird_audit_relay_timer_interval_sec }}
+AccuracySec=5s
+Unit=netbird-audit-relay.service
+
+[Install]
+WantedBy=timers.target

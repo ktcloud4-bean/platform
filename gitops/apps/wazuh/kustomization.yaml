@@ -44,6 +44,7 @@ configMapGenerator:
       - wazuh-04-a90-idp-access.xml=files/wazuh-04-a90-idp-access.xml
       - wazuh-04-d30-waf-runtime.xml=files/wazuh-04-d30-waf-runtime.xml
       - wazuh-04-decoders.xml=files/wazuh-04-decoders.xml
+      - wazuh-05-a90-netbird-audit.xml=files/wazuh-05-a90-netbird-audit.xml
   - name: wazuh-manager-cont-init
     namespace: wazuh
     files:

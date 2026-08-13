@@ -1,0 +1,18 @@
+---
+# infra/ansible/roles/netbird_audit_relay/defaults/main.yml
+# WAZUH-05: netbird-01 전용. events.db(SQLite, root:root 0600)를 read-only로
+# 주기 polling해 account·user·peer·policy·setup-key 변경과 접근 event만 JSON
+# 한 줄씩 /var/lib/wazuh-05-netbird-relay/netbird-audit.log에 append한다(마지막
+# 처리 row id 기준 이어 읽기). setup key 값·geo/city·이메일·표시명은 여기서
+# 제거한다(docs/audit-event-standard.md 6절, allowlist 방식).
+#
+# 이 역할이 events.db를 쓰지 않는다는 것은 스크립트가 URI `mode=ro`로만 여는
+# 것으로 보장한다. 전용 non-root user(wazuh05_relay_user)에게 파일 하나에만
+# POSIX ACL로 read를 주고 root로 실행하지 않는다.
+netbird_audit_relay_events_db: /var/lib/netbird/events.db
+netbird_audit_relay_user: wazuh05-relay
+netbird_audit_relay_group: wazuh05-relay
+netbird_audit_relay_state_dir: /var/lib/wazuh-05-netbird-relay
+netbird_audit_relay_script_path: /usr/local/libexec/netbird-audit-relay.py
+netbird_audit_relay_timer_oncalendar_boot_sec: "2min"
+netbird_audit_relay_timer_interval_sec: "60s"
