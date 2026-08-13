@@ -90,10 +90,17 @@ rule counter도 음성 control 중 증가했다. timeout/refused만으로 PF 차
 loopback bind와 PF runtime을 함께 대조했다.
 
 S3 identity는 저장소 밖 mode `0600` extra-vars로만 주입한다. identity별 action은
-`Admin|Read|List|Tagging|Write:<정확한-bucket>` 형식만 허용하며 access key와 secret의 최소
-길이를 검사한다. 빈 identity 목록에는 disabled `deny-all-bootstrap` sentinel을 넣어
-SeaweedFS의 empty-identity allow-all 동작을 막는다. 최종 상태에는 장기 consumer credential이
+`Admin|Read|List|Tagging|Write|Delete:<정확한-bucket>` 형식만 허용하며 access key와
+secret의 최소 길이를 검사한다. 빈 identity 목록에는 disabled `deny-all-bootstrap` sentinel을
+넣어 SeaweedFS의 empty-identity allow-all 동작을 막는다. 최종 상태에는 장기 consumer credential이
 없고 credential 없는 TLS request는 HTTP 403이다.
+
+`S3-02`에서 `Delete`를 정규식에 추가했다. `loki-01` identity가 이미 라이브에서
+`Delete:loki-chunks`(retention 삭제)를 쓰고 있었는데, 이 role의 선언 경로가 아니라
+role 밖에서 부여된 상태였다 — role의 검증은 처음부터 `Delete`를 허용한 적이 없어 그대로
+apply했다면 무관한 identity 하나 때문에 배포 전체가 실패했을 것이다. 확장 뒤에는 라이브
+`s3.json`의 7개 identity(BKP-01/02/03×2·REG-01·`loki-01`)를 그대로 선언에 반영해 이
+role이 다시 s3 identity의 진짜 source of truth가 되게 했다.
 
 ## 실제 S3 호환성·최소권한 시험
 
@@ -173,7 +180,7 @@ filer는 SeaweedFS 컴포넌트 중 유일하게 브라우저에서 버킷 내�
   자체(TLS 8333, `S3-01`)와는 별도 결정이다.
 
 **bucket 단위 접근 통제가 없다는 한계.** `S3-01`의 S3 identity는
-`Admin|Read|List|Tagging|Write:<정확한-bucket>` 형식으로 bucket마다 분리돼 있어,
+`Admin|Read|List|Tagging|Write|Delete:<정확한-bucket>` 형식으로 bucket마다 분리돼 있어,
 credential 하나가 새도 그 bucket 하나만 노출된다. filer 자체에는 이런 bucket 단위
 ACL이 없다 — Pomerium `/platform-privileged` 통과 세션 하나가 전체 filer 네임스페이스
 (모든 bucket)에 대해 읽기·쓰기·삭제를 all-or-nothing으로 갖는다. 이 Route는 S3 API의

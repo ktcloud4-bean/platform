@@ -19,7 +19,11 @@ s302_fail() {
 }
 
 readonly action=${1:-}
-readonly sequence=1024
+# 1002~1021은 이미 꽉 찬 "k3s-01→비공개 목적지 개별 허용" 구간이고 1022는 그 뒤의
+# quick 기본 차단(NET-04 NET04_NONPUBLIC_V4) rule이다. object-01도 비공개 목적지라
+# 1022보다 뒤(예: 1024, OBS-18·NET-04 web egress처럼 공개 목적지용 구간)에 두면 차단
+# rule에 먼저 매치돼 절대 평가되지 않는다. 그래서 빈 1000을 쓴다.
+readonly sequence=1000
 readonly description='S3-02: k3s-01에서 object-01 SeaweedFS filer 웹 UI TCP 8888만 허용'
 readonly destination=10.10.50.20
 readonly port=8888

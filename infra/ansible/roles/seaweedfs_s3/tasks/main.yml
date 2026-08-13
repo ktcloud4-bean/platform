@@ -30,7 +30,7 @@
       - item.credentials | length > 0
       - item.actions is defined
       - item.actions | length > 0
-      - item.actions | reject('regex', '^(Admin|Read|List|Tagging|Write):[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$') | list | length == 0
+      - item.actions | reject('regex', '^(Admin|Read|List|Tagging|Write|Delete):[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$') | list | length == 0
     fail_msg: 각 S3 identity에는 name, credential과 제한된 action이 필요하다.
   loop: "{{ seaweedfs_s3_identities }}"
   no_log: true
@@ -480,12 +480,14 @@
     that:
       - "('127.0.0.1:' ~ seaweedfs_master_port) in seaweedfs_listeners.stdout"
       - "('127.0.0.1:' ~ seaweedfs_volume_port) in seaweedfs_listeners.stdout"
-      - "('127.0.0.1:' ~ seaweedfs_filer_port) in seaweedfs_listeners.stdout"
+      - "('*:' ~ seaweedfs_filer_port) in seaweedfs_listeners.stdout"
       - "(seaweedfs_s3_bind_address ~ ':' ~ seaweedfs_s3_port) in seaweedfs_listeners.stdout"
       - "('0.0.0.0:' ~ seaweedfs_master_port) not in seaweedfs_listeners.stdout"
       - "('0.0.0.0:' ~ seaweedfs_volume_port) not in seaweedfs_listeners.stdout"
-      - "('0.0.0.0:' ~ seaweedfs_filer_port) not in seaweedfs_listeners.stdout"
-    fail_msg: master·volume·filer는 loopback, S3만 DATA 주소의 TLS port에 있어야 한다.
+    fail_msg: >-
+      master·volume는 loopback 전용이어야 한다. filer는 S3-02부터 0.0.0.0
+      bind(k3s-01만 systemd IPAddressAllow·OPNsense PF로 허용)이고, S3는 DATA
+      주소의 TLS port에 있어야 한다.
   when:
     - seaweedfs_binary_after.stat.exists
     - not ansible_check_mode or seaweedfs_tls_files.results[0].stat.exists
