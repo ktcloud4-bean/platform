@@ -331,6 +331,27 @@ gateway·Loki retention과 Grafana host selector는 `gitops/apps/obs/`, O7 분�
 `docs/audit-event-standard.md`, cross-VLAN TCP 3100 PASS와 UUID rollback은
 `gitops/tools/loki-02/`가 소유한다.
 
+## OBS-18 Slack egress source identity
+
+`playbooks/obs-18-slack-egress.yml`과 `roles/obs_slack_egress/`은 `k3s-01`의
+기존 primary 주소를 유지한 채, Alertmanager Slack CONNECT proxy 전용 source identity 하나만
+NetworkManager profile에 추가한다. 주소의 단일 원본과 상태는
+[`docs/ip-plan.md`](../../docs/ip-plan.md)다. role은 현재 연결 profile과 primary 주소가
+선언과 정확히 같을 때만 추가하고, device reapply 뒤 두 주소를 읽어 확인한다. link를
+내리거나 k3s를 재시작하지 않는다.
+
+```bash
+cd infra/ansible
+export ANSIBLE_SSH_COMMON_ARGS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<저장소 밖 known_hosts> -o PasswordAuthentication=no"
+ansible-playbook -i <저장소 밖 inventory> playbooks/obs-18-slack-egress.yml --syntax-check
+# OPNsense Slack rule rollback 뒤에만 source identity를 제거한다.
+ansible-playbook -i <저장소 밖 inventory> playbooks/obs-18-slack-egress-rollback.yml
+```
+
+OPNsense FQDN alias/rule의 stage·readback·runtime과 rollback UUID는
+`gitops/tools/obs-18/apply-firewall.py`가 소유한다. proxy manifest와 Alertmanager
+NetworkPolicy는 `gitops/apps/obs/`가 소유한다.
+
 ## NTP source
 
 `NET-03`은 각 project VLAN에서 **해당 VLAN gateway의 UDP 123만** 허용한다. Rocky 기본 설정의 공개 pool은 차단되므로 그대로 두면 게스트가 영원히 동기화되지 않는다.

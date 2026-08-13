@@ -462,7 +462,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1786615381.71" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1786619029.94" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -3265,6 +3265,62 @@
             <shaper2 />
             <description>OBS-17: k3s-01에서 warpgate-01 private TLS TCP 8888만 허용</description>
           </rule>
+          <rule uuid="335b4fe2-dcf4-4410-a9e9-a639966b895a">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1023</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.11</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>OBS18_SLACK_HOST</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>443</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>OBS-18: Slack egress proxy source에서 hooks.slack.com TCP 443만 허용</description>
+          </rule>
         </rules>
         <snatrules />
         <npt />
@@ -3273,7 +3329,7 @@
       <Lvtemplate version="0.0.1" persisted_at="1785198671.19" description="Firewall Live View filter templates">
         <templates />
       </Lvtemplate>
-      <Alias version="1.0.1" persisted_at="1786515708.85" description="Firewall aliases">
+      <Alias version="1.0.1" persisted_at="1786619027.45" description="Firewall aliases">
         <geoip>
           <url />
         </geoip>
@@ -3454,6 +3510,23 @@ EDGE02_CF_IPV6</content>
             <expire />
             <categories />
             <description>WAZUH-03: 6개 host agent가 쓰는 Wazuh manager 등록·수집 NodePort</description>
+          </alias>
+          <alias uuid="ed161966-7131-4aa4-b3cb-2fac7dfa42d1">
+            <enabled>1</enabled>
+            <name>OBS18_SLACK_HOST</name>
+            <type>host</type>
+            <path_expression />
+            <proto />
+            <interface />
+            <counters>0</counters>
+            <updatefreq />
+            <content>hooks.slack.com</content>
+            <password />
+            <username />
+            <authtype />
+            <expire />
+            <categories />
+            <description>OBS-18: Alertmanager Slack Incoming Webhook FQDN</description>
           </alias>
         </aliases>
       </Alias>

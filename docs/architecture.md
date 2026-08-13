@@ -202,6 +202,11 @@ Suricata · CrowdSec AppSec(Coraza/CRS) · Falco · 각종 audit event → Wazuh
 
 Wazuh는 Loki를 입력으로 삼지 않고 각 보안 소스에서 직접 이벤트를 받는다. 소스에는 제한된 로컬 로그를 남겨 중앙 수집 장애가 방화벽·접근 통제·탐지 엔진의 동작을 중단시키지 않게 한다. Wazuh active response와 방화벽 자동 차단은 수동 대응 절차가 검증되기 전에는 사용하지 않는다.
 
+Alertmanager의 팀 운영 Slack 통지는 Vault file credential을 읽는 전용 receiver만 담당한다.
+receiver는 외부로 직접 나가지 않고 내부 CONNECT proxy를 거쳐, proxy의 전용 source identity와
+OPNsense Slack FQDN alias TCP 443·CONNECT hostname allowlist가 함께 외부 목적지를 제한한다.
+기존 k3s 공용 HTTPS egress는 다른 GitOps 의존성을 위해 보존한다(ADR-0025).
+
 ## 인증·권한
 
 Keycloak은 팀 사용자, MFA, OIDC/SAML의 중앙 IdP다. 프로젝트 realm과 Keycloak 관리용 realm을 분리한다. 팀 username과 Shuffle 역할·계정 수명주기는 [ADR-0017](adr/0017-team-identity-and-shuffle-rbac.md), 외부 사용자 프런트엔드와 관리면 분리는 [ADR-0018](adr/0018-public-keycloak-frontchannel.md)을 따른다.

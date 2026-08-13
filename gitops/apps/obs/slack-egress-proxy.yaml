@@ -1,0 +1,107 @@
+# OBS-18: Alertmanager 전용 Slack CONNECT proxy.
+#
+# hostNetwork는 alertmanager가 아닌 proxy 한 Pod만 사용한다. proxy는 출발 source를
+# k3s-01의 별도 IP(10.10.20.11)로 bind해 OPNsense가 기존 k3s-01(.10) 공용 egress와
+# 구별할 수 있게 한다. 외부 TCP 443은 이 proxy만 시작하고, source·CONNECT host는
+# process에서 한 번 더 고정한다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: obs-18-slack-egress-proxy
+  namespace: obs
+  labels:
+    app.kubernetes.io/name: obs-18-slack-egress-proxy
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  selector:
+    app.kubernetes.io/name: obs-18-slack-egress-proxy
+  ports:
+    - name: connect
+      port: 8444
+      targetPort: connect
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: obs-18-slack-egress-proxy
+  namespace: obs
+  labels:
+    app.kubernetes.io/name: obs-18-slack-egress-proxy
+    app.kubernetes.io/part-of: platform-gitops
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: obs-18-slack-egress-proxy
+  namespace: obs
+  labels:
+    app.kubernetes.io/name: obs-18-slack-egress-proxy
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: obs-18-slack-egress-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: obs-18-slack-egress-proxy
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      serviceAccountName: obs-18-slack-egress-proxy
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      nodeSelector:
+        kubernetes.io/hostname: k3s-01.imcherry5778.xyz
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: connect-proxy
+          image: docker.io/library/python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844
+          imagePullPolicy: IfNotPresent
+          command: [python3, -u, /app/obs-18-slack-egress-proxy.py]
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          ports:
+            - name: connect
+              containerPort: 8444
+          readinessProbe:
+            tcpSocket:
+              port: connect
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: connect
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: proxy-code
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: proxy-code
+          configMap:
+            name: obs-18-slack-egress-proxy
+            defaultMode: 0555

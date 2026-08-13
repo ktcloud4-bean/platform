@@ -26,7 +26,16 @@ alertmanager:
         - receiver: obs-01-verification
           matchers:
             - alertname = "OBS01Delivery"
-        # OBS-13·OBS-16·OBS-17: 허용한 10개 alertname만 실제 채널(obs-13-receiver)로 보낸다.
+        # OBS-18: 허용한 운영 alert 중 critical/warning만 전용 Slack receiver로도
+        # 보낸다. continue=true 뒤 기존 internal receiver도 그대로 유지하며, info와
+        # allowlist 밖 alert는 여전히 discard다.
+        - receiver: obs-18-platform-slack
+          group_by: [alertname, severity, instance]
+          continue: true
+          matchers:
+            - alertname =~ "NodeDown|RootFilesystemUsageWarning|RootFilesystemUsageCritical|TLSCertificateExpiringSoon|VeleroBackupFailed|NativeMetricsTargetDown|PostgreSQLDatabaseMetricsDown|WarpgateServiceDown|WarpgateACMERenewTimerDown|WarpgateTLSCertificateExpiringSoon"
+            - severity =~ "critical|warning"
+        # OBS-13·OBS-16·OBS-17: 허용한 10개 alertname만 internal receiver로 보낸다.
         # 다른 모든 alertname은 여전히 discard로 떨어진다.
         - receiver: obs-13-receiver
           matchers:
@@ -43,6 +52,27 @@ alertmanager:
           # obs-internal NetworkPolicy가 이미 이 경로를 연다.
           - url: http://obs-13-receiver.obs.svc:8080/alerts
             send_resolved: true
+      - name: obs-18-platform-slack
+        slack_configs:
+          - api_url_file: /vault/secrets/slack-webhook-url
+            channel: "#platform-alerts"
+            username: platform-alertmanager
+            send_resolved: true
+            # title·fallback·text 모두 allowlist 다섯 항목만 쓴다. alert label의
+            # Slack markdown/mention 문자는 없애 receiver message injection을 막는다.
+            title: '{{ if eq .CommonLabels.severity "critical" }}@channel {{ end }}{{ .Status | toUpper }}: {{ reReplaceAll "[<>&@]" "" .CommonLabels.alertname }}'
+            title_link: https://grafana.imcherry5778.xyz/alerting/list
+            fallback: '{{ if eq .CommonLabels.severity "critical" }}@channel {{ end }}alertname={{ reReplaceAll "[<>&@]" "" .CommonLabels.alertname }} severity={{ reReplaceAll "[<>&@]" "" .CommonLabels.severity }} instance={{ reReplaceAll "[<>&@]" "" .CommonLabels.instance }} time={{ if eq .Status "resolved" }}{{ (index .Alerts 0).EndsAt }}{{ else }}{{ (index .Alerts 0).StartsAt }}{{ end }} grafana=https://grafana.imcherry5778.xyz/alerting/list'
+            text: '{{ if eq .CommonLabels.severity "critical" }}@channel {{ end }}alertname={{ reReplaceAll "[<>&@]" "" .CommonLabels.alertname }} severity={{ reReplaceAll "[<>&@]" "" .CommonLabels.severity }} instance={{ reReplaceAll "[<>&@]" "" .CommonLabels.instance }} time={{ if eq .Status "resolved" }}{{ (index .Alerts 0).EndsAt }}{{ else }}{{ (index .Alerts 0).StartsAt }}{{ end }} grafana=https://grafana.imcherry5778.xyz/alerting/list'
+            pretext: ""
+            footer: ""
+            fields: []
+            mrkdwn_in: [text]
+            short_fields: false
+            http_config:
+              proxy_url: http://obs-18-slack-egress-proxy.obs.svc:8444
+              proxy_from_environment: false
+              follow_redirects: false
   alertmanagerSpec:
     automountServiceAccountToken: false
     image:
@@ -66,6 +96,69 @@ alertmanager:
       runAsUser: 65534
       seccompProfile:
         type: RuntimeDefault
+    initContainers:
+      - name: vault-agent-alertmanager
+        image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+        imagePullPolicy: IfNotPresent
+        args:
+          - agent
+          - -config=/vault/config/vault-agent-alertmanager.hcl
+        securityContext:
+          runAsUser: 100
+          runAsGroup: 65534
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop: [ALL]
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        volumeMounts:
+          - name: obs-alertmanager-runtime-config
+            mountPath: /vault/config
+            readOnly: true
+          - name: obs-alertmanager-runtime-config
+            mountPath: /vault/tls/vault.crt
+            subPath: vault.crt
+            readOnly: true
+          - name: obs-alertmanager-runtime-secrets
+            mountPath: /vault/secrets
+          - name: obs-alertmanager-vault-agent-tmp
+            mountPath: /tmp
+          - name: obs-alertmanager-vault-token
+            mountPath: /var/run/secrets/vault
+            readOnly: true
+    volumes:
+      - name: obs-alertmanager-runtime-secrets
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1Mi
+      - name: obs-alertmanager-vault-agent-tmp
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Mi
+      - name: obs-alertmanager-runtime-config
+        configMap:
+          name: obs-alertmanager-runtime-config
+      - name: obs-alertmanager-vault-token
+        projected:
+          defaultMode: 0440
+          sources:
+            - serviceAccountToken:
+                path: token
+                audience: vault
+                expirationSeconds: 600
+    volumeMounts:
+      - name: obs-alertmanager-runtime-secrets
+        mountPath: /vault/secrets
+        readOnly: true
     storage:
       volumeClaimTemplate:
         spec:

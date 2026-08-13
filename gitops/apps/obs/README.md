@@ -267,6 +267,39 @@ TLS probe 성공·14일 초과, receiver matcher와 exact NetworkPolicy를 한 �
 literal `main`으로 복구한다. rollback은 이 task의 alert rule·blackbox target·NetworkPolicy
 egress·방화벽 rule만 역순으로 원복한다.
 
+## OBS-18 Alertmanager 팀 운영 Slack 통지
+
+Slack receiver는 allowlist 10개 alertname 중 `critical`·`warning`만
+`#platform-alerts`로 보낸다. critical은 firing·resolved 모두 `@channel`을 붙이고,
+warning은 상태를 남기되 멘션하지 않는다. info와 allowlist 밖 alert는 기본 `discard`로
+남는다. title·fallback·text에는 alertname·severity·instance·시각·고정 Grafana link만
+넣고 동적 값의 `<`·`>`·`&`·`@`를 제거한다.
+
+Webhook은 전용 Vault KV field를 Vault Agent init container가 memory `emptyDir` 파일로
+렌더링한다. Alertmanager는 그 파일을 `api_url_file`로만 읽고, 전용 Kubernetes auth
+role·policy에는 이 field 한 개만 허용한다. 기존 `obs-13-receiver`와 다른 Slack secret·
+채널은 재사용하지 않는다.
+
+```text
+Alertmanager -- TCP 8444 --> obs-18-slack-egress-proxy
+  -- source identity --> OPNsense Slack FQDN alias TCP 443 --> hooks.slack.com
+```
+
+proxy만 host network에서 외부 TCP 443을 시작하고, 전용 source identity로 bind한다.
+process는 client source, CONNECT method, `hooks.slack.com:443`을 다시 고정한다.
+따라서 FQDN alias의 L3 주소 제한과 proxy의 hostname 제한이 함께 작동하며, 기존 k3s
+공용 HTTPS egress는 바꾸지 않는다. Alertmanager NetworkPolicy는 Vault TCP 8200과
+node-local proxy TCP 8444만 추가한다. 선택 이유와 대안은 ADR-0025가 소유한다.
+
+`infra/ansible/playbooks/obs-18-slack-egress.yml`은 node의 전용 source identity만
+추가하고, rollback playbook은 그 identity만 제거한다. `gitops/tools/obs-18/provision.sh`은
+저장소 밖 mode `0600` webhook 입력을 전용 Vault policy·role·KV field로 반영하며, rollback은
+그 세 객체만 삭제한다. `apply-firewall.py`는 FQDN alias와 exact firewall rule을
+disabled stage→readback→enable·PF runtime 순서로 적용하고, 저장소 밖 UUID 복구 지점만
+출력한다. live 검증은 immutable SHA에서 receiver·proxy·Vault file mode·정확한
+NetworkPolicy·전용 source TCP 도달, 승인된 `[TEST]` critical 한 건의 firing/resolved,
+literal `main` 복구와 firewall drift만 판정한다.
+
 ## OBS-03 Grafana Keycloak 로그인과 Editor 경계
 
 Grafana는 Keycloak `platform` realm의 confidential client `grafana`를 `generic_oauth` provider로

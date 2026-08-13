@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""OBS-18 전용 CONNECT proxy.
+
+Alertmanager의 TLS stream만 hooks.slack.com:443으로 중계한다. webhook URL과 HTTP
+payload는 TLS 안에 있으므로 이 process의 log·ConfigMap·명령 인자로 노출되지 않는다.
+"""
+
+import ipaddress
+import selectors
+import socket
+import socketserver
+
+EXPECTED_HOST = "hooks.slack.com"
+EXPECTED_PORT = 443
+LISTEN_ADDRESS = "10.10.20.10"
+LISTEN_PORT = 8444
+EGRESS_ADDRESS = "10.10.20.11"
+POD_CIDR = ipaddress.ip_network("10.42.0.0/24")
+MAX_HEADER = 16384
+
+
+def allowed_client(address):
+    source = ipaddress.ip_address(address)
+    return source in POD_CIDR or source == ipaddress.ip_address(LISTEN_ADDRESS)
+
+
+def read_request(sock):
+    data = bytearray()
+    while b"\r\n\r\n" not in data:
+        chunk = sock.recv(4096)
+        if not chunk:
+            return None
+        data.extend(chunk)
+        if len(data) > MAX_HEADER:
+            return None
+    return bytes(data)
+
+
+def is_expected_connect(request):
+    try:
+        line = request.split(b"\r\n", 1)[0].decode("ascii")
+        method, authority, version = line.split(" ", 2)
+        host, port = authority.rsplit(":", 1)
+    except (UnicodeDecodeError, ValueError):
+        return False
+    return (
+        method == "CONNECT"
+        and version.startswith("HTTP/")
+        and host.lower() == EXPECTED_HOST
+        and port == str(EXPECTED_PORT)
+    )
+
+
+def connect_slack():
+    addresses = {
+        item[4][0]
+        for item in socket.getaddrinfo(
+            EXPECTED_HOST, EXPECTED_PORT, family=socket.AF_INET, type=socket.SOCK_STREAM
+        )
+    }
+    last_error = None
+    for address in sorted(addresses):
+        upstream = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            upstream.settimeout(10)
+            upstream.bind((EGRESS_ADDRESS, 0))
+            upstream.connect((address, EXPECTED_PORT))
+            upstream.settimeout(None)
+            return upstream
+        except OSError as error:
+            last_error = error
+            upstream.close()
+    raise OSError("Slack upstream connection failed") from last_error
+
+
+def relay(client, upstream):
+    selector = selectors.DefaultSelector()
+    selector.register(client, selectors.EVENT_READ, upstream)
+    selector.register(upstream, selectors.EVENT_READ, client)
+    try:
+        while True:
+            for key, _ in selector.select():
+                data = key.fileobj.recv(65536)
+                if not data:
+                    return
+                key.data.sendall(data)
+    finally:
+        selector.close()
+
+
+class Handler(socketserver.BaseRequestHandler):
+    def handle(self):
+        if not allowed_client(self.client_address[0]):
+            return
+        try:
+            request = read_request(self.request)
+            if not request:
+                return
+            if not is_expected_connect(request):
+                self.request.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+                return
+            with connect_slack() as upstream:
+                self.request.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                relay(self.request, upstream)
+        except (OSError, ValueError):
+            # 요청 header·webhook path·payload를 log에 남기지 않는다.
+            return
+
+
+class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+if __name__ == "__main__":
+    with Server((LISTEN_ADDRESS, LISTEN_PORT), Handler) as server:
+        server.serve_forever()

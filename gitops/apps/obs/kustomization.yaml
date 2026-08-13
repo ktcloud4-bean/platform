@@ -6,6 +6,7 @@ resources:
   - monitoring.yaml
   - alerting-rules.yaml
   - alerting-receiver.yaml
+  - slack-egress-proxy.yaml
   - network-policies.yaml
   - loki-host-gateway.yaml
   - dashboard.yaml
@@ -22,5 +23,14 @@ configMapGenerator:
     files:
       - vault-agent.hcl=files/vault-agent.hcl
       - vault.crt=files/vault.crt
+  - name: obs-alertmanager-runtime-config
+    namespace: obs
+    files:
+      - vault-agent-alertmanager.hcl=files/vault-agent-alertmanager.hcl
+      - vault.crt=files/vault.crt
+  - name: obs-18-slack-egress-proxy
+    namespace: obs
+    files:
+      - obs-18-slack-egress-proxy.py=files/obs-18-slack-egress-proxy.py
 generatorOptions:
   disableNameSuffixHash: true

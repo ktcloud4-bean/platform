@@ -1,0 +1,5 @@
+---
+# OBS-18: 다른 k3s workload source와 겹치지 않는 Alertmanager Slack proxy egress IP.
+obs_slack_egress_interface: eth0
+obs_slack_egress_primary_address: 10.10.20.10/24
+obs_slack_egress_address: 10.10.20.11/24

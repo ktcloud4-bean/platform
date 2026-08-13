@@ -1,0 +1,89 @@
+---
+- name: OBS-18 egress 주소 계약 확인
+  ansible.builtin.assert:
+    that:
+      - obs_slack_egress_interface == 'eth0'
+      - obs_slack_egress_primary_address == '10.10.20.10/24'
+      - obs_slack_egress_address == '10.10.20.11/24'
+    fail_msg: OBS-18 egress IP 또는 interface가 승인된 k3s-01 계약과 다르다.
+
+- name: 활성 NetworkManager connection 조회
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - GENERAL.CONNECTION
+      - device
+      - show
+      - "{{ obs_slack_egress_interface }}"
+  register: obs_slack_egress_connection
+  changed_when: false
+  check_mode: false
+
+- name: NetworkManager connection이 유효한지 확인
+  ansible.builtin.assert:
+    that:
+      - obs_slack_egress_connection.stdout | length > 0
+      - obs_slack_egress_connection.stdout != '--'
+    fail_msg: OBS-18 egress IP를 붙일 활성 NetworkManager connection이 없다.
+
+- name: 현재 IPv4 주소 조회
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - ipv4.addresses
+      - connection
+      - show
+      - "{{ obs_slack_egress_connection.stdout }}"
+  register: obs_slack_egress_current_addresses
+  changed_when: false
+  check_mode: false
+
+- name: k3s-01 primary address 보존 확인
+  ansible.builtin.assert:
+    that:
+      - obs_slack_egress_primary_address in obs_slack_egress_current_addresses.stdout_lines
+    fail_msg: k3s-01 primary address가 예상과 달라 OBS-18 변경을 중단한다.
+
+- name: OBS-18 별도 egress address 영속 추가
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - modify
+      - "{{ obs_slack_egress_connection.stdout }}"
+      - +ipv4.addresses
+      - "{{ obs_slack_egress_address }}"
+  when: obs_slack_egress_address not in obs_slack_egress_current_addresses.stdout
+  register: obs_slack_egress_add
+
+- name: 새 address를 link 재연결 없이 적용
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - device
+      - reapply
+      - "{{ obs_slack_egress_interface }}"
+  when: obs_slack_egress_add.changed | default(false)
+
+- name: 적용된 IPv4 주소 조회
+  ansible.builtin.command:
+    argv:
+      - ip
+      - -4
+      - -o
+      - address
+      - show
+      - dev
+      - "{{ obs_slack_egress_interface }}"
+  register: obs_slack_egress_live_addresses
+  changed_when: false
+  check_mode: false
+
+- name: OBS-18 egress address 적용 확인
+  ansible.builtin.assert:
+    that:
+      - obs_slack_egress_primary_address in obs_slack_egress_live_addresses.stdout
+      - obs_slack_egress_address in obs_slack_egress_live_addresses.stdout
+    fail_msg: OBS-18 egress address가 primary address를 보존한 채 적용되지 않았다.

@@ -1,0 +1,7 @@
+---
+- name: OBS-18 Alertmanager Slack egress source address
+  hosts: k3s_servers
+  become: true
+  gather_facts: false
+  roles:
+    - role: obs_slack_egress

@@ -1,0 +1,68 @@
+---
+- name: OBS-18 egress address rollback 전 활성 connection 조회
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - GENERAL.CONNECTION
+      - device
+      - show
+      - "{{ obs_slack_egress_interface }}"
+  register: obs_slack_egress_connection
+  changed_when: false
+  check_mode: false
+
+- name: OBS-18 egress address rollback 전 IPv4 주소 조회
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - ipv4.addresses
+      - connection
+      - show
+      - "{{ obs_slack_egress_connection.stdout }}"
+  register: obs_slack_egress_current_addresses
+  changed_when: false
+  check_mode: false
+
+- name: OBS-18 별도 egress address 영속 제거
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - modify
+      - "{{ obs_slack_egress_connection.stdout }}"
+      - -ipv4.addresses
+      - "{{ obs_slack_egress_address }}"
+  when: obs_slack_egress_address in obs_slack_egress_current_addresses.stdout
+  register: obs_slack_egress_remove
+
+- name: 제거한 address를 link 재연결 없이 적용
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - device
+      - reapply
+      - "{{ obs_slack_egress_interface }}"
+  when: obs_slack_egress_remove.changed | default(false)
+
+- name: rollback 뒤 IPv4 주소 조회
+  ansible.builtin.command:
+    argv:
+      - ip
+      - -4
+      - -o
+      - address
+      - show
+      - dev
+      - "{{ obs_slack_egress_interface }}"
+  register: obs_slack_egress_live_addresses
+  changed_when: false
+  check_mode: false
+
+- name: primary address만 보존됐는지 확인
+  ansible.builtin.assert:
+    that:
+      - obs_slack_egress_primary_address in obs_slack_egress_live_addresses.stdout
+      - obs_slack_egress_address not in obs_slack_egress_live_addresses.stdout
+    fail_msg: OBS-18 egress address rollback 결과가 예상과 다르다.

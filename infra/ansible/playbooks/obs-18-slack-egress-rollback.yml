@@ -1,0 +1,13 @@
+---
+- name: OBS-18 Alertmanager Slack egress source address rollback
+  hosts: k3s_servers
+  become: true
+  gather_facts: false
+  tasks:
+    - name: OBS-18 egress role defaults load
+      ansible.builtin.include_vars:
+        file: ../roles/obs_slack_egress/defaults/main.yml
+
+    - name: OBS-18 egress rollback tasks
+      ansible.builtin.include_tasks:
+        file: ../roles/obs_slack_egress/tasks/rollback.yml
