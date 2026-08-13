@@ -102,7 +102,7 @@ memory `emptyDir`에만 렌더한다. 스크립트는 어떤 credential도 출�
 | Vault 경로 | 소비자 | 내용 |
 |---|---|---|
 | `kv/wazuh/indexer` | `wazuh-indexer` SA | root CA, node·admin 인증서, admin password bcrypt hash |
-| `kv/wazuh/manager` | `wazuh-manager` SA | root CA, filebeat 인증서, indexer·API credential, authd password |
+| `kv/wazuh/manager` | `wazuh-manager` SA (재사용: `wazuh-04-relay` Pod) | root CA, filebeat 인증서, indexer·API credential, authd password, `wazuh-04-relay` agent의 정적 client.keys(`WAZUH-04-FIX-01`) |
 | `kv/wazuh/bootstrap` | `wazuh-bootstrap` SA | root CA, admin client 인증서 |
 
 `indexer`의 `internal_users.yml`에는 `admin` 한 명만 둔다. upstream demo 계정

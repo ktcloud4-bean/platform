@@ -12,11 +12,17 @@
 # wazuh-logtest로 검증된 그대로 매칭된다)가 emptyDir 하나를 공유한다.
 #
 # 새 Vault role을 만들지 않고 wazuh-manager ServiceAccount·Vault role을 그대로
-# 재사용한다(files/vault-agent-relay-agent.hcl 주석 참고) — authd_password 필드
-# 하나만 읽으며 manager가 이미 읽을 수 있는 값이라 새 권한이 생기지 않는다.
+# 재사용한다(files/vault-agent-relay-agent.hcl 주석 참고) — manager가 이미 읽을
+# 수 있는 kv/data/wazuh/manager 경로의 필드만 읽어 새 권한이 생기지 않는다.
 # NetworkPolicy는 추가하지 않는다 — wazuh-internal·wazuh-dns-egress·wazuh-vault-egress가
 # 이미 `podSelector: {}`로 wazuh 네임스페이스 전체에 적용돼 이 Pod도 자동으로
 # manager의 1514/1515, DNS, Vault에 닿는다.
+#
+# WAZUH-04-FIX-01: client.keys는 동적 enrollment(authd_password) 대신 Vault
+# Agent가 매니저의 기존 등록을 정적 렌더링하고, ossec.conf의 enrollment는 껐다
+# (docs/backlog.md, files/vault-agent-relay-agent.hcl 주석 참고) — pod
+# 재시작마다 client.keys가 사라져 자동 재등록이 같은 이름의 기존(비활성) 등록과
+# 충돌해 영구 재시도에 빠지던 결함을 근본적으로 없앤다.
 #
 # wazuh-04-relay-agent container는 wazuh-agent 이미지의 s6-overlay 초기화 자체가
 # UID 0을 요구해(PVC 유무와 무관한 이미지 구조적 요구사항, "/var/run/s6" mkdir
@@ -197,28 +203,23 @@ spec:
         - name: wazuh-04-relay-agent
           image: docker.io/wazuh/wazuh-agent:4.14.7@sha256:460758c8de2a6227818d5e415c514199e77179f5bbaec77aca5c246c99932ed2
           imagePullPolicy: IfNotPresent
-          # authd.pass를 /wazuh-config-mount/etc(ConfigMap subPath가 만드는
-          # 디렉터리)에 두지 않고, 이미지의 0-wazuh-init 스크립트가 지원하는
-          # WAZUH_REGISTRATION_PASSWORD를 shell에서 export한다 — Pod spec에는
-          # 값이 남지 않는다.
+          # WAZUH-04-FIX-01: client.keys는 pod 재시작마다 사라지는 컨테이너
+          # 파일시스템에만 있어서, wazuh-agentd의 자동 재등록(enrollment)이 같은
+          # 이름의 기존(비활성) 등록과 충돌해 영구 재시도에 빠지는 것을 라이브로
+          # 확인했다(docs/backlog.md 참고). 동적 enrollment(authd.pass) 대신
+          # Vault Agent가 정적으로 렌더링한 기존 등록의 client.keys를 매
+          # 컨테이너 시작 시 제자리에 심고, ossec.conf의 enrollment는 WAZUH-03
+          # host agent와 동일하게 껐다 — wazuh-agentd가 재등록을 시도하지 않는다.
           command: [/bin/bash, -ec]
           args:
             - |
-              export WAZUH_REGISTRATION_PASSWORD="$(cat /vault/secrets/authd.pass)"
+              install -m 0640 -o wazuh -g wazuh /vault/secrets/client.keys /var/ossec/etc/client.keys
               exec /init
           env:
             - name: WAZUH_MANAGER_SERVER
               value: wazuh-agents.wazuh.svc.cluster.local
             - name: WAZUH_MANAGER_PORT
               value: "1514"
-            - name: WAZUH_REGISTRATION_SERVER
-              value: wazuh-agents.wazuh.svc.cluster.local
-            - name: WAZUH_REGISTRATION_PORT
-              value: "1515"
-            - name: WAZUH_AGENT_NAME
-              value: wazuh-04-relay
-            - name: WAZUH_AGENT_GROUP
-              value: default
           securityContext:
             # wazuh-agent 이미지는 s6-overlay 초기화 단계에서 UID 0을 요구한다
             # ("/var/run/s6" mkdir 실패를 라이브로 확인 — PVC 유무와 무관한 이미지
