@@ -245,13 +245,16 @@ routes:
 
   # S3-02: object-01은 k3s가 아니라 DATA VLAN의 독립 VM이라 다른 Route처럼
   # *.svc.cluster.local이 아니라 방화벽으로 k3s-01 하나만 허용된 실주소를 쓴다.
-  # SeaweedFS filer는 bucket 단위 ACL이 없는 raw 파일트리 UI라 /platform-users는
-  # 아예 배제하고 /platform-privileged만 허용한다(전체 filer 네임스페이스 all-or-nothing
-  # 접근권이라는 뜻이며, S3-01의 bucket-scoped credential 최소권한 모델과는 별개 경계다).
-  - name: filer
-    description: S3-02 SeaweedFS filer 웹 UI; bucket 단위 ACL 없음, privileged 전용
-    from: https://filer.imcherry5778.xyz
-    to: http://10.10.50.20:8888
+  # weed admin은 자체 로그인(WEED_ADMIN_USER/PASSWORD)과 자체 TLS(security.toml
+  # [https.admin], S3-01의 SAN에 이미 object-01 IP가 있어 재사용)를 가진 진짜 cluster
+  # 관리 콘솔이라 Pomerium 뒤에서도 이중 인증이 된다. 다만 volume 재배치·EC·maintenance
+  # worker·정책 변경까지 다루는 넓은 권한이라 /platform-users는 배제하고
+  # /platform-privileged만 허용한다.
+  - name: object-admin
+    description: S3-02 SeaweedFS admin 웹 UI; cluster 관리 콘솔, privileged 전용
+    from: https://object-admin.imcherry5778.xyz
+    to: https://10.10.50.20:23646
+    tls_skip_verify: true
     policy:
       - allow:
           or:

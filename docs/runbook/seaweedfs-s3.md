@@ -152,40 +152,48 @@ swap 0, 15분 load 0.21로 모두 [capacity-plan.md](../capacity-plan.md)의 경
 손실 복구 증거가 아니다. AWS S3 오프사이트 복제·샘플 restore·보존·경보는 `BKP-04`의
 별도 범위이며 여기서 구현하지 않았다.
 
-## S3-02: filer 웹 UI의 Pomerium 노출
+## S3-02: SeaweedFS admin 웹 UI의 Pomerium 노출
 
 검증일: 진행 중. 대상: `object-01.imcherry5778.xyz`. 서비스 endpoint:
-`https://filer.imcherry5778.xyz`(Pomerium, `/platform-privileged`만 허용).
+`https://object-admin.imcherry5778.xyz`(Pomerium + 자체 로그인, `/platform-privileged`만
+허용).
 
-filer는 SeaweedFS 컴포넌트 중 유일하게 브라우저에서 버킷 내용을 탐색할 수 있는 웹 UI를
-갖고 있다. `S3-01` 이후 master·volume·filer 관리 endpoint는 전부 loopback bind였고,
-사람이 이 UI에 닿을 경로가 없었다. `S3-02`는 filer만 골라 다음처럼 연다.
+처음에는 filer(브라우저에서 디렉터리를 탐색하는 컴포넌트)를 열려고 했지만, filer는
+인증이 전혀 없어 Pomerium 세션 하나가 전체 filer 네임스페이스에 all-or-nothing으로
+접근하는 구조였다. SeaweedFS 4.40에는 다섯 번째 컴포넌트 `weed admin`(cluster 관리
+콘솔)이 있고, 이건 자체 로그인(`WEED_ADMIN_USER`/`WEED_ADMIN_PASSWORD`)과 자체 TLS를
+가진다는 걸 확인해(2026-03-05 PR #8525로 이전 `ALPHA` 라벨도 제거됨, 4.40은 그 이후
+릴리스) filer 대신 admin을 열기로 재결정했다. filer는 손대지 않고 계속 loopback
+전용이다.
 
-- filer systemd unit의 `-ip.bind`를 `127.0.0.1`에서 `0.0.0.0`으로 바꿔 DATA 주소
-  (`10.10.50.20:8888`)에서도 듣게 하되, 기존 `127.0.0.1:8888`(S3 gateway의 로컬 filer
-  연결)은 그대로 유지한다. `-ip`(자기 식별 주소)는 `seaweedfs_filer_bind_address`
-  (DATA 주소)로 맞춘다.
-- `IPAddressAllow`에 `10.10.20.10/32`(k3s-01)를 filer 전용 항목으로 명시한다(기존
-  `seaweedfs_metrics_allowed_sources`와 값은 같지만, metrics가 나중에 꺼져도 이 노출
-  경계가 조용히 사라지지 않도록 별도 목록으로 관리한다).
-- OPNsense `opt2` exact PASS 1건(`k3s-01/32` → `object-01/32` TCP 8888)만 추가한다.
-  master(9333)·volume(8080) 관리 포트는 loopback으로 그대로 남는다.
-- Unbound alias `filer.imcherry5778.xyz` → `k3s-01`(`10.10.20.10`)을 등록한다. 다른
-  Pomerium Route와 같은 이유로 실제 backend(`object-01`)가 아니라 Pomerium이 있는
-  host를 가리킨다.
-- Pomerium Route `filer`는 `to: http://10.10.50.20:8888`로 k3s-01에서 object-01로
-  직접 연결한다(클러스터 안 `*.svc.cluster.local`이 아닌 첫 외부 VM 대상 Route). 전송
-  구간은 이미 OPNsense가 k3s-01 단일 source로 제한한 평문 HTTP다. `OBS-16`이 같은
-  host의 metrics endpoint(9325~9328)에 이미 적용한 것과 같은 경계 판단이며, S3 API
-  자체(TLS 8333, `S3-01`)와는 별도 결정이다.
+- 새 systemd unit `seaweedfs-admin`을 선언한다. `-ip.bind` 옵션이 없어 항상
+  `0.0.0.0:23646`으로 듣지만(admin 자체 제약), `IPAddressAllow`로 `10.10.20.10/32`
+  (k3s-01)만 명시적으로 허용한다.
+- `/etc/seaweedfs/security.toml`의 `[https.admin]`에 기존 S3 gateway TLS
+  cert/key(`S3-01`이 만든 leaf, SAN에 object-01 IP 포함)를 재사용해 admin 자체 TLS를
+  켠다.
+- `/etc/seaweedfs/admin.env`(mode `0600`, root 전용, `no_log`)에
+  `WEED_ADMIN_USER`·`WEED_ADMIN_PASSWORD`를 저장소 밖 extra-vars로 주입한다. 빈
+  값이면 role이 실패해 평문 미인증 관리 콘솔이 만들어지지 않는다.
+- OPNsense `opt2` exact PASS 1건(`k3s-01/32` → `object-01/32` TCP 23646)만 추가한다.
+  master(9333)·volume(8080)·filer(8888) 관리 포트는 loopback으로 그대로 남는다.
+- Unbound alias `object-admin.imcherry5778.xyz` → `k3s-01`(`10.10.20.10`)을 등록한다.
+  다른 Pomerium Route와 같은 이유로 실제 backend(`object-01`)가 아니라 Pomerium이
+  있는 host를 가리킨다.
+- Pomerium Route `object-admin`은 `to: https://10.10.50.20:23646`(`tls_skip_verify:
+  true`, `argocd` Route와 같은 자체서명 backend 패턴)로 k3s-01에서 object-01로 직접
+  연결한다(클러스터 안 `*.svc.cluster.local`이 아닌 외부 VM 대상 Route). filer 때와
+  달리 이 구간은 admin 자체 TLS로 암호화된다.
 
-**bucket 단위 접근 통제가 없다는 한계.** `S3-01`의 S3 identity는
-`Admin|Read|List|Tagging|Write|Delete:<정확한-bucket>` 형식으로 bucket마다 분리돼 있어,
-credential 하나가 새도 그 bucket 하나만 노출된다. filer 자체에는 이런 bucket 단위
-ACL이 없다 — Pomerium `/platform-privileged` 통과 세션 하나가 전체 filer 네임스페이스
-(모든 bucket)에 대해 읽기·쓰기·삭제를 all-or-nothing으로 갖는다. 이 Route는 S3 API의
-최소권한 경계를 대체하지 않으며, 별도의 넓은 신뢰 경계로 다룬다.
+**filer보다 넓은 권한 범위라는 한계.** admin은 자체 로그인·TLS로 filer의 인증
+공백은 메우지만, 다루는 범위는 filer(파일 읽기/쓰기/삭제)보다 넓다 — volume 재배치,
+EC(erasure coding) 작업, maintenance worker, cluster 설정 변경까지 이 UI 하나로
+가능하다. `S3-01`의 bucket-scoped S3 credential 최소권한 모델과는 여전히 별개의,
+더 넓은 신뢰 경계로 다룬다.
+
+로그인 성공(session cookie 발급, `/admin` 200)과 잘못된 비밀번호 거부(`/login?error=
+Invalid credentials`)를 `object-01` loopback에서 직접 확인했다.
 
 rollback은 Pomerium Route·NetworkPolicy·Ingress host·Unbound alias·OPNsense PF
-rule을 제거하고 filer unit을 `-ip.bind=127.0.0.1`로 원복하는 것으로 끝난다. S3 API
-8333 경로·credential·bucket policy는 이 작업으로 바뀌지 않는다.
+rule과 `seaweedfs-admin` unit·`security.toml`·`admin.env`를 제거하는 것으로 끝난다.
+filer·S3 API 8333 경로·credential·bucket policy는 이 작업으로 바뀌지 않는다.

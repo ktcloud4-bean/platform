@@ -1,29 +1,22 @@
 [Unit]
-Description=SeaweedFS filer
+Description=SeaweedFS admin
 Documentation=https://github.com/seaweedfs/seaweedfs
-After=network-online.target seaweedfs-master.service seaweedfs-volume.service
+After=network-online.target seaweedfs-master.service
 Wants=network-online.target
-Requires=seaweedfs-master.service seaweedfs-volume.service
+Requires=seaweedfs-master.service
 
 [Service]
 Type=simple
 User={{ seaweedfs_user }}
 Group={{ seaweedfs_group }}
 UMask=0027
-ExecStart={{ seaweedfs_binary_path }} filer \
+EnvironmentFile={{ seaweedfs_config_dir }}/admin.env
+ExecStart={{ seaweedfs_binary_path }} admin \
   -master=127.0.0.1:{{ seaweedfs_master_port }} \
-  -ip=127.0.0.1 \
-  -ip.bind=127.0.0.1 \
-  -port={{ seaweedfs_filer_port }} \
-  -port.grpc={{ seaweedfs_filer_grpc_port }} \
-  -defaultStoreDir={{ seaweedfs_filer_dir }} \
-  -defaultReplicaPlacement=000 \
-{% if seaweedfs_metrics_enabled %}
-  -metricsIp={{ seaweedfs_metrics_bind_address }} \
-  -metricsPort={{ seaweedfs_filer_metrics_port }}
-{% else %}
+  -port={{ seaweedfs_admin_port }} \
+  -port.grpc={{ seaweedfs_admin_grpc_port }} \
+  -dataDir={{ seaweedfs_admin_dir }} \
   -metricsPort=0
-{% endif %}
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=30s
@@ -40,7 +33,8 @@ ProtectKernelTunables=true
 ProtectProc=invisible
 ProtectSystem=strict
 ProcSubset=pid
-ReadWritePaths={{ seaweedfs_filer_dir }}
+ReadOnlyPaths={{ seaweedfs_config_dir }}
+ReadWritePaths={{ seaweedfs_admin_dir }}
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictNamespaces=true
 RestrictRealtime=true
@@ -54,12 +48,9 @@ MemoryDenyWriteExecute=true
 CapabilityBoundingSet=
 AmbientCapabilities=
 IPAddressAllow=localhost
-{% if seaweedfs_metrics_enabled %}
-IPAddressAllow={{ seaweedfs_metrics_bind_address }}/32
-{% for source in seaweedfs_metrics_allowed_sources %}
+{% for source in seaweedfs_admin_allowed_sources %}
 IPAddressAllow={{ source }}
 {% endfor %}
-{% endif %}
 IPAddressDeny=any
 
 [Install]

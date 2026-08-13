@@ -40,3 +40,17 @@
     state: restarted
   listen: SeaweedFS S3 재시작
   when: not ansible_check_mode
+
+- name: SeaweedFS admin 재시작 (stack)
+  ansible.builtin.systemd:
+    name: seaweedfs-admin.service
+    state: restarted
+  listen: SeaweedFS stack 재시작
+  when: not ansible_check_mode
+
+- name: SeaweedFS admin 재시작
+  ansible.builtin.systemd:
+    name: seaweedfs-admin.service
+    state: restarted
+  listen: SeaweedFS admin 재시작
+  when: not ansible_check_mode

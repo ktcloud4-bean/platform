@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# S3-02의 filer 웹 UI 단일 경로(k3s-01 -> object-01 TCP 8888)만 OPNsense opt2
+# S3-02의 SeaweedFS admin 웹 UI 단일 경로(k3s-01 -> object-01 TCP 23646)만 OPNsense opt2
 # ingress에 추가하거나 제거한다. 기존 S3-01(8333)·OBS-16(9325~9328) 규칙은
 # 건드리지 않는다.
 set -Eeuo pipefail
@@ -24,9 +24,9 @@ readonly action=${1:-}
 # 1022보다 뒤(예: 1024, OBS-18·NET-04 web egress처럼 공개 목적지용 구간)에 두면 차단
 # rule에 먼저 매치돼 절대 평가되지 않는다. 그래서 빈 1000을 쓴다.
 readonly sequence=1000
-readonly description='S3-02: k3s-01에서 object-01 SeaweedFS filer 웹 UI TCP 8888만 허용'
+readonly description='S3-02: k3s-01에서 object-01 SeaweedFS admin 웹 UI TCP 23646만 허용'
 readonly destination=10.10.50.20
-readonly port=8888
+readonly port=23646
 
 usage() {
   echo "사용법: $0 apply | rollback <복구-지점>" >&2

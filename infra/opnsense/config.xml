@@ -462,7 +462,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1786637778.18" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1786640850.40" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -3321,7 +3321,7 @@
             <shaper2 />
             <description>OBS-18: Slack egress proxy source에서 hooks.slack.com TCP 443만 허용</description>
           </rule>
-          <rule uuid="b126af8a-c4c5-42d2-966e-bf8c266820de">
+          <rule uuid="34da8df9-c8a0-45dd-83b3-9e731c111e6a">
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
@@ -3340,7 +3340,7 @@
             <source_port />
             <destination_net>10.10.50.20</destination_net>
             <destination_not>0</destination_not>
-            <destination_port>8888</destination_port>
+            <destination_port>23646</destination_port>
             <divert-to />
             <gateway />
             <replyto />
@@ -3375,7 +3375,7 @@
             <tos />
             <shaper1 />
             <shaper2 />
-            <description>S3-02: k3s-01에서 object-01 SeaweedFS filer 웹 UI TCP 8888만 허용</description>
+            <description>S3-02: k3s-01에서 object-01 SeaweedFS admin 웹 UI TCP 23646만 허용</description>
           </rule>
         </rules>
         <snatrules />
@@ -4202,7 +4202,7 @@ EDGE02_CF_IPV6</content>
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1786637401.36" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1786640855.64" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -4554,12 +4554,12 @@ EDGE02_CF_IPV6</content>
           <domain>imcherry5778.xyz</domain>
           <description>AWS-HR-01 HR admin Pomerium alias</description>
         </alias>
-        <alias uuid="f43f7ce3-d45c-42bd-be44-f3bbbd66287a">
+        <alias uuid="710d0c3c-4992-41bc-affe-0c5150b813d9">
           <enabled>1</enabled>
           <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
-          <hostname>filer</hostname>
+          <hostname>object-admin</hostname>
           <domain>imcherry5778.xyz</domain>
-          <description>SeaweedFS filer 웹 UI Pomerium Route alias (S3-02)</description>
+          <description>SeaweedFS admin 웹 UI Pomerium Route alias (S3-02)</description>
         </alias>
       </aliases>
     </unboundplus>

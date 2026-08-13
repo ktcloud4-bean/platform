@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""S3-02 Unbound filer alias 한 건만 지원 API로 조회·적용·rollback한다."""
+"""S3-02 Unbound object-admin alias 한 건만 지원 API로 조회·적용·rollback한다."""
 
 import argparse
 import base64
@@ -23,9 +23,9 @@ EXPECTED_HOST = {
 }
 EXPECTED_ALIAS = {
     "enabled": "1",
-    "hostname": "filer",
+    "hostname": "object-admin",
     "domain": "imcherry5778.xyz",
-    "description": "SeaweedFS filer 웹 UI Pomerium Route alias (S3-02)",
+    "description": "SeaweedFS admin 웹 UI Pomerium Route alias (S3-02)",
 }
 
 
@@ -120,7 +120,7 @@ def preflight(client: Client):
         and row.get("domain") == EXPECTED_ALIAS["domain"]
     ]
     if len(aliases) > 1:
-        raise RuntimeError("filer alias is not unique")
+        raise RuntimeError("object-admin alias is not unique")
     return host_uuid, aliases
 
 
@@ -134,14 +134,14 @@ def main():
 
     if args.mode == "check":
         if not aliases:
-            print("S3-02 Unbound: k3s-01 precondition=match, filer alias=absent")
+            print("S3-02 Unbound: k3s-01 precondition=match, object-admin alias=absent")
             return
         alias = aliases[0]
         if alias.get("host") != host_uuid or not exact_match(alias, EXPECTED_ALIAS):
-            raise RuntimeError("existing filer alias differs from the S3-02 declaration")
+            raise RuntimeError("existing object-admin alias differs from the S3-02 declaration")
         print(
             "S3-02 Unbound: k3s-01 precondition=match, "
-            f"filer alias=match, uuid={alias['uuid']}"
+            f"object-admin alias=match, uuid={alias['uuid']}"
         )
         return
 
@@ -149,8 +149,8 @@ def main():
         if aliases:
             alias = aliases[0]
             if alias.get("host") != host_uuid or not exact_match(alias, EXPECTED_ALIAS):
-                raise RuntimeError("existing filer alias differs; refusing to overwrite")
-            print(f"S3-02 Unbound: filer alias already matches, uuid={alias['uuid']}")
+                raise RuntimeError("existing object-admin alias differs; refusing to overwrite")
+            print(f"S3-02 Unbound: object-admin alias already matches, uuid={alias['uuid']}")
             return
         payload = {"alias": {**EXPECTED_ALIAS, "host": host_uuid}}
         status, body = client.post("/api/unbound/settings/add_host_alias", payload)
@@ -162,19 +162,19 @@ def main():
             raise RuntimeError("Unbound reconfigure did not succeed")
         host_uuid_after, aliases_after = preflight(client)
         if host_uuid_after != host_uuid or len(aliases_after) != 1:
-            raise RuntimeError("filer alias verification count mismatch")
+            raise RuntimeError("object-admin alias verification count mismatch")
         alias = aliases_after[0]
         if (
             alias.get("uuid") != alias_uuid
             or alias.get("host") != host_uuid
             or not exact_match(alias, EXPECTED_ALIAS)
         ):
-            raise RuntimeError("saved filer alias differs from the declaration")
-        print(f"S3-02 Unbound: filer alias applied, uuid={alias_uuid}")
+            raise RuntimeError("saved object-admin alias differs from the declaration")
+        print(f"S3-02 Unbound: object-admin alias applied, uuid={alias_uuid}")
         return
 
     if not aliases:
-        raise RuntimeError("rollback target filer alias is absent")
+        raise RuntimeError("rollback target object-admin alias is absent")
     alias = aliases[0]
     if alias.get("host") != host_uuid or not exact_match(alias, EXPECTED_ALIAS):
         raise RuntimeError("rollback target differs from the exact S3-02 alias")
@@ -189,8 +189,8 @@ def main():
         raise RuntimeError("Unbound reconfigure did not succeed")
     _, aliases_after = preflight(client)
     if aliases_after:
-        raise RuntimeError("filer alias still exists after rollback")
-    print(f"S3-02 Unbound: filer alias rolled back, uuid={alias_uuid}")
+        raise RuntimeError("object-admin alias still exists after rollback")
+    print(f"S3-02 Unbound: object-admin alias rolled back, uuid={alias_uuid}")
 
 
 if __name__ == "__main__":
