@@ -419,6 +419,13 @@ spec:
       ports:
         - protocol: TCP
           port: 8443
+    # OBS-17: private SNI TLS probe가 Warpgate listener 하나만 확인한다.
+    - to:
+        - ipBlock:
+            cidr: 10.10.30.10/32
+      ports:
+        - protocol: TCP
+          port: 8888
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

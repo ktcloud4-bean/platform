@@ -84,3 +84,29 @@ spec:
             severity: critical
           annotations:
             summary: "postgres_exporter가 PostgreSQL 자체에 연결하지 못한다."
+    - name: obs-17-warpgate
+      rules:
+        - alert: WarpgateServiceDown
+          expr: >-
+            node_systemd_unit_state{job="node-exporter",instance="10.10.30.10:9100",name="warpgate.service",state="active"} != 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "warpgate.service가 5분 이상 active가 아니다."
+        - alert: WarpgateACMERenewTimerDown
+          expr: >-
+            node_systemd_unit_state{job="node-exporter",instance="10.10.30.10:9100",name="warpgate-acme-renew.timer",state="active"} != 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "warpgate-acme-renew.timer가 5분 이상 active가 아니다."
+        - alert: WarpgateTLSCertificateExpiringSoon
+          expr: >-
+            (probe_ssl_earliest_cert_expiry{service="obs-blackbox",target="warpgate-certificate"} - time()) < 14 * 86400
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Warpgate private TLS 인증서가 14일 이내 만료된다."

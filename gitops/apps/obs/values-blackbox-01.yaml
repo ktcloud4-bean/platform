@@ -57,3 +57,7 @@ serviceMonitor:
     - name: traefik-certificate
       url: https://traefik.kube-system.svc:443
       hostname: k3s-01.imcherry5778.xyz
+    # OBS-17: 내부 Unbound alias를 target/SNI로 그대로 사용한다.
+    # public DNS, NAT 또는 별도 hostname override는 만들지 않는다.
+    - name: warpgate-certificate
+      url: https://warpgate.imcherry5778.xyz:8888

@@ -12,7 +12,7 @@ node-exporter, kube-state-metrics, Grafana, 인증서 probe와 OPNsense node_exp
 | node | `obs-prometheus-node-exporter`, `node_uname_info` | 이 chart의 node-exporter |
 | PVC | `obs-kube-state-metrics`, `kube_persistentvolumeclaim_info` | 이 chart의 kube-state-metrics |
 | backup | `velero`, `velero_backup_total` | `obs`의 ServiceMonitor가 기존 `velero` Service를 선택 |
-| certificate | `obs-blackbox`, `probe_success`, `probe_ssl_earliest_cert_expiry` | blackbox-exporter가 기존 Traefik의 `k3s-01.imcherry5778.xyz` TLS를 검증 |
+| certificate | `obs-blackbox`, `probe_success`, `probe_ssl_earliest_cert_expiry` | blackbox-exporter가 Traefik과 Warpgate의 private SNI TLS를 검증 |
 | Traefik traffic | `obs-traefik`, `traefik_entrypoint_*`·`traefik_router_*`·`traefik_service_*` | ingress의 private `traefik-metrics:9100` Service와 `obs` ServiceMonitor |
 | 수집 pipeline | `loki`·`alloy`, `loki_build_info`·`alloy_build_info` | `obs`의 ServiceMonitor가 기존 `loki` namespace Service를 선택 |
 | OPNsense | `opnsense-node`, CPU·memory·interface node metric | 이 앱의 외부 static target ScrapeConfig |
@@ -150,7 +150,7 @@ Prometheus TCP 9090, Alertmanager TCP 9093에 도달하게 해 해당 egress와 
 
 NetworkPolicy는 `obs`를 ingress·egress default deny로 시작한다. namespace 내부 통신, CoreDNS,
 Kubernetes API, node-exporter의 node IP TCP 9100, OPNsense 관리 주소 TCP 9100 한 건,
-postgres-01 TCP 9187 한 건, 기존 Velero·Loki·Alloy metric port, Grafana init→Vault TCP 8200, blackbox→Traefik TCP 8443과
+postgres-01 TCP 9187 한 건, 기존 Velero·Loki·Alloy metric port, Grafana init→Vault TCP 8200, blackbox→Traefik TCP 8443과 Warpgate TCP 8888 한 건,
 `obs-01-verification` label의 임시 receiver TCP 8080만 연다.
 
 ## OBS-15 PostgreSQL native metric
@@ -244,6 +244,28 @@ rollback은 `seaweedfs-metrics-rollback.yml`·`netbird-metrics-rollback.yml`, OB
 `ScrapeConfig`·NetworkPolicy·dashboard·PrometheusRule 원복, 그리고
 `gitops/tools/obs-16/apply-firewall.sh rollback <STATE_DIR>` 순서다. 이 범위만 되돌리며
 기존 SeaweedFS S3·NetBird control/relay·PostgreSQL TCP 5432와 node_exporter는 보존한다.
+
+## OBS-17 Warpgate private TLS·systemd 경보
+
+기존 `node-exporter-fleet`의 Warpgate target에서 `warpgate.service`와
+`warpgate-acme-renew.timer`의 `active` state만 각각 읽어 5분 뒤 critical로 보낸다.
+`warpgate-acme-renew.service`는 `Type=oneshot`이라 성공 뒤 `inactive`가 정상이며, alert
+expression에 넣지 않는다. blackbox exporter는 내부 Unbound alias
+`warpgate.imcherry5778.xyz:8888`를 URL과 SNI로 그대로 써 TLS 성공·만료 시각만 수집한다.
+
+default-deny 아래 blackbox Pod에는 `warpgate-01` TCP 8888 한 경로만 추가하고,
+OPNsense `opt2`에는 `k3s-01`에서 같은 host·port로 향하는 exact PASS 한 건만 둔다. public
+DNS/NAT, 새 Ingress, 인증서 재발급, 서비스 재기동과 합성 장애는 이 작업 범위 밖이다.
+`WarpgateServiceDown`, `WarpgateACMERenewTimerDown`,
+`WarpgateTLSCertificateExpiringSoon` 세 alertname만 기존 `obs-13-receiver` matcher에
+추가하며 기본 `discard`와 기존 route는 보존한다.
+
+`gitops/tools/obs-17/apply-firewall.sh`는 disabled stage→semantic readback→enable·PF
+runtime 확인 순서로 rule 하나를 적용하고 UUID만 저장소 밖 복구 지점에 보관한다.
+`apply-live.sh`는 immutable root/child에서 service·timer active, oneshot inactive, private
+TLS probe 성공·14일 초과, receiver matcher와 exact NetworkPolicy를 한 번 확인한 뒤
+literal `main`으로 복구한다. rollback은 이 task의 alert rule·blackbox target·NetworkPolicy
+egress·방화벽 rule만 역순으로 원복한다.
 
 ## OBS-03 Grafana Keycloak 로그인과 Editor 경계
 

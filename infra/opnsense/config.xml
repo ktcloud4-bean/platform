@@ -462,7 +462,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1786603771.14" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1786615381.71" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -3208,6 +3208,62 @@
             <shaper1 />
             <shaper2 />
             <description>OBS-16: k3s-01에서 netbird-01 management metrics TCP 9090만 허용</description>
+          </rule>
+          <rule uuid="98957500-c698-4c3b-a241-a56db40d69ca">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1013</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.30.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>8888</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>OBS-17: k3s-01에서 warpgate-01 private TLS TCP 8888만 허용</description>
           </rule>
         </rules>
         <snatrules />
