@@ -137,6 +137,23 @@ Rollback은 policy-baseline child를 시작 main SHA로 먼저 돌려 mutation �
 Operator가 기존 web/task spec을 복구하고 둘 다 Ready가 되면 root와 두 child를 literal `main`으로
 복원한다. AWX CR·DB·PVC·runtime Secret은 삭제하지 않는다.
 
+## AWX-03 기본 deny 통신 경계
+
+`awx-default-deny`가 namespace의 ingress·egress를 먼저 막고, `network-policies.yaml`이 현재
+확인된 흐름만 다시 허용한다. web/task/migration은 PostgreSQL `10.10.50.10:5432`, web만 내부
+Traefik을 통한 Keycloak `443`, task와 provision Hook만 web `8052`, execution Pod만 verifier
+`8080`을 사용한다. Vault Agent init는 verifier와 두 Hook에 각각 분리된 selector로 Vault
+`8200`만 사용하고, Operator·runtime·execution·bootstrap은 Kubernetes API의 Service `443`과
+k3s endpoint `6443`만 사용한다. Pomerium server만 web `8052` ingress 권한을 가진다.
+
+DNS는 CoreDNS TCP/UDP `53`으로만 열며, 외부 VM SSH·임의 RFC1918 egress·공개 DNS/NAT·OPNsense
+규칙은 추가하지 않는다. `gitops/tools/awx-03/verify-live.sh`는 선언, 필요 경로와 PostgreSQL
+대상 TCP `22` 차단을 판정한다. browser RBAC 검증의 성공 job은 execution Pod→verifier `8080`과
+Pomerium→web ingress를 함께 확인한다.
+
+Rollback은 AWX child를 시작 main SHA로 먼저 sync해 NetworkPolicy를 prune하고, web/task Ready를
+확인한 다음 root를 literal `main`으로 복원한다. AWX CR·DB·PVC·runtime Secret은 삭제하지 않는다.
+
 ## 적용 순서와 검증
 
 1. `prepare-secret-input.sh`, `provision.sh --check`, `provision.sh --apply`로 DB,

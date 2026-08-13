@@ -10,6 +10,7 @@ resources:
   - operator
   - project-playbook.yaml
   - awx.yaml
+  - network-policies.yaml
   - verifier-config.yaml
   - verifier.yaml
   - provision-script.yaml

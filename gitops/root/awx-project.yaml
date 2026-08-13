@@ -6,7 +6,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
-  description: AWX-01 AWX Operator, 외부 PostgreSQL, Vault init 및 최소권한 자동화 경계
+  description: AWX-01~03 Operator, 외부 PostgreSQL, Vault init·기본 deny 최소 통신 경계
   sourceRepos:
     - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
   destinations:
@@ -28,6 +28,8 @@ spec:
       kind: Deployment
     - group: batch
       kind: Job
+    - group: networking.k8s.io
+      kind: NetworkPolicy
     - group: rbac.authorization.k8s.io
       kind: Role
     - group: rbac.authorization.k8s.io

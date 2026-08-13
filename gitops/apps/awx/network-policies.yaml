@@ -1,0 +1,360 @@
+# AWX-03은 namespace 전체를 기본 차단한 뒤, 현재 선언·socket 실측으로 확인된
+# 구성요소 흐름만 다시 연다. NetworkPolicy는 FQDN을 해석하지 않으므로 OIDC는 내부
+# Traefik Service와 backend Pod를 함께 명시한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-default-deny
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# AWX task의 controller API 호출은 web Pod TCP 8052 하나뿐이다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-task-web-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: awx-task
+      app.kubernetes.io/component: awx
+      app.kubernetes.io/managed-by: awx-operator
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: awx-web
+              app.kubernetes.io/component: awx
+              app.kubernetes.io/managed-by: awx-operator
+      ports:
+        - {protocol: TCP, port: 8052}
+---
+# provision Hook도 AWX API 준비·수렴에 같은 web endpoint만 사용한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-provision-web-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels: {job-name: awx-provision}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: awx-web
+              app.kubernetes.io/component: awx
+              app.kubernetes.io/managed-by: awx-operator
+      ports:
+        - {protocol: TCP, port: 8052}
+---
+# web Pod는 task와 provision Hook의 위 두 controller 호출만 받는다. Pomerium ingress는
+# 별도 규칙으로 유지해 cross-namespace 경계를 섞지 않는다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-web-runtime-ingress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: awx-web
+      app.kubernetes.io/component: awx
+      app.kubernetes.io/managed-by: awx-operator
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: awx-task
+              app.kubernetes.io/component: awx
+              app.kubernetes.io/managed-by: awx-operator
+      ports:
+        - {protocol: TCP, port: 8052}
+    - from:
+        - podSelector:
+            matchLabels: {job-name: awx-provision}
+      ports:
+        - {protocol: TCP, port: 8052}
+---
+# AWX default container group가 만든 execution Pod의 verifier HTTP 한 경로다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-execution-verifier-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: ansible-awx
+        operator: Exists
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: awx-verifier}
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-verifier-execution-ingress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: awx-verifier}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: ansible-awx
+                operator: Exists
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-dns-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+# AWX Operator는 in-cluster Kubernetes API만 사용한다.
+# Service ClusterIP와 k3s server endpoint를 함께 써 kube-router DNAT 전후 판정 차이를 막는다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-operator-kubernetes-api-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels: {control-plane: controller-manager}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.43.0.1/32}
+      ports:
+        - {protocol: TCP, port: 443}
+    - to:
+        - ipBlock: {cidr: 10.10.20.10/32}
+      ports:
+        - {protocol: TCP, port: 6443}
+---
+# web/task/migration Pod도 runtime state와 migration을 위해 같은 Kubernetes API만 사용한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-runtime-kubernetes-api-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: awx
+      app.kubernetes.io/managed-by: awx-operator
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.43.0.1/32}
+      ports:
+        - {protocol: TCP, port: 443}
+    - to:
+        - ipBlock: {cidr: 10.10.20.10/32}
+      ports:
+        - {protocol: TCP, port: 6443}
+---
+# default execution queue가 만든 automation-job-* Pod만 같은 Kubernetes API를 쓴다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-execution-kubernetes-api-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: ansible-awx
+        operator: Exists
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.43.0.1/32}
+      ports:
+        - {protocol: TCP, port: 443}
+    - to:
+        - ipBlock: {cidr: 10.10.20.10/32}
+      ports:
+        - {protocol: TCP, port: 6443}
+---
+# bootstrap Hook만 runtime Secret을 만들기 위해 Kubernetes API를 사용한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-bootstrap-kubernetes-api-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels: {job-name: awx-secret-bootstrap-v1}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.43.0.1/32}
+      ports:
+        - {protocol: TCP, port: 443}
+    - to:
+        - ipBlock: {cidr: 10.10.20.10/32}
+      ports:
+        - {protocol: TCP, port: 6443}
+---
+# verifier의 Vault Agent init만 Vault HTTPS에 연결한다. web/task 자체와 Operator는 제외한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-vault-agent-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: awx-verifier
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
+        - {protocol: TCP, port: 8200}
+---
+# 두 일회성 Hook의 Vault Agent init도 Vault HTTPS 하나만 쓴다. podSelector 항목은
+# AND이므로 verifier와 Hook을 하나의 selector에 넣지 않고 이 정책으로 OR 경계를 만든다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-hook-vault-agent-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: job-name
+        operator: In
+        values: [awx-secret-bootstrap-v1, awx-provision]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
+        - {protocol: TCP, port: 8200}
+---
+# web/task와 migration Job은 외부 postgres-01 TLS 하나만 사용한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-postgres-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: awx
+      app.kubernetes.io/managed-by: awx-operator
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.10.50.10/32}
+      ports:
+        - {protocol: TCP, port: 5432}
+---
+# Pomerium server에서 public AWX backend로 들어오는 유일한 cross-namespace ingress다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-web-pomerium-ingress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: awx-web
+      app.kubernetes.io/component: awx
+      app.kubernetes.io/managed-by: awx-operator
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pomerium
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pomerium
+              app.kubernetes.io/component: server
+      ports:
+        - {protocol: TCP, port: 8052}
+---
+# AWX web만 canonical OIDC endpoint로 authorization-code 교환과 JWKS 조회를 한다.
+# sso는 내부 Traefik Service를 가리키므로 Service ClusterIP:443과 backend Pod:8443을 짝으로 둔다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-web-keycloak-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: awx-web
+      app.kubernetes.io/component: awx
+      app.kubernetes.io/managed-by: awx-operator
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.43.255.250/32}
+      ports:
+        - {protocol: TCP, port: 443}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - {protocol: TCP, port: 8443}
