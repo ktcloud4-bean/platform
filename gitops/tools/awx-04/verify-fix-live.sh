@@ -13,12 +13,16 @@ remote_kubectl() {
 }
 
 recover_main() {
-  ssh "${ssh_options[@]}" "${k3s_host}" bash -s <<'REMOTE' >/dev/null
+  local main_revision=${AWX04_FIX_MAIN_REVISION:?latest main SHA가 필요하다}
+  [[ ${main_revision} =~ ^[0-9a-f]{40}$ ]]
+  ssh "${ssh_options[@]}" "${k3s_host}" "AWX04_FIX_MAIN_REVISION=${main_revision} bash -s" <<'REMOTE' >/dev/null
 set -Eeuo pipefail
-sudo -n /usr/local/bin/k3s kubectl -n argocd patch applications.argoproj.io awx --type=merge \
-  --subresource=status -p '{"status":{"operationState":{"phase":"Terminating"}}}'
+sudo -n /usr/local/bin/k3s kubectl -n argocd patch applications.argoproj.io awx --type=merge -p "$(cat <<JSON
+{"operation":{"initiatedBy":{"automated":true},"retry":{"limit":5},"sync":{"prune":true,"revision":"${AWX04_FIX_MAIN_REVISION}","source":{"path":"gitops/apps/awx","repoURL":"ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git","targetRevision":"main"},"syncOptions":["ApplyOutOfSyncOnly=true","PruneLast=true","PrunePropagationPolicy=foreground"]}}}
+JSON
+)"
 REMOTE
-  printf 'AWX04_FIX_OPERATION=TERMINATING target=main\n'
+  printf 'AWX04_FIX_OPERATION=SYNC_REQUESTED revision=%s\n' "${main_revision}"
 }
 
 verify_main() {
@@ -31,14 +35,14 @@ verify_main() {
     if jq -e --arg main "${main_revision}" '
       . as $doc | def app($name): $doc.items[] | select(.metadata.name == $name);
       (app("platform-root") | .spec.source.targetRevision == "main" and .status.sync.revision == $main and .status.sync.status == "Synced" and .status.health.status == "Healthy") and
-      (app("awx") | .spec.source.targetRevision == "main" and .status.sync.revision == $main and .status.sync.status == "Synced" and .status.health.status == "Healthy")
+      (app("awx") | .spec.source.targetRevision == "main" and .status.sync.revision == $main and .status.sync.status == "Synced" and .status.health.status == "Healthy" and .status.operationState.phase == "Succeeded" and .status.operationState.operation.sync.revision == $main)
     ' <<<"${argo}" >/dev/null; then break; fi
     sleep 5
   done
   jq -e --arg main "${main_revision}" '
     . as $doc | def app($name): $doc.items[] | select(.metadata.name == $name);
     (app("platform-root") | .spec.source.targetRevision == "main" and .status.sync.revision == $main and .status.sync.status == "Synced" and .status.health.status == "Healthy") and
-    (app("awx") | .spec.source.targetRevision == "main" and .status.sync.revision == $main and .status.sync.status == "Synced" and .status.health.status == "Healthy")
+    (app("awx") | .spec.source.targetRevision == "main" and .status.sync.revision == $main and .status.sync.status == "Synced" and .status.health.status == "Healthy" and .status.operationState.phase == "Succeeded" and .status.operationState.operation.sync.revision == $main)
   ' <<<"${argo}" >/dev/null
   state=$(remote_kubectl -n awx exec -i deploy/awx-web -c awx-web -- awx-manage shell <<PY
 import json

@@ -33,7 +33,9 @@ EOF
 set -eu
 role_id=$(vault kv get -field=vault_role_id kv/awx/scm-lookup)
 secret_id=$(vault kv get -field=vault_secret_id kv/awx/scm-lookup)
-token=$(vault write -field=token auth/approle/login role_id="$role_id" secret_id="$secret_id")
+# 이 shell은 bootstrap KV를 읽으려고 root token을 갖지만, AppRole login은 bearer token 없이
+# 수행해야 한다. root token을 동봉하면 Vault가 AppRole 인증을 거부해 false negative가 된다.
+token=$(env -u VAULT_TOKEN vault write -field=token auth/approle/login role_id="$role_id" secret_id="$secret_id")
 VAULT_TOKEN="$token" vault kv get -field=gitea_deploy_key kv/awx/scm >/dev/null
 EOF
     printf 'AWX04_FIX_LOOKUP_CHECK=PASS lookup=approle key_read=authorized\n'

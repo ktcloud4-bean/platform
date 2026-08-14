@@ -185,12 +185,20 @@ Rollback은 먼저 AWX child를 적용 전 main SHA로 sync하여 AWX-04 EE, SCM
 `main`으로 복원한다. GitHub/Gitea deploy key와 Vault path는 이 task의 rollback 범위에서만
 삭제하며 기존 AWX-01 runtime Secret·DB·PVC·NetworkPolicy는 삭제하지 않는다.
 
-### AWX-04-FIX-01 AppRole 입력 보정
+### AWX-04 SCM AppRole 입력 보정
 
-`awx-04-scm-lookup`의 Secret ID는 TTL을 가지므로, Vault login HTTP 400으로 project update가
+`awx-04-scm-lookup`의 Secret ID는 TTL을 가지므로, Vault login HTTP 400/403으로 project update가
 중단되면 `refresh-scm-lookup.sh --apply`로 `kv/awx/scm-lookup`의 bootstrap 입력만 새로 만든다.
 이는 deploy key·Gitea host key·Source Control credential·EE·role을 교체하지 않는다. 이어 AWX
-main Sync hook의 SCM update 성공과 root/AWX `Synced/Healthy`만 확인한다.
+main Sync hook의 SCM update 성공과 root/AWX `Synced/Healthy`만 확인한다. `--check`는 KV를
+읽을 때만 bootstrap root token을 쓰고, AppRole login에는 그 token을 명시적으로 제거한다.
+이미 인증된 root token을 AppRole login에 동봉하면 새 Secret ID도 403으로 오판한다.
+
+실패 operation을 재개할 때 Application CRD의 `status` subresource를 patch하지 않는다.
+이 CRD에는 해당 subresource가 없으므로 `NotFound`가 된다. `verify-fix-live.sh recover-main`은
+최신 main SHA의 최상위 `operation.sync`를 한 번 요청해 선언된 automated Sync hook을 다시 실행한다.
+`verify-main`은 이전 실패 상태가 아니라 이 latest SHA operation의 `Succeeded`와 그 뒤 SCM
+project update 성공을 함께 기다린다.
 
 ## 적용 순서와 검증
 
