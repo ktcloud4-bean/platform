@@ -1,0 +1,85 @@
+# 실제 값은 이 파일이 아니라 저장소 밖 파일에 두고 -var-file 로 넘긴다.
+# 계정 ID, 연락처, 이메일 등 개인정보/식별정보를 커밋하지 않는다.
+
+# 적용 대상 AWS 계정 ID. provider guard가 이 값과 다른 계정의 적용을 막는다.
+aws_account_id = "000000000000"
+
+# 오프사이트/기존 root와 맞춰 ap-northeast-2 유지. 바꾸려면 주석 해제.
+# aws_region = "ap-northeast-2"
+
+# --- 필수: 기본값 없음, 안 채우면 apply 자체가 안 됨 (4개) ---
+
+# 예산 초과(80%)/비용 이상 징후, Cost Anomaly Detection 알림을 받을 이메일
+alert_email = "여기에_알림받을_이메일_입력"
+
+# Security Hub Account.1(계정 보안 연락처) - AWS Alternate Contact(SECURITY)
+security_contact_name  = "여기에_보안_연락처_이름_입력"
+security_contact_phone = "여기에_보안_연락처_전화번호_입력"
+
+# 온프레미스 Keycloak 접속 주소 (tofu-network VPN 경유 IP 또는 사내 DNS)
+onprem_keycloak_host = "여기에_온프레미스_Keycloak_주소_입력"
+
+# --- 선택: 기본값 있음, 필요할 때만 주석 해제 ---
+
+# CIS AWS Foundations Benchmark를 Security Hub에서 FSBP와 함께 켜고 싶다면 true.
+# 기본은 false(FSBP만 기본 활성화).
+# enable_cis_benchmark = true
+
+# 월 예산 알림 기준 금액(USD). 기본값 100.
+# monthly_budget_amount = "100"
+
+# RDS 감사로그 WORM 보존기간(일). S3 Object Lock이라 이 기간 동안 계정
+# 소유자도 못 지움. 기본값 365일(ISMS-P 요구사항 기준).
+# rds_audit_worm_retention_days = 365
+
+# RDS 권한 드리프트 체크 Lambda(30번, 09번 시나리오)용 psycopg2 Lambda Layer
+# ARN. 기본값 "" 이라 apply는 통과하지만, 채우지 않으면 이 Lambda가 import
+# 에러로 동작하지 않음. AWS 공식 Layer가 없어 커뮤니티 Layer를 쓰거나 직접
+# 빌드해야 함(리전/Python 버전에 맞는 Layer). 05/09번 시나리오를 쓸 계획이면
+# 채울 것 - 그전에 iam_database_authentication_enabled도 tofu-app-db에서
+# 켜야 함(합치기-전-체크리스트.md 1번 참고).
+# psycopg2_layer_arn = "여기에_psycopg2_lambda_layer_arn_입력"
+
+# Automated Security Response on AWS 활성화 여부. 기본값 false로 유지
+# (지금은 ASR 대신 자체 CSPM 탐지로 시연하기로 결정됨 - 그대로 둘 것).
+# enable_asr_remediation = true
+
+# 권한 드리프트 검사(36번 tf) CloudTrail lookback 시간. 기본값 3(데모/테스트용
+# 짧은 값) - 실운영 전환 시 훨씬 길게(최소 몇 주) 권장.
+# boundary_drift_lookback_hours = 3
+
+# Keycloak AWS SAML 연동 realm 이름. 기본값 "platform"(tofu-identity와 동일).
+# keycloak_realm_name = "platform"
+
+# Security Lake(19번 tf) 활성화 여부. 기본값 false. Grafana SOC 대시보드가
+# Athena로 조회하는 OCSF 데이터의 원천이라, Grafana를 실제로 쓰려면 true로
+# 켜야 함 - 계정+리전당 1개만 가능한 리소스라 이미 다른 root에서 켜져 있는지
+# 먼저 확인할 것.
+# enable_security_lake = true
+# security_lake_retention_days = 365
+
+# 보안 알림(23번 tf) - 안 채우면 SNS 토픽/EventBridge 규칙은 만들어지되
+# Slack/PagerDuty로는 안 감.
+# slack_workspace_id = "T0XXXXXXX"        # AWS Chatbot에 Slack 앱 설치 후 확인
+# slack_channel_id   = "C0XXXXXXX"        # #sec-alerts 채널 ID
+# pagerduty_integration_url = "https://events.pagerduty.com/integration/xxxxx/enqueue"
+
+# --- Grafana (25번 tf, 대시보드 템플릿 자체는 project-c 그대로) ---
+
+# grafana-dashboard-setup.sh가 SAML 로그인에 쓸 계정 비밀번호
+# keycloak_test_users_password = "여기에_비밀번호_입력"
+
+# Grafana Admin 권한이 매핑된 실제 Keycloak 계정명
+# grafana_provisioning_user = "여기에_계정명_입력"
+
+# Grafana 전용 SAML 클라이언트의 role 속성값 - scripts/keycloak-grafana-saml-client.sh가
+# 실제로 등록하는 Keycloak 그룹 이름과 정확히 일치해야 함. 기본값 빈 목록
+# (비워두면 아무도 admin/editor로 안 붙고 전부 viewer).
+# grafana_admin_role_values  = ["여기에_admin_그룹명"]
+# grafana_editor_role_values = ["여기에_editor_그룹명"]
+
+# --- apply 후 별도로 채워야 함 (이 파일에 안 둠, Terraform 밖) ---
+# - Slack Bot Token / Signing Secret  -> aws_secretsmanager_secret.slack_app (28번 tf)
+# - Keycloak admin 계정               -> aws_secretsmanager_secret.keycloak_admin (35번 tf)
+# 둘 다 apply 직후엔 placeholder 값이라 실제 값 채우기 전까지 관련 기능이
+# 동작하지 않음. 합치기-전-체크리스트.md 2번 참고.
