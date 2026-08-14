@@ -65,12 +65,12 @@
       - >-
         (bkp03_volume_unit_raw.content | b64decode |
          regex_findall('(?m)^  -max=([0-9]+) ') | first | int)
-        in [6, 8, bkp03_required_volume_max_count]
-      - bkp03_required_volume_max_count == 10
+        in [6, 8, 10, 15, 20, bkp03_required_volume_max_count]
+      - bkp03_required_volume_max_count in [10, 30]
     fail_msg: >-
-      승인된 object-01 volume max 6 또는 8에서 10으로의 변경만 허용한다.
+      승인된 object-01 volume max 변경만 허용한다.
 
-- name: SeaweedFS volume slot 한도 10 선언
+- name: SeaweedFS volume slot 한도 선언
   ansible.builtin.lineinfile:
     path: "{{ bkp03_volume_service_path }}"
     regexp: '^  -max=[0-9]+ '
@@ -164,6 +164,10 @@
           - "List:{{ bkp03_postgres_bucket }}"
           - "Read:{{ bkp03_vault_bucket }}"
           - "List:{{ bkp03_vault_bucket }}"
+          - "Read:bkp-01-k3s-datastore"
+          - "List:bkp-01-k3s-datastore"
+          - "Read:bkp-02-velero"
+          - "List:bkp-02-velero"
   no_log: true
 
 - name: BKP-03 이외 기존 identity 보존 목록 계산

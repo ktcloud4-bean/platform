@@ -1,0 +1,13 @@
+---
+
+bkp09_offsite_identity: bkp-03-offsite-reader
+bkp09_offsite_buckets:
+  - bkp-03-postgres
+  - bkp-03-vault
+  - bkp-01-k3s-datastore
+  - bkp-02-velero
+
+bkp09_s3_config_path: /etc/seaweedfs/s3.json
+bkp09_s3_ca_path: /etc/seaweedfs/tls/s3.crt
+bkp09_s3_endpoint: https://s3.imcherry5778.xyz:8333
+bkp09_rclone_path: /usr/local/bin/rclone

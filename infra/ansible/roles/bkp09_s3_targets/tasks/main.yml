@@ -1,0 +1,172 @@
+---
+
+- name: BKP-09 S3 전제와 전용 identity 입력 확인
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.hostname == 'object-01'
+      - bkp09_offsite_access_key | length >= 16
+      - bkp09_offsite_secret_key | length >= 32
+      - bkp09_offsite_buckets | length == 4
+    fail_msg: object-01과 offsite 전용 identity의 입력 및 4개 버킷 목록이 필요하다.
+  no_log: true
+
+- name: SeaweedFS S3 구성과 public certificate 현재 상태 확인
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ bkp09_s3_config_path }}"
+    - "{{ bkp09_s3_ca_path }}"
+    - "{{ bkp09_rclone_path }}"
+  register: bkp09_s3_files
+
+- name: SeaweedFS S3 필수 파일 존재 확인
+  ansible.builtin.assert:
+    that:
+      - bkp09_s3_files.results | map(attribute='stat.exists') | min
+    fail_msg: S3-01이 설치한 s3.json, TLS certificate와 rclone이 필요하다.
+
+- name: 기존 static S3 구성 읽기
+  ansible.builtin.slurp:
+    src: "{{ bkp09_s3_config_path }}"
+  register: bkp09_s3_config_raw
+  no_log: true
+
+- name: 기존 S3 구성과 BKP-09 최종 identity 계산
+  ansible.builtin.set_fact:
+    bkp09_s3_current_config: "{{ bkp09_s3_config_raw.content | b64decode | from_json }}"
+    bkp09_s3_desired_identity:
+      name: "{{ bkp09_offsite_identity }}"
+      credentials:
+        - accessKey: "{{ bkp09_offsite_access_key }}"
+          secretKey: "{{ bkp09_offsite_secret_key }}"
+      actions:
+        - "Read:bkp-03-postgres"
+        - "List:bkp-03-postgres"
+        - "Read:bkp-03-vault"
+        - "List:bkp-03-vault"
+        - "Read:bkp-01-k3s-datastore"
+        - "List:bkp-01-k3s-datastore"
+        - "Read:bkp-02-velero"
+        - "List:bkp-02-velero"
+  no_log: true
+
+- name: BKP-09 이외 기존 identity 보존 목록 계산
+  ansible.builtin.set_fact:
+    bkp09_s3_preserved_identities: >-
+      {{ bkp09_s3_current_config.identities | default([])
+         | rejectattr('name', 'equalto', bkp09_offsite_identity) | list }}
+  no_log: true
+
+- name: BKP-09 최종 static S3 구성 계산
+  ansible.builtin.set_fact:
+    bkp09_s3_final_config: >-
+      {{ bkp09_s3_current_config
+         | combine({'identities': bkp09_s3_preserved_identities + [bkp09_s3_desired_identity]}) }}
+  no_log: true
+
+- name: 현재 bucket 목록 조회
+  ansible.builtin.shell:
+    cmd: "set -o pipefail; echo 'fs.ls /buckets' | /usr/local/bin/weed shell -filer=127.0.0.1:8888 2>/dev/null"
+  register: bkp09_bucket_listing
+  changed_when: false
+  check_mode: false
+
+- name: 4개 대상 bucket 존재 확인
+  ansible.builtin.assert:
+    that:
+      - item in bkp09_bucket_listing.stdout_lines
+    fail_msg: "대상 bucket {{ item }}이(가) SeaweedFS에 존재해야 한다."
+  loop: "{{ bkp09_offsite_buckets }}"
+
+- name: BKP-09 최종 S3 구성 선언
+  ansible.builtin.copy:
+    content: "{{ bkp09_s3_final_config | to_nice_json }}"
+    dest: "{{ bkp09_s3_config_path }}"
+    owner: seaweedfs
+    group: seaweedfs
+    mode: "0600"
+  register: bkp09_final_s3_config
+  no_log: true
+
+- name: S3 gateway 재시작으로 새 권한 반영
+  ansible.builtin.systemd:
+    name: seaweedfs-s3.service
+    state: restarted
+    daemon_reload: true
+  when:
+    - not ansible_check_mode
+    - bkp09_final_s3_config.changed
+
+- name: offsite-reader identity의 bucket 목록 조회
+  ansible.builtin.command:
+    argv:
+      - "{{ bkp09_rclone_path }}"
+      - lsd
+      - "offsiteverify:"
+      - --config
+      - /dev/null
+      - --ca-cert
+      - "{{ bkp09_s3_ca_path }}"
+  environment:
+    RCLONE_CONFIG_OFFSITEVERIFY_TYPE: s3
+    RCLONE_CONFIG_OFFSITEVERIFY_PROVIDER: Other
+    RCLONE_CONFIG_OFFSITEVERIFY_ENV_AUTH: "false"
+    RCLONE_CONFIG_OFFSITEVERIFY_ACCESS_KEY_ID: "{{ bkp09_offsite_access_key }}"
+    RCLONE_CONFIG_OFFSITEVERIFY_SECRET_ACCESS_KEY: "{{ bkp09_offsite_secret_key }}"
+    RCLONE_CONFIG_OFFSITEVERIFY_ENDPOINT: "{{ bkp09_s3_endpoint }}"
+    RCLONE_CONFIG_OFFSITEVERIFY_FORCE_PATH_STYLE: "true"
+  register: bkp09_identity_bucket_view
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: offsite-reader identity의 4개 bucket 조회 권한 확인
+  ansible.builtin.assert:
+    that:
+      - item in bkp09_identity_bucket_view.stdout
+    fail_msg: "offsite-reader identity가 {{ item }} bucket을 조회할 수 있어야 한다."
+  loop: "{{ bkp09_offsite_buckets }}"
+  when: not ansible_check_mode
+
+- name: offsite-reader identity의 4개 bucket 쓰기 거부 확인 (음성 시험)
+  ansible.builtin.shell:
+    cmd: >-
+      printf 'denied\n' |
+      {{ bkp09_rclone_path }} rcat
+      offsitedeny:{{ item }}/bkp09-offsite-cross-write-denied-{{ item }}
+      --config /dev/null --ca-cert {{ bkp09_s3_ca_path }}
+      --retries 1 --low-level-retries 1 --log-level ERROR
+    executable: /bin/bash
+  environment:
+    RCLONE_CONFIG_OFFSITEDENY_TYPE: s3
+    RCLONE_CONFIG_OFFSITEDENY_PROVIDER: Other
+    RCLONE_CONFIG_OFFSITEDENY_ENV_AUTH: "false"
+    RCLONE_CONFIG_OFFSITEDENY_ACCESS_KEY_ID: "{{ bkp09_offsite_access_key }}"
+    RCLONE_CONFIG_OFFSITEDENY_SECRET_ACCESS_KEY: "{{ bkp09_offsite_secret_key }}"
+    RCLONE_CONFIG_OFFSITEDENY_ENDPOINT: "{{ bkp09_s3_endpoint }}"
+    RCLONE_CONFIG_OFFSITEDENY_FORCE_PATH_STYLE: "true"
+  register: bkp09_offsite_cross_writes
+  loop: "{{ bkp09_offsite_buckets }}"
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: offsite-reader identity의 쓰기 권한 부재 판정
+  ansible.builtin.assert:
+    that:
+      - item.rc != 0
+    fail_msg: "offsite-reader identity는 {{ item.item }} bucket에 쓸 수 없어야 한다."
+  loop: "{{ bkp09_offsite_cross_writes.results }}"
+  when: not ansible_check_mode
+
+- name: 인증된 SeaweedFS S3 public certificate 읽기
+  ansible.builtin.slurp:
+    src: "{{ bkp09_s3_ca_path }}"
+  register: bkp09_s3_ca_raw
+
+- name: client play에 전달할 public certificate fact 선언
+  ansible.builtin.set_fact:
+    bkp03_s3_ca_b64: "{{ bkp09_s3_ca_raw.content }}"

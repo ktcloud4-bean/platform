@@ -1,6 +1,6 @@
 ---
 
-- name: BKP-03 controller-side secret and existing offsite input 준비
+- name: BKP-09 controller-side secret and existing offsite input 준비
   hosts: localhost
   gather_facts: false
   become: false
@@ -27,20 +27,8 @@
         owner: "{{ lookup('ansible.builtin.env', 'USER') }}"
         mode: "0700"
 
-    - name: 전용 S3 identity 자격증명 생성 또는 재사용
+    - name: 전용 S3 identity 자격증명 조회 또는 생성
       ansible.builtin.set_fact:
-        bkp03_postgres_access_key: >-
-          {{ lookup('ansible.builtin.password', bkp03_secret_dir ~ '/postgres-s3.access',
-                    length=24, chars=['ascii_letters', 'digits']) }}
-        bkp03_postgres_secret_key: >-
-          {{ lookup('ansible.builtin.password', bkp03_secret_dir ~ '/postgres-s3.secret',
-                    length=64, chars=['ascii_letters', 'digits']) }}
-        bkp03_vault_access_key: >-
-          {{ lookup('ansible.builtin.password', bkp03_secret_dir ~ '/vault-s3.access',
-                    length=24, chars=['ascii_letters', 'digits']) }}
-        bkp03_vault_secret_key: >-
-          {{ lookup('ansible.builtin.password', bkp03_secret_dir ~ '/vault-s3.secret',
-                    length=64, chars=['ascii_letters', 'digits']) }}
         bkp03_offsite_access_key: >-
           {{ lookup('ansible.builtin.password', bkp03_secret_dir ~ '/offsite-reader-s3.access',
                     length=24, chars=['ascii_letters', 'digits']) }}
@@ -55,10 +43,6 @@
         owner: "{{ lookup('ansible.builtin.env', 'USER') }}"
         mode: "0600"
       loop:
-        - "{{ bkp03_secret_dir }}/postgres-s3.access"
-        - "{{ bkp03_secret_dir }}/postgres-s3.secret"
-        - "{{ bkp03_secret_dir }}/vault-s3.access"
-        - "{{ bkp03_secret_dir }}/vault-s3.secret"
         - "{{ bkp03_secret_dir }}/offsite-reader-s3.access"
         - "{{ bkp03_secret_dir }}/offsite-reader-s3.secret"
       no_log: true
@@ -80,17 +64,13 @@
         fail_msg: 검증된 BKP-04 AWS bucket, region, alert topic과 전송 identity가 필요하다.
       no_log: true
 
-- name: BKP-03 전용 bucket·identity와 오프사이트 연결 선언
+- name: BKP-09 S3 offsite reader identity 확장 및 4개 버킷 오프사이트 연결 선언
   hosts: object_nodes
   gather_facts: true
   become: true
   vars:
-    bkp03_postgres_access_key: "{{ hostvars['localhost'].bkp03_postgres_access_key }}"
-    bkp03_postgres_secret_key: "{{ hostvars['localhost'].bkp03_postgres_secret_key }}"
-    bkp03_vault_access_key: "{{ hostvars['localhost'].bkp03_vault_access_key }}"
-    bkp03_vault_secret_key: "{{ hostvars['localhost'].bkp03_vault_secret_key }}"
-    bkp03_offsite_access_key: "{{ hostvars['localhost'].bkp03_offsite_access_key }}"
-    bkp03_offsite_secret_key: "{{ hostvars['localhost'].bkp03_offsite_secret_key }}"
+    bkp09_offsite_access_key: "{{ hostvars['localhost'].bkp03_offsite_access_key }}"
+    bkp09_offsite_secret_key: "{{ hostvars['localhost'].bkp03_offsite_secret_key }}"
     offsite_aws_region: "{{ hostvars['localhost'].bkp03_offsite_inputs.offsite_aws_region }}"
     offsite_aws_bucket: "{{ hostvars['localhost'].bkp03_offsite_inputs.offsite_aws_bucket }}"
     offsite_alert_topic_arn: "{{ hostvars['localhost'].bkp03_offsite_inputs.offsite_alert_topic_arn }}"
@@ -104,53 +84,5 @@
       - bkp-01-k3s-datastore
       - bkp-02-velero
   roles:
-    - role: bkp03_s3_targets
+    - role: bkp09_s3_targets
     - role: seaweedfs_offsite_backup
-
-- name: PostgreSQL native physical snapshot 선언
-  hosts: postgres_nodes
-  gather_facts: true
-  become: true
-  vars:
-    bkp03_backup_kind: postgres
-    bkp03_backup_user: postgres-backup
-    bkp03_backup_group: postgres-backup
-    bkp03_service_name: postgres-native-backup
-    bkp03_config_dir: /etc/postgres-native-backup
-    bkp03_state_dir: /var/lib/postgres-native-backup
-    bkp03_cache_dir: /var/cache/postgres-native-backup
-    bkp03_s3_bucket: bkp-03-postgres
-    bkp03_s3_access_key: "{{ hostvars['localhost'].bkp03_postgres_access_key }}"
-    bkp03_s3_secret_key: "{{ hostvars['localhost'].bkp03_postgres_secret_key }}"
-    bkp03_s3_ca_b64: "{{ hostvars[groups['object_nodes'][0]].bkp03_s3_ca_b64 }}"
-    bkp03_backup_ip_allow:
-      - 127.0.0.0/8
-      - 10.10.50.1/32
-      - 10.10.50.20/32
-  roles:
-    - role: bkp03_backup_common
-    - role: postgres_native_backup
-
-- name: Vault Raft snapshot 선언
-  hosts: k3s_servers
-  gather_facts: true
-  become: true
-  vars:
-    bkp03_backup_kind: vault
-    bkp03_backup_user: vault-backup
-    bkp03_backup_group: vault-backup
-    bkp03_service_name: vault-raft-backup
-    bkp03_config_dir: /etc/vault-raft-backup
-    bkp03_state_dir: /var/lib/vault-raft-backup
-    bkp03_cache_dir: /var/cache/vault-raft-backup
-    bkp03_s3_bucket: bkp-03-vault
-    bkp03_s3_access_key: "{{ hostvars['localhost'].bkp03_vault_access_key }}"
-    bkp03_s3_secret_key: "{{ hostvars['localhost'].bkp03_vault_secret_key }}"
-    bkp03_s3_ca_b64: "{{ hostvars[groups['object_nodes'][0]].bkp03_s3_ca_b64 }}"
-    bkp03_backup_ip_allow:
-      - 127.0.0.0/8
-      - 10.10.20.1/32
-      - 10.10.50.20/32
-  roles:
-    - role: bkp03_backup_common
-    - role: vault_raft_backup

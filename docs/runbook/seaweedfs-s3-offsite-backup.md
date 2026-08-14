@@ -190,10 +190,13 @@ Ansible은 syntax-check, check/diff, 실제 적용을 모두 실행했다. check
 `ok=16 changed=9`, 최초 적용은 `ok=26 changed=15`, 같은 입력의 2회차는
 `ok=23 changed=0`이다. 설치된 rclone이 고정 버전인지 role assertion이 확인한다.
 
-`BKP-03` 완료 뒤 `offsite_source_buckets`에는 `bkp-03-postgres`와 `bkp-03-vault`가 들어 있고,
-두 bucket의 `Read/List`만 가진 별도 identity가 source를 읽는다. 매 실행은 `rclone copy` 뒤
-`rclone check --download --one-way`를 수행한다. 2026-08-01 최종 재실행에서 두 source 모두
-AWS destination과 byte 차이 0건이었다. heartbeat와 성공 metric 경로도 그대로 유지한다.
+`BKP-03` 완료 뒤 `offsite_source_buckets`에는 `bkp-03-postgres`와 `bkp-03-vault`가 들어 있었고,
+2026-08-14 `BKP-09`에서 `bkp-01-k3s-datastore`와 `bkp-02-velero`가 추가되어 총 4개 bucket이
+오프사이트 동기화 대상으로 확장되었다. `bkp-03-offsite-reader` identity는 네 bucket의 `Read/List`만
+가진 최소권한으로 관리된다. 매 실행은 `rclone copy` 뒤 `rclone check --download --one-way`를
+수행하며, 2026-08-14 라이브 실행에서 네 source 모두 AWS destination과 byte 차이 0건(postgres 14개,
+vault 14개, k3s-datastore 15개, velero 114개)이었고, AWS 측 격리 위치 샘플 복원 검증에서도
+SHA-256이 완벽히 일치했다. heartbeat와 성공 metric 경로도 그대로 유지한다.
 
 후속 backup producer를 추가할 때는 다음 두 가지를 함께 넣고 playbook을 다시 적용한다.
 하나만 넣으면 job이 403으로 실패하고 경보가 울린다.
@@ -246,7 +249,8 @@ state 원문, access key secret, S3 secret은 기록·Git·일반 log에 넣지 
   확인했다.
 - 재부팅 후 timer 자동 시작은 `enabled` 상태와 `Persistent=true` 선언으로만 확인했다.
   `object-01`은 다른 작업자가 함께 쓸 수 있는 host라 이 작업에서 재부팅하지 않았다.
-- 현재 오프사이트 사본은 BKP-03의 PostgreSQL·Vault 백업 자산을 포함한다. 전체 플랫폼을
+- 현재 오프사이트 사본은 BKP-01(k3s datastore), BKP-02(Velero), BKP-03(PostgreSQL·Vault) 백업 자산을 포함한다. 전체 플랫폼을
   얼마나 빨리 복구하고 무엇을 잃을 수 있는지는 `BKP-05`의 통합 drill이 답한다.
 - AWS 착지점은 단일 region 단일 bucket이다. region 장애나 계정 자체의 상실은 이 구성이
   다루지 않는다.
+

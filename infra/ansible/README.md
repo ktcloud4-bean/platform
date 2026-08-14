@@ -216,6 +216,23 @@ REG-01은 `30GB` volume 5개까지 Harbor collection에 열어 두도록 별도 
 올린다. `playbooks/harbor-seaweedfs-capacity.yml`은 전체 identity 선언을 요구하지 않고 정확히
 이 값만 바꾸며 volume → filer → S3만 한 차례 재시작한다.
 
+## k3s datastore·Velero 오프사이트 사본 확장 (BKP-09)
+
+`playbooks/bkp-09-offsite-backup.yml`과 `roles/bkp09_s3_targets`는 `BKP-09`의 k3s datastore(`bkp-01-k3s-datastore`)
+및 Velero(`bkp-02-velero`) 버킷 오프사이트 확장 선언을 소유한다. 기존 `bkp-03-offsite-reader` identity에
+두 버킷의 `Read/List` 권한을 추가하고 `OFFSITE_SOURCE_BUCKETS`를 총 4개 버킷으로 확장하여
+`object-01` 호스팅 NVMe 장애 시의 데이터 소실을 방지한다.
+
+```bash
+cd infra/ansible
+export ANSIBLE_SSH_COMMON_ARGS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=<저장소 밖 인증된 known_hosts> -o PasswordAuthentication=no"
+ansible-playbook -i <저장소 밖 inventory> playbooks/bkp-09-offsite-backup.yml --syntax-check
+ansible-playbook -i <저장소 밖 inventory> playbooks/bkp-09-offsite-backup.yml --check --diff
+# 실제 적용
+ansible-playbook -i <저장소 밖 inventory> playbooks/bkp-09-offsite-backup.yml
+```
+
+
 ## Wazuh HIDS agent 기준선
 
 `playbooks/wazuh-agent-baseline.yml`과 `roles/wazuh_agent_baseline/`은 `WAZUH-03`의
