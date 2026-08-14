@@ -143,3 +143,19 @@ spec:
             severity: critical
           annotations:
             summary: "vault-raft-backup.service가 마지막 실행에서 실패했다."
+        - alert: PostgreSQLNativeBackupHealthStale
+          expr: >-
+            node_systemd_unit_state{job="node-exporter",instance="10.10.50.10:9100",name="postgres-native-backup-health.service",state="failed"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "postgres-native-backup-health.service가 실패해 PostgreSQL 백업이 최신 기준(36시간)을 충족하지 못했다."
+        - alert: VaultRaftBackupHealthStale
+          expr: >-
+            node_systemd_unit_state{job="node-exporter-root",instance="10.10.20.10:9101",name="vault-raft-backup-health.service",state="failed"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "vault-raft-backup-health.service가 실패해 Vault raft 백업이 최신 기준(36시간)을 충족하지 못했다."

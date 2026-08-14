@@ -530,3 +530,12 @@ immutable root `addba0e1aa8e6625345641b0d19929ee99e4f0b8`과 child
 않는 02:00 KST 매일 schedule을 추가하고(`defaultVolumesToFsBackup: true`, TTL 7일),
 실패·부분 실패는 기존 `VeleroBackupFailed`(`obs-13-backup`)가 그대로 감시한다 — 새
 alert가 필요 없다.
+
+## BKP-11 PostgreSQL·Vault 백업 Freshness Health 경보
+
+`BKP-07`의 실패 경보는 백업 `.service`가 실행되다가 오류를 낼 때만 잡으며, timer가 비활성화되거나 host가 정지되어 아예 실행 시도조차 없는 경우에는 unit이 `failed`가 아니라 `inactive` 상태로 머물러 감지하지 못하는 사각지대가 존재한다.
+
+이를 보완하기 위해 `BKP-03`에 이미 구축되어 있던 36시간 freshness 검증 유닛인 `postgres-native-backup-health.service`와 `vault-raft-backup-health.service`의 실패 상태(`state="failed"==1`)를 감시하는 Prometheus alert 2개(`PostgreSQLNativeBackupHealthStale`, `VaultRaftBackupHealthStale`)를 신설했다.
+
+새 exporter나 방화벽 추가 없이 기존 node-exporter가 수집하는 `node_systemd_unit_state`를 활용하며, `obs-13-receiver` 및 `obs-18-platform-slack` matcher에 등록해 백업 신선도 미달 시 Slack 및 internal receiver로 즉시 알림이 전달되도록 했다.
+
