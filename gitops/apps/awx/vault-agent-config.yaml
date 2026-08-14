@@ -63,6 +63,16 @@ data:
     {{- with secret "kv/data/awx/scm-hostkeys" -}}{{ .Data.data.gitea_known_hosts }}{{- end -}}
     EOT
     }
+    # AWX-05 machine credential가 사용하는 k3s-01의 인증된 host key다. private
+    # key가 아니며, bootstrap Hook만 이를 실행 Pod 전용 Secret으로 materialize한다.
+    template {
+      destination = "/vault/secrets/ssh-canary-known-hosts"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/awx/ssh-canary-hostkeys" -}}{{ .Data.data.known_hosts }}{{- end -}}
+    EOT
+    }
   provision.hcl: |
     exit_after_auth = true
     pid_file = "/tmp/vault-agent.pid"
@@ -94,6 +104,14 @@ data:
       error_on_missing_key = true
       contents = <<EOT
     {{- with secret "kv/data/awx/scm-lookup" -}}{{ .Data.data | toJSON }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/vault/secrets/ssh-canary.json"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/awx/ssh-canary-lookup" -}}{{ .Data.data | toJSON }}{{- end -}}
     EOT
     }
   verifier.hcl: |

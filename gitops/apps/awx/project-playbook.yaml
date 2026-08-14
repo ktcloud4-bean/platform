@@ -32,3 +32,59 @@ data:
               - verifier_response.status == 200
             success_msg: "AWX-01 credential boundary: declared in-cluster host returned HTTP 200"
             fail_msg: "AWX-01 credential boundary: access denied"
+  awx05-ssh-canary.yml: |
+    ---
+    - name: AWX-05 k3s-01 SSH 무변경 canary
+      hosts: all
+      gather_facts: false
+      become: false
+      any_errors_fatal: true
+      tasks:
+        - name: 허용된 k3s-01 SSH TCP 22만 사전 확인
+          ansible.builtin.wait_for:
+            host: "{{ inventory_hostname }}"
+            port: 22
+            timeout: 5
+          delegate_to: localhost
+          check_mode: false
+          changed_when: false
+
+        - name: 다른 운영 host SSH TCP 22는 NetworkPolicy로 차단됨
+          ansible.builtin.wait_for:
+            host: netbird-01.imcherry5778.xyz
+            port: 22
+            timeout: 5
+          delegate_to: localhost
+          check_mode: false
+          changed_when: false
+          failed_when: false
+          register: awx05_other_host_ssh
+
+        - name: k3s-01의 허용 밖 TCP 2222는 NetworkPolicy로 차단됨
+          ansible.builtin.wait_for:
+            host: "{{ inventory_hostname }}"
+            port: 2222
+            timeout: 5
+          delegate_to: localhost
+          check_mode: false
+          changed_when: false
+          failed_when: false
+          register: awx05_other_port
+
+        - name: NetworkPolicy 음성 경계 판정
+          ansible.builtin.assert:
+            that:
+              - awx05_other_host_ssh.msg is search('Timeout')
+              - awx05_other_port.msg is search('Timeout')
+            success_msg: "AWX05_NETWORK_BOUNDARIES=PASS other_host_ssh=blocked other_port=blocked"
+            fail_msg: "AWX05_NETWORK_BOUNDARIES=FAIL unexpected egress path"
+
+        - name: 전용 비인간 account SSH ping
+          ansible.builtin.ping:
+
+        - name: 최소 facts만 read-only 조회
+          ansible.builtin.setup:
+            gather_subset:
+              - '!all'
+              - min
+          changed_when: false

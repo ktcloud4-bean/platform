@@ -64,7 +64,8 @@ export USER=awx HOME=/tmp
 runtime="$WORKSPACE/source/.awx04-python-runtime"
 packages="$WORKSPACE/source/.awx04-python-packages"
 bin_dir="$WORKSPACE/source/.awx04-bin"
-mkdir -p "$runtime/usr" "$packages" "$bin_dir"
+ssh_root="$WORKSPACE/source/.awx04-ssh"
+mkdir -p "$runtime/usr" "$packages" "$bin_dir" "$ssh_root"
 cp -R /usr/local "$runtime/usr/"
 cp -R /usr/lib "$runtime/usr/"
 # final EE에는 installer와 bundled third-party package metadata를 넣지 않는다.
@@ -73,6 +74,29 @@ rm -rf "$runtime/usr/local/lib/python3.13/ensurepip" \
 find "$runtime/usr/local/lib/python3.13/site-packages" -maxdepth 1 -name 'pip-*.dist-info' -exec rm -rf {} +
 python3 -m pip install --no-cache-dir --target "$packages" \
   --requirement gitops/tools/awx-04/ee/python-requirements.txt
+# AWX가 Vault Machine credential의 private key를 ephemeral ssh-agent에만 주입한다.
+# 비특권 Jenkins agent에서도 apk의 --root/--usermode로 workspace에 정확한 SSH runtime을
+# 준비한 뒤 final image에는 COPY만 한다.
+apk --root "$ssh_root" --repositories-file /etc/apk/repositories --keys-dir /etc/apk/keys \
+  --initdb --usermode --no-cache add \
+  libcrypto3=3.5.7-r0 \
+  libedit=20260508.3.1-r1 \
+  libncursesw=6.6_p20260516-r0 \
+  musl=1.2.6-r2 \
+  ncurses-terminfo-base=6.6_p20260516-r0 \
+  openssh-client-common=10.3_p1-r0 \
+  openssh-keygen=10.3_p1-r0 \
+  openssh-client-default=10.3_p1-r0 \
+  zlib=1.3.2-r0
+for apk_state in "$ssh_root/etc/apk" "$ssh_root/var/cache/apk"; do
+  [[ -d "$apk_state" ]] && find "$apk_state" -depth -delete
+done
+# Alpine base에는 UID 1000 이름이 없다. OpenSSH가 execution UID를 resolve할 수 있도록
+# base의 root entry와 AWX execution identity만 final bundle에 명시한다.
+mkdir -p "$ssh_root/etc"
+printf '%s\n' 'root:x:0:0:root:/root:/bin/ash' 'awx:x:1000:0:AWX execution user:/tmp:/sbin/nologin' >"$ssh_root/etc/passwd"
+printf '%s\n' 'root:x:0:' 'awx:x:1000:' >"$ssh_root/etc/group"
+test -x "$ssh_root/usr/bin/ssh" && test -x "$ssh_root/usr/bin/ssh-agent"
 printf '%s\n' '#!/bin/sh' 'exec /usr/local/bin/python3 -c "from ansible.cli.playbook import main; main()" "$@"' >"$bin_dir/ansible-playbook"
 printf '%s\n' '#!/bin/sh' 'exec /usr/local/bin/python3 -c "from ansible_runner.__main__ import main; main()" "$@"' >"$bin_dir/ansible-runner"
 chmod 0555 "$bin_dir/ansible-playbook" "$bin_dir/ansible-runner"

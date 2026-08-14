@@ -168,12 +168,14 @@ Gitea read-only deploy key는 AWX credential에 저장하지 않는다. Source C
 provisioner, runtime policy는 서로 이 키·Harbor pull credential·AppRole 값을 읽을 수 없다.
 
 전용 `AWX-04 platform EE`는 Harbor digest
-`sha256:8a50355c48b8ffde5e86cbc552400194aba2c93b5ad169bb78305abc804905fe`만 사용한다.
-Jenkins build #12는 source `8d3f99396cef7b349b88b2207f606bebeca4485f`에서
-`community.postgresql 3.5.0`, 실제 role과 33개 playbook syntax를 확인한 뒤 Trivy,
+`sha256:0a35dcb1933fd6439730dd2a57e325be1bd175852c29dd0e2894728b16137bb9`만 사용한다.
+Jenkins replay #17은 source `112fb2a25afc2bc774fe3040bf091c1c421a1398`에서
+`community.postgresql 3.5.0`, 실제 role과 36개 playbook syntax를 확인한 뒤 Trivy,
 CycloneDX SBOM, Cosign sign/verify를 통과했다. EE는 rootless builder의 `RUN` 없이 최신
-Alpine Python runtime과 고정 Ansible package를 COPY하며, installer는 runtime image에 넣지
-않는다.
+Alpine Python runtime·고정 Ansible package·고정 OpenSSH runtime을 COPY하며, installer는
+runtime image에 넣지 않는다.
+Alpine base에 이름 없는 UID 1000이 OpenSSH에서 실패하지 않도록 OpenSSH bundle은 root와
+`awx`(UID 1000) passwd/group entry만 함께 제공한다.
 
 일상 `AWX Operators`에는 이 project와 `AWX-04 운영 원본 정보` check template의 read role만
 부여한다. template에는 execute·credential use 권한이 없고 branch override도 받지 않으며,
@@ -227,3 +229,39 @@ CR의 `image_pull_secrets`는 app/database Pod에 이 Docker config Secret을 �
 automation-job Pod에 같은 `imagePullSecrets`를 연결한다. 이 보정은 Secret 형식과 실행
 Pod 선언만 판정한다. private EE를 실제로 pull해 `k3s-01`에서 무변경 SSH를 실행하는 증거는
 `AWX-05`가 단 한 번 소유한다.
+
+## AWX-05 same-node SSH canary
+
+AWX-05는 실제 운영 변경 전에 `k3s-01.imcherry5778.xyz` 한 대에서만
+Machine credential 실행 경계를 확인한다. 새 SCM branch나 임시 Gitea `main`을 만들지 않고,
+이미 root immutable SHA로 배포되는 `awx-manual-project` ConfigMap의
+`awx05-ssh-canary.yml`만 사용한다. 따라서 AWX-04가 소유한 private Gitea mirror의
+`main` 고정·deploy key 경계를 넓히지 않는다.
+
+Machine private key는 `kv/awx/ssh-canary`에만 있고, `AWX-05 Vault Machine lookup`의
+짧은 AppRole이 built-in Vault external input source로 `ssh_key_data` 한 필드만
+resolve한다. Provision Hook·runtime/bootstrap policy는 private key를 읽지 못한다.
+lookup AppRole Secret ID는 1시간 TTL이므로 Vault login HTTP 400/403이면 승인 후
+`prepare-live.sh --refresh-lookup`으로 `kv/awx/ssh-canary-lookup`만 재발급한다. account,
+private key, host key, policy와 role은 교체하지 않는다.
+`awx-ssh-canary-known-hosts` Secret은 인증된 public host key 하나를 execution Pod의
+`/etc/awx-ssh-canary/known_hosts`에 read-only mount한다.
+플랫폼 EE는 UID 1000으로 실행되므로 default execution Pod는 PVC 대신 32 MiB `emptyDir`를
+`/runner`에 mount해 Ansible Runner의 private data를 쓰게 한다.
+
+`AWX-05 k3s-01 SSH canary` Job Template은 check-only, one-host limit, forks 1,
+simultaneous 및 inventory/credential/branch/extra-vars override 금지, `become_enabled=false`다.
+AWX 24.6.1의 built-in Machine credential에는 `ssh_common_args` 필드가 없으므로 strict
+host-key 옵션은 이 전용 host 변수에서만 고정한다.
+CR reconciliation 직후에는 web API보다 task dispatcher가 늦게 준비되거나 교체될 수 있으므로,
+provision Hook은 오류 없는 enabled·capacity control/hybrid instance 집합이 20초 동안 안정된 뒤
+inventory를 만든다.
+`AWX Operators`에는 이 전용 inventory·credential의 use 및 template execute만 부여하며,
+기존 운영 inventory와 다른 credential에는 권한을 추가하지 않는다. 실행 Pod egress는
+`10.10.20.10/32:22` 한 경로만 추가한다. playbook 안의 두 read-only TCP 음성 판정은
+다른 운영 host의 22와 k3s-01의 2222가 이 policy로 막혔음을 같은 job에서 확인한다.
+
+Rollback은 `gitops/tools/awx-05/prepare-live.sh --rollback`으로 source 제한 account/key,
+Vault KV/AppRole/policy를 제거하고, AWX child를 직전 main SHA로 sync한 다음
+`platform-root`를 literal `main`으로 복원한다. AWX DB·기존 SCM deploy key·EE·PVC와
+OPNsense는 이 범위에서 변경하거나 삭제하지 않는다.

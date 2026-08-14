@@ -14,6 +14,9 @@ LABEL org.opencontainers.image.title="AWX-04 platform execution environment" \
 COPY .awx04-python-runtime/usr/ /usr/
 COPY .awx04-python-packages/ /opt/awx-python/
 COPY .awx04-bin/ /opt/awx-bin/
+# Jenkins가 pinned Alpine OpenSSH dependency closure를 비특권 workspace에 준비한다.
+# rootless Buildah Containerfile에는 root 권한 RUN을 추가하지 않는다.
+COPY .awx04-ssh/ /
 COPY infra/ansible/roles/ /usr/share/ansible/roles/
 COPY .awx04-collections/ansible_collections/ /usr/share/ansible/collections/ansible_collections/
 

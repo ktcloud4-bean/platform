@@ -19,6 +19,7 @@ data:
     API = BASE + "/api/v2"
     runtime = json.load(open("/vault/secrets/runtime.json", encoding="utf-8"))
     scm = json.load(open("/vault/secrets/scm.json", encoding="utf-8"))
+    ssh_canary = json.load(open("/vault/secrets/ssh-canary.json", encoding="utf-8"))
     admin_password = runtime["admin_password"]
     auth = base64.b64encode(f"awx-recovery:{admin_password}".encode()).decode()
 
@@ -53,6 +54,28 @@ data:
                 print(f"AWX API 준비 대기: {attempt + 1}/180")
             time.sleep(5)
         raise RuntimeError("AWX API 준비 시간이 초과됨")
+
+    def wait_task_instance():
+        # AWX web API가 먼저 Ready가 되어도 task dispatcher가 재기동 중이면 host 생성의
+        # on-commit dispatch가 500을 내거나 SCM update가 instance shutdown으로 reap된다.
+        # enabled/capacity가 있고 오류 없는 control/hybrid 집합이 20초 동안 같은지 확인해
+        # CR reconciliation이 task Deployment를 교체하는 창을 지난 뒤 provisioning한다.
+        previous = ()
+        stable = 0
+        for attempt in range(120):
+            instances = api("GET", "/instances/?page_size=200").get("results", [])
+            ready = tuple(sorted(item.get("hostname") for item in instances if item.get("enabled") and
+                          not item.get("errors") and int(item.get("capacity") or 0) > 0 and
+                          item.get("node_type") in ("control", "hybrid")))
+            stable = stable + 1 if ready and ready == previous else 1
+            previous = ready
+            if ready and stable >= 5:
+                print(f"AWX task instance 안정 준비됨: {','.join(ready)}")
+                return
+            if attempt % 12 == 0:
+                print(f"AWX task instance 준비 대기: {attempt + 1}/120")
+            time.sleep(5)
+        raise RuntimeError("AWX task instance 준비 시간이 초과됨")
 
     def update_project(project):
         requested = api("POST", f"/projects/{project['id']}/update/", {}, expected=(202,))
@@ -109,6 +132,7 @@ data:
         attach(f"/roles/{object_role(obj, role_name)}/teams/", team["id"])
 
     wait_ready()
+    wait_task_instance()
 
     api("PATCH", "/settings/system/", {"TOWER_URL_BASE": "https://awx.imcherry5778.xyz"})
     api("PATCH", "/settings/oidc/", {
@@ -218,8 +242,9 @@ data:
 
     vault_lookup_type = one("credential_types", {"name": "HashiCorp Vault Secret Lookup"})
     source_control_type = one("credential_types", {"name": "Source Control"})
-    if vault_lookup_type is None or source_control_type is None:
-        raise RuntimeError("AWX built-in Vault 또는 Source Control credential type을 찾지 못했다")
+    machine_type = one("credential_types", {"name": "Machine"})
+    if vault_lookup_type is None or source_control_type is None or machine_type is None:
+        raise RuntimeError("AWX built-in Vault, Source Control 또는 Machine credential type을 찾지 못했다")
     vault_lookup = ensure("credentials", {"name": "AWX-04 Vault SCM lookup", "organization": organization["id"]}, {
         "name": "AWX-04 Vault SCM lookup", "organization": organization["id"],
         "description": "Gitea deploy key는 Vault external lookup으로만 읽는다.",
@@ -260,7 +285,7 @@ data:
     platform_ee = ensure("execution_environments", {"name": "AWX-04 platform EE"}, {
         "name": "AWX-04 platform EE",
         "description": "Jenkins Trivy·SBOM·Cosign을 통과한 Harbor digest 전용 EE",
-        "image": "harbor.imcherry5778.xyz/awx-ee/platform-ee@sha256:8a50355c48b8ffde5e86cbc552400194aba2c93b5ad169bb78305abc804905fe",
+        "image": "harbor.imcherry5778.xyz/awx-ee/platform-ee@sha256:0a35dcb1933fd6439730dd2a57e325be1bd175852c29dd0e2894728b16137bb9",
         "credential": None, "pull": "",
     })
     scm_template = ensure("job_templates", {"name": "AWX-04 운영 원본 정보", "organization": organization["id"]}, {
@@ -273,6 +298,63 @@ data:
         "ask_credential_on_launch": False, "ask_job_type_on_launch": False,
         "ask_scm_branch_on_launch": False, "forks": 1, "verbosity": 0,
     })
+
+    ssh_canary_inventory = ensure("inventories", {"name": "AWX-05 k3s-01 SSH canary", "organization": organization["id"]}, {
+        "name": "AWX-05 k3s-01 SSH canary", "organization": organization["id"],
+        "description": "같은 k3s-01의 무변경 SSH canary 전용 inventory; 다른 운영 host는 포함하지 않는다.",
+        "variables": json.dumps({"ansible_become": False, "awx05_single_target": True}),
+    })
+    ssh_canary_host = ensure("hosts", {"name": "k3s-01.imcherry5778.xyz", "inventory": ssh_canary_inventory["id"]}, {
+        "name": "k3s-01.imcherry5778.xyz", "inventory": ssh_canary_inventory["id"], "enabled": True,
+        "description": "AWX-05 canary의 같은-node SSH 대상 하나",
+        "variables": json.dumps({
+            "ansible_become": False,
+            "ansible_ssh_common_args": "-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/awx-ssh-canary/known_hosts -o GlobalKnownHostsFile=/dev/null -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no",
+        }),
+    })
+    ssh_canary_lookup = ensure("credentials", {"name": "AWX-05 Vault Machine lookup", "organization": organization["id"]}, {
+        "name": "AWX-05 Vault Machine lookup", "organization": organization["id"],
+        "description": "AWX-05 Machine private key external lookup의 단기 AppRole bootstrap",
+        "credential_type": vault_lookup_type["id"],
+        "inputs": {
+            "url": "https://vault.vault.svc.cluster.local:8200",
+            "cacert": open("/trust/vault.crt", encoding="utf-8").read(),
+            "role_id": ssh_canary["vault_role_id"], "secret_id": ssh_canary["vault_secret_id"],
+            "default_auth_path": "approle", "api_version": "v2",
+        },
+    })
+    ssh_canary_credential = ensure("credentials", {"name": "AWX-05 k3s-01 SSH canary", "organization": organization["id"]}, {
+        "name": "AWX-05 k3s-01 SSH canary", "organization": organization["id"],
+        "description": "전용 비인간 account와 strict host key만 사용하는 no-become Machine credential",
+        "credential_type": machine_type["id"],
+        "inputs": {
+            "username": "awx-canary",
+        },
+    }, update=False)
+    ensure("credential_input_sources", {
+        "target_credential": ssh_canary_credential["id"], "input_field_name": "ssh_key_data",
+    }, {
+        "target_credential": ssh_canary_credential["id"], "source_credential": ssh_canary_lookup["id"],
+        "input_field_name": "ssh_key_data",
+        "metadata": {
+            "secret_backend": "kv", "secret_path": "awx/ssh-canary", "auth_path": "approle",
+            "secret_key": "ssh_private_key",
+        },
+    })
+    ssh_canary_template = ensure("job_templates", {"name": "AWX-05 k3s-01 SSH canary", "organization": organization["id"]}, {
+        "name": "AWX-05 k3s-01 SSH canary", "organization": organization["id"],
+        "description": "k3s-01 하나에서 ping/min facts와 NetworkPolicy 음성 경계만 판정하는 check-only job",
+        "project": project["id"], "inventory": ssh_canary_inventory["id"],
+        "playbook": "awx05-ssh-canary.yml", "job_type": "check",
+        "execution_environment": platform_ee["id"], "limit": "k3s-01.imcherry5778.xyz",
+        "become_enabled": False, "allow_simultaneous": False,
+        "ask_limit_on_launch": False, "ask_inventory_on_launch": False,
+        "ask_credential_on_launch": False, "ask_job_type_on_launch": False,
+        "ask_scm_branch_on_launch": False, "ask_variables_on_launch": False,
+        "ask_execution_environment_on_launch": False, "ask_forks_on_launch": False,
+        "forks": 1, "verbosity": 0,
+    })
+    attach(f"/job_templates/{ssh_canary_template['id']}/credentials/", ssh_canary_credential["id"])
 
     common_template = {
         "project": project["id"], "inventory": boundary["id"],
@@ -331,6 +413,9 @@ data:
     give_team_role(workflow, "execute_role", operators)
     give_team_role(scm_project, "read_role", operators)
     give_team_role(scm_template, "read_role", operators)
+    give_team_role(ssh_canary_inventory, "use_role", operators)
+    give_team_role(ssh_canary_credential, "use_role", operators)
+    give_team_role(ssh_canary_template, "execute_role", operators)
     give_team_role(workflow, "approval_role", approvers)
 
     # 이전 AWX-01 또는 UI 변경으로 생길 수 있는 과잉 team role을 정확한 최소 집합으로
@@ -342,6 +427,9 @@ data:
         object_role(workflow, "execute_role"),
         object_role(scm_project, "read_role"),
         object_role(scm_template, "read_role"),
+        object_role(ssh_canary_inventory, "use_role"),
+        object_role(ssh_canary_credential, "use_role"),
+        object_role(ssh_canary_template, "execute_role"),
     }
     approver_role_ids = {object_role(workflow, "approval_role")}
     for team, allowed_role_ids in ((operators, operator_role_ids), (approvers, approver_role_ids)):
@@ -352,4 +440,4 @@ data:
 
     # 실행 금지 인벤토리, denied credential, denied/apply JT에는 Operators role을
     # 절대 붙이지 않는다. 다음 단계 verify-live.sh가 이를 같은 시점에 대조한다.
-    print("AWX-01/AWX-04 선언 provisioning 완료")
+    print("AWX-01/AWX-04/AWX-05 선언 provisioning 완료")

@@ -265,6 +265,26 @@ spec:
       ports:
         - {protocol: TCP, port: 6443}
 ---
+# AWX-05의 execution Pod가 같은 k3s-01 한 대의 SSH만 사용할 수 있는 경로다.
+# 다른 운영 VM TCP 22와 k3s-01의 다른 port에는 별도 egress rule이 없으므로 기본 deny다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-execution-k3s-ssh-canary-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: ansible-awx
+        operator: Exists
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.10.20.10/32}
+      ports:
+        - {protocol: TCP, port: 22}
+---
 # bootstrap Hook만 runtime Secret을 만들기 위해 Kubernetes API를 사용한다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

@@ -1,0 +1,36 @@
+---
+- name: AWX-05 k3s-01 SSH canary account bootstrap
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    awx05_account: awx-canary
+    awx05_home: /var/lib/awx-canary
+  tasks:
+    - name: 전용 비인간 canary account 생성
+      ansible.builtin.user:
+        name: "{{ awx05_account }}"
+        system: true
+        create_home: true
+        home: "{{ awx05_home }}"
+        shell: /bin/bash
+        password_lock: true
+        groups: ''
+        append: false
+
+    - name: canary SSH 디렉터리 권한 제한
+      ansible.builtin.file:
+        path: "{{ awx05_home }}/.ssh"
+        state: directory
+        owner: "{{ awx05_account }}"
+        group: "{{ awx05_account }}"
+        mode: '0700'
+
+    - name: source 제한 canary key 하나만 설치
+      ansible.builtin.copy:
+        content: "{{ awx05_authorized_key }}\n"
+        dest: "{{ awx05_home }}/.ssh/authorized_keys"
+        owner: "{{ awx05_account }}"
+        group: "{{ awx05_account }}"
+        mode: '0600'
+      no_log: true
