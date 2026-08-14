@@ -1,0 +1,112 @@
+---
+
+- name: BKP-08 controller-side secret 준비
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars:
+    bkp08_secret_dir: >-
+      {{ lookup('ansible.builtin.env', 'BKP08_SECRET_DIR') | default(
+         lookup('ansible.builtin.env', 'KTC_SECRET_ROOT') | default(lookup('ansible.builtin.env', 'HOME') ~ '/secrets/ktcloud4-bean', true) ~ '/bkp-08', true) }}
+  tasks:
+    - name: 저장소 밖 입력 경계 확인
+      ansible.builtin.assert:
+        that:
+          - bkp08_secret_dir is regex('^/')
+          - not bkp08_secret_dir.startswith(playbook_dir | dirname | dirname)
+        fail_msg: BKP08_SECRET_DIR은 저장소 밖 절대경로여야 한다.
+
+    - name: BKP-08 복구 자격증명 디렉터리 선언
+      ansible.builtin.file:
+        path: "{{ bkp08_secret_dir }}"
+        state: directory
+        owner: "{{ lookup('ansible.builtin.env', 'USER') }}"
+        mode: "0700"
+
+    - name: 전용 S3 identity 자격증명 생성 또는 재사용
+      ansible.builtin.set_fact:
+        bkp08_netbird_access_key: >-
+          {{ lookup('ansible.builtin.password', bkp08_secret_dir ~ '/netbird-s3.access',
+                    length=24, chars=['ascii_letters', 'digits']) }}
+        bkp08_netbird_secret_key: >-
+          {{ lookup('ansible.builtin.password', bkp08_secret_dir ~ '/netbird-s3.secret',
+                    length=64, chars=['ascii_letters', 'digits']) }}
+        bkp08_warpgate_access_key: >-
+          {{ lookup('ansible.builtin.password', bkp08_secret_dir ~ '/warpgate-s3.access',
+                    length=24, chars=['ascii_letters', 'digits']) }}
+        bkp08_warpgate_secret_key: >-
+          {{ lookup('ansible.builtin.password', bkp08_secret_dir ~ '/warpgate-s3.secret',
+                    length=64, chars=['ascii_letters', 'digits']) }}
+      no_log: true
+
+    - name: 복구 자격증명 파일 mode 0600 강제
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: "{{ lookup('ansible.builtin.env', 'USER') }}"
+        mode: "0600"
+      loop:
+        - "{{ bkp08_secret_dir }}/netbird-s3.access"
+        - "{{ bkp08_secret_dir }}/netbird-s3.secret"
+        - "{{ bkp08_secret_dir }}/warpgate-s3.access"
+        - "{{ bkp08_secret_dir }}/warpgate-s3.secret"
+      no_log: true
+
+- name: BKP-08 전용 S3 bucket·identity 선언
+  hosts: object_nodes
+  gather_facts: true
+  become: true
+  vars:
+    bkp08_netbird_access_key: "{{ hostvars['localhost'].bkp08_netbird_access_key }}"
+    bkp08_netbird_secret_key: "{{ hostvars['localhost'].bkp08_netbird_secret_key }}"
+    bkp08_warpgate_access_key: "{{ hostvars['localhost'].bkp08_warpgate_access_key }}"
+    bkp08_warpgate_secret_key: "{{ hostvars['localhost'].bkp08_warpgate_secret_key }}"
+  roles:
+    - role: bkp08_s3_targets
+
+- name: NetBird native backup 선언
+  hosts: netbird_server
+  gather_facts: true
+  become: true
+  vars:
+    bkp03_backup_kind: netbird
+    bkp03_backup_user: netbird-backup
+    bkp03_backup_group: netbird-backup
+    bkp03_service_name: netbird-native-backup
+    bkp03_config_dir: /etc/netbird-native-backup
+    bkp03_state_dir: /var/lib/netbird-native-backup
+    bkp03_cache_dir: /var/cache/netbird-native-backup
+    bkp03_s3_bucket: bkp-08-netbird
+    bkp03_s3_access_key: "{{ hostvars['localhost'].bkp08_netbird_access_key }}"
+    bkp03_s3_secret_key: "{{ hostvars['localhost'].bkp08_netbird_secret_key }}"
+    bkp03_s3_ca_b64: "{{ hostvars[groups['object_nodes'][0]].bkp03_s3_ca_b64 }}"
+    bkp03_backup_ip_allow:
+      - 127.0.0.0/8
+      - 10.10.40.1/32
+      - 10.10.50.20/32
+  roles:
+    - role: bkp03_backup_common
+    - role: netbird_native_backup
+
+- name: Warpgate native backup 선언
+  hosts: warpgate_nodes
+  gather_facts: true
+  become: true
+  vars:
+    bkp03_backup_kind: warpgate
+    bkp03_backup_user: warpgate-backup
+    bkp03_backup_group: warpgate-backup
+    bkp03_service_name: warpgate-native-backup
+    bkp03_config_dir: /etc/warpgate-native-backup
+    bkp03_state_dir: /var/lib/warpgate-native-backup
+    bkp03_cache_dir: /var/cache/warpgate-native-backup
+    bkp03_s3_bucket: bkp-08-warpgate
+    bkp03_s3_access_key: "{{ hostvars['localhost'].bkp08_warpgate_access_key }}"
+    bkp03_s3_secret_key: "{{ hostvars['localhost'].bkp08_warpgate_secret_key }}"
+    bkp03_s3_ca_b64: "{{ hostvars[groups['object_nodes'][0]].bkp03_s3_ca_b64 }}"
+    bkp03_backup_ip_allow:
+      - 127.0.0.0/8
+      - 10.10.30.1/32
+      - 10.10.50.20/32
+  roles:
+    - role: bkp03_backup_common
+    - role: warpgate_native_backup

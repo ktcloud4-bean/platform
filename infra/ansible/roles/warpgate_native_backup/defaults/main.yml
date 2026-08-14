@@ -1,0 +1,13 @@
+---
+
+bkp08_warpgate_backup_user: warpgate-backup
+bkp08_warpgate_backup_group: warpgate-backup
+bkp08_warpgate_service_name: warpgate-native-backup
+bkp08_warpgate_config_dir: /etc/warpgate-native-backup
+bkp08_warpgate_state_dir: /var/lib/warpgate-native-backup
+bkp08_warpgate_cache_dir: /var/cache/warpgate-native-backup
+bkp08_warpgate_local_backup_dir: /var/backups/warpgate
+bkp08_warpgate_s3_bucket: bkp-08-warpgate
+bkp08_warpgate_retention_count: 7
+bkp08_warpgate_backup_timer_calendar: "*-*-* 03:30:00"
+bkp08_warpgate_health_max_age_seconds: 129600

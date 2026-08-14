@@ -1,0 +1,5 @@
+---
+
+- name: Warpgate native backup systemd 재적재
+  ansible.builtin.systemd:
+    daemon_reload: true

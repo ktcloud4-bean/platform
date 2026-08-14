@@ -1,0 +1,99 @@
+---
+
+- name: Warpgate native backup 대상과 경계 확인
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.hostname == 'warpgate-01'
+      - bkp03_backup_kind == 'warpgate'
+      - bkp03_s3_bucket == 'bkp-08-warpgate'
+    fail_msg: warpgate-01과 전용 bucket을 확인한다.
+
+- name: Warpgate systemd service active 확인
+  ansible.builtin.command:
+    argv: [systemctl, is-active, warpgate.service]
+  register: warpgate_backup_service_active
+  changed_when: false
+  check_mode: false
+
+- name: Warpgate 서비스 active 상태 판정
+  ansible.builtin.assert:
+    that:
+      - warpgate_backup_service_active.stdout == 'active'
+    fail_msg: warpgate.service가 실행 중이어야 한다.
+
+- name: 로컬 백업 디렉터리 선언
+  ansible.builtin.file:
+    path: "{{ bkp08_warpgate_local_backup_dir }}"
+    state: directory
+    owner: "{{ bkp03_backup_user }}"
+    group: "{{ bkp03_backup_group }}"
+    mode: "0750"
+
+- name: Warpgate 데이터 및 설정 디렉터리에 backup 사용자 읽기 ACL 적용
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      setfacl -R -m u:{{ bkp03_backup_user }}:rX /var/lib/warpgate /etc/warpgate.yaml
+      setfacl -R -d -m u:{{ bkp03_backup_user }}:rX /var/lib/warpgate
+      setfacl -m u:{{ bkp03_backup_user }}:r /etc/systemd/system/warpgate.service
+      if [ -d /var/lib/warpgate-acme ]; then
+        setfacl -R -m u:{{ bkp03_backup_user }}:rX /var/lib/warpgate-acme
+        setfacl -R -d -m u:{{ bkp03_backup_user }}:rX /var/lib/warpgate-acme
+      fi
+      if [ -d /etc/warpgate-acme ]; then
+        setfacl -R -m u:{{ bkp03_backup_user }}:rX /etc/warpgate-acme
+      fi
+    executable: /bin/bash
+  register: warpgate_backup_setfacl
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Warpgate native backup·격리 restore 스크립트 선언
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: warpgate-native-backup.sh.j2
+      dest: /usr/local/libexec/warpgate-native-backup.sh
+      group: "{{ bkp03_backup_group }}"
+      mode: "0750"
+    - src: warpgate-native-restore-verify.sh.j2
+      dest: /usr/local/sbin/warpgate-native-restore-verify
+      group: root
+      mode: "0750"
+
+- name: Warpgate native backup systemd unit 선언
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - warpgate-native-backup.service
+    - warpgate-native-backup.timer
+    - warpgate-native-restore-verify.service
+  notify: Warpgate native backup systemd 재적재
+
+- name: Warpgate native backup executable SELinux 기본 label 적용
+  ansible.builtin.command:
+    argv: [restorecon, -Fv, "{{ item }}"]
+  loop:
+    - /usr/local/libexec/warpgate-native-backup.sh
+    - /usr/local/sbin/warpgate-native-restore-verify
+  register: warpgate_backup_restorecon
+  changed_when: "'Relabeled' in warpgate_backup_restorecon.stdout"
+  when: not ansible_check_mode
+
+- name: Warpgate native backup systemd handler 반영
+  ansible.builtin.meta: flush_handlers
+
+- name: Warpgate native backup timer 활성화
+  ansible.builtin.systemd:
+    name: warpgate-native-backup.timer
+    enabled: true
+    state: started
+  when: not ansible_check_mode

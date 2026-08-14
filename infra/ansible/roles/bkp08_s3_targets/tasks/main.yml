@@ -1,0 +1,371 @@
+---
+
+- name: BKP-08 S3 전제와 전용 identity 입력 확인
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.hostname == 'object-01'
+      - bkp08_netbird_bucket != bkp08_warpgate_bucket
+      - bkp08_netbird_identity != bkp08_warpgate_identity
+      - bkp08_netbird_access_key | length >= 16
+      - bkp08_netbird_secret_key | length >= 32
+      - bkp08_warpgate_access_key | length >= 16
+      - bkp08_warpgate_secret_key | length >= 32
+      - bkp08_netbird_access_key != bkp08_warpgate_access_key
+    fail_msg: object-01과 NetBird·Warpgate 전용 identity의 분리 입력이 필요하다.
+  no_log: true
+
+- name: SeaweedFS S3 구성과 public certificate 현재 상태 확인
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ bkp03_s3_config_path }}"
+    - "{{ bkp03_s3_ca_path }}"
+    - "{{ bkp03_rclone_path }}"
+    - "{{ bkp08_volume_service_path }}"
+  register: bkp08_s3_files
+
+- name: SeaweedFS S3 필수 파일 존재 확인
+  ansible.builtin.assert:
+    that:
+      - bkp08_s3_files.results | map(attribute='stat.exists') | min
+    fail_msg: S3-01이 설치한 s3.json, TLS certificate, rclone, volume service가 필요하다.
+
+- name: SeaweedFS 기존 volume 목록과 slot 한도 확인
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      echo 'volume.list' |
+      /usr/local/bin/weed shell -master=127.0.0.1:9333 2>/dev/null
+    executable: /bin/bash
+  register: bkp08_volume_list_before
+  changed_when: false
+  check_mode: false
+
+- name: SeaweedFS volume unit 읽기
+  ansible.builtin.slurp:
+    src: "{{ bkp08_volume_service_path }}"
+  register: bkp08_volume_unit_raw
+
+- name: 재시작 전 SeaweedFS volume ID 기록
+  ansible.builtin.set_fact:
+    bkp08_volume_ids_before: >-
+      {{ bkp08_volume_list_before.stdout |
+         regex_findall('volume Id:([0-9]+),') | map('int') | list }}
+
+- name: 승인된 SeaweedFS volume slot 변경 경계 확인
+  ansible.builtin.assert:
+    that:
+      - >-
+        (bkp08_volume_unit_raw.content | b64decode |
+         regex_findall('(?m)^  -max=([0-9]+) ') | length) == 1
+      - >-
+        (bkp08_volume_unit_raw.content | b64decode |
+         regex_findall('(?m)^  -max=([0-9]+) ') | first | int)
+        in [10, 15, 20, bkp08_required_volume_max_count]
+      - bkp08_required_volume_max_count == 30
+    fail_msg: >-
+      승인된 object-01 volume max 10, 15, 20에서 30으로의 변경만 허용한다.
+
+- name: SeaweedFS volume slot 한도 30 선언
+  ansible.builtin.lineinfile:
+    path: "{{ bkp08_volume_service_path }}"
+    regexp: '^  -max=[0-9]+ '
+    line: "  -max={{ bkp08_required_volume_max_count }} \\"
+  register: bkp08_volume_unit_change
+
+- name: 변경된 SeaweedFS volume service만 재시작
+  ansible.builtin.systemd:
+    name: seaweedfs-volume.service
+    state: restarted
+    daemon_reload: true
+  when:
+    - bkp08_volume_unit_change.changed
+    - not ansible_check_mode
+
+- name: SeaweedFS volume service 재연결 대기
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: 8080
+    state: started
+    timeout: 30
+  when:
+    - bkp08_volume_unit_change.changed
+    - not ansible_check_mode
+
+- name: SeaweedFS volume service와 slot 한도 재확인
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      systemctl is-active seaweedfs-volume.service
+      grep -Fx -- '  -max={{ bkp08_required_volume_max_count }} \' '{{ bkp08_volume_service_path }}'
+      echo 'volume.list' | /usr/local/bin/weed shell -master=127.0.0.1:9333 2>/dev/null
+    executable: /bin/bash
+  register: bkp08_volume_list_after
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: 기존 SeaweedFS volume 보존 확인
+  ansible.builtin.assert:
+    that:
+      - >-
+        bkp08_volume_ids_before |
+        difference(bkp08_volume_list_after.stdout |
+                   regex_findall('volume Id:([0-9]+),') |
+                   map('int') | list) | length == 0
+      - >-
+        bkp08_volume_list_after.stdout |
+        regex_findall('Topology.*volume:[0-9]+/' ~
+                      (bkp08_required_volume_max_count | string) ~ ' active:') |
+        length == 1
+    fail_msg: volume service 재시작 전 기존 volume 목록이 모두 보존되어야 한다.
+  when: not ansible_check_mode
+
+- name: 기존 static S3 구성 읽기
+  ansible.builtin.slurp:
+    src: "{{ bkp03_s3_config_path }}"
+  register: bkp08_s3_config_raw
+  no_log: true
+
+- name: 기존 S3 구성과 BKP-08 최종 identity 계산
+  ansible.builtin.set_fact:
+    bkp08_s3_current_config: "{{ bkp08_s3_config_raw.content | b64decode | from_json }}"
+    bkp08_s3_owned_names:
+      - "{{ bkp08_netbird_identity }}"
+      - "{{ bkp08_warpgate_identity }}"
+    bkp08_s3_desired_identities:
+      - name: "{{ bkp08_netbird_identity }}"
+        credentials:
+          - accessKey: "{{ bkp08_netbird_access_key }}"
+            secretKey: "{{ bkp08_netbird_secret_key }}"
+        actions:
+          - "Read:{{ bkp08_netbird_bucket }}"
+          - "List:{{ bkp08_netbird_bucket }}"
+          - "Write:{{ bkp08_netbird_bucket }}"
+      - name: "{{ bkp08_warpgate_identity }}"
+        credentials:
+          - accessKey: "{{ bkp08_warpgate_access_key }}"
+            secretKey: "{{ bkp08_warpgate_secret_key }}"
+        actions:
+          - "Read:{{ bkp08_warpgate_bucket }}"
+          - "List:{{ bkp08_warpgate_bucket }}"
+          - "Write:{{ bkp08_warpgate_bucket }}"
+  no_log: true
+
+- name: BKP-08 이외 기존 identity 보존 목록 계산
+  ansible.builtin.set_fact:
+    bkp08_s3_preserved_identities: >-
+      {{ bkp08_s3_current_config.identities | default([])
+         | rejectattr('name', 'in', bkp08_s3_owned_names) | list }}
+  no_log: true
+
+- name: BKP-08 최종 static S3 구성 계산
+  ansible.builtin.set_fact:
+    bkp08_s3_final_config: >-
+      {{ bkp08_s3_current_config
+         | combine({'identities': bkp08_s3_preserved_identities + bkp08_s3_desired_identities}) }}
+  no_log: true
+
+- name: 현재 bucket 목록 조회
+  ansible.builtin.shell:
+    cmd: "set -o pipefail; echo 'fs.ls /buckets' | /usr/local/bin/weed shell -filer=127.0.0.1:8888 2>/dev/null"
+    executable: /bin/bash
+  register: bkp08_bucket_listing
+  changed_when: false
+  check_mode: false
+
+- name: 생성이 필요한 BKP-08 bucket 계산
+  ansible.builtin.set_fact:
+    bkp08_missing_buckets: >-
+      {{ [bkp08_netbird_bucket, bkp08_warpgate_bucket]
+         | difference(bkp08_bucket_listing.stdout_lines) | list }}
+
+- name: bucket bootstrap용 일회성 identity 계산
+  ansible.builtin.set_fact:
+    bkp08_bootstrap_access_key: >-
+      {{ lookup('ansible.builtin.password', '/dev/null', length=24,
+                chars=['ascii_letters', 'digits']) }}
+    bkp08_bootstrap_secret_key: >-
+      {{ lookup('ansible.builtin.password', '/dev/null', length=64,
+                chars=['ascii_letters', 'digits']) }}
+  no_log: true
+  when: bkp08_missing_buckets | length > 0
+
+- name: BKP-08 bucket bootstrap와 최종 최소권한 수렴
+  block:
+    - name: 일회성 bucket bootstrap identity를 static config에 추가
+      ansible.builtin.copy:
+        content: >-
+          {{ bkp08_s3_current_config | combine({'identities':
+             bkp08_s3_preserved_identities + bkp08_s3_desired_identities + [{
+               'name': 'bkp-08-bootstrap',
+               'credentials': [{'accessKey': bkp08_bootstrap_access_key,
+                                'secretKey': bkp08_bootstrap_secret_key}],
+               'actions': ['Admin:' ~ bkp08_netbird_bucket,
+                           'Admin:' ~ bkp08_warpgate_bucket]
+             }]}) | to_nice_json }}
+        dest: "{{ bkp03_s3_config_path }}"
+        owner: seaweedfs
+        group: seaweedfs
+        mode: "0600"
+      no_log: true
+      when:
+        - bkp08_missing_buckets | length > 0
+        - not ansible_check_mode
+
+    - name: bootstrap identity 반영을 위해 S3 gateway만 재시작
+      ansible.builtin.systemd:
+        name: seaweedfs-s3.service
+        state: restarted
+      when:
+        - bkp08_missing_buckets | length > 0
+        - not ansible_check_mode
+
+    - name: S3 API로 전용 bucket 생성
+      ansible.builtin.command:
+        argv:
+          - "{{ bkp03_rclone_path }}"
+          - mkdir
+          - "bootstrap:{{ item }}"
+          - --config
+          - /dev/null
+          - --ca-cert
+          - "{{ bkp03_s3_ca_path }}"
+      environment:
+        RCLONE_CONFIG_BOOTSTRAP_TYPE: s3
+        RCLONE_CONFIG_BOOTSTRAP_PROVIDER: Other
+        RCLONE_CONFIG_BOOTSTRAP_ENV_AUTH: "false"
+        RCLONE_CONFIG_BOOTSTRAP_ACCESS_KEY_ID: "{{ bkp08_bootstrap_access_key }}"
+        RCLONE_CONFIG_BOOTSTRAP_SECRET_ACCESS_KEY: "{{ bkp08_bootstrap_secret_key }}"
+        RCLONE_CONFIG_BOOTSTRAP_ENDPOINT: "{{ bkp03_s3_endpoint }}"
+        RCLONE_CONFIG_BOOTSTRAP_FORCE_PATH_STYLE: "true"
+      loop: "{{ bkp08_missing_buckets }}"
+      no_log: true
+      when:
+        - bkp08_missing_buckets | length > 0
+        - not ansible_check_mode
+  always:
+    - name: 일회성 identity를 제거한 BKP-08 최종 S3 구성 선언
+      ansible.builtin.copy:
+        content: "{{ bkp08_s3_final_config | to_nice_json }}"
+        dest: "{{ bkp03_s3_config_path }}"
+        owner: seaweedfs
+        group: seaweedfs
+        mode: "0600"
+      register: bkp08_final_s3_config
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: NetBird-01 및 Warpgate-01 전용 S3 source systemd drop-in directory 선언
+      ansible.builtin.file:
+        path: /etc/systemd/system/seaweedfs-s3.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: NetBird-01 및 Warpgate-01 전용 S3 source 허용 선언
+      ansible.builtin.copy:
+        content: |
+          [Service]
+          IPAddressAllow={{ bkp08_netbird_source_cidr }} {{ bkp08_warpgate_source_cidr }}
+        dest: /etc/systemd/system/seaweedfs-s3.service.d/bkp-08.conf
+        owner: root
+        group: root
+        mode: "0644"
+      register: bkp08_s3_source_dropin
+
+    - name: 최종 최소권한 설정으로 S3 gateway 수렴
+      ansible.builtin.systemd:
+        name: seaweedfs-s3.service
+        state: restarted
+        daemon_reload: true
+      when:
+        - not ansible_check_mode
+        - >-
+          bkp08_missing_buckets | length > 0 or
+          bkp08_final_s3_config.changed | default(false) or
+          bkp08_s3_source_dropin.changed | default(false) or
+          bkp08_volume_unit_change.changed | default(false)
+
+- name: 최종 bucket 목록 조회
+  ansible.builtin.shell:
+    cmd: "set -o pipefail; echo 'fs.ls /buckets' | /usr/local/bin/weed shell -filer=127.0.0.1:8888 2>/dev/null"
+    executable: /bin/bash
+  register: bkp08_final_bucket_listing
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: BKP-08 전용 bucket 두 개 존재 확인
+  ansible.builtin.assert:
+    that:
+      - bkp08_netbird_bucket in bkp08_final_bucket_listing.stdout_lines
+      - bkp08_warpgate_bucket in bkp08_final_bucket_listing.stdout_lines
+    fail_msg: NetBird와 Warpgate 전용 bucket이 모두 존재해야 한다.
+  when: not ansible_check_mode
+
+- name: NetBird identity의 Warpgate bucket 교차 쓰기 거부 확인
+  ansible.builtin.shell:
+    cmd: >-
+      printf 'denied\n' |
+      {{ bkp03_rclone_path }} rcat
+      nbdeny:{{ bkp08_warpgate_bucket }}/bkp08-netbird-cross-write-denied
+      --config /dev/null --ca-cert {{ bkp03_s3_ca_path }}
+      --retries 1 --low-level-retries 1 --log-level ERROR
+    executable: /bin/bash
+  environment:
+    RCLONE_CONFIG_NBDENY_TYPE: s3
+    RCLONE_CONFIG_NBDENY_PROVIDER: Other
+    RCLONE_CONFIG_NBDENY_ENV_AUTH: "false"
+    RCLONE_CONFIG_NBDENY_ACCESS_KEY_ID: "{{ bkp08_netbird_access_key }}"
+    RCLONE_CONFIG_NBDENY_SECRET_ACCESS_KEY: "{{ bkp08_netbird_secret_key }}"
+    RCLONE_CONFIG_NBDENY_ENDPOINT: "{{ bkp03_s3_endpoint }}"
+    RCLONE_CONFIG_NBDENY_FORCE_PATH_STYLE: "true"
+  register: bkp08_netbird_cross_write
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Warpgate identity의 NetBird bucket 교차 쓰기 거부 확인
+  ansible.builtin.shell:
+    cmd: >-
+      printf 'denied\n' |
+      {{ bkp03_rclone_path }} rcat
+      wgdeny:{{ bkp08_netbird_bucket }}/bkp08-warpgate-cross-write-denied
+      --config /dev/null --ca-cert {{ bkp03_s3_ca_path }}
+      --retries 1 --low-level-retries 1 --log-level ERROR
+    executable: /bin/bash
+  environment:
+    RCLONE_CONFIG_WGDENY_TYPE: s3
+    RCLONE_CONFIG_WGDENY_PROVIDER: Other
+    RCLONE_CONFIG_WGDENY_ENV_AUTH: "false"
+    RCLONE_CONFIG_WGDENY_ACCESS_KEY_ID: "{{ bkp08_warpgate_access_key }}"
+    RCLONE_CONFIG_WGDENY_SECRET_ACCESS_KEY: "{{ bkp08_warpgate_secret_key }}"
+    RCLONE_CONFIG_WGDENY_ENDPOINT: "{{ bkp03_s3_endpoint }}"
+    RCLONE_CONFIG_WGDENY_FORCE_PATH_STYLE: "true"
+  register: bkp08_warpgate_cross_write
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: producer identity의 상대 bucket Write 권한 부재 판정
+  ansible.builtin.assert:
+    that:
+      - bkp08_netbird_cross_write.rc != 0
+      - bkp08_warpgate_cross_write.rc != 0
+    fail_msg: NetBird와 Warpgate producer identity는 상대 bucket에 쓸 수 없어야 한다.
+  when: not ansible_check_mode
+
+- name: SeaweedFS S3 public certificate 읽기
+  ansible.builtin.slurp:
+    src: "{{ bkp03_s3_ca_path }}"
+  register: bkp08_s3_ca_raw
+
+- name: client play에 전달할 public certificate fact 선언
+  ansible.builtin.set_fact:
+    bkp03_s3_ca_b64: "{{ bkp08_s3_ca_raw.content }}"

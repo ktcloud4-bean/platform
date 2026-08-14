@@ -1,0 +1,14 @@
+---
+
+bkp08_netbird_bucket: bkp-08-netbird
+bkp08_warpgate_bucket: bkp-08-warpgate
+bkp08_netbird_identity: bkp-08-netbird
+bkp08_warpgate_identity: bkp-08-warpgate
+bkp08_netbird_source_cidr: 10.10.40.10/32
+bkp08_warpgate_source_cidr: 10.10.30.10/32
+bkp03_s3_config_path: /etc/seaweedfs/s3.json
+bkp03_s3_ca_path: /etc/seaweedfs/tls/s3.crt
+bkp03_s3_endpoint: https://s3.imcherry5778.xyz:8333
+bkp03_rclone_path: /usr/local/bin/rclone
+bkp08_volume_service_path: /etc/systemd/system/seaweedfs-volume.service
+bkp08_required_volume_max_count: 30

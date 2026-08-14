@@ -1,0 +1,77 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+STATE_DIR={{ bkp03_state_dir }}
+CACHE_DIR={{ bkp03_cache_dir }}
+CONFIG_DIR={{ bkp03_config_dir }}
+RCLONE={{ bkp03_rclone_path }}
+
+# shellcheck disable=SC1090
+set -a
+source "${CONFIG_DIR}/s3.env"
+set +a
+
+BUCKET=${BKP03_S3_BUCKET:?BKP03_S3_BUCKET is required}
+
+OBJECT=${1:-}
+if [ -z "${OBJECT}" ]; then
+  if [ -r "${STATE_DIR}/last-object" ]; then
+    OBJECT=$(tr -d '\r\n' <"${STATE_DIR}/last-object")
+  else
+    OBJECT=$(
+      "${RCLONE}" lsf "local:${BUCKET}/warpgate" \
+        --config "${CONFIG_DIR}/rclone.conf" \
+        --ca-cert "{{ bkp03_s3_ca_path }}" \
+        --files-only --include 'warpgate-backup-*.tar.gz' | sort -r | head -n 1
+    )
+    [ -n "${OBJECT}" ] && OBJECT="warpgate/${OBJECT}"
+  fi
+fi
+
+[ -n "${OBJECT}" ] || { echo "복원 검증 대상 object를 찾을 수 없다" >&2; exit 1; }
+
+STAGE=$(mktemp -d "${CACHE_DIR}/restore-verify.XXXXXX")
+cleanup() { rm -rf -- "${STAGE}"; }
+trap cleanup EXIT INT TERM
+
+RCLONE_COMMON=(
+  --config "${CONFIG_DIR}/rclone.conf"
+  --ca-cert "{{ bkp03_s3_ca_path }}"
+  --retries 3
+  --low-level-retries 10
+  --log-level NOTICE
+)
+
+ARCHIVE_NAME=$(basename "${OBJECT}")
+echo "Warpgate 격리 복원 검증 시작 object=${OBJECT}"
+
+"${RCLONE}" copyto "local:${BUCKET}/${OBJECT}" "${STAGE}/${ARCHIVE_NAME}" "${RCLONE_COMMON[@]}"
+"${RCLONE}" copyto "local:${BUCKET}/${OBJECT}.sha256" "${STAGE}/${ARCHIVE_NAME}.sha256" "${RCLONE_COMMON[@]}" || true
+
+if [ -f "${STAGE}/${ARCHIVE_NAME}.sha256" ]; then
+  (cd "${STAGE}" && sha256sum -c "${ARCHIVE_NAME}.sha256" --status) || {
+    echo "SHA-256 manifest 검증 실패" >&2
+    exit 1
+  }
+fi
+
+ACTUAL_SHA=$(sha256sum "${STAGE}/${ARCHIVE_NAME}" | awk '{print $1}')
+
+EXTRACT_DIR="${STAGE}/extracted"
+mkdir -p "${EXTRACT_DIR}"
+tar -xzf "${STAGE}/${ARCHIVE_NAME}" -C "${EXTRACT_DIR}"
+
+# SQLite DB 무결성 검증
+if [ -f "${EXTRACT_DIR}/db/db.sqlite3" ]; then
+  if ! sqlite3 "${EXTRACT_DIR}/db/db.sqlite3" "PRAGMA quick_check;" | grep -q "^ok$"; then
+    echo "복원된 SQLite quick_check 실패 db=db.sqlite3" >&2
+    exit 1
+  fi
+  echo "SQLite quick_check=PASS db=db.sqlite3"
+fi
+
+# 설정 파일 검증
+[ -f "${EXTRACT_DIR}/etc/warpgate.yaml" ] || { echo "warpgate.yaml 누락" >&2; exit 1; }
+
+echo "WarpgateRestoreVerify=PASS object=${OBJECT} sha256=${ACTUAL_SHA}"
