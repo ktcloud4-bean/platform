@@ -1,12 +1,12 @@
 ---
 
-- name: BKP-03 공통 입력 확인
+- name: BKP-03/08 공통 입력 확인
   ansible.builtin.assert:
     that:
-      - bkp03_backup_kind in ['postgres', 'vault']
+      - bkp03_backup_kind in ['postgres', 'vault', 'netbird', 'warpgate']
       - bkp03_backup_user | length > 0
       - bkp03_service_name | length > 0
-      - bkp03_s3_bucket is regex('^bkp-03-(postgres|vault)$')
+      - bkp03_s3_bucket is regex('^bkp-(03|08)-(postgres|vault|netbird|warpgate)$')
       - bkp03_s3_access_key | length >= 16
       - bkp03_s3_secret_key | length >= 32
       - bkp03_s3_ca_b64 | length > 0
@@ -14,16 +14,18 @@
       - bkp03_backup_ip_allow | length > 0
       - bkp03_rclone_version == '1.74.4'
       - bkp03_rclone_sha256 | length == 64
-    fail_msg: BKP-03 전용 identity, bucket, CA, 고정 rclone 입력과 허용 주소를 확인한다.
+    fail_msg: BKP-03/08 전용 identity, bucket, CA, 고정 rclone 입력과 허용 주소를 확인한다.
   no_log: true
 
-- name: BKP-03 필수 패키지 설치
+- name: BKP-03/08 필수 패키지 설치
   ansible.builtin.dnf:
     name:
+      - acl
       - coreutils
       - curl
       - gzip
       - openssl
+      - sqlite
       - tar
       - unzip
     state: present

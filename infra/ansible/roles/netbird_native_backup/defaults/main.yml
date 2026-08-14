@@ -1,0 +1,13 @@
+---
+
+bkp08_netbird_backup_user: netbird-backup
+bkp08_netbird_backup_group: netbird-backup
+bkp08_netbird_service_name: netbird-native-backup
+bkp08_netbird_config_dir: /etc/netbird-native-backup
+bkp08_netbird_state_dir: /var/lib/netbird-native-backup
+bkp08_netbird_cache_dir: /var/cache/netbird-native-backup
+bkp08_netbird_local_backup_dir: /var/backups/netbird
+bkp08_netbird_s3_bucket: bkp-08-netbird
+bkp08_netbird_retention_count: 7
+bkp08_netbird_backup_timer_calendar: "*-*-* 03:00:00"
+bkp08_netbird_health_max_age_seconds: 129600

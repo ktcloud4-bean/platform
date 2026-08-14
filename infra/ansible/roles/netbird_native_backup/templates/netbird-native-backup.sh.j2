@@ -1,0 +1,122 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+STATE_DIR={{ bkp03_state_dir }}
+CACHE_DIR={{ bkp03_cache_dir }}
+CONFIG_DIR={{ bkp03_config_dir }}
+LOCAL_DIR={{ bkp08_netbird_local_backup_dir }}
+RCLONE={{ bkp03_rclone_path }}
+BUCKET=${BKP03_S3_BUCKET:?BKP03_S3_BUCKET is required}
+RETENTION=${BKP03_RETENTION_COUNT:?BKP03_RETENTION_COUNT is required}
+
+exec 9>"${STATE_DIR}/backup.lock"
+flock -n 9 || { echo "다른 NetBird backup이 실행 중이다" >&2; exit 75; }
+
+STAGE=$(mktemp -d "${CACHE_DIR}/backup.XXXXXX")
+cleanup() { rm -rf -- "${STAGE}"; }
+trap cleanup EXIT INT TERM
+
+RUN_LOG="${STATE_DIR}/last-run.log"
+: >"${RUN_LOG}"
+log() {
+  local line
+  line="$(date -u '+%Y-%m-%dT%H:%M:%SZ') $*"
+  printf '%s\n' "${line}" | tee -a "${RUN_LOG}"
+}
+
+STAMP=$(date -u '+%Y%m%dT%H%M%SZ')
+ARCHIVE="netbird-backup-${STAMP}.tar.gz"
+OBJECT="netbird/${ARCHIVE}"
+MANIFEST="${ARCHIVE}.sha256"
+
+RCLONE_COMMON=(
+  --config "${CONFIG_DIR}/rclone.conf"
+  --ca-cert "{{ bkp03_s3_ca_path }}"
+  --retries 3
+  --low-level-retries 10
+  --log-level NOTICE
+)
+
+if "${RCLONE}" lsf "local:${BUCKET}/${OBJECT}" "${RCLONE_COMMON[@]}" 2>/dev/null | grep -q .; then
+  log "동일 object가 이미 있어 덮어쓰지 않는다 object=${OBJECT}"
+  exit 75
+fi
+
+log "NetBird native backup 시작"
+mkdir -p "${STAGE}/db" "${LOCAL_DIR}"
+
+for db in store.db events.db idp.db; do
+  if [ -f "/var/lib/netbird/${db}" ]; then
+    log "SQLite quick_check 검증 db=${db}"
+    if ! sqlite3 "/var/lib/netbird/${db}" "PRAGMA quick_check;" | grep -q "^ok$"; then
+      log "SQLite quick_check 실패 db=${db}"
+      exit 1
+    fi
+    sqlite3 "/var/lib/netbird/${db}" ".backup '${STAGE}/db/${db}'"
+    if ! sqlite3 "${STAGE}/db/${db}" "PRAGMA quick_check;" | grep -q "^ok$"; then
+      log "백업된 SQLite 복제본 quick_check 실패 db=${db}"
+      exit 1
+    fi
+    log "SQLite 온라인 백업 완료 db=${db}"
+  fi
+done
+
+# 백업 대상 목록 수집
+TAR_TARGETS=()
+[ -d /etc/netbird ] && TAR_TARGETS+=(/etc/netbird)
+[ -d /var/lib/netbird/letsencrypt ] && TAR_TARGETS+=(/var/lib/netbird/letsencrypt)
+[ -f /etc/systemd/system/netbird-compose.service ] && TAR_TARGETS+=(/etc/systemd/system/netbird-compose.service)
+
+# Staging 디렉터리 안의 db와 함께 tar 아카이브 생성
+tar -czf "${STAGE}/${ARCHIVE}" -C "${STAGE}" db "${TAR_TARGETS[@]}"
+tar -tzf "${STAGE}/${ARCHIVE}" >/dev/null
+log "tar 아카이브 무결성 검증 완료"
+
+ARCHIVE_SHA=$(sha256sum "${STAGE}/${ARCHIVE}" | awk '{print $1}')
+printf '%s  %s\n' "${ARCHIVE_SHA}" "${ARCHIVE}" >"${STAGE}/${MANIFEST}"
+
+# 로컬 백업 사본 저장 (0600)
+cp -p "${STAGE}/${ARCHIVE}" "${LOCAL_DIR}/${ARCHIVE}"
+chmod 0600 "${LOCAL_DIR}/${ARCHIVE}"
+cp -p "${STAGE}/${MANIFEST}" "${LOCAL_DIR}/${MANIFEST}"
+chmod 0600 "${LOCAL_DIR}/${MANIFEST}"
+log "로컬 백업 사본 저장 완료 path=${LOCAL_DIR}/${ARCHIVE}"
+
+# S3 업로드
+"${RCLONE}" copyto "${STAGE}/${ARCHIVE}" "local:${BUCKET}/${OBJECT}" "${RCLONE_COMMON[@]}"
+"${RCLONE}" copyto "${STAGE}/${MANIFEST}" "local:${BUCKET}/netbird/${MANIFEST}" "${RCLONE_COMMON[@]}"
+"${RCLONE}" copyto "local:${BUCKET}/${OBJECT}" "${STAGE}/download-${ARCHIVE}" "${RCLONE_COMMON[@]}"
+DOWNLOADED_SHA=$(sha256sum "${STAGE}/download-${ARCHIVE}" | awk '{print $1}')
+[ "${ARCHIVE_SHA}" = "${DOWNLOADED_SHA}" ] || { log "S3 round-trip SHA-256 불일치"; exit 1; }
+log "S3 round-trip 검증 완료 sha256=${ARCHIVE_SHA}"
+
+# S3 retention 정리
+mapfile -t BACKUPS < <(
+  "${RCLONE}" lsf "local:${BUCKET}/netbird" "${RCLONE_COMMON[@]}" --files-only \
+    --include 'netbird-backup-*.tar.gz' | sort -r
+)
+for OLD in "${BACKUPS[@]:${RETENTION}}"; do
+  [[ "${OLD}" =~ ^netbird-backup-[0-9]{8}T[0-9]{6}Z\.tar\.gz$ ]] \
+    || { log "보존 삭제 대상 형식이 안전하지 않다 name=${OLD}"; exit 1; }
+  "${RCLONE}" deletefile "local:${BUCKET}/netbird/${OLD}" "${RCLONE_COMMON[@]}"
+  "${RCLONE}" deletefile "local:${BUCKET}/netbird/${OLD}.sha256" "${RCLONE_COMMON[@]}" || true
+  log "보존 세대 초과 S3 object 삭제 name=${OLD}"
+done
+
+# 로컬 retention 정리
+mapfile -t LOCAL_BACKUPS < <(
+  find "${LOCAL_DIR}" -maxdepth 1 -name 'netbird-backup-*.tar.gz' -printf '%f\n' | sort -r
+)
+for OLD in "${LOCAL_BACKUPS[@]:${RETENTION}}"; do
+  [[ "${OLD}" =~ ^netbird-backup-[0-9]{8}T[0-9]{6}Z\.tar\.gz$ ]] \
+    || { log "로컬 보존 삭제 대상 형식이 안전하지 않다 name=${OLD}"; exit 1; }
+  rm -f "${LOCAL_DIR}/${OLD}" "${LOCAL_DIR}/${OLD}.sha256"
+  log "보존 세대 초과 로컬 백업 삭제 name=${OLD}"
+done
+
+printf '%s\n' "${OBJECT}" >"${STATE_DIR}/last-object"
+printf '%s\n' "${ARCHIVE_SHA}" >"${STATE_DIR}/last-sha256"
+date -u +%s >"${STATE_DIR}/last-success.epoch"
+rm -f "${STATE_DIR}/last-failure"
+log "NetBird native backup 완료 object=${OBJECT} retained=${RETENTION}"
