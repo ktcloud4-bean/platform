@@ -212,3 +212,45 @@ resource "aws_launch_template" "app_nodes" {
     create_before_destroy = true
   }
 }
+
+# EKS control-plane이 admission webhook(Kyverno 443/9443), kubelet(10250) 등을 호출하고
+# 응답을 주고받을 수 있도록 cluster security group과 node security group 간 통신을 허용한다.
+resource "aws_security_group_rule" "cluster_to_nodes" {
+  type                     = "egress"
+  description              = "Allow EKS control plane to communicate with worker nodes for webhooks and kubelet"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  security_group_id        = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+  source_security_group_id = data.terraform_remote_state.app_network.outputs.eks_nodes_security_group_id
+}
+
+resource "aws_security_group_rule" "cluster_from_nodes" {
+  type                     = "ingress"
+  description              = "Allow worker nodes to communicate with EKS control plane"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  security_group_id        = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+  source_security_group_id = data.terraform_remote_state.app_network.outputs.eks_nodes_security_group_id
+}
+
+resource "aws_security_group_rule" "nodes_from_cluster" {
+  type                     = "ingress"
+  description              = "Allow EKS control plane to reach worker nodes for webhooks and kubelet"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  security_group_id        = data.terraform_remote_state.app_network.outputs.eks_nodes_security_group_id
+  source_security_group_id = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+}
+
+resource "aws_security_group_rule" "nodes_to_cluster" {
+  type                     = "egress"
+  description              = "Allow worker nodes to reach EKS control plane"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  security_group_id        = data.terraform_remote_state.app_network.outputs.eks_nodes_security_group_id
+  source_security_group_id = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+}

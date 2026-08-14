@@ -23,6 +23,14 @@ resource "aws_security_group" "eks_nodes_sg" {
     self        = true
   }
 
+  egress {
+    description = "Allow node-to-control-plane and intra-VPC communication for admission webhooks"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [data.terraform_remote_state.shared_network.outputs.vpc_cidr]
+  }
+
   # ECR·S3·STS endpoint와 RDS 규칙은 아래의 특정 목적지만 허용한다.
   egress {
     description     = "HTTPS to explicitly declared AWS PrivateLink endpoints"
@@ -182,9 +190,15 @@ resource "aws_security_group" "eks_cluster_endpoint_sg" {
     cidr_blocks = [data.terraform_remote_state.shared_network.outputs.vpc_cidr]
   }
 
-  # EKS 기본 cluster security group이 control-plane의 필수 응답/노드 흐름을 담당한다.
-  # 이 보조 SG는 허용 범위를 좁히는 ingress 전용이다.
-  egress = []
+  # EKS control-plane이 admission webhook, metrics-server 등을 위해 worker node 및 Pod로
+  # 아웃바운드 연결할 수 있도록 node SG로의 egress를 허용한다.
+  egress {
+    description = "Allow control plane to communicate with worker nodes and webhooks"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [data.terraform_remote_state.shared_network.outputs.vpc_cidr]
+  }
 
   tags = {
     Name = "${local.name_prefix}-eks-cluster-endpoint-sg"

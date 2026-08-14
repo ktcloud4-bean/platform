@@ -2549,3 +2549,35 @@ NetBird(바이너리 내장 flag 활성화)는 공통적으로 `OPNSENSE-LIVE` �
 필요해 `OBS-14`의 `ARGO-ROOT` 단독 잠금 범위 밖이므로 각각 `OBS-15`·`OBS-16`으로 열었다.
 Warpgate는 실행 가능한 후속이 없어 새 ID를 만들지 않았다. 상세 근거는
 [`docs/evidence/obs-14/README.md`](evidence/obs-14/README.md)에 기록했다.
+
+## 11. 공급망 보안과 이미지 어드미션
+
+| ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
+|---|---|---|---|---|---|
+| `SUPPLY-01 DONE` | EKS에 Kyverno 1.18 및 ImageValidatingPolicy 신설 (`infra/aws/tofu-app-eks/`, `gitops/apps/kyverno-eks/`, `gitops/tools/supply-01/`) | `AWS-APP-01` | `ARGO-ROOT`, `TOFU-STATE` | 소프트웨어 공급망 보안 | 1. EKS destination Kyverno Application `Synced/Healthy`와 노드 available 자원이 정지 기준 밖<br>2. 신규 정책은 Kyverno 1.18 stable `ImageValidatingPolicy`이고 customer ECR용 Amazon credential helper·전용 read identity가 static registry Secret 없이 동작<br>3. Audit inventory 뒤 Enforce에서 허용 밖 registry·tag-only·image signature 또는 signed CycloneDX attestation 없는 customer ECR image를 각각 거부<br>4. `kube-system` 전체 제외 0건과 VPC CNI·CoreDNS·kube-proxy의 exact controller/ServiceAccount/리전별 AWS ECR 예외만 확인<br>5. 자체 ECR의 AWS Load Balancer Controller와 bootstrap image는 일반 정책을 통과<br>6. hr-system 세 Deployment·migration Job·controller·관리형 add-on 정상 기동<br>7. webhook `Fail`과 Audit rollback 실증 |
+
+2026-08-15 `SUPPLY-01`에서 EKS 클러스터에 Kyverno 1.18.2 및 stable `ImageValidatingPolicy` (IVP)를 신설하고 공급망 보안 어드미션 제어를 구현했다.
+
+1. **IRSA 및 ECR 인프라 구성**:
+   - `infra/aws/tofu-app-eks/iam_kyverno.tf`: Kyverno admission controller용 IRSA Role `hr-system-prod-kyverno-admission-role`을 생성하고 `AmazonEC2ContainerRegistryReadOnly` 정책을 부여하여 static Docker registry Secret 없이 AWS IAM 기반 ECR 인증 체계를 구성했다.
+   - `infra/aws/tofu-app-ecr/ecr.tf`: Kyverno bootstrap 컨테이너 이미지 3종(`kyverno`, `kyvernopre`, `kyverno-reports-controller`) 전용 ECR 레포지토리를 신설하고 `v1.18.2` 이미지를 미러링했다.
+   - `infra/aws/tofu-app-network/security.tf`: EKS Control plane SG <-> Node SG 간 9443/443 포트 통신 및 VPC Endpoint Security Group 인바운드/아웃바운드 규칙을 보정하여 사설망 환경에서 STS/ECR 통신을 보장했다.
+2. **GitOps 선언 및 Kyverno 배포 (`gitops/apps/kyverno-eks/`)**:
+   - Helm 차트 v3.8.2 (Kyverno v1.18.2)를 기반으로 `values-supply-01.yaml`과 렌더링된 `install.yaml`을 구성했다.
+   - `config.webhooks` 및 `config.resourceFilters`에서 `kube-system` 전체 제외를 제거하여 네임스페이스 격리 및 어드미션 통제를 확보했다.
+   - 사설망 및 Sigstore 오프라인 환경에 맞추어 `AWS_STS_REGIONAL_ENDPOINTS: regional`, `AWS_REGION: ap-northeast-2`, `HOME: /tmp`, `SIGSTORE_NO_CACHE: "true"`, `COSIGN_EXPERIMENTAL: "0"` 런타임 환경변수와 `hostAliases`를 구성했다.
+3. **ImageValidatingPolicy 및 검증 규칙 (`gitops/apps/kyverno-eks/policies/image-validating-policy.yaml`)**:
+   - Kyverno 1.18 stable `ImageValidatingPolicy`로 선언하고 `failurePolicy: Fail`, `validationActions: [Deny]` Enforce 모드로 배포했다.
+   - `attestors[].cosign.tuf.root.data`에 유효한 Sigstore trusted root JSON (`15.root.json`) base64를 주입하여 사설망 내 TUF 초기화 성공을 보장했다.
+   - `current` 및 `previous` Cosign EC P-256 공개키 PEM을 인라인 선언하고, CEL 표현식을 통해 (1) 허용된 ECR 레지스트리 제한, (2) sha256 digest 고정 필수, (3) Cosign image signature 검증, (4) CycloneDX SBOM attestation 검증을 구현했다.
+   - `matchConditions`를 통해 `kube-system` 내 AWS 관리형 add-on(`aws-node`, `coredns`, `kube-proxy`)의 exact controller/ServiceAccount/리전별 AWS ECR만 예외 처리했다.
+4. **8단계 라이브 검증 (`gitops/tools/supply-01/verify-live.sh`) 100% PASS**:
+   - `Preflight & Node Capacity`: 2개 노드 정상, Memory/Disk Pressure 없음.
+   - `Argo CD 상태`: `platform-root` Healthy, `kyverno-eks` Synced/Healthy.
+   - `IRSA 무자격증명 ECR`: static Secret 0건 및 IRSA role 부착 확인.
+   - `허용 밖 레지스트리 거부`: `docker.io/library/nginx` 등 외부 레지스트리 생성 즉시 거부.
+   - `Tag-only 미고정 거부`: digest 없는 이미지 생성 즉시 거부.
+   - `서명/attestation 미비 거부`: 서명 없는 customer ECR 이미지 생성 즉시 거부.
+   - `양성 실증 & 격리 검증`: 서명된 `hr-system-prod-frontend` 및 ALB bootstrap 이미지 정상 생성(dry-run 통과), `kube-system` 내 비인가 이미지 거부 실증.
+   - `워크로드 및 정책 상태`: `hr-system` 3개 Deployment Ready, `kube-system` Pod Ready, IVP `Fail/Deny` 모드 확인.
+

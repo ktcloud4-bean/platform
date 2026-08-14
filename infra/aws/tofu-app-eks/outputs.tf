@@ -32,3 +32,9 @@ output "db_migrate_iam_role_arn" {
   description = "DB migration Job ServiceAccount의 제한된 IRSA role ARN"
   value       = aws_iam_role.db_migrate.arn
 }
+
+output "kyverno_admission_iam_role_arn" {
+  description = "Kyverno admission controller ServiceAccount의 IRSA role ARN"
+  value       = aws_iam_role.kyverno_admission.arn
+}
+

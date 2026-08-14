@@ -6,6 +6,9 @@ locals {
     "bootstrap-argocd",
     "bootstrap-redis",
     "bootstrap-aws-load-balancer-controller",
+    "bootstrap-kyverno",
+    "bootstrap-kyvernopre",
+    "bootstrap-kyverno-reports-controller",
   ])
 }
 

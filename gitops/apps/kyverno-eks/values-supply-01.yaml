@@ -1,0 +1,96 @@
+crds:
+  install: false
+  migration:
+    enabled: false
+
+features:
+  generateValidatingAdmissionPolicy:
+    enabled: false
+  policyExceptions:
+    enabled: true
+    namespace: kyverno
+  logging:
+    format: text
+    verbosity: 6
+
+config:
+  webhooks:
+    - namespaceSelector:
+        matchExpressions:
+          - key: kubernetes.io/metadata.name
+            operator: NotIn
+            values:
+              - kyverno
+  resourceFilters:
+    - '[*/*,kyverno,*]'
+    - '[Event,*,*]'
+    - '[*/*,kube-public,*]'
+    - '[*/*,kube-node-lease,*]'
+    - '[Node,*,*]'
+    - '[Node/?*,*,*]'
+    - '[APIService,*,*]'
+    - '[APIService/?*,*,*]'
+    - '[TokenReview,*,*]'
+    - '[SubjectAccessReview,*,*]'
+    - '[SelfSubjectAccessReview,*,*]'
+    - '[Binding,*,*]'
+    - '[Pod/binding,*,*]'
+    - '[ReplicaSet,*,*]'
+    - '[ReplicaSet/?*,*,*]'
+    - '[EphemeralReport,*,*]'
+    - '[ClusterEphemeralReport,*,*]'
+
+webhooksCleanup:
+  enabled: false
+
+admissionController:
+  replicas: 1
+  revisionHistoryLimit: 2
+  podSecurityContext:
+    fsGroup: 65534
+  rbac:
+    serviceAccount:
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::465137780685:role/hr-system-prod-kyverno-admission-role
+  initContainer:
+    image:
+      registry: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com
+      repository: hr-system-prod-bootstrap-kyvernopre
+      tag: "v1.18.2@sha256:341402e2860cce765a744735c0a3a9c0d0978a82dfdff7b76332afb8d3a2d20b"
+  container:
+    image:
+      registry: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com
+      repository: hr-system-prod-bootstrap-kyverno
+      tag: "v1.18.2@sha256:11cc08bf7116e0881c00412729dc25c299f29fa3dc6b8e1e53fc623d5158c182"
+    extraEnvVars:
+      - name: HOME
+        value: /tmp
+      - name: AWS_REGION
+        value: ap-northeast-2
+      - name: AWS_DEFAULT_REGION
+        value: ap-northeast-2
+      - name: AWS_STS_REGIONAL_ENDPOINTS
+        value: regional
+      - name: AWS_SDK_LOAD_CONFIG
+        value: "1"
+      - name: SIGSTORE_NO_CACHE
+        value: "true"
+      - name: COSIGN_EXPERIMENTAL
+        value: "0"
+
+backgroundController:
+  enabled: false
+
+cleanupController:
+  enabled: false
+
+reportsController:
+  enabled: true
+  replicas: 1
+  revisionHistoryLimit: 2
+  podSecurityContext:
+    fsGroup: 65534
+  image:
+    registry: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com
+    repository: hr-system-prod-bootstrap-kyverno-reports-controller
+    tag: "v1.18.2@sha256:207138d7a52ca4f8ebfcefae203ec22ff57ac21a5bc9437ee428882ca69dbcf2"

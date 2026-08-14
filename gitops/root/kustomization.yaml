@@ -42,6 +42,8 @@ resources:
   - hr-system-project.yaml
   - hr-system-bootstrap-application.yaml
   - hr-system-application.yaml
+  - kyverno-eks-project.yaml
+  - kyverno-eks-application.yaml
   - falco-project.yaml
   - falco-application.yaml
   - loki-project.yaml

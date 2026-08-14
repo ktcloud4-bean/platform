@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kyverno-cosign-trust-bundle
+  namespace: kyverno
+  labels:
+    app.kubernetes.io/name: kyverno
+    app.kubernetes.io/component: trust
+    app.kubernetes.io/part-of: platform-gitops
+data:
+  cosign.pub: |
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEQa4Ut0QCl60HNt2ZdEu1qVtoU/mL
+    wgP4DwVaOUntkbS76xmB9xPxkVRWlhVoYGzsYcvVU3Bn7SzL/8FgV9C99A==
+    -----END PUBLIC KEY-----
+  cosign-previous.pub: |
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEYDJs7Lrkaw8AKYul3sSYsMKjCQhd
+    lFqwV0eLn3byybjj+CMZUEoH5s8grTsmikhYeF0QVPzpVpMQNxbT6shc/w==
+    -----END PUBLIC KEY-----
