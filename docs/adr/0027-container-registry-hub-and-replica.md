@@ -1,6 +1,6 @@
 # ADR-0027: 컨테이너 레지스트리 허브와 복제 경계
 
-- 상태: `Accepted`
+- 상태: `Superseded` ([ADR-0028](0028-container-supply-chain-promotion.md))
 - 날짜: 2026-08-14
 - 관련 작업: `SUPPLY-DESIGN-01`, `SUPPLY-01`~`08`, `REG-01`, `AWS-HR-01`
 

@@ -102,7 +102,7 @@ Git에는 PVC 선언만 저장하고 PVC 데이터나 노드 디렉터리명을 
 | 내부 데모 애플리케이션 | Board Demo | k3s; Pomerium 뒤, PostgreSQL TLS·Vault runtime 분리 |
 | HR 애플리케이션 | HR System | `DECLARED`; private EKS, internal ALB, Pomerium·shared S2S VPN 뒤, private Aurora PostgreSQL·서비스별 IRSA·Secrets Manager DB credential |
 | 자동화 | AWX · Renovate | k3s |
-| 공급망 검증 | Trivy · Cosign · Kyverno | k3s |
+| 공급망 검증 | Trivy · Cosign · Kyverno | Jenkins·Trivy·Cosign은 k3s, Kyverno는 k3s·EKS |
 | 런타임 탐지 | Falco | k3s |
 | Kubernetes 백업 | Velero + node-agent/Kopia | k3s |
 | 운영 로그 | Loki | k3s, 후순위 |
@@ -113,6 +113,27 @@ Git에는 PVC 선언만 저장하고 PVC 데이터나 노드 디렉터리명을 
 | 오프사이트 백업 | AWS S3 | 외부 서비스 |
 
 NetBox는 채택하지 않았다. 물리 장비 증가, 포트·케이블 관리, API IP 할당 또는 공통 인벤토리 수요가 생길 때만 조건부 PoC를 한다. 채택 전까지 `ip-plan.md`가 주소의 단일 원본이다.
+
+## 컨테이너 공급망
+
+Jenkins가 build 또는 upstream artifact의 exact digest를 대상으로 Trivy gate, Cosign image
+signature와 signed CycloneDX attestation을 만든다. Harbor는 이 결과를 저장하고 immutable·retention과
+replication을 적용하는 단일 승격 원본이다. Harbor proxy cache는 upstream 획득과 rate limit
+완화에만 쓰며 production workload는 proxy project를 직접 참조하지 않는다. 검증한 upstream
+artifact도 일반 Harbor curated project로 옮긴 뒤 플랫폼 서명을 붙여 소비한다.
+
+ECR은 EKS 전용 읽기 소비 복제본이다. Harbor의 완성된 release를 scheduled replication으로
+보낸 뒤 ECR 주소에서 subject digest, OCI 1.1 image signature와 CycloneDX attestation을 다시
+검증한 경우에만 GitOps digest를 바꾼다. EKS image pull은 ECR VPC endpoint를 사용하므로 VPN이나
+Harbor 장애가 이미 복제한 workload 기동으로 전파되지 않는다. 복제 실패는 새 release만
+중단하고 직전 검증 digest를 유지한다.
+
+Kyverno는 registry, digest와 signature/attestation을 별도 규칙으로 판정하며 Enforce에서는 webhook
+오류도 fail-closed로 처리한다. namespace 전체는 제외하지 않는다. AWS 관리형 VPC CNI·CoreDNS·
+kube-proxy만 workload identity와 AWS가 게시한 리전별 공식 ECR을 함께 고정한 예외를 쓰고,
+자체 ECR mirror의 AWS Load Balancer Controller와 bootstrap image는 일반 customer ECR 정책을
+통과한다. 세부 승격 상태, credential과 rollback 경계는
+[ADR-0028](adr/0028-container-supply-chain-promotion.md)을 따른다.
 
 ## HTTP 요청 경로
 
