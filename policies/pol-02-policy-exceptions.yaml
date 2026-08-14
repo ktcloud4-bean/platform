@@ -122,7 +122,7 @@ metadata:
   namespace: kyverno
   annotations:
     pol-02.imcherry5778.xyz/owner: platform-operations
-    pol-02.imcherry5778.xyz/reason: Velero node-agent needs Pod-level securityContext remediation.
+    pol-02.imcherry5778.xyz/reason: Velero node-agent and pod volume backup hosting pods need Pod-level securityContext remediation.
     pol-02.imcherry5778.xyz/expires-at: "2026-09-02T15:00:00Z"
   labels:
     app.kubernetes.io/part-of: platform-gitops
@@ -141,7 +141,7 @@ spec:
           namespaces:
             - velero
           names:
-            - node-agent-*
+            - "*"
       - resources:
           kinds:
             - DaemonSet
@@ -149,6 +149,7 @@ spec:
             - velero
           names:
             - node-agent
+
   conditions:
     all:
       - key: "{{ time_before('{{ time_now_utc() }}','2026-09-02T15:00:00Z') }}"

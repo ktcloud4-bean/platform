@@ -20,6 +20,8 @@ spec:
       app.kubernetes.io/component: controller
   template:
     metadata:
+      annotations:
+        backup.velero.io/backup-volumes: jenkins-home
       labels:
         app.kubernetes.io/name: jenkins
         app.kubernetes.io/component: controller

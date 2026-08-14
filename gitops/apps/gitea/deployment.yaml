@@ -21,6 +21,7 @@ spec:
   template:
     metadata:
       annotations:
+        backup.velero.io/backup-volumes: gitea-data
         scm.imcherry5778.xyz/runtime-config-sha256: 9c6ba3007157ea28066c040768d608d30e53ad1e4ac20fb81dbdc4fce49063d6
       labels:
         app.kubernetes.io/name: gitea

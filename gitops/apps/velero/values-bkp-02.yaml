@@ -153,17 +153,18 @@ rbac:
 # offsite 03:30, k3s-datastore 03:50 KST)과 겹치지 않도록 02:00 KST(UTC 17:00
 # 전날)에 돌린다.
 #
-# defaultVolumesToFsBackup은 켜지 않는다. 라이브로 시험해보니 emptyDir(tmp·scratch·
-# cache)·Secret 마운트까지 포함한 cluster 전체 거의 모든 volume에서 Kopia FS backup이
-# 실패했다(112 errors) — BKP-02가 검증한 건 단일 PVC PoC뿐이라 이 범위로 확대하는 건
-# 별도 조사가 필요하다. 지금은 검증된 resource-only backup만 켜고, PV 데이터 백업
-# 확대는 후속 작업으로 남긴다.
+# defaultVolumesToFsBackup은 켜지 않는다. 클러스터 전체에 켜면 emptyDir·Secret·projected token
+# 마운트까지 백업을 시도하다 광범위하게 실패하므로(112 errors), BKP-10에서 Pod 단위 opt-in
+# annotation(`backup.velero.io/backup-volumes`) 방식을 채택했다. Gitea(`gitea-data`)와
+# Jenkins(`jenkins-home`)는 Deployment pod template에 annotation을 선언해 이 정기
+# schedule에서 Kopia 파일시스템 백업이 정상 수행된다.
 schedules:
   daily:
     schedule: "0 17 * * *"
     template:
       ttl: 168h0m0s
       storageLocation: default
+
 
 extraObjects:
   - apiVersion: v1

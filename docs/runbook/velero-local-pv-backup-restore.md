@@ -308,3 +308,16 @@ Traefik/Vault PVC와 PV 이름·Bound 상태는 시작과 같았다. 전용 buck
 `cluster-k3s-01` prefix는 0 object·0 byte였고 final identity는 credential 1개와
 `Read/List/Write:bkp-02-velero`만 가졌다. 실제 `offsite-backup.timer`는
 `active/enabled`이고 source bucket 목록은 계속 비어 있어 기존 BKP-04 범위도 불변이다.
+
+## BKP-10 Gitea·Jenkins PVC 데이터 Kopia 볼륨 백업 연동
+
+`BKP-07`에서 클러스터 전체 `defaultVolumesToFsBackup: true`가 112개 볼륨 실패를 일으킨 원인은 Projected ServiceAccountToken 및 Memory emptyDir 등 백업 불가능한 임시 볼륨에 대한 무차별 백업 시도와, Kyverno `pol-01-require-pod-run-as-non-root`가 Velero PVB 임시 hosting pod를 admission에서 차단한 것 때문이었다.
+
+`BKP-10`은 다음 구조로 PVC 데이터 백업을 완결했다:
+
+1. **Kyverno PolicyException 확장**: `policies/pol-02-policy-exceptions.yaml`의 `pol-02-velero-run-as-non-root`에 `names: ["*"]`를 선언해 `velero` namespace의 PVB 임시 hosting pod를 허용.
+2. **Pod Volume Opt-In**: `gitops/apps/gitea/deployment.yaml`에 `backup.velero.io/backup-volumes: gitea-data`, `gitops/apps/jenkins/deployment.yaml`에 `backup.velero.io/backup-volumes: jenkins-home`을 선언.
+3. **정기 백업 통합**: `velero-daily` 스케줄(`0 17 * * *`, 02:00 KST)에서 Gitea(약 8.26MB)와 Jenkins(약 396.76MB)의 PVC 데이터가 Kopia 파일시스템 백업에 자동 포함되며, `BKP-09`를 통해 AWS S3 오프사이트 복제로 연동.
+4. **실제 복원 검증**: 격리 namespace `bkp-10-restore-test`로 복원하여 `gitea-data` 내 `hr-system.git` HEAD commit SHA `be0f99fa766453ced4fdc6e1a7a4bf6c95d18fb9`가 원본과 100% 일치함을 확인.
+5. **저장소 위험도 평가**: `hr-system`은 GitHub 원본의 `mirror = true` pull-mirror임을 실측 확인하여, PVC 완전 소실 시에도 GitHub에서 즉시 재구성 가능(위험도 Low/Medium).
+
