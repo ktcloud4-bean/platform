@@ -4202,7 +4202,7 @@ EDGE02_CF_IPV6</content>
         <MinProtocol_DTLS />
       </general>
     </trust>
-    <unboundplus version="1.0.15" persisted_at="1786640855.64" description="Unbound configuration">
+    <unboundplus version="1.0.15" persisted_at="1786665915.26" description="Unbound configuration">
       <general>
         <enabled>1</enabled>
         <port>53</port>
@@ -4554,10 +4554,10 @@ EDGE02_CF_IPV6</content>
           <domain>imcherry5778.xyz</domain>
           <description>AWS-HR-01 HR admin Pomerium alias</description>
         </alias>
-        <alias uuid="710d0c3c-4992-41bc-affe-0c5150b813d9">
+        <alias uuid="7a6a99eb-f7b3-4f3b-8942-423a2ef7b660">
           <enabled>1</enabled>
           <host>a690c2b5-5600-4a50-8678-953cc14889d2</host>
-          <hostname>object-admin</hostname>
+          <hostname>seaweedfs</hostname>
           <domain>imcherry5778.xyz</domain>
           <description>SeaweedFS admin 웹 UI Pomerium Route alias (S3-02)</description>
         </alias>

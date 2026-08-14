@@ -57,8 +57,11 @@ seaweedfs_admin_dir: "{{ seaweedfs_data_dir }}/admin"
 seaweedfs_admin_allowed_sources:
   - "10.10.20.10/32"
 seaweedfs_admin_user: "admin"
-# 저장소 밖 extra-vars로만 주입한다. 빈 값이면 role이 실패한다(평문 미인증 관리
-# 콘솔을 만들지 않기 위해).
+# S3-02-FIX-01: 기본값은 빈 문자열이며 weed admin 자체 로그인을 끈다(Pomerium
+# /platform-privileged 게이트에만 의존). weed admin은 SSO를 지원하지 않아
+# Keycloak 뒤에 이중으로 두면 사용자 경험만 나빠지고, 계정 하나를 공유하는
+# 로컬 로그인은 Pomerium의 사용자별 접근 로그보다 추적성이 낮다. 켜려면
+# 저장소 밖 extra-vars로 16자 이상 비밀번호를 주입한다.
 seaweedfs_admin_password: ""
 # 기존 collection 10개에 더해 REG-01 Harbor가 30GB volume 5개까지 사용할 수 있도록
 # 승인된 slot이다. max는 예약 용량이나 quota가 아니며 minFreeSpace가 디스크 하한을 지킨다.

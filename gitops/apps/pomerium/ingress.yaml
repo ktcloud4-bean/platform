@@ -175,7 +175,7 @@ spec:
                 name: pomerium
                 port:
                   name: http
-    - host: object-admin.imcherry5778.xyz
+    - host: seaweedfs.imcherry5778.xyz
       http:
         paths:
           - path: /
@@ -203,4 +203,4 @@ spec:
         - alertmanager.imcherry5778.xyz
         - wazuh.imcherry5778.xyz
         - shuffle.imcherry5778.xyz
-        - object-admin.imcherry5778.xyz
+        - seaweedfs.imcherry5778.xyz
