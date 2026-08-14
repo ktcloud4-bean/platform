@@ -110,3 +110,36 @@ spec:
             severity: critical
           annotations:
             summary: "Warpgate private TLS 인증서가 14일 이내 만료된다."
+    # BKP-07: k3s-datastore-backup·postgres-native-backup·vault-raft-backup
+    # 세 systemd timer job은 Alertmanager에 걸리는 규칙이 없어, PostgreSQL(8/12부터)과
+    # Vault(8/8부터)가 며칠씩 조용히 실패해도 아무도 몰랐다(BKP-06에서 발견·복구).
+    # 세 unit 모두 OBS-11/13/17 fleet가 이미 --collector.systemd로 수집 중이라
+    # node_systemd_unit_state{state="failed"}==1을 직접 감시한다(WarpgateServiceDown과
+    # 달리 timer가 아니라 oneshot .service 자체를 본다 — timer는 트리거된 job이 실패해도
+    # 계속 active라 실패를 못 잡는다).
+    - name: bkp-07-native-backup
+      rules:
+        - alert: K3sDatastoreBackupFailed
+          expr: >-
+            node_systemd_unit_state{job="node-exporter-root",instance="10.10.20.10:9101",name="k3s-datastore-backup.service",state="failed"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "k3s-datastore-backup.service가 마지막 실행에서 실패했다."
+        - alert: PostgreSQLNativeBackupFailed
+          expr: >-
+            node_systemd_unit_state{job="node-exporter",instance="10.10.50.10:9100",name="postgres-native-backup.service",state="failed"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "postgres-native-backup.service가 마지막 실행에서 실패했다."
+        - alert: VaultRaftBackupFailed
+          expr: >-
+            node_systemd_unit_state{job="node-exporter-root",instance="10.10.20.10:9101",name="vault-raft-backup.service",state="failed"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "vault-raft-backup.service가 마지막 실행에서 실패했다."
