@@ -38,3 +38,5 @@ spec:
       kind: RoleBinding
     - group: velero.io
       kind: BackupStorageLocation
+    - group: velero.io
+      kind: Schedule
