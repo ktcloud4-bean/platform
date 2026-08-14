@@ -213,3 +213,17 @@ project update 성공을 함께 기다린다.
 
 실제 VM 구성 변경 playbook apply, 성능·부하 시험, 재부팅 drill, Traefik 재기동은 이
 검증에 포함하지 않는다.
+
+### AWX-04 실행 Pod Harbor pull 보정
+
+Harbor private EE에는 서로 다른 두 인증 형식이 필요하다. `awx-ee-pull-credentials`는
+AWX Operator가 등록된 EE에 연결하는 Opaque Secret이며 `url`, `username`, `password`,
+`ssl_verify`만 가진다. `awx-ee-pull`은 kubelet과 automation-job Pod가 실제 이미지를
+가져오는 `kubernetes.io/dockerconfigjson` Secret이다. 둘은 bootstrap Hook이 같은 Vault
+Harbor robot 입력에서 만들며, 원문은 Git이나 실행 출력에 남기지 않는다.
+
+CR의 `image_pull_secrets`는 app/database Pod에 이 Docker config Secret을 연결하고,
+`DEFAULT_EXECUTION_QUEUE_POD_SPEC_OVERRIDE`는 default Instance Group이 만드는 동적
+automation-job Pod에 같은 `imagePullSecrets`를 연결한다. 이 보정은 Secret 형식과 실행
+Pod 선언만 판정한다. private EE를 실제로 pull해 `k3s-01`에서 무변경 SSH를 실행하는 증거는
+`AWX-05`가 단 한 번 소유한다.
