@@ -148,18 +148,22 @@ rbac:
   clusterAdministratorName: cluster-admin
 
 # BKP-07: BKP-02는 메커니즘 검증(PoC)만 하고 정기 schedule은 만들지 않았다.
-# 실제 namespace resource·PVC 데이터를 지키려면 schedule이 있어야 한다.
-# 다른 네이티브 백업(postgres 02:15, vault 02:40, offsite 03:30, k3s-datastore
-# 03:50 KST)과 겹치지 않도록 02:00 KST(UTC 17:00 전날)에 돌린다. defaultVolumesToFsBackup은
-# BKP-02가 이미 검증한 Kopia PV backup 경로를 그대로 켠다. 실패·부분 실패는 기존
-# obs-13-backup의 VeleroBackupFailed alert가 이미 감시한다(새 alert 불필요).
+# 최소한 namespace resource(Deployment·Secret·ConfigMap 등 API object) 복구는
+# 지키도록 schedule을 연다. 다른 네이티브 백업(postgres 02:15, vault 02:40,
+# offsite 03:30, k3s-datastore 03:50 KST)과 겹치지 않도록 02:00 KST(UTC 17:00
+# 전날)에 돌린다.
+#
+# defaultVolumesToFsBackup은 켜지 않는다. 라이브로 시험해보니 emptyDir(tmp·scratch·
+# cache)·Secret 마운트까지 포함한 cluster 전체 거의 모든 volume에서 Kopia FS backup이
+# 실패했다(112 errors) — BKP-02가 검증한 건 단일 PVC PoC뿐이라 이 범위로 확대하는 건
+# 별도 조사가 필요하다. 지금은 검증된 resource-only backup만 켜고, PV 데이터 백업
+# 확대는 후속 작업으로 남긴다.
 schedules:
   daily:
     schedule: "0 17 * * *"
     template:
       ttl: 168h0m0s
       storageLocation: default
-      defaultVolumesToFsBackup: true
 
 extraObjects:
   - apiVersion: v1
