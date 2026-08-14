@@ -130,8 +130,8 @@
     src: "{{ postgres_tls_leaf_key_path }}"
     dest: "{{ postgres_tls_ca_key_path }}"
     remote_src: true
-    owner: root
-    group: root
+    owner: postgres
+    group: postgres
     mode: "0600"
   when:
     - postgres_tls_migrate_legacy_ca_leaf | bool
@@ -139,6 +139,20 @@
     - not pg_tls_ca_key.stat.exists
     - not ansible_check_mode
   no_log: true
+
+# BKP-06: root:root였을 때 pg_basebackup(BKP-03)이 PGDATA 전체를 읽다가 이 파일에서
+# Permission denied로 죽었다. 이 CA는 postgres-01 자신만을 위한 self-signed
+# 단일 호스트 CA(다른 host/service와 공유하지 않음)라 postgres OS 계정에 읽기를
+# 주는 것이 server.key를 이미 그 계정에 맡기는 것과 같은 신뢰 경계다. 위 마이그레이션
+# task는 파일이 없을 때만 한 번 실행되므로, 이미 존재하는 환경도 계속 맞는 소유자를
+# 갖도록 별도로 강제한다.
+- name: CA private key 소유자 강제(BKP-03 pg_basebackup이 읽을 수 있도록)
+  ansible.builtin.file:
+    path: "{{ postgres_tls_ca_key_path }}"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  when: pg_tls_ca_key.stat.exists or postgres_tls_migrate_legacy_ca_leaf | bool
 
 - name: Determine whether a PostgreSQL server leaf must be issued
   ansible.builtin.set_fact:
