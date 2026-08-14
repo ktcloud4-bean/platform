@@ -404,6 +404,13 @@ def main() -> None:
             ):
                 raise SystemExit("S3 검증 뒤 k3s service identity가 바뀌었습니다")
 
+            # BKP-12: freshness health-check용 last-success.epoch 원자적 기록
+            success_epoch_path = state_dir / "last-success.epoch"
+            temp_epoch_path = working / "last-success.epoch.tmp"
+            temp_epoch_path.write_text(f"{int(created.timestamp())}\n", encoding="utf-8")
+            os.chmod(temp_epoch_path, 0o600)
+            shutil.move(str(temp_epoch_path), str(success_epoch_path))
+
             summary = {
                 "backup_id": backup_id,
                 "bucket": config["bucket"],

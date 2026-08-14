@@ -1,0 +1,11 @@
+[Unit]
+Description=BKP-12 k3s datastore backup freshness 정기 검사
+
+[Timer]
+OnCalendar={{ k3s_datastore_backup_health_on_calendar }}
+RandomizedDelaySec={{ k3s_datastore_backup_health_randomized_delay }}
+Persistent=true
+Unit=k3s-datastore-backup-health.service
+
+[Install]
+WantedBy=timers.target

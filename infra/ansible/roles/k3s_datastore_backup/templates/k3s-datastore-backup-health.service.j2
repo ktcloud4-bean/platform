@@ -1,0 +1,16 @@
+[Unit]
+Description=BKP-12 k3s datastore backup freshness 검사
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart={{ k3s_datastore_backup_health_script_path }}
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths={{ k3s_datastore_backup_state_dir }}
+CapabilityBoundingSet=
+AmbientCapabilities=

@@ -159,3 +159,11 @@ spec:
             severity: critical
           annotations:
             summary: "vault-raft-backup-health.service가 실패해 Vault raft 백업이 최신 기준(36시간)을 충족하지 못했다."
+        - alert: K3sDatastoreBackupHealthStale
+          expr: >-
+            node_systemd_unit_state{job="node-exporter-root",instance="10.10.20.10:9101",name="k3s-datastore-backup-health.service",state="failed"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "k3s-datastore-backup-health.service가 실패해 k3s datastore 백업이 최신 기준(36시간)을 충족하지 못했다."

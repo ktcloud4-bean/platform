@@ -133,16 +133,60 @@
     mode: "0644"
   register: k3s_datastore_backup_timer_unit
 
-- name: BKP-01 systemd unit 변경 반영
+- name: BKP-12 freshness health-check 스크립트 배치
+  ansible.builtin.template:
+    src: k3s-datastore-backup-health-check.sh.j2
+    dest: "{{ k3s_datastore_backup_health_script_path }}"
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: BKP-12 freshness health service 선언
+  ansible.builtin.template:
+    src: k3s-datastore-backup-health.service.j2
+    dest: /etc/systemd/system/k3s-datastore-backup-health.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: k3s_datastore_backup_health_service_unit
+
+- name: BKP-12 freshness health timer 선언
+  ansible.builtin.template:
+    src: k3s-datastore-backup-health.timer.j2
+    dest: /etc/systemd/system/k3s-datastore-backup-health.timer
+    owner: root
+    group: root
+    mode: "0644"
+  register: k3s_datastore_backup_health_timer_unit
+
+- name: BKP-01/12 executable SELinux 기본 label 적용
+  ansible.builtin.command:
+    argv: [restorecon, -Fv, "{{ item }}"]
+  loop:
+    - "{{ k3s_datastore_backup_script_path }}"
+    - "{{ k3s_datastore_backup_s3_library_path }}"
+    - "{{ k3s_datastore_backup_health_script_path }}"
+  register: k3s_datastore_backup_restorecon
+  changed_when: "'Relabeled' in k3s_datastore_backup_restorecon.stdout"
+  when: not ansible_check_mode
+
+- name: BKP-01/12 systemd unit 변경 반영
   ansible.builtin.systemd:
     daemon_reload: true
   when:
     - not ansible_check_mode
-    - k3s_datastore_backup_service_unit.changed or k3s_datastore_backup_timer_unit.changed
+    - k3s_datastore_backup_service_unit.changed or k3s_datastore_backup_timer_unit.changed or k3s_datastore_backup_health_service_unit.changed or k3s_datastore_backup_health_timer_unit.changed
 
 - name: BKP-01 timer 활성화와 대기 상태 선언
   ansible.builtin.systemd:
     name: k3s-datastore-backup.timer
+    enabled: true
+    state: started
+  when: not ansible_check_mode
+
+- name: BKP-12 freshness timer 활성화와 대기 상태 선언
+  ansible.builtin.systemd:
+    name: k3s-datastore-backup-health.timer
     enabled: true
     state: started
   when: not ansible_check_mode
@@ -160,9 +204,24 @@
   delay: 1
   when: not ansible_check_mode
 
-- name: BKP-01 timer enabled/active 확인
+- name: BKP-12 freshness timer 상태 조회
+  ansible.builtin.command:
+    argv: [systemctl, show, k3s-datastore-backup-health.timer, "--property=ActiveState,UnitFileState"]
+  register: k3s_datastore_backup_health_timer_state
+  changed_when: false
+  check_mode: false
+  until:
+    - "'ActiveState=active' in k3s_datastore_backup_health_timer_state.stdout"
+    - "'UnitFileState=enabled' in k3s_datastore_backup_health_timer_state.stdout"
+  retries: 5
+  delay: 1
+  when: not ansible_check_mode
+
+- name: BKP-01/12 timer enabled/active 확인
   ansible.builtin.assert:
     that:
       - "'ActiveState=active' in k3s_datastore_backup_timer_state.stdout"
       - "'UnitFileState=enabled' in k3s_datastore_backup_timer_state.stdout"
+      - "'ActiveState=active' in k3s_datastore_backup_health_timer_state.stdout"
+      - "'UnitFileState=enabled' in k3s_datastore_backup_health_timer_state.stdout"
   when: not ansible_check_mode

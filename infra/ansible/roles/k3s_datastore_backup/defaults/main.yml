@@ -22,3 +22,8 @@ k3s_datastore_backup_gpg_public_key: ""
 
 k3s_datastore_backup_on_calendar: "*-*-* 03:30:00"
 k3s_datastore_backup_randomized_delay: 30m
+
+k3s_datastore_backup_health_script_path: "{{ k3s_datastore_backup_libexec_dir }}/k3s-datastore-backup-health-check.sh"
+k3s_datastore_backup_health_max_age_seconds: 129600
+k3s_datastore_backup_health_on_calendar: "*-*-* 04:30:00"
+k3s_datastore_backup_health_randomized_delay: 300

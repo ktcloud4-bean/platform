@@ -539,3 +539,12 @@ alert가 필요 없다.
 
 새 exporter나 방화벽 추가 없이 기존 node-exporter가 수집하는 `node_systemd_unit_state`를 활용하며, `obs-13-receiver` 및 `obs-18-platform-slack` matcher에 등록해 백업 신선도 미달 시 Slack 및 internal receiver로 즉시 알림이 전달되도록 했다.
 
+## BKP-12 k3s datastore 백업 Freshness Health 경보
+
+`k3s-datastore-backup`(`BKP-01`)은 `BKP-03`과 달리 백업 완료 시 epoch 기록 및 freshness 검증 unit이 누락되어 있어, timer 비활성화 또는 호스트 장애 시 감지할 수 없었다.
+
+`BKP-12`에서 `k3s_datastore_backup.py`가 성공 시 `last-success.epoch`를 원자적으로 기록하도록 보정하고, 36시간 freshness를 검증하는 `k3s-datastore-backup-health.service` 및 매일 04:30 KST 정기 검사 timer(`k3s-datastore-backup-health.timer`)를 신설했다.
+
+Prometheus alert `K3sDatastoreBackupHealthStale`(`10.10.20.10:9101`, `state="failed"==1`)을 추가하고 `obs-13-receiver` 및 `obs-18-platform-slack` matcher에 등록하여 k3s datastore 백업 지연 시 즉시 경보가 전달되도록 연동했다.
+
+

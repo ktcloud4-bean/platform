@@ -334,3 +334,14 @@ node-agent는 Ready, BSL은 `Available`이었다. 기존 Traefik·Vault PVC/PV�
 유지했다. Git 현재 파일과 전체 history를 exact credential/server token 및 private-key/token
 pattern으로 검사해 원문 0건을 확인했다. 저장소 밖 BKP-01 입력·inventory·CA만 mode `0600`으로
 남겼고 bootstrap credential과 임시 자원은 남기지 않았다.
+
+## BKP-12 k3s datastore backup freshness health 검사
+
+`BKP-12`에서 `k3s_datastore_backup.py`가 성공 시 `last-success.epoch`를 원자적으로 기록하도록 보정하고, 36시간 freshness를 검증하는 `k3s-datastore-backup-health.service` 및 매일 04:30 KST 정기 timer(`k3s-datastore-backup-health.timer`)를 신설했다.
+
+- 검사 스크립트: `/usr/local/libexec/k3s-datastore-backup/k3s-datastore-backup-health-check.sh`
+- 임계치: `MAX_AGE=129600` (36시간)
+- 상태 파일: `/var/lib/k3s-datastore-backup/last-success.epoch`
+- Prometheus Alert: `K3sDatastoreBackupHealthStale` (`10.10.20.10:9101`, `state="failed"==1`)
+- Staleness 검증: 40시간 전 epoch 임시 변조 시 `failed` 감지 실측 및 정상 epoch 복구 후 `healthy` 복귀 확인 완료.
+
