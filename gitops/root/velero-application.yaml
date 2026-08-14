@@ -13,7 +13,7 @@ spec:
   project: velero
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: main
+    targetRevision: 33f07ea5fb72d06d693df52303d639e3dbbee605
     path: gitops/apps/velero
     helm:
       releaseName: velero
