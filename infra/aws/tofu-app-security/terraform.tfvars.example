@@ -1,0 +1,9 @@
+# 실제 파일은 저장소 밖 mode 0600 경로에 둔다.
+aws_account_id = "<12자리 AWS 계정 ID>"
+
+# platform realm metadata. 원문은 Git과 로그에 두지 않는다.
+keycloak_saml_metadata_file = "/home/<operator>/secrets/ktcloud4-bean/aws-sec-02/keycloak-platform-metadata.xml"
+
+# Keycloak SAML group mapper는 full.path=false로 값만 보낸다.
+grafana_admin_role_values  = ["platform-privileged"]
+grafana_editor_role_values = ["grafana-amg-editors"]
