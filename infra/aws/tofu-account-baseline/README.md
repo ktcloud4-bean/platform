@@ -1,6 +1,7 @@
 # AWS 계정 보안 기준선
 
 작업: `AWS-SEC-01`
+후속 보정: `AWS-SEC-01-FIX-01`
 잠금: `TOFU-STATE`, `AWS-ACCOUNT-SEC`
 
 이 root는 계정 전역 CloudTrail·Config·Security Hub FSBP·GuardDuty·Access
@@ -32,6 +33,11 @@ tofu apply -input=false -var-file=/absolute/path/account-baseline.tfvars
 - Config recorder를 모든 지원 리소스/글로벌 IAM 리소스에 대해 켜고, FSBP·GuardDuty·Security
   Lake·Access Analyzer·CIS metric alarm·account S3 public access block·EBS 기본 암호화와
   snapshot public sharing 차단·IAM password policy를 적용한다.
+- Security Lake가 자동 생성한 metastore manager Lambda의 CloudWatch log group은 이 root가
+  import해 30일 retention만 관리한다. Security Lake, Lambda 함수와 기존 log event는 변경하지 않는다.
+- `access_logs` bucket은 S3 server access logging 목적지이므로 SSE-S3를 유지한다. AWS가 이
+  목적지의 SSE-KMS를 지원하지 않아, Trivy `AVD-AWS-0132`은 이 root에만 2026-09-15까지 한시
+  예외로 둔다.
 - CloudTrail/Config bucket·KMS·CloudWatch Logs는 `prevent_destroy`로 보호한다. 제거가
   필요한 경우 이 보호를 별도 변경과 plan으로 해제해야 한다.
 - `enable_cis_benchmark=false`는 유지한다. Slack workspace는 Terraform 전에 AWS Console의

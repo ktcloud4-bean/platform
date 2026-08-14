@@ -89,6 +89,17 @@ variable "security_lake_retention_days" {
   }
 }
 
+variable "security_lake_metastore_log_retention_days" {
+  description = "Security Lake metastore manager Lambda CloudWatch Logs 보존일"
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.security_lake_metastore_log_retention_days == 30
+    error_message = "AWS-SEC-01-FIX-01의 Security Lake metastore Lambda 로그 보존은 30일이다."
+  }
+}
+
 variable "monthly_budget_amount" {
   type    = string
   default = "100"

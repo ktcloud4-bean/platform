@@ -80,6 +80,18 @@ resource "aws_securitylake_data_lake" "main" {
   ]
 }
 
+# Security Lake가 metastore manager Lambda와 함께 자동 생성한다. 서비스 lifecycle은
+# Security Lake가 계속 소유하고, 이 root는 CloudWatch Logs 보존 정책만 import해 관리한다.
+resource "aws_cloudwatch_log_group" "security_lake_metastore" {
+  name              = "/aws/lambda/AmazonSecurityLakeMetastoreManager-${var.aws_region}"
+  retention_in_days = var.security_lake_metastore_log_retention_days
+}
+
+import {
+  to = aws_cloudwatch_log_group.security_lake_metastore
+  id = "/aws/lambda/AmazonSecurityLakeMetastoreManager-${var.aws_region}"
+}
+
 resource "aws_securitylake_aws_log_source" "vpc_flow" {
   count = var.enable_security_lake ? 1 : 0
   source {

@@ -1,0 +1,3 @@
+# S3 server access logging 목적지는 AWS 제약상 SSE-S3여야 한다.
+# AWS-SEC-01-FIX-01: SSE-KMS 전환은 access log delivery를 깨므로 재검토 전까지 한시 예외.
+AVD-AWS-0132 # exp:2026-09-15

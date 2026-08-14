@@ -33,7 +33,9 @@ node('aws-opentofu') {
 
       stage('Trivy config gate') {
         container('trivy') {
-          sh "trivy config --exit-code 1 --severity HIGH,CRITICAL infra/aws/${targetRoot}"
+          def ignoreFile = "infra/aws/${targetRoot}/.trivyignore"
+          def ignoreOption = fileExists(ignoreFile) ? "--ignorefile ${ignoreFile}" : ''
+          sh "trivy config --exit-code 1 --severity HIGH,CRITICAL ${ignoreOption} infra/aws/${targetRoot}"
         }
       }
 
