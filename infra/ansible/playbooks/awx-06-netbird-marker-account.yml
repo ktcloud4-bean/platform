@@ -1,0 +1,36 @@
+---
+- name: AWX-06 netbird-01 marker account bootstrap
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    awx06_account: awx-marker
+    awx06_home: /var/lib/awx-marker
+  tasks:
+    - name: 전용 비인간 marker account 생성
+      ansible.builtin.user:
+        name: "{{ awx06_account }}"
+        system: true
+        create_home: true
+        home: "{{ awx06_home }}"
+        shell: /bin/bash
+        password_lock: true
+        groups: ''
+        append: false
+
+    - name: marker account SSH 디렉터리 권한 제한
+      ansible.builtin.file:
+        path: "{{ awx06_home }}/.ssh"
+        state: directory
+        owner: "{{ awx06_account }}"
+        group: "{{ awx06_account }}"
+        mode: '0700'
+
+    - name: source 제한 marker key 하나만 설치
+      ansible.builtin.copy:
+        content: "{{ awx06_authorized_key }}\n"
+        dest: "{{ awx06_home }}/.ssh/authorized_keys"
+        owner: "{{ awx06_account }}"
+        group: "{{ awx06_account }}"
+        mode: '0600'
+      no_log: true

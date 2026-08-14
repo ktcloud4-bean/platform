@@ -53,14 +53,10 @@ verify_platform() {
     [.spec.extra_settings[] | select(.setting == "DEFAULT_EXECUTION_QUEUE_POD_SPEC_OVERRIDE") | .value | ltrimstr("\u0027") | rtrimstr("\u0027") | fromjson] as $override |
     $override | length == 1 and
     .[0].spec.imagePullSecrets == [{"name":"awx-ee-pull"}] and
-    .[0].spec.volumes == [
-      {"name":"awx-ssh-canary-known-hosts","secret":{"secretName":"awx-ssh-canary-known-hosts","defaultMode":292}},
-      {"name":"awx-execution-runner","emptyDir":{"sizeLimit":"32Mi"}}
-    ] and
-    .[0].spec.containers == [{"name":"worker","volumeMounts":[
-      {"name":"awx-ssh-canary-known-hosts","mountPath":"/etc/awx-ssh-canary","readOnly":true},
-      {"name":"awx-execution-runner","mountPath":"/runner"}
-    ]}]
+    ([.[0].spec.volumes[] | select(.name == "awx-ssh-canary-known-hosts" and .secret == {"secretName":"awx-ssh-canary-known-hosts","defaultMode":292})] | length == 1) and
+    ([.[0].spec.volumes[] | select(.name == "awx-execution-runner" and .emptyDir == {"sizeLimit":"32Mi"})] | length == 1) and
+    ([.[0].spec.containers[] | select(.name == "worker") | .volumeMounts[] | select(.name == "awx-ssh-canary-known-hosts" and .mountPath == "/etc/awx-ssh-canary" and .readOnly == true)] | length == 1) and
+    ([.[0].spec.containers[] | select(.name == "worker") | .volumeMounts[] | select(.name == "awx-execution-runner" and .mountPath == "/runner")] | length == 1)
   ' <<<"${awx_cr}" >/dev/null
   network=$(remote_kubectl -n awx get networkpolicy awx-execution-k3s-ssh-canary-egress -o json)
   jq -e '

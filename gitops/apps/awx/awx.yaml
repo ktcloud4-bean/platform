@@ -50,7 +50,7 @@ spec:
   extra_settings:
     - setting: DEFAULT_EXECUTION_QUEUE_POD_SPEC_OVERRIDE
       value: >-
-        '{"spec":{"imagePullSecrets":[{"name":"awx-ee-pull"}],"securityContext":{"runAsNonRoot":true,"runAsUser":1000,"runAsGroup":0,"fsGroup":1000,"fsGroupChangePolicy":"OnRootMismatch","seccompProfile":{"type":"RuntimeDefault"}},"volumes":[{"name":"awx-ssh-canary-known-hosts","secret":{"secretName":"awx-ssh-canary-known-hosts","defaultMode":292}},{"name":"awx-execution-runner","emptyDir":{"sizeLimit":"32Mi"}}],"containers":[{"name":"worker","volumeMounts":[{"name":"awx-ssh-canary-known-hosts","mountPath":"/etc/awx-ssh-canary","readOnly":true},{"name":"awx-execution-runner","mountPath":"/runner"}]}]}}'
+        '{"spec":{"imagePullSecrets":[{"name":"awx-ee-pull"}],"securityContext":{"runAsNonRoot":true,"runAsUser":1000,"runAsGroup":0,"fsGroup":1000,"fsGroupChangePolicy":"OnRootMismatch","seccompProfile":{"type":"RuntimeDefault"}},"volumes":[{"name":"awx-ssh-canary-known-hosts","secret":{"secretName":"awx-ssh-canary-known-hosts","defaultMode":292}},{"name":"awx-ssh-marker-known-hosts","secret":{"secretName":"awx-ssh-marker-known-hosts","defaultMode":292}},{"name":"awx-execution-runner","emptyDir":{"sizeLimit":"32Mi"}}],"containers":[{"name":"worker","volumeMounts":[{"name":"awx-ssh-canary-known-hosts","mountPath":"/etc/awx-ssh-canary","readOnly":true},{"name":"awx-ssh-marker-known-hosts","mountPath":"/etc/awx-ssh-marker","readOnly":true},{"name":"awx-execution-runner","mountPath":"/runner"}]}]}}'
     - setting: AWX_TASK_ENV
       value: >-
         '{"GIT_SSH_COMMAND":"ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/awx-scm/known_hosts -o GlobalKnownHostsFile=/dev/null"}'

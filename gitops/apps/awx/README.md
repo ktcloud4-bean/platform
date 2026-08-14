@@ -265,3 +265,24 @@ Rollback은 `gitops/tools/awx-05/prepare-live.sh --rollback`으로 source 제한
 Vault KV/AppRole/policy를 제거하고, AWX child를 직전 main SHA로 sync한 다음
 `platform-root`를 literal `main`으로 복원한다. AWX DB·기존 SCM deploy key·EE·PVC와
 OPNsense는 이 범위에서 변경하거나 삭제하지 않는다.
+
+## AWX-06 cross-VLAN 승인 marker
+
+AWX-06은 `netbird-01.imcherry5778.xyz` 하나에서만 cross-VLAN SSH 경계를 실제로
+확인한다. OPNsense에는 `opt2`의 `10.10.20.10 → 10.10.40.10 TCP 22` pass rule 하나를
+NET-04 non-public block 바로 앞에 추가하고, execution Pod에는 같은 대상과 port만 허용하는
+별도 NetworkPolicy를 둔다. 이외 VM·port·방화벽 rule은 확장하지 않는다.
+
+전용 `awx-marker` account는 sudo/become 권한이 없고, `/var/lib/awx-marker`의 marker
+파일 하나만 생성·삭제한다. private key는 `kv/awx/ssh-marker`의 external lookup role만 읽고,
+인증된 netbird host key는 `awx-ssh-marker-known-hosts` Secret을 통해 execution Pod의
+`/etc/awx-ssh-marker/known_hosts`에 read-only mount한다.
+
+`AWX-06 netbird marker 승인` workflow는 precheck의 예상 `changed=1` 뒤 사람 승인을
+기다린다. 승인 뒤 apply `changed=1`, idempotency check `changed=0`, cleanup으로 marker
+부재를 확인한다. Operators는 precheck 및 workflow를 시작할 수 있지만 apply/cleanup template,
+credential과 권한을 직접 수정할 수 없다. Approvers는 이 workflow의 approve/reject 역할만 가진다.
+
+실패하면 `gitops/tools/awx-06/apply-firewall.sh rollback <STATE_DIR>`로 그 rule 하나를 먼저
+삭제하고, `gitops/tools/awx-06/prepare-live.sh --rollback`으로 전용 account와 AWX/Vault
+객체만 제거한다. root/AWX Application은 항상 literal `main`으로 복원한다.

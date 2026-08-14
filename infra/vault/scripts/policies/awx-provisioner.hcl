@@ -25,3 +25,13 @@ path "kv/data/awx/ssh-canary-lookup" {
 path "kv/metadata/awx/ssh-canary-lookup" {
   capabilities = ["read"]
 }
+
+# AWX-06 marker Machine credential의 AppRole bootstrap만 provisioning Hook이 읽는다.
+# SSH private key와 authenticated host key는 이 policy로 읽지 못한다.
+path "kv/data/awx/ssh-marker-lookup" {
+  capabilities = ["read"]
+}
+
+path "kv/metadata/awx/ssh-marker-lookup" {
+  capabilities = ["read"]
+}

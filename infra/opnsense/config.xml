@@ -462,7 +462,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1786671353.03" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1786695771.22" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -861,7 +861,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1022</sequence>
+            <sequence>1121</sequence>
             <action>block</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -917,7 +917,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1032</sequence>
+            <sequence>1221</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -973,7 +973,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1102</sequence>
+            <sequence>1271</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1029,7 +1029,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1112</sequence>
+            <sequence>1321</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1085,7 +1085,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1117</sequence>
+            <sequence>1371</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1141,7 +1141,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1118</sequence>
+            <sequence>1421</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1197,7 +1197,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1221</sequence>
+            <sequence>1721</sequence>
             <action>block</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1253,7 +1253,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1271</sequence>
+            <sequence>1771</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1309,7 +1309,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1321</sequence>
+            <sequence>1821</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1365,7 +1365,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1371</sequence>
+            <sequence>1871</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1421,7 +1421,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1421</sequence>
+            <sequence>1921</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1477,7 +1477,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1521</sequence>
+            <sequence>2121</sequence>
             <action>block</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1533,7 +1533,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1571</sequence>
+            <sequence>2171</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1589,7 +1589,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1621</sequence>
+            <sequence>2221</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1645,7 +1645,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1671</sequence>
+            <sequence>2271</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1701,7 +1701,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1771</sequence>
+            <sequence>2421</sequence>
             <action>block</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1757,7 +1757,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1821</sequence>
+            <sequence>2471</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -1813,7 +1813,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1119</sequence>
+            <sequence>1471</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -2205,7 +2205,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1120</sequence>
+            <sequence>1521</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -2541,7 +2541,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1121</sequence>
+            <sequence>1571</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -2597,7 +2597,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1471</sequence>
+            <sequence>1971</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -2653,7 +2653,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1721</sequence>
+            <sequence>2321</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -2709,7 +2709,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1171</sequence>
+            <sequence>1671</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -2765,7 +2765,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1496</sequence>
+            <sequence>2021</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -2821,7 +2821,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1746</sequence>
+            <sequence>2371</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -3269,7 +3269,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1023</sequence>
+            <sequence>1171</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -3381,7 +3381,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1122</sequence>
+            <sequence>1621</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -3437,7 +3437,7 @@
             <enabled>1</enabled>
             <statetype>keep</statetype>
             <state-policy />
-            <sequence>1497</sequence>
+            <sequence>2071</sequence>
             <action>pass</action>
             <quick>1</quick>
             <interfacenot>0</interfacenot>
@@ -3488,6 +3488,62 @@
             <shaper1 />
             <shaper2 />
             <description>BKP-08: netbird-01에서 object-01 TLS S3 TCP 8333만 허용</description>
+          </rule>
+          <rule uuid="d25f6ee0-8163-4fb5-96cb-68c5172b7df7">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1071</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.10</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.40.10</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>22</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>AWX-06: k3s-01 AWX execution에서 netbird-01 SSH TCP 22 marker만 허용</description>
           </rule>
         </rules>
         <snatrules />

@@ -88,3 +88,129 @@ data:
               - '!all'
               - min
           changed_when: false
+  awx06-marker-precheck.yml: |
+    ---
+    - name: AWX-06 netbird-01 marker 변경 예상 확인
+      hosts: all
+      gather_facts: false
+      become: false
+      any_errors_fatal: true
+      vars:
+        awx06_marker_path: /var/lib/awx-marker/awx06-approved-marker
+        awx06_marker_content: AWX-06 approved reversible marker
+      tasks:
+        - name: marker가 아직 없는지 확인
+          ansible.builtin.stat:
+            path: "{{ awx06_marker_path }}"
+          register: awx06_marker_before
+          changed_when: false
+
+        - name: 첫 check는 marker 한 개의 변경만 예상
+          ansible.builtin.assert:
+            that:
+              - not awx06_marker_before.stat.exists
+            success_msg: "AWX06_PRECHECK=PASS expected_changed=1 marker=absent"
+            fail_msg: "AWX06_PRECHECK=FAIL marker가 남아 있어 새 승인 workflow를 시작할 수 없다"
+
+        - name: 승인 뒤 만들 marker의 정확한 상태만 check
+          ansible.builtin.copy:
+            content: "{{ awx06_marker_content }}\n"
+            dest: "{{ awx06_marker_path }}"
+            mode: '0600'
+            backup: false
+          diff: false
+  awx06-marker-apply.yml: |
+    ---
+    - name: AWX-06 승인된 netbird-01 marker 적용
+      hosts: all
+      gather_facts: false
+      become: false
+      any_errors_fatal: true
+      vars:
+        awx06_marker_path: /var/lib/awx-marker/awx06-approved-marker
+        awx06_marker_content: AWX-06 approved reversible marker
+      tasks:
+        - name: 승인 범위의 marker 하나만 생성
+          ansible.builtin.copy:
+            content: "{{ awx06_marker_content }}\n"
+            dest: "{{ awx06_marker_path }}"
+            mode: '0600'
+            backup: false
+          diff: false
+          register: awx06_marker_apply
+
+        - name: marker 적용 결과가 정확히 한 변경인지 확인
+          ansible.builtin.assert:
+            that:
+              - awx06_marker_apply.changed
+            success_msg: "AWX06_APPLY=PASS changed=1 marker=present"
+            fail_msg: "AWX06_APPLY=FAIL marker 적용이 기대한 변경이 아니다"
+  awx06-marker-idempotency.yml: |
+    ---
+    - name: AWX-06 승인 뒤 marker idempotency 확인
+      hosts: all
+      gather_facts: false
+      become: false
+      any_errors_fatal: true
+      vars:
+        awx06_marker_path: /var/lib/awx-marker/awx06-approved-marker
+        awx06_marker_content: AWX-06 approved reversible marker
+      tasks:
+        - name: marker가 승인 apply 뒤 존재하는지 확인
+          ansible.builtin.stat:
+            path: "{{ awx06_marker_path }}"
+          register: awx06_marker_after
+          changed_when: false
+
+        - name: marker가 정확히 존재함을 판정
+          ansible.builtin.assert:
+            that:
+              - awx06_marker_after.stat.exists
+              - awx06_marker_after.stat.mode == '0600'
+            success_msg: "AWX06_POSTCHECK=PASS expected_changed=0 marker=present"
+            fail_msg: "AWX06_POSTCHECK=FAIL 승인 apply marker가 없다"
+
+        - name: 같은 marker의 두 번째 check는 변경이 없어야 함
+          ansible.builtin.copy:
+            content: "{{ awx06_marker_content }}\n"
+            dest: "{{ awx06_marker_path }}"
+            mode: '0600'
+            backup: false
+          diff: false
+          register: awx06_marker_idempotent
+
+        - name: 두 번째 check의 changed 0을 판정
+          ansible.builtin.assert:
+            that:
+              - not awx06_marker_idempotent.changed
+            success_msg: "AWX06_POSTCHECK_CHANGED=0"
+            fail_msg: "AWX06_POSTCHECK=FAIL marker가 idempotent하지 않다"
+  awx06-marker-cleanup.yml: |
+    ---
+    - name: AWX-06 승인 범위 marker cleanup
+      hosts: all
+      gather_facts: false
+      become: false
+      any_errors_fatal: true
+      vars:
+        awx06_marker_path: /var/lib/awx-marker/awx06-approved-marker
+      tasks:
+        - name: 승인된 marker 하나만 제거
+          ansible.builtin.file:
+            path: "{{ awx06_marker_path }}"
+            state: absent
+          register: awx06_marker_cleanup
+
+        - name: cleanup 뒤 marker 부재 확인
+          ansible.builtin.stat:
+            path: "{{ awx06_marker_path }}"
+          register: awx06_marker_absent
+          changed_when: false
+
+        - name: cleanup 범위 판정
+          ansible.builtin.assert:
+            that:
+              - awx06_marker_cleanup.changed
+              - not awx06_marker_absent.stat.exists
+            success_msg: "AWX06_CLEANUP=PASS changed=1 marker=absent"
+            fail_msg: "AWX06_CLEANUP=FAIL marker가 남아 있다"

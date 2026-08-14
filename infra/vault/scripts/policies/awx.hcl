@@ -35,3 +35,13 @@ path "kv/data/awx/ssh-canary-hostkeys" {
 path "kv/metadata/awx/ssh-canary-hostkeys" {
   capabilities = ["read"]
 }
+
+# AWX-06 marker 대상의 public host key는 bootstrap Hook만 execution Pod mount Secret으로
+# 만든다. private Machine key와 lookup bootstrap은 이 workload policy로 읽지 못한다.
+path "kv/data/awx/ssh-marker-hostkeys" {
+  capabilities = ["read"]
+}
+
+path "kv/metadata/awx/ssh-marker-hostkeys" {
+  capabilities = ["read"]
+}

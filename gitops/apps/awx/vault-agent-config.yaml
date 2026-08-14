@@ -73,6 +73,16 @@ data:
     {{- with secret "kv/data/awx/ssh-canary-hostkeys" -}}{{ .Data.data.known_hosts }}{{- end -}}
     EOT
     }
+    # AWX-06 marker 대상 netbird-01의 authenticated public host key도 별도 Secret으로만
+    # materialize한다. private Machine key와 lookup bootstrap은 이 workload policy로 읽지 못한다.
+    template {
+      destination = "/vault/secrets/ssh-marker-known-hosts"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/awx/ssh-marker-hostkeys" -}}{{ .Data.data.known_hosts }}{{- end -}}
+    EOT
+    }
   provision.hcl: |
     exit_after_auth = true
     pid_file = "/tmp/vault-agent.pid"
@@ -112,6 +122,14 @@ data:
       error_on_missing_key = true
       contents = <<EOT
     {{- with secret "kv/data/awx/ssh-canary-lookup" -}}{{ .Data.data | toJSON }}{{- end -}}
+    EOT
+    }
+    template {
+      destination = "/vault/secrets/ssh-marker.json"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/awx/ssh-marker-lookup" -}}{{ .Data.data | toJSON }}{{- end -}}
     EOT
     }
   verifier.hcl: |

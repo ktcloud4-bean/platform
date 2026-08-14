@@ -285,6 +285,26 @@ spec:
       ports:
         - {protocol: TCP, port: 22}
 ---
+# AWX-06의 execution Pod는 cross-VLAN marker 대상 netbird-01 SSH 하나만 추가로 쓴다.
+# k3s-01 경로와 분리해 다른 VM 또는 port로의 확장을 허용하지 않는다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awx-execution-netbird-marker-ssh-egress
+  namespace: awx
+  annotations: {argocd.argoproj.io/sync-wave: "-9"}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: ansible-awx
+        operator: Exists
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.10.40.10/32}
+      ports:
+        - {protocol: TCP, port: 22}
+---
 # bootstrap Hook만 runtime Secret을 만들기 위해 Kubernetes API를 사용한다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

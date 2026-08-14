@@ -20,6 +20,7 @@ data:
     runtime = json.load(open("/vault/secrets/runtime.json", encoding="utf-8"))
     scm = json.load(open("/vault/secrets/scm.json", encoding="utf-8"))
     ssh_canary = json.load(open("/vault/secrets/ssh-canary.json", encoding="utf-8"))
+    ssh_marker = json.load(open("/vault/secrets/ssh-marker.json", encoding="utf-8"))
     admin_password = runtime["admin_password"]
     auth = base64.b64encode(f"awx-recovery:{admin_password}".encode()).decode()
 
@@ -356,6 +357,109 @@ data:
     })
     attach(f"/job_templates/{ssh_canary_template['id']}/credentials/", ssh_canary_credential["id"])
 
+    ssh_marker_inventory = ensure("inventories", {"name": "AWX-06 netbird-01 marker", "organization": organization["id"]}, {
+        "name": "AWX-06 netbird-01 marker", "organization": organization["id"],
+        "description": "cross-VLAN SSH와 승인된 가역 marker 한 파일만 판정하는 단일 대상 inventory",
+        "variables": json.dumps({"ansible_become": False, "awx06_single_target": True}),
+    })
+    ssh_marker_host = ensure("hosts", {"name": "netbird-01.imcherry5778.xyz", "inventory": ssh_marker_inventory["id"]}, {
+        "name": "netbird-01.imcherry5778.xyz", "inventory": ssh_marker_inventory["id"], "enabled": True,
+        "description": "AWX-06 cross-VLAN marker 대상 하나",
+        "variables": json.dumps({
+            "ansible_become": False,
+            "ansible_ssh_common_args": "-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/awx-ssh-marker/known_hosts -o GlobalKnownHostsFile=/dev/null -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no",
+        }),
+    })
+    ssh_marker_lookup = ensure("credentials", {"name": "AWX-06 Vault Machine lookup", "organization": organization["id"]}, {
+        "name": "AWX-06 Vault Machine lookup", "organization": organization["id"],
+        "description": "AWX-06 Machine private key external lookup의 단기 AppRole bootstrap",
+        "credential_type": vault_lookup_type["id"],
+        "inputs": {
+            "url": "https://vault.vault.svc.cluster.local:8200",
+            "cacert": open("/trust/vault.crt", encoding="utf-8").read(),
+            "role_id": ssh_marker["vault_role_id"], "secret_id": ssh_marker["vault_secret_id"],
+            "default_auth_path": "approle", "api_version": "v2",
+        },
+    })
+    ssh_marker_credential = ensure("credentials", {"name": "AWX-06 netbird-01 marker", "organization": organization["id"]}, {
+        "name": "AWX-06 netbird-01 marker", "organization": organization["id"],
+        "description": "전용 비인간 account와 strict host key만 사용하는 no-become Machine credential",
+        "credential_type": machine_type["id"], "inputs": {"username": "awx-marker"},
+    }, update=False)
+    ensure("credential_input_sources", {
+        "target_credential": ssh_marker_credential["id"], "input_field_name": "ssh_key_data",
+    }, {
+        "target_credential": ssh_marker_credential["id"], "source_credential": ssh_marker_lookup["id"],
+        "input_field_name": "ssh_key_data",
+        "metadata": {
+            "secret_backend": "kv", "secret_path": "awx/ssh-marker", "auth_path": "approle",
+            "secret_key": "ssh_private_key",
+        },
+    })
+    marker_template_common = {
+        "project": project["id"], "inventory": ssh_marker_inventory["id"],
+        "limit": "netbird-01.imcherry5778.xyz", "execution_environment": platform_ee["id"],
+        "become_enabled": False, "allow_simultaneous": False,
+        "ask_limit_on_launch": False, "ask_inventory_on_launch": False,
+        "ask_credential_on_launch": False, "ask_job_type_on_launch": False,
+        "ask_scm_branch_on_launch": False, "ask_variables_on_launch": False,
+        "ask_execution_environment_on_launch": False, "ask_forks_on_launch": False,
+        "forks": 1, "verbosity": 0,
+    }
+    marker_precheck = ensure("job_templates", {"name": "AWX-06 netbird marker precheck", "organization": organization["id"]}, {
+        **marker_template_common, "name": "AWX-06 netbird marker precheck",
+        "description": "marker 부재에서 check가 changed=1을 예고하는 승인 전 단일 대상 판정",
+        "playbook": "awx06-marker-precheck.yml", "job_type": "check",
+    })
+    marker_apply = ensure("job_templates", {"name": "AWX-06 netbird marker apply", "organization": organization["id"]}, {
+        **marker_template_common, "name": "AWX-06 netbird marker apply",
+        "description": "사람 승인 뒤 marker 하나만 생성하는 단일 대상 apply",
+        "playbook": "awx06-marker-apply.yml", "job_type": "run",
+    })
+    marker_idempotency = ensure("job_templates", {"name": "AWX-06 netbird marker idempotency", "organization": organization["id"]}, {
+        **marker_template_common, "name": "AWX-06 netbird marker idempotency",
+        "description": "승인 apply 뒤 같은 선언의 changed=0을 판정",
+        "playbook": "awx06-marker-idempotency.yml", "job_type": "check",
+    })
+    marker_cleanup = ensure("job_templates", {"name": "AWX-06 netbird marker cleanup", "organization": organization["id"]}, {
+        **marker_template_common, "name": "AWX-06 netbird marker cleanup",
+        "description": "승인 범위 안에서 marker 하나를 제거해 초기 상태로 복원",
+        "playbook": "awx06-marker-cleanup.yml", "job_type": "run",
+    })
+    for template in (marker_precheck, marker_apply, marker_idempotency, marker_cleanup):
+        attach(f"/job_templates/{template['id']}/credentials/", ssh_marker_credential["id"])
+
+    marker_workflow = ensure("workflow_job_templates", {"name": "AWX-06 netbird marker 승인"}, {
+        "name": "AWX-06 netbird marker 승인", "organization": organization["id"],
+        "description": "precheck changed=1 뒤 사람 승인, apply changed=1, postcheck changed=0, cleanup으로 끝나는 가역 cross-VLAN 증거",
+        "ask_variables_on_launch": False, "allow_simultaneous": False,
+    })
+    def workflow_node(identifier, template=None):
+        node = one("workflow_job_template_nodes", {
+            "workflow_job_template": marker_workflow["id"], "identifier": identifier,
+        })
+        if node is None:
+            body = {"workflow_job_template": marker_workflow["id"], "identifier": identifier,
+                    "all_parents_must_converge": True}
+            if template is not None:
+                body["unified_job_template"] = template["id"]
+            node = api("POST", "/workflow_job_template_nodes/", body)
+        return node
+    marker_precheck_node = workflow_node("marker-precheck", marker_precheck)
+    marker_approval_node = workflow_node("human-approval")
+    if not marker_approval_node.get("related", {}).get("unified_job_template"):
+        api("POST", f"/workflow_job_template_nodes/{marker_approval_node['id']}/create_approval_template/", {
+            "name": "AWX-06 netbird marker 사람 승인",
+            "description": "AWX Approvers만 승인; 승인 전에는 marker apply가 시작되지 않는다.", "timeout": 900,
+        })
+    marker_apply_node = workflow_node("approved-marker-apply", marker_apply)
+    marker_idempotency_node = workflow_node("marker-idempotency", marker_idempotency)
+    marker_cleanup_node = workflow_node("approved-marker-cleanup", marker_cleanup)
+    attach(f"/workflow_job_template_nodes/{marker_precheck_node['id']}/success_nodes/", marker_approval_node["id"])
+    attach(f"/workflow_job_template_nodes/{marker_approval_node['id']}/success_nodes/", marker_apply_node["id"])
+    attach(f"/workflow_job_template_nodes/{marker_apply_node['id']}/success_nodes/", marker_idempotency_node["id"])
+    attach(f"/workflow_job_template_nodes/{marker_idempotency_node['id']}/success_nodes/", marker_cleanup_node["id"])
+
     common_template = {
         "project": project["id"], "inventory": boundary["id"],
         "playbook": "verify-credential.yml",
@@ -416,7 +520,12 @@ data:
     give_team_role(ssh_canary_inventory, "use_role", operators)
     give_team_role(ssh_canary_credential, "use_role", operators)
     give_team_role(ssh_canary_template, "execute_role", operators)
+    give_team_role(ssh_marker_inventory, "use_role", operators)
+    give_team_role(ssh_marker_credential, "use_role", operators)
+    give_team_role(marker_precheck, "execute_role", operators)
+    give_team_role(marker_workflow, "execute_role", operators)
     give_team_role(workflow, "approval_role", approvers)
+    give_team_role(marker_workflow, "approval_role", approvers)
 
     # 이전 AWX-01 또는 UI 변경으로 생길 수 있는 과잉 team role을 정확한 최소 집합으로
     # 수렴한다. Organization member는 team membership의 상위 전제일 뿐 admin 권한이 아니다.
@@ -430,8 +539,12 @@ data:
         object_role(ssh_canary_inventory, "use_role"),
         object_role(ssh_canary_credential, "use_role"),
         object_role(ssh_canary_template, "execute_role"),
+        object_role(ssh_marker_inventory, "use_role"),
+        object_role(ssh_marker_credential, "use_role"),
+        object_role(marker_precheck, "execute_role"),
+        object_role(marker_workflow, "execute_role"),
     }
-    approver_role_ids = {object_role(workflow, "approval_role")}
+    approver_role_ids = {object_role(workflow, "approval_role"), object_role(marker_workflow, "approval_role")}
     for team, allowed_role_ids in ((operators, operator_role_ids), (approvers, approver_role_ids)):
         assigned = api("GET", f"/teams/{team['id']}/roles/?page_size=200")
         for role in assigned.get("results", []):
@@ -440,4 +553,4 @@ data:
 
     # 실행 금지 인벤토리, denied credential, denied/apply JT에는 Operators role을
     # 절대 붙이지 않는다. 다음 단계 verify-live.sh가 이를 같은 시점에 대조한다.
-    print("AWX-01/AWX-04/AWX-05 선언 provisioning 완료")
+    print("AWX-01/AWX-04/AWX-05/AWX-06 선언 provisioning 완료")
