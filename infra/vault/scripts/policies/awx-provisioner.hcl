@@ -35,3 +35,13 @@ path "kv/data/awx/ssh-marker-lookup" {
 path "kv/metadata/awx/ssh-marker-lookup" {
   capabilities = ["read"]
 }
+
+# AWX-07 node_exporter Machine credential의 AppRole bootstrap만 provisioning Hook이 읽는다.
+# SSH private key와 authenticated netbird host key는 이 policy에 넣지 않는다.
+path "kv/data/awx/ssh-node-exporter-lookup" {
+  capabilities = ["read"]
+}
+
+path "kv/metadata/awx/ssh-node-exporter-lookup" {
+  capabilities = ["read"]
+}

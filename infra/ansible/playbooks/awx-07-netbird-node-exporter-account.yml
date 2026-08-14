@@ -1,0 +1,50 @@
+---
+- name: AWX-07 netbird-01 node_exporter privileged account bootstrap
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    awx07_account: awx-node-exporter
+    awx07_home: /var/lib/awx-node-exporter
+  tasks:
+    - name: 전용 비인간 node_exporter account 생성
+      ansible.builtin.user:
+        name: "{{ awx07_account }}"
+        system: true
+        create_home: true
+        home: "{{ awx07_home }}"
+        shell: /bin/bash
+        password_lock: true
+        groups: ''
+        append: false
+
+    - name: node_exporter account SSH 디렉터리 권한 제한
+      ansible.builtin.file:
+        path: "{{ awx07_home }}/.ssh"
+        state: directory
+        owner: "{{ awx07_account }}"
+        group: "{{ awx07_account }}"
+        mode: '0700'
+
+    - name: source 제한 node_exporter key 하나만 설치
+      ansible.builtin.copy:
+        content: "{{ awx07_authorized_key }}\n"
+        dest: "{{ awx07_home }}/.ssh/authorized_keys"
+        owner: "{{ awx07_account }}"
+        group: "{{ awx07_account }}"
+        mode: '0600'
+      no_log: true
+
+    # AWX-07의 고정 SCM playbook만 become을 사용한다. Job Template은 inventory·limit·
+    # credential·branch·extra-vars override와 ad hoc command를 모두 금지해 이 sudo는
+    # node_exporter_baseline 역할 외에 노출되지 않는다.
+    - name: AWX-07 node_exporter baseline 전용 passwordless sudo 선언
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/awx-node-exporter
+        content: |
+          Defaults:awx-node-exporter !requiretty
+          awx-node-exporter ALL=(root) NOPASSWD: ALL
+        owner: root
+        group: root
+        mode: '0440'
+        validate: /usr/sbin/visudo -cf %s

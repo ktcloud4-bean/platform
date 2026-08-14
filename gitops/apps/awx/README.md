@@ -14,8 +14,9 @@ vendoring했고, 사용하지 않는 metrics auth proxy와 폐기된 pull secret
 - projects PVC와 별도 SCM credential을 만들지 않는다. 검증 playbook은 GitOps ConfigMap을
   web/task의 manual project 경로에 read-only mount해 공급한다. private 저장소 접근용
   credential을 AWX에 복제하거나 Argo CD credential을 재사용하지 않는다.
-- 배포 직전과 직후에는 `docs/capacity-plan.md`의 `k3s-01` guest available을 읽는다.
-  12 GiB 경고선까지 여유가 없으면 적용을 시작하거나 계속하지 않는다.
+- AWX control-plane을 새로 배포할 때는 `docs/capacity-plan.md`의 `k3s-01` guest available
+  12 GiB 진입선을 지킨다. 기존 control-plane의 단일 execution job은 새 PVC·상시 request를
+  만들지 않으며, 같은 문서의 12 GiB 경고와 8 GiB 정지선을 구분해 판정한다.
 
 ## Secret 소비 경계
 
@@ -286,3 +287,25 @@ credential과 권한을 직접 수정할 수 없다. Approvers는 이 workflow�
 실패하면 `gitops/tools/awx-06/apply-firewall.sh rollback <STATE_DIR>`로 그 rule 하나를 먼저
 삭제하고, `gitops/tools/awx-06/prepare-live.sh --rollback`으로 전용 account와 AWX/Vault
 객체만 제거한다. root/AWX Application은 항상 literal `main`으로 복원한다.
+
+## AWX-07 단일 node_exporter 운영 역할
+
+`AWX-07 netbird-01 node exporter`는 기존 `node_exporter_baseline` SCM playbook을
+`netbird-01.imcherry5778.xyz` 한 대에서만 쓴다. `AWX-04 platform 운영 원본`의 fixed `main`
+revision과 digest 고정 EE를 사용하고, inventory·limit·credential·forks·branch·extra-vars
+override, simultaneous 실행, ad hoc command를 열지 않는다. 동일 host의 AWX-06 authenticated
+host key mount와 이미 허용된 execution Pod→`10.10.40.10:22` 경계를 재사용하므로 방화벽,
+NetworkPolicy, PVC, Prometheus scrape 선언은 바꾸지 않는다.
+
+전용 `awx-node-exporter` account의 private key는 `kv/awx/ssh-node-exporter`에만 있고,
+`AWX-07 Vault Machine lookup`이 AppRole external input source로 `ssh_key_data` 하나만
+resolve한다. account의 passwordless sudo는 source 제한 key와 고정 SCM apply template에서만
+소비되며, AWX Operators에는 check template·workflow·inventory/credential use만 부여한다.
+apply와 idempotency template은 workflow 안에서만 실행되고, AWX Approvers에는 해당 workflow의
+승인·거절만 부여한다.
+
+workflow는 check→사람 승인→apply→idempotency check 순서다. 기존 exporter가 기준선과
+일치하면 승인 전 check와 승인 뒤 idempotency check의 `changed=0`을 요구한다. rollback은
+`gitops/tools/awx-07/prepare-live.sh --rollback`으로 AWX-07 account/sudo/key/Vault
+lookup/object만 회수하며, 기존 node_exporter unit과 OBS-11 Prometheus 관측 경로, AWX-06
+marker credential·host key·방화벽 경계는 보존한다.

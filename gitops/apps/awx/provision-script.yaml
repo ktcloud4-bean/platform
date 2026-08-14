@@ -8,6 +8,7 @@ metadata:
 data:
   provision.py: |
     #!/usr/bin/env python3
+    # AWX07_PROVISION_GUARD=1
     import base64
     import json
     import time
@@ -21,6 +22,7 @@ data:
     scm = json.load(open("/vault/secrets/scm.json", encoding="utf-8"))
     ssh_canary = json.load(open("/vault/secrets/ssh-canary.json", encoding="utf-8"))
     ssh_marker = json.load(open("/vault/secrets/ssh-marker.json", encoding="utf-8"))
+    ssh_node_exporter = json.load(open("/vault/secrets/ssh-node-exporter.json", encoding="utf-8"))
     admin_password = runtime["admin_password"]
     auth = base64.b64encode(f"awx-recovery:{admin_password}".encode()).decode()
 
@@ -460,6 +462,106 @@ data:
     attach(f"/workflow_job_template_nodes/{marker_apply_node['id']}/success_nodes/", marker_idempotency_node["id"])
     attach(f"/workflow_job_template_nodes/{marker_idempotency_node['id']}/success_nodes/", marker_cleanup_node["id"])
 
+    node_exporter_inventory = ensure("inventories", {"name": "AWX-07 netbird-01 node exporter", "organization": organization["id"]}, {
+        "name": "AWX-07 netbird-01 node exporter", "organization": organization["id"],
+        "description": "기존 node_exporter_baseline을 netbird-01 하나에서만 승인 실행하는 inventory",
+        "variables": json.dumps({"ansible_become": True, "awx07_single_target": True}),
+    })
+    node_exporter_host = ensure("hosts", {"name": "netbird-01.imcherry5778.xyz", "inventory": node_exporter_inventory["id"]}, {
+        "name": "netbird-01.imcherry5778.xyz", "inventory": node_exporter_inventory["id"], "enabled": True,
+        "description": "AWX-07 node_exporter privileged execution 대상 하나",
+        "variables": json.dumps({
+            "ansible_become": True,
+            "ansible_ssh_common_args": "-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/awx-ssh-marker/known_hosts -o GlobalKnownHostsFile=/dev/null -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no",
+            "node_exporter_listen_address": "10.10.40.10",
+        }),
+    })
+    node_exporter_group = ensure("groups", {"name": "node_exporter_fleet", "inventory": node_exporter_inventory["id"]}, {
+        "name": "node_exporter_fleet", "inventory": node_exporter_inventory["id"],
+    })
+    attach(f"/groups/{node_exporter_group['id']}/hosts/", node_exporter_host["id"])
+    node_exporter_lookup = ensure("credentials", {"name": "AWX-07 Vault Machine lookup", "organization": organization["id"]}, {
+        "name": "AWX-07 Vault Machine lookup", "organization": organization["id"],
+        "description": "AWX-07 privileged Machine private key external lookup의 단기 AppRole bootstrap",
+        "credential_type": vault_lookup_type["id"],
+        "inputs": {
+            "url": "https://vault.vault.svc.cluster.local:8200",
+            "cacert": open("/trust/vault.crt", encoding="utf-8").read(),
+            "role_id": ssh_node_exporter["vault_role_id"], "secret_id": ssh_node_exporter["vault_secret_id"],
+            "default_auth_path": "approle", "api_version": "v2",
+        },
+    })
+    node_exporter_credential = ensure("credentials", {"name": "AWX-07 netbird-01 node exporter", "organization": organization["id"]}, {
+        "name": "AWX-07 netbird-01 node exporter", "organization": organization["id"],
+        "description": "전용 비인간 account의 node_exporter_baseline become Machine credential",
+        "credential_type": machine_type["id"], "inputs": {"username": "awx-node-exporter"},
+    }, update=False)
+    ensure("credential_input_sources", {
+        "target_credential": node_exporter_credential["id"], "input_field_name": "ssh_key_data",
+    }, {
+        "target_credential": node_exporter_credential["id"], "source_credential": node_exporter_lookup["id"],
+        "input_field_name": "ssh_key_data",
+        "metadata": {
+            "secret_backend": "kv", "secret_path": "awx/ssh-node-exporter", "auth_path": "approle",
+            "secret_key": "ssh_private_key",
+        },
+    })
+    node_exporter_template_common = {
+        "project": scm_project["id"], "inventory": node_exporter_inventory["id"],
+        "playbook": "infra/ansible/playbooks/node-exporter-baseline.yml",
+        "limit": "netbird-01.imcherry5778.xyz", "execution_environment": platform_ee["id"],
+        "become_enabled": True, "allow_simultaneous": False,
+        "ask_limit_on_launch": False, "ask_inventory_on_launch": False,
+        "ask_credential_on_launch": False, "ask_job_type_on_launch": False,
+        "ask_scm_branch_on_launch": False, "ask_variables_on_launch": False,
+        "ask_execution_environment_on_launch": False, "ask_forks_on_launch": False,
+        "ask_job_slice_count_on_launch": False,
+        "forks": 1, "job_slice_count": 1, "verbosity": 0,
+    }
+    node_exporter_check = ensure("job_templates", {"name": "AWX-07 netbird node exporter check", "organization": organization["id"]}, {
+        **node_exporter_template_common, "name": "AWX-07 netbird node exporter check",
+        "description": "기존 exporter 선언을 변경 없이 확인하는 단일 대상 check-only job", "job_type": "check",
+    })
+    node_exporter_apply = ensure("job_templates", {"name": "AWX-07 netbird node exporter apply", "organization": organization["id"]}, {
+        **node_exporter_template_common, "name": "AWX-07 netbird node exporter apply",
+        "description": "사람 승인 뒤 기존 node_exporter_baseline을 netbird-01 하나에만 적용", "job_type": "run",
+    })
+    node_exporter_idempotency = ensure("job_templates", {"name": "AWX-07 netbird node exporter idempotency", "organization": organization["id"]}, {
+        **node_exporter_template_common, "name": "AWX-07 netbird node exporter idempotency",
+        "description": "승인 apply 뒤 동일 SCM revision의 changed=0을 확인하는 check job", "job_type": "check",
+    })
+    for template in (node_exporter_check, node_exporter_apply, node_exporter_idempotency):
+        attach(f"/job_templates/{template['id']}/credentials/", node_exporter_credential["id"])
+
+    node_exporter_workflow = ensure("workflow_job_templates", {"name": "AWX-07 netbird node exporter 승인"}, {
+        "name": "AWX-07 netbird node exporter 승인", "organization": organization["id"],
+        "description": "check 뒤 사람 승인, node_exporter apply, idempotency check로 끝나는 단일 대상 workflow",
+        "ask_variables_on_launch": False, "allow_simultaneous": False,
+    })
+    def node_exporter_workflow_node(identifier, template=None):
+        node = one("workflow_job_template_nodes", {
+            "workflow_job_template": node_exporter_workflow["id"], "identifier": identifier,
+        })
+        if node is None:
+            body = {"workflow_job_template": node_exporter_workflow["id"], "identifier": identifier,
+                    "all_parents_must_converge": True}
+            if template is not None:
+                body["unified_job_template"] = template["id"]
+            node = api("POST", "/workflow_job_template_nodes/", body)
+        return node
+    node_exporter_check_node = node_exporter_workflow_node("node-exporter-check", node_exporter_check)
+    node_exporter_approval_node = node_exporter_workflow_node("human-approval")
+    if not node_exporter_approval_node.get("related", {}).get("unified_job_template"):
+        api("POST", f"/workflow_job_template_nodes/{node_exporter_approval_node['id']}/create_approval_template/", {
+            "name": "AWX-07 netbird node exporter 사람 승인",
+            "description": "AWX Approvers만 승인; 승인 전에는 privileged apply가 시작되지 않는다.", "timeout": 900,
+        })
+    node_exporter_apply_node = node_exporter_workflow_node("approved-node-exporter-apply", node_exporter_apply)
+    node_exporter_idempotency_node = node_exporter_workflow_node("node-exporter-idempotency", node_exporter_idempotency)
+    attach(f"/workflow_job_template_nodes/{node_exporter_check_node['id']}/success_nodes/", node_exporter_approval_node["id"])
+    attach(f"/workflow_job_template_nodes/{node_exporter_approval_node['id']}/success_nodes/", node_exporter_apply_node["id"])
+    attach(f"/workflow_job_template_nodes/{node_exporter_apply_node['id']}/success_nodes/", node_exporter_idempotency_node["id"])
+
     common_template = {
         "project": project["id"], "inventory": boundary["id"],
         "playbook": "verify-credential.yml",
@@ -524,8 +626,13 @@ data:
     give_team_role(ssh_marker_credential, "use_role", operators)
     give_team_role(marker_precheck, "execute_role", operators)
     give_team_role(marker_workflow, "execute_role", operators)
+    give_team_role(node_exporter_inventory, "use_role", operators)
+    give_team_role(node_exporter_credential, "use_role", operators)
+    give_team_role(node_exporter_check, "execute_role", operators)
+    give_team_role(node_exporter_workflow, "execute_role", operators)
     give_team_role(workflow, "approval_role", approvers)
     give_team_role(marker_workflow, "approval_role", approvers)
+    give_team_role(node_exporter_workflow, "approval_role", approvers)
 
     # 이전 AWX-01 또는 UI 변경으로 생길 수 있는 과잉 team role을 정확한 최소 집합으로
     # 수렴한다. Organization member는 team membership의 상위 전제일 뿐 admin 권한이 아니다.
@@ -543,8 +650,15 @@ data:
         object_role(ssh_marker_credential, "use_role"),
         object_role(marker_precheck, "execute_role"),
         object_role(marker_workflow, "execute_role"),
+        object_role(node_exporter_inventory, "use_role"),
+        object_role(node_exporter_credential, "use_role"),
+        object_role(node_exporter_check, "execute_role"),
+        object_role(node_exporter_workflow, "execute_role"),
     }
-    approver_role_ids = {object_role(workflow, "approval_role"), object_role(marker_workflow, "approval_role")}
+    approver_role_ids = {
+        object_role(workflow, "approval_role"), object_role(marker_workflow, "approval_role"),
+        object_role(node_exporter_workflow, "approval_role"),
+    }
     for team, allowed_role_ids in ((operators, operator_role_ids), (approvers, approver_role_ids)):
         assigned = api("GET", f"/teams/{team['id']}/roles/?page_size=200")
         for role in assigned.get("results", []):
@@ -553,4 +667,4 @@ data:
 
     # 실행 금지 인벤토리, denied credential, denied/apply JT에는 Operators role을
     # 절대 붙이지 않는다. 다음 단계 verify-live.sh가 이를 같은 시점에 대조한다.
-    print("AWX-01/AWX-04/AWX-05/AWX-06 선언 provisioning 완료")
+    print("AWX-01/AWX-04/AWX-05/AWX-06/AWX-07 선언 provisioning 완료")

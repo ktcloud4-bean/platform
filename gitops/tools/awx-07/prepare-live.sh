@@ -1,0 +1,262 @@
+#!/usr/bin/env bash
+# AWX-07 전용: netbird-01 node_exporter privileged account와 Vault external lookup을 만든다.
+# 비밀은 stdin/umask 077 임시 파일로만 취급하며 명령행·출력·Git에 넣지 않는다.
+set -Eeuo pipefail
+
+mode=${1:-}
+[[ ${mode} == --check || ${mode} == --apply || ${mode} == --refresh-lookup || ${mode} == --rollback ]] || {
+  echo "사용법: $0 --check|--apply|--refresh-lookup|--rollback" >&2
+  exit 2
+}
+
+readonly repo_root=$(git rev-parse --show-toplevel)
+readonly secret_root=${KTC_SECRET_ROOT:-/home/imcherry/secrets/ktcloud4-bean}
+readonly root_token_file=${VAULT_ROOT_TOKEN_FILE:-${secret_root}/vault-root.token}
+readonly known_hosts=${K3S_SSH_KNOWN_HOSTS:-/home/imcherry/.ssh/known_hosts}
+readonly k3s_host=${K3S_HOST:-rocky@k3s-01.imcherry5778.xyz}
+readonly target_fqdn=netbird-01.imcherry5778.xyz
+readonly kubectl_command=${KUBECTL:-sudo -n /usr/local/bin/k3s kubectl}
+readonly account=awx-node-exporter
+readonly account_home=/var/lib/awx-node-exporter
+readonly sudoers_file=/etc/sudoers.d/awx-node-exporter
+readonly lookup_policy=awx-ssh-node-exporter-lookup
+readonly lookup_role=awx-07-ssh-node-exporter-lookup
+readonly base_revision=${AWX07_ROLLBACK_REVISION:-$(git rev-parse origin/main)}
+ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=${known_hosts}")
+temp_dir=''
+applied=false
+
+require_inputs() {
+  [[ -r ${root_token_file} && ! -L ${root_token_file} && $(stat -c %a "${root_token_file}") == 600 ]] || {
+    echo "Vault root token 파일을 읽을 수 없거나 mode 0600이 아니다" >&2
+    exit 1
+  }
+  [[ -r ${known_hosts} && ! -L ${known_hosts} ]] || {
+    echo "인증된 k3s SSH known_hosts 파일을 읽을 수 없다" >&2
+    exit 1
+  }
+}
+
+remote_kubectl() {
+  ssh "${ssh_options[@]}" "${k3s_host}" "${kubectl_command} $*"
+}
+
+vault_exec() {
+  { tr -d '\n' <"${root_token_file}"; printf '\n'; cat; } | ssh "${ssh_options[@]}" "${k3s_host}" \
+    "${kubectl_command} -n vault exec -i vault-0 -- sh -c 'read -r VAULT_TOKEN; export VAULT_TOKEN; exec sh -eu'"
+}
+
+vault_state() {
+  vault_exec <<'EOF'
+for item in \
+  "policy:awx-ssh-node-exporter-lookup" \
+  "role:awx-07-ssh-node-exporter-lookup" \
+  "kv:awx/ssh-node-exporter" \
+  "kv:awx/ssh-node-exporter-lookup"; do
+  kind=${item%%:*}
+  name=${item#*:}
+  case ${kind} in
+    policy) vault policy read "${name}" >/dev/null 2>&1 && printf '%s=PRESENT\n' "${item}" || printf '%s=ABSENT\n' "${item}" ;;
+    role) vault read "auth/approle/role/${name}" >/dev/null 2>&1 && printf '%s=PRESENT\n' "${item}" || printf '%s=ABSENT\n' "${item}" ;;
+    kv) vault kv get "kv/${name}" >/dev/null 2>&1 && printf '%s=PRESENT\n' "${item}" || printf '%s=ABSENT\n' "${item}" ;;
+  esac
+done
+EOF
+}
+
+target_state() {
+  ssh "${ssh_options[@]}" "rocky@${target_fqdn}" '
+    set -eu
+    if getent passwd awx-node-exporter >/dev/null; then
+      entry=$(getent passwd awx-node-exporter)
+      printf "account=PRESENT uid=%s home=%s shell=%s\\n" "$(cut -d: -f3 <<<"${entry}")" "$(cut -d: -f6 <<<"${entry}")" "$(cut -d: -f7 <<<"${entry}")"
+    else
+      printf "account=ABSENT\\n"
+    fi
+    if test -f /etc/sudoers.d/awx-node-exporter; then printf "sudoers=PRESENT\\n"; else printf "sudoers=ABSENT\\n"; fi
+    systemctl is-active sshd | sed "s/^/sshd=/"
+  '
+}
+
+capacity() {
+  ssh "${ssh_options[@]}" "${k3s_host}" '
+    awk "/MemAvailable:/ {printf \"guest_available_bytes=%d\\n\", \$2*1024}" /proc/meminfo
+    printf "swap_devices="; awk "NR>1 {count++} END {print count+0}" /proc/swaps
+    sudo -n /usr/local/bin/k3s kubectl -n awx get pvc -o json | jq -r '"'"'"pvc_count=\(.items | length)"'"'"'
+  '
+}
+
+check() {
+  require_inputs
+  local target vault cap
+  target=$(target_state)
+  vault=$(vault_state)
+  cap=$(capacity)
+  printf '%s\n%s\n%s\n' "${target}" "${vault}" "${cap}"
+  awk -F= '/^guest_available_bytes=/{if ($2 < 8589934592) exit 1}' <<<"${cap}" || {
+    echo "AWX-07 중지: guest available이 8 GiB 미만이다" >&2
+    exit 1
+  }
+  grep -qx 'swap_devices=0' <<<"${cap}" || { echo "AWX-07 중지: swap이 0이 아니다" >&2; exit 1; }
+  grep -qx 'pvc_count=0' <<<"${cap}" || { echo "AWX-07 중지: AWX PVC가 존재한다" >&2; exit 1; }
+  grep -qx 'sshd=active' <<<"${target}" || { echo "AWX-07 중지: netbird-01 sshd가 active가 아니다" >&2; exit 1; }
+}
+
+write_policy() {
+  local name=$1 file=$2
+  {
+    printf "cat > /tmp/awx07-policy.hcl <<'HCL'\n"
+    cat "${file}"
+    printf "HCL\nvault policy write %q /tmp/awx07-policy.hcl >/dev/null\nrm -f /tmp/awx07-policy.hcl\n" "${name}"
+  } | vault_exec
+}
+
+put_vault_file() {
+  local path=$1 field=$2 source=$3
+  { tr -d '\n' <"${root_token_file}"; printf '\n'; cat "${source}"; } | ssh "${ssh_options[@]}" "${k3s_host}" \
+    "${kubectl_command} -n vault exec -i vault-0 -- sh -c 'set -eu; umask 077; read -r VAULT_TOKEN; export VAULT_TOKEN; cat > /tmp/awx07-value; vault kv put ${path} ${field}=@/tmp/awx07-value >/dev/null; rm -f /tmp/awx07-value'"
+}
+
+restore_policy() {
+  local revision=$1
+  [[ ${revision} =~ ^[0-9a-f]{40}$ ]] || { echo "AWX07_ROLLBACK_REVISION은 40자리 commit SHA여야 한다" >&2; return 1; }
+  {
+    printf "cat > /tmp/awx07-policy.hcl <<'HCL'\n"
+    git show "${revision}:infra/vault/scripts/policies/awx-provisioner.hcl"
+    printf "HCL\nvault policy write awx-provisioner /tmp/awx07-policy.hcl >/dev/null\nrm -f /tmp/awx07-policy.hcl\n"
+  } | vault_exec
+}
+
+rollback() {
+  require_inputs
+  ssh "${ssh_options[@]}" "rocky@${target_fqdn}" 'bash -s' <<'EOF'
+set -Eeuo pipefail
+sudo -n /usr/bin/rm -f /etc/sudoers.d/awx-node-exporter
+sudo -n /usr/sbin/userdel --remove awx-node-exporter 2>/dev/null || {
+  status=$?
+  [[ ${status} == 6 ]]
+}
+EOF
+  remote_kubectl -n awx exec -i deploy/awx-web -c awx-web -- awx-manage shell <<'PY'
+from awx.main.models import Credential, CredentialInputSource, Inventory, JobTemplate, Organization, WorkflowJobTemplate
+
+org = Organization.objects.filter(name="Platform").first()
+if org:
+    WorkflowJobTemplate.objects.filter(name="AWX-07 netbird node exporter 승인", organization=org).delete()
+    JobTemplate.objects.filter(name__in=[
+        "AWX-07 netbird node exporter check", "AWX-07 netbird node exporter apply",
+        "AWX-07 netbird node exporter idempotency",
+    ], organization=org).delete()
+    for credential in Credential.objects.filter(
+        name__in=["AWX-07 Vault Machine lookup", "AWX-07 netbird-01 node exporter"], organization=org
+    ):
+        CredentialInputSource.objects.filter(target_credential=credential).delete()
+        credential.delete()
+    Inventory.objects.filter(name="AWX-07 netbird-01 node exporter", organization=org).delete()
+PY
+  vault_exec <<EOF
+vault kv metadata delete kv/awx/ssh-node-exporter >/dev/null 2>&1 || true
+vault kv metadata delete kv/awx/ssh-node-exporter-lookup >/dev/null 2>&1 || true
+vault delete auth/approle/role/${lookup_role} >/dev/null 2>&1 || true
+vault policy delete ${lookup_policy} >/dev/null 2>&1 || true
+EOF
+  restore_policy "${base_revision}"
+  printf 'AWX07_ROLLBACK=PASS account=%s sudoers=%s vault_paths=2 role=%s policy=%s baseline=%s\n' \
+    "${account}" "${sudoers_file}" "${lookup_role}" "${lookup_policy}" "${base_revision}"
+}
+
+refresh_lookup() {
+  require_inputs
+  vault_exec <<EOF
+vault read auth/approle/role/${lookup_role} >/dev/null
+vault kv get kv/awx/ssh-node-exporter >/dev/null
+vault read -field=role_id auth/approle/role/${lookup_role}/role-id >/tmp/awx07-role-id
+vault write -field=secret_id -f auth/approle/role/${lookup_role}/secret-id >/tmp/awx07-secret-id
+vault kv put kv/awx/ssh-node-exporter-lookup vault_role_id=@/tmp/awx07-role-id vault_secret_id=@/tmp/awx07-secret-id >/dev/null
+rm -f /tmp/awx07-role-id /tmp/awx07-secret-id
+EOF
+  vault_exec <<'EOF'
+role_id=$(vault kv get -field=vault_role_id kv/awx/ssh-node-exporter-lookup)
+secret_id=$(vault kv get -field=vault_secret_id kv/awx/ssh-node-exporter-lookup)
+token=$(env -u VAULT_TOKEN vault write -field=token auth/approle/login role_id="$role_id" secret_id="$secret_id")
+VAULT_TOKEN="$token" vault kv get -field=ssh_private_key kv/awx/ssh-node-exporter >/dev/null
+EOF
+  printf 'AWX07_LOOKUP_REFRESH=PASS role=%s path=kv/awx/ssh-node-exporter-lookup\n' "${lookup_role}"
+}
+
+apply() {
+  check
+  local initial_target initial_vault
+  initial_target=$(target_state)
+  initial_vault=$(vault_state)
+  grep -qx 'account=ABSENT' <<<"${initial_target}" || { echo "기존 awx-node-exporter account가 있어 자동 교체하지 않는다" >&2; exit 1; }
+  grep -qx 'sudoers=ABSENT' <<<"${initial_target}" || { echo "기존 AWX-07 sudoers가 있어 자동 교체하지 않는다" >&2; exit 1; }
+  ! grep -q '=PRESENT$' <<<"${initial_vault}" || { echo "기존 AWX-07 Vault 객체가 있어 자동 교체하지 않는다" >&2; exit 1; }
+
+  umask 077
+  temp_dir=$(mktemp -d)
+  applied=false
+  cleanup() {
+    local status=$?
+    [[ -z ${temp_dir} ]] || rm -rf "${temp_dir}"
+    if [[ ${status} -ne 0 && ${applied} == true ]]; then
+      rollback || true
+    fi
+    exit "${status}"
+  }
+  trap cleanup EXIT INT TERM
+
+  ssh-keygen -q -t ed25519 -N '' -C awx-07-netbird-node-exporter -f "${temp_dir}/id_ed25519"
+  ssh-keygen -F "${target_fqdn}" -f "${known_hosts}" | awk '!/^#/' >"${temp_dir}/known_hosts"
+  [[ -s ${temp_dir}/known_hosts ]]
+  ssh-keygen -lf "${temp_dir}/known_hosts" >/dev/null
+  printf 'from="10.42.0.0/24,10.10.20.10",restrict,no-pty %s\n' "$(<"${temp_dir}/id_ed25519.pub")" >"${temp_dir}/authorized_key"
+  jq -n --rawfile key "${temp_dir}/authorized_key" '{awx07_authorized_key: ($key | rtrimstr("\n"))}' >"${temp_dir}/account-vars.json"
+
+  ANSIBLE_CONFIG="${repo_root}/infra/ansible/ansible.cfg" \
+  ANSIBLE_SSH_COMMON_ARGS="-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${known_hosts} -o PasswordAuthentication=no" \
+  ansible-playbook -i "${target_fqdn}," --user rocky \
+    -e "@${temp_dir}/account-vars.json" \
+    "${repo_root}/infra/ansible/playbooks/awx-07-netbird-node-exporter-account.yml"
+  applied=true
+  ssh "${ssh_options[@]}" "rocky@${target_fqdn}" 'bash -s' <<'EOF'
+set -Eeuo pipefail
+entry=$(getent passwd awx-node-exporter)
+test "$(cut -d: -f6 <<<"${entry}")" = /var/lib/awx-node-exporter
+test "$(cut -d: -f7 <<<"${entry}")" = /bin/bash
+! id -nG awx-node-exporter | tr " " "\n" | grep -qx wheel
+test "$(sudo -n /usr/bin/stat -c %a /var/lib/awx-node-exporter/.ssh/authorized_keys)" = 600
+test "$(sudo -n /usr/bin/stat -c %a /etc/sudoers.d/awx-node-exporter)" = 440
+sudo -n /usr/sbin/visudo -cf /etc/sudoers.d/awx-node-exporter >/dev/null
+sudo -n -u awx-node-exporter /usr/bin/true
+EOF
+
+  write_policy awx-provisioner "${repo_root}/infra/vault/scripts/policies/awx-provisioner.hcl"
+  write_policy "${lookup_policy}" "${repo_root}/infra/vault/scripts/policies/${lookup_policy}.hcl"
+  put_vault_file kv/awx/ssh-node-exporter ssh_private_key "${temp_dir}/id_ed25519"
+  vault_exec <<EOF
+vault write auth/approle/role/${lookup_role} \\
+  token_policies="${lookup_policy}" token_no_default_policy=true \\
+  token_ttl=10m token_max_ttl=15m secret_id_ttl=1h secret_id_num_uses=0 >/dev/null
+umask 077
+vault read -field=role_id auth/approle/role/${lookup_role}/role-id >/tmp/awx07-role-id
+vault write -field=secret_id -f auth/approle/role/${lookup_role}/secret-id >/tmp/awx07-secret-id
+vault kv put kv/awx/ssh-node-exporter-lookup vault_role_id=@/tmp/awx07-role-id vault_secret_id=@/tmp/awx07-secret-id >/dev/null
+rm -f /tmp/awx07-role-id /tmp/awx07-secret-id
+EOF
+  vault_exec <<'EOF'
+role_id=$(vault kv get -field=vault_role_id kv/awx/ssh-node-exporter-lookup)
+secret_id=$(vault kv get -field=vault_secret_id kv/awx/ssh-node-exporter-lookup)
+token=$(env -u VAULT_TOKEN vault write -field=token auth/approle/login role_id="$role_id" secret_id="$secret_id")
+VAULT_TOKEN="$token" vault kv get -field=ssh_private_key kv/awx/ssh-node-exporter >/dev/null
+EOF
+  printf 'AWX07_PREPARE=PASS account=%s source=10.42.0.0/24,10.10.20.10 vault_lookup=%s hostkey=AWX06-reuse sudo=enabled\n' \
+    "${account}" "${lookup_role}"
+}
+
+case ${mode} in
+  --check) check ;;
+  --apply) apply ;;
+  --refresh-lookup) refresh_lookup ;;
+  --rollback) rollback ;;
+esac

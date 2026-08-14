@@ -132,6 +132,16 @@ data:
     {{- with secret "kv/data/awx/ssh-marker-lookup" -}}{{ .Data.data | toJSON }}{{- end -}}
     EOT
     }
+    # AWX-07 privileged node_exporter Machine credential의 lookup bootstrap만
+    # provisioning Hook에 전달한다. private key와 host key는 이 policy로 읽지 못한다.
+    template {
+      destination = "/vault/secrets/ssh-node-exporter.json"
+      perms = "0400"
+      error_on_missing_key = true
+      contents = <<EOT
+    {{- with secret "kv/data/awx/ssh-node-exporter-lookup" -}}{{ .Data.data | toJSON }}{{- end -}}
+    EOT
+    }
   verifier.hcl: |
     exit_after_auth = true
     pid_file = "/tmp/vault-agent.pid"
