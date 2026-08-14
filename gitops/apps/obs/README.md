@@ -508,3 +508,25 @@ immutable root `addba0e1aa8e6625345641b0d19929ee99e4f0b8`과 child
 `/home/imcherry/.local/state-backups/opn-metrics-01-nKnokVNk`, 변경 전 config revision은
 `1785711551.50`이다. 검증 종료 뒤 root와 child는 시작 SHA
 `3ab89ab66bc6217c8ca789f034485e41a1e77f08`을 거쳐 literal `main`으로 복구했다.
+
+## BKP-07 네이티브 백업 실패 경보
+
+`BKP-06`에서 PostgreSQL·Vault 네이티브 백업이 각각 3일·7일째 조용히 실패 중이던 것을
+발견·복구했다. 두 실패 모두 systemd 레벨의 자체 freshness check가 감지는 했지만
+로컬 파일에 기록만 하고 아무 데도 통보하지 않았다. `k3s-datastore-backup`도 같은
+구조라 언젠가 실패해도 마찬가지로 조용히 지나갈 수 있었다.
+
+세 systemd `.service`(`k3s-datastore-backup`·`postgres-native-backup`·`vault-raft-backup`)는
+이미 OBS-11/13/17 fleet의 `--collector.systemd`로 Prometheus가 수집 중이라 새 exporter나
+방화벽 규칙 없이 `node_systemd_unit_state{state="failed"}==1`만 감시하면 된다.
+`WarpgateACMERenewTimerDown`처럼 `.timer`가 아니라 `.service` 자체를 본다 — timer는
+트리거된 job이 실패해도 계속 `active`라 실패를 못 잡기 때문이다. 세 alertname
+(`K3sDatastoreBackupFailed`, `PostgreSQLNativeBackupFailed`, `VaultRaftBackupFailed`)만
+기존 `obs-13-receiver`·`obs-18-platform-slack` matcher에 추가하며 기본 `discard`와
+기존 route는 보존한다.
+
+같은 작업에서 `BKP-02`(Velero)가 메커니즘만 검증하고 정기 schedule은 만들지 않았던
+공백도 메운다. `gitops/apps/velero/values-bkp-02.yaml`에 다른 네이티브 백업과 겹치지
+않는 02:00 KST 매일 schedule을 추가하고(`defaultVolumesToFsBackup: true`, TTL 7일),
+실패·부분 실패는 기존 `VeleroBackupFailed`(`obs-13-backup`)가 그대로 감시한다 — 새
+alert가 필요 없다.
