@@ -1,0 +1,22 @@
+# 이 파일을 복사하지 말고, 저장소 밖 mode 0600 파일에 실제 값을 둔다.
+# 예: /home/imcherry/secrets/ktcloud4-bean/aws-sec-01/account-baseline.tfvars
+
+# 기존 multi-region CloudTrail을 새로 만들지 않고 import해 보정한다.
+cloudtrail_name = "management-events"
+
+# account guard: 실제 12자리 계정 ID를 넣는다.
+aws_account_id = "000000000000"
+
+alert_email           = "security-contact@example.invalid"
+security_contact_name = "Security Administrator"
+security_contact_phone = "+82 10-0000-0000"
+
+# AWS Console의 Amazon Q Developer in chat applications 승인 후 얻는 ID
+slack_workspace_id = "T00000000000"
+slack_channel_id   = "C0000000000"
+
+# CIS Security Hub standard는 기본 false를 유지한다.
+# enable_cis_benchmark = true
+
+# PagerDuty를 사용할 때만 채운다.
+# pagerduty_integration_url = "https://events.pagerduty.com/integration/.../enqueue"
