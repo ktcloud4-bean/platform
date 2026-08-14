@@ -13,7 +13,7 @@ spec:
   project: obs
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: 33f07ea5fb72d06d693df52303d639e3dbbee605
+    targetRevision: main
     path: gitops/apps/obs
   destination:
     server: https://kubernetes.default.svc
