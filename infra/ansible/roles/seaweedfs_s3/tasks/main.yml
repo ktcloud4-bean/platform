@@ -13,12 +13,18 @@
       - seaweedfs_s3_bind_address == ansible_default_ipv4.address
     fail_msg: Rocky Linux 9/amd64, 고정 release, license, bind 주소와 최소 source 입력을 확인한다.
 
-- name: admin 콘솔 credential 최소 길이 확인
+- name: admin 콘솔 credential 형식 확인
   ansible.builtin.assert:
     that:
       - seaweedfs_admin_user | length > 0
-      - seaweedfs_admin_password | length >= 16
-    fail_msg: weed admin은 평문 미인증 관리 콘솔을 만들지 않도록 저장소 밖 extra-vars의 계정·충분한 길이의 비밀번호가 필요하다.
+      - seaweedfs_admin_password | length == 0 or seaweedfs_admin_password | length >= 16
+    fail_msg: >-
+      weed admin 자체 로그인을 켜려면 충분한 길이의 비밀번호가 필요하다.
+      비워두면(기본값) 자체 로그인은 꺼지고 Pomerium `/platform-privileged`
+      게이트에만 의존한다(S3-02-FIX-01: weed admin은 SSO를 지원하지 않아
+      Keycloak 뒤에 자체 로그인을 이중으로 두면 사용자 경험만 나빠지고,
+      계정 하나를 공유하는 로컬 로그인은 Pomerium의 사용자별 접근 로그보다
+      추적성이 낮다).
   no_log: true
 
 - name: S3 허용 source가 단일 host CIDR 형식인지 확인

@@ -162,7 +162,7 @@ sections:
       - title: SeaweedFS Admin
         description: S3-02 SeaweedFS admin 웹 UI; cluster 관리 콘솔이라 /platform-privileged만 허용
         icon: favicon-local
-        url: https://object-admin.imcherry5778.xyz
+        url: https://seaweedfs.imcherry5778.xyz
         target: sametab
         displayData:
           showForGroups:
