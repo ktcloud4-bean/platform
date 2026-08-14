@@ -1,10 +1,10 @@
-// AWS-CI-FIX-01: JCasC pipelineJob가 parameter·source를 소유하고 이 Scripted pipeline은 plan만 실행한다.
-def allowedRoots = ['tofu-app-network', 'tofu-app-ecr']
+// AWS-CI-FIX-02: JCasC pipelineJob가 parameter·source를 소유하고 이 Scripted pipeline은 plan만 실행한다.
+def allowedRoots = ['tofu-app-network', 'tofu-app-ecr', 'tofu-account-baseline', 'tofu-app-security']
 def targetRoot = params.TARGET_ROOT ?: ''
 def gitRevision = params.GIT_REVISION ?: 'main'
 
 if (!allowedRoots.contains(targetRoot)) {
-  error("AWS-CI-FIX-01 허용되지 않은 TARGET_ROOT: ${targetRoot}")
+  error("AWS-CI-FIX-02 허용되지 않은 TARGET_ROOT: ${targetRoot}")
 }
 
 node('aws-opentofu') {
@@ -23,6 +23,12 @@ node('aws-opentofu') {
           ]]
         ])
         sh 'git rev-parse --verify HEAD >/dev/null'
+      }
+
+      stage('OpenTofu fmt gate') {
+        container('opentofu') {
+          sh "tofu -chdir=infra/aws/${targetRoot} fmt -check -diff"
+        }
       }
 
       stage('Trivy config gate') {

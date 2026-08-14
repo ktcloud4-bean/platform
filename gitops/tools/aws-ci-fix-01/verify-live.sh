@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# AWS-CI-FIX-01의 완료 증거만 판정한다.
+# AWS-CI-FIX-02의 완료 증거만 판정한다.
 # - immutable SHA의 platform-root/Jenkins Synced·Healthy
 # - 허용 root 두 개의 Jenkins OpenTofu plan build SUCCESS
 # - console에 plan 결과만 있고 Vault runtime의 이 pipeline 입력 원문이 0건
 set -Eeuo pipefail
 
-readonly expected_root_revision=${AWS_CI_FIX_01_EXPECTED_ROOT_REVISION:?root pointer SHA가 필요하다}
-readonly expected_config_revision=${AWS_CI_FIX_01_EXPECTED_CONFIG_REVISION:?Jenkins 설정 SHA가 필요하다}
+readonly expected_root_revision=${AWS_CI_FIX_02_EXPECTED_ROOT_REVISION:-${AWS_CI_FIX_01_EXPECTED_ROOT_REVISION:?root pointer SHA가 필요하다}}
+readonly expected_config_revision=${AWS_CI_FIX_02_EXPECTED_CONFIG_REVISION:-${AWS_CI_FIX_01_EXPECTED_CONFIG_REVISION:?Jenkins 설정 SHA가 필요하다}}
+readonly verification_mode=${AWS_CI_FIX_02_MODE:-full}
+readonly fmt_negative_revision=${AWS_CI_FIX_02_FMT_NEGATIVE_REVISION:-}
 readonly secret_root=${KTC_SECRET_ROOT:-$HOME/secrets/ktcloud4-bean}
 readonly jenkins_env=${CI01_ENV_FILE:-${secret_root}/jenkins/env}
 readonly vault_root_token_file=${VAULT_ROOT_TOKEN_FILE:-${secret_root}/vault-root.token}
@@ -15,28 +17,38 @@ readonly kubectl_command=${KUBECTL:-sudo -n /usr/local/bin/k3s kubectl}
 readonly known_hosts=${K3S_SSH_KNOWN_HOSTS:-$HOME/.ssh/known_hosts}
 readonly jenkins_port=${AWS_CI_FIX_01_JENKINS_PORT:-33029}
 readonly job_name=aws-opentofu-pipeline
-readonly allowed_roots=(tofu-app-network tofu-app-ecr)
+readonly verification_roots=(tofu-account-baseline tofu-app-security)
 
 [[ ${expected_root_revision} =~ ^[0-9a-f]{40}$ &&
    ${expected_config_revision} =~ ^[0-9a-f]{40}$ ]] || {
-  echo 'AWS-CI-FIX-01 검증 실패 단계=argo 원인=immutable SHA 형식이 아니다.' >&2
+  echo 'AWS-CI-FIX-02 검증 실패 단계=argo 원인=immutable SHA 형식이 아니다.' >&2
   exit 1
 }
+case ${verification_mode} in
+  fmt-negative | plan-only | full) ;;
+  *) echo 'AWS-CI-FIX-02 검증 실패 단계=preflight 원인=지원하지 않는 mode다.' >&2; exit 1 ;;
+esac
+if [[ ${verification_mode} == fmt-negative || ${verification_mode} == full ]]; then
+  [[ ${fmt_negative_revision} =~ ^[0-9a-f]{40}$ ]] || {
+    echo 'AWS-CI-FIX-02 검증 실패 단계=preflight 원인=fmt 음성 SHA가 필요하다.' >&2
+    exit 1
+  }
+fi
 for private_input in "${jenkins_env}" "${vault_root_token_file}"; do
   [[ -f ${private_input} && ! -L ${private_input} && $(stat -c %a "${private_input}") == 600 ]] || {
-    echo "AWS-CI-FIX-01 검증 실패 단계=preflight 원인=credential 입력이 mode 0600 일반 파일이 아니다." >&2
+    echo "AWS-CI-FIX-02 검증 실패 단계=preflight 원인=credential 입력이 mode 0600 일반 파일이 아니다." >&2
     exit 1
   }
 done
 [[ -f ${known_hosts} && ! -L ${known_hosts} ]] || {
-  echo 'AWS-CI-FIX-01 검증 실패 단계=preflight 원인=인증된 k3s known_hosts 파일이 없다.' >&2
+  echo 'AWS-CI-FIX-02 검증 실패 단계=preflight 원인=인증된 k3s known_hosts 파일이 없다.' >&2
   exit 1
 }
 
 if [[ ${AWS_CI_FIX_01_ARGO_LOCK_HELD:-false} != true ]]; then
   exec 9>/tmp/ktcloud4-bean-argo-root.lock
   flock -n 9 || {
-    echo 'AWS-CI-FIX-01 검증 실패 단계=lock 원인=다른 ARGO-ROOT 작업이 실행 중이다.' >&2
+    echo 'AWS-CI-FIX-02 검증 실패 단계=lock 원인=다른 ARGO-ROOT 작업이 실행 중이다.' >&2
     exit 1
   }
 fi
@@ -208,7 +220,7 @@ trigger_and_assert() {
     echo "AWS-CI-FIX-01 검증 실패 단계=build root=${root} build=${build_number} result=${build_result:-미완료}" >&2
     return 1
   }
-  rg -F "AWS-CI-FIX-01 Plan=PASS root=${root}" "${temp_dir}/console-${root}.txt" >/dev/null || {
+  rg -F "AWS-CI-FIX-02 Plan=PASS root=${root}" "${temp_dir}/console-${root}.txt" >/dev/null || {
     echo "AWS-CI-FIX-01 검증 실패 단계=plan root=${root} build=${build_number} 원인=plan 성공 요약이 없다." >&2
     return 1
   }
@@ -232,9 +244,63 @@ hits = sum(console.count(value) for value in values if value)
 if hits:
     raise SystemExit("민감값이 Jenkins console에 남았다")
 PY
-  echo "AWS-CI-FIX-01 Build=SUCCESS root=${root} build=${build_number} plan-only=true sensitive-hits=0"
+  echo "AWS-CI-FIX-02 Build=SUCCESS root=${root} build=${build_number} plan-only=true sensitive-hits=0"
 }
 
-for root in "${allowed_roots[@]}"; do
-  trigger_and_assert "${root}"
-done
+trigger_fmt_negative() {
+  local root=tofu-account-baseline queue_location queue_item build_number='' build_result='' build_state
+  queue_location=$(jcurl --fail --request POST --dump-header - --output /dev/null \
+    --header "${crumb_field}: ${crumb_value}" \
+    --data-urlencode "TARGET_ROOT=${root}" \
+    --data-urlencode "GIT_REVISION=${fmt_negative_revision}" \
+    "${jenkins_api}/job/${job_name}/buildWithParameters" \
+    | awk 'tolower($1) == "location:" {gsub(/\r/, "", $2); print $2}')
+  [[ -n ${queue_location} ]] || {
+    echo 'AWS-CI-FIX-02 검증 실패 단계=fmt-trigger 원인=queue item이 없다.' >&2
+    return 1
+  }
+  queue_item=${queue_location%/}
+  queue_item=${queue_item##*/}
+  for _ in $(seq 1 180); do
+    jcurl --output "${temp_dir}/fmt-queue.json" "${jenkins_api}/queue/item/${queue_item}/api/json" || true
+    build_number=$(jq -r '.executable.number // empty' "${temp_dir}/fmt-queue.json" 2>/dev/null || true)
+    [[ -n ${build_number} ]] && break
+    sleep 2
+  done
+  [[ -n ${build_number} ]] || {
+    echo 'AWS-CI-FIX-02 검증 실패 단계=fmt-queue 원인=build로 승격되지 않았다.' >&2
+    return 1
+  }
+  for _ in $(seq 1 450); do
+    jcurl --output "${temp_dir}/fmt-build.json" \
+      "${jenkins_api}/job/${job_name}/${build_number}/api/json?tree=building,result" || true
+    build_state=$(jq -r 'if .building == false then "finished" else "running" end' \
+      "${temp_dir}/fmt-build.json" 2>/dev/null || true)
+    if [[ ${build_state} == finished ]]; then
+      build_result=$(jq -r '.result // empty' "${temp_dir}/fmt-build.json")
+      break
+    fi
+    sleep 2
+  done
+  jcurl --fail --output "${temp_dir}/console-fmt-negative.txt" \
+    "${jenkins_api}/job/${job_name}/${build_number}/consoleText"
+  [[ ${build_result} == FAILURE ]] || {
+    echo "AWS-CI-FIX-02 검증 실패 단계=fmt-build build=${build_number} result=${build_result:-미완료}" >&2
+    return 1
+  }
+  if ! rg -F 'OpenTofu fmt gate' "${temp_dir}/console-fmt-negative.txt" >/dev/null ||
+     rg -F 'Trivy config gate' "${temp_dir}/console-fmt-negative.txt" >/dev/null; then
+    echo "AWS-CI-FIX-02 검증 실패 단계=fmt-build build=${build_number} 원인=fmt 이전/이후 stage 경계가 다르다." >&2
+    return 1
+  fi
+  echo "AWS-CI-FIX-02 Fmt=FAIL_AS_EXPECTED root=${root} build=${build_number} plan-stage=not-reached"
+}
+
+if [[ ${verification_mode} == fmt-negative || ${verification_mode} == full ]]; then
+  trigger_fmt_negative
+fi
+if [[ ${verification_mode} == plan-only || ${verification_mode} == full ]]; then
+  for root in "${verification_roots[@]}"; do
+    trigger_and_assert "${root}"
+  done
+fi

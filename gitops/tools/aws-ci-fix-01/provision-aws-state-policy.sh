@@ -4,8 +4,8 @@
 set -Eeuo pipefail
 
 readonly mode=${1:-}
-[[ ${mode} == --check || ${mode} == --apply || ${mode} == --destroy ]] || {
-  echo 'usage: provision-aws-state-policy.sh --check|--apply|--destroy' >&2
+[[ ${mode} == --check || ${mode} == --apply || ${mode} == --rollback || ${mode} == --destroy ]] || {
+  echo 'usage: provision-aws-state-policy.sh --check|--apply|--rollback|--destroy' >&2
   exit 2
 }
 
@@ -92,12 +92,32 @@ readonly admin_arn
 readonly bucket_name="ktcloud4-bean-opentofu-state-${account_id}"
 readonly bucket_arn="arn:aws:s3:::${bucket_name}"
 readonly lock_table_arn="arn:aws:dynamodb:ap-northeast-2:${account_id}:table/ktcloud4-bean-opentofu-locks"
-jq -n \
-  --arg bucket_arn "${bucket_arn}" \
-  --arg network_state "${bucket_arn}/platform/infra/aws/tofu-app-network/v1/terraform.tfstate" \
-  --arg ecr_state "${bucket_arn}/platform/infra/aws/tofu-app-ecr/v1/terraform.tfstate" \
-  --arg lock_table_arn "${lock_table_arn}" \
-  '{
+
+legacy_state_objects=(
+  "${bucket_arn}/platform/infra/aws/tofu-app-network/v1/terraform.tfstate"
+  "${bucket_arn}/platform/infra/aws/tofu-app-ecr/v1/terraform.tfstate"
+)
+expanded_state_objects=(
+  "${legacy_state_objects[@]}"
+  "${bucket_arn}/platform/infra/aws/tofu-account-baseline/v1/terraform.tfstate"
+  "${bucket_arn}/platform/infra/aws/tofu-app-security/v1/terraform.tfstate"
+)
+
+if [[ ${mode} == --rollback ]]; then
+  desired_state_objects=("${legacy_state_objects[@]}")
+  previous_state_objects=("${expanded_state_objects[@]}")
+else
+  desired_state_objects=("${expanded_state_objects[@]}")
+  previous_state_objects=("${legacy_state_objects[@]}")
+fi
+
+write_policy() {
+  local output_file=$1
+  shift
+  jq -n \
+    --arg bucket_arn "${bucket_arn}" \
+    --arg lock_table_arn "${lock_table_arn}" \
+    '{
     Version: "2012-10-17",
     Statement: [
       {
@@ -110,7 +130,7 @@ jq -n \
         Sid: "ManageSelectedPlanStateObjects",
         Effect: "Allow",
         Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-        Resource: [$network_state, $ecr_state]
+        Resource: $ARGS.positional
       },
       {
         Sid: "ReadStateBucketLocation",
@@ -130,7 +150,13 @@ jq -n \
         Resource: $lock_table_arn
       }
     ]
-  }' >"${temp_dir}/expected-policy.json"
+  }' --args "$@" >"${output_file}"
+}
+
+readonly desired_policy="${temp_dir}/desired-policy.json"
+readonly previous_policy="${temp_dir}/previous-policy.json"
+write_policy "${desired_policy}" "${desired_state_objects[@]}"
+write_policy "${previous_policy}" "${previous_state_objects[@]}"
 
 policy_exists=false
 if aws iam get-user-policy \
@@ -141,41 +167,67 @@ elif ! grep -q 'NoSuchEntity' "${temp_dir}/actual-policy.err"; then
   fail '기존 AWS-CI-FIX-01 policy 상태를 읽지 못했다.'
 fi
 
-verify_policy() {
+policy_matches() {
+  local policy_file=$1
+  jq -e -S --slurpfile expected "${policy_file}" \
+    '.PolicyDocument == $expected[0]' "${temp_dir}/actual-policy.json" >/dev/null
+}
+
+verify_desired_policy() {
   [[ ${policy_exists} == true ]] || fail 'AWS-CI-FIX-01 전용 state policy가 없다.'
-  jq -e -S --slurpfile expected "${temp_dir}/expected-policy.json" \
-    '.PolicyDocument == $expected[0]' "${temp_dir}/actual-policy.json" >/dev/null \
+  policy_matches "${desired_policy}" \
     || fail '동일 이름의 AWS-CI-FIX-01 policy가 예상 권한과 다르다.'
+}
+
+apply_desired_policy() {
+  aws iam put-user-policy \
+    --user-name "${target_user_name}" \
+    --policy-name "${policy_name}" \
+    --policy-document "file://${desired_policy}" >/dev/null
+  policy_exists=true
+  aws iam get-user-policy \
+    --user-name "${target_user_name}" \
+    --policy-name "${policy_name}" >"${temp_dir}/actual-policy.json"
+  verify_desired_policy
 }
 
 case ${mode} in
   --check)
-    verify_policy
-    echo "AWS-CI-FIX-01 StatePolicy=PASS target-user-sha256=$(printf '%s' "${target_arn}" | sha256sum | awk '{print $1}') state-objects=2 key-version=v1 lock-table=exact"
+    verify_desired_policy
+    echo "AWS-CI-FIX-02 StatePolicy=PASS target-user-sha256=$(printf '%s' "${target_arn}" | sha256sum | awk '{print $1}') state-objects=${#desired_state_objects[@]} key-version=v1 lock-table=exact"
     ;;
   --apply)
     if [[ ${policy_exists} == true ]]; then
-      verify_policy
-      echo "AWS-CI-FIX-01 StatePolicy=EXISTS target-user-sha256=$(printf '%s' "${target_arn}" | sha256sum | awk '{print $1}') state-objects=2 key-version=v1 lock-table=exact"
+      if policy_matches "${desired_policy}"; then
+        echo "AWS-CI-FIX-02 StatePolicy=EXISTS target-user-sha256=$(printf '%s' "${target_arn}" | sha256sum | awk '{print $1}') state-objects=${#desired_state_objects[@]} key-version=v1 lock-table=exact"
+        exit 0
+      fi
+      policy_matches "${previous_policy}" \
+        || fail '동일 이름의 AWS-CI-FIX-01 policy가 허용된 이전 정책과 다르다.'
+    fi
+    apply_desired_policy
+    echo "AWS-CI-FIX-02 StatePolicy=APPLIED target-user-sha256=$(printf '%s' "${target_arn}" | sha256sum | awk '{print $1}') state-objects=${#desired_state_objects[@]} key-version=v1 lock-table=exact"
+    ;;
+  --rollback)
+    if [[ ${policy_exists} == false ]]; then
+      echo 'AWS-CI-FIX-02 StatePolicy=ABSENT'
       exit 0
     fi
-    aws iam put-user-policy \
-      --user-name "${target_user_name}" \
-      --policy-name "${policy_name}" \
-      --policy-document "file://${temp_dir}/expected-policy.json" >/dev/null
-    policy_exists=true
-    aws iam get-user-policy \
-      --user-name "${target_user_name}" \
-      --policy-name "${policy_name}" >"${temp_dir}/actual-policy.json"
-    verify_policy
-    echo "AWS-CI-FIX-01 StatePolicy=APPLIED target-user-sha256=$(printf '%s' "${target_arn}" | sha256sum | awk '{print $1}') state-objects=2 key-version=v1 lock-table=exact"
+    if policy_matches "${desired_policy}"; then
+      echo "AWS-CI-FIX-02 StatePolicy=ROLLBACK_EXISTS target-user-sha256=$(printf '%s' "${target_arn}" | sha256sum | awk '{print $1}') state-objects=${#desired_state_objects[@]} key-version=v1 lock-table=exact"
+      exit 0
+    fi
+    policy_matches "${previous_policy}" \
+      || fail '동일 이름의 AWS-CI-FIX-01 policy가 AWS-CI-FIX-02 확장 정책과 다르다.'
+    apply_desired_policy
+    echo "AWS-CI-FIX-02 StatePolicy=ROLLED_BACK target-user-sha256=$(printf '%s' "${target_arn}" | sha256sum | awk '{print $1}') state-objects=${#desired_state_objects[@]} key-version=v1 lock-table=exact"
     ;;
   --destroy)
     if [[ ${policy_exists} == false ]]; then
       echo 'AWS-CI-FIX-01 StatePolicy=ABSENT'
       exit 0
     fi
-    verify_policy
+    verify_desired_policy
     aws iam delete-user-policy \
       --user-name "${target_user_name}" \
       --policy-name "${policy_name}" >/dev/null

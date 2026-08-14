@@ -75,10 +75,10 @@ gitops/tools/aws-ci-fix-01/provision-aws-state-policy.sh --apply
 gitops/tools/aws-ci-fix-01/provision-aws-state-policy.sh --check
 ```
 
-권한은 state bucket의 metadata list·location, 두 `v1` state object의 lifecycle,
+권한은 state bucket의 metadata list·location, 네 `v1` state object의 lifecycle,
 그리고 lock table 한 개의 lease operation으로 고정된다. root resource 생성 권한은 이
-policy에 없다. 중단/rollback에서는 세 도구의 `--destroy`가 자신이 정확히 생성한 field와
-inline policy만 회수한다.
+policy에 없다. `AWS-CI-FIX-02` 검증 중단 시에는 `--rollback`으로 기존 두 state object
+권한으로 되돌리고, pipeline 전체를 폐기할 때만 `--destroy`를 쓴다.
 
 resource plan의 AWS API read 권한은 별도 policy가 소유하며, 실패한 Jenkins build의
 `UnauthorizedOperation` 응답으로 확인한 action만 추가한다. 현재 network root에는 AZ data

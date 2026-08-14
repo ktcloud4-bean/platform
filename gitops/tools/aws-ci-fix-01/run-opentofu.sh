@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AWS-CI-FIX-01: Jenkins는 허용된 app root를 plan만 수행한다.
+# AWS-CI-FIX-02: Jenkins는 허용된 AWS root를 fmt·plan만 수행한다.
 set -Eeuo pipefail
 
 readonly target_root=${1:-}
@@ -23,6 +23,12 @@ case ${target_root} in
     ;;
   tofu-app-ecr)
     readonly state_key='platform/infra/aws/tofu-app-ecr/v1/terraform.tfstate'
+    ;;
+  tofu-account-baseline)
+    readonly state_key='platform/infra/aws/tofu-account-baseline/v1/terraform.tfstate'
+    ;;
+  tofu-app-security)
+    readonly state_key='platform/infra/aws/tofu-app-security/v1/terraform.tfstate'
     ;;
   *)
     fail '허용되지 않은 TARGET_ROOT다.'
@@ -78,5 +84,5 @@ tofu plan \
 
 popd >/dev/null
 
-printf 'AWS-CI-FIX-01 Plan=PASS root=%s state-key-version=v1 actions=summary-redacted sensitive-output=0\n' \
+printf 'AWS-CI-FIX-02 Plan=PASS root=%s state-key-version=v1 actions=summary-redacted sensitive-output=0\n' \
   "${target_root}"

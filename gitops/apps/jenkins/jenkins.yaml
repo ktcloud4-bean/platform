@@ -749,13 +749,13 @@ jobs:
         }
       }
       pipelineJob('aws-opentofu-pipeline') {
-        description('AWS-CI-FIX-01: app network/ECR OpenTofu plan 전용 파이프라인')
+        description('AWS-CI-FIX-02: 허용한 AWS OpenTofu root의 fmt·Trivy·plan 전용 파이프라인')
         logRotator {
           numToKeep(20)
           artifactNumToKeep(0)
         }
         parameters {
-          choiceParam('TARGET_ROOT', ['tofu-app-network', 'tofu-app-ecr'], 'AWS-CI-FIX-01이 plan만 허용하는 root입니다.')
+          choiceParam('TARGET_ROOT', ['tofu-app-network', 'tofu-app-ecr', 'tofu-account-baseline', 'tofu-app-security'], 'AWS-CI-FIX-02가 fmt·plan만 허용하는 root입니다.')
           stringParam('GIT_REVISION', 'main', '일반 실행은 main, immutable 검증은 승인된 commit SHA만 사용합니다.')
         }
         definition {

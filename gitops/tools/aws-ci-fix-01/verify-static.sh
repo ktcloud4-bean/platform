@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AWS-CI-FIX-01 완료 증거의 정적 항목만 한 경로로 판정한다.
+# AWS-CI-FIX-02 완료 증거의 정적 항목만 한 경로로 판정한다.
 set -Eeuo pipefail
 
 readonly root_dir=$(git rev-parse --show-toplevel)
@@ -16,7 +16,7 @@ readonly opentofu_image='ghcr.io/opentofu/opentofu:1.12.5@sha256:ba827d1af675c3f
 readonly awscli_image='public.ecr.aws/aws-cli/aws-cli:2.27.18@sha256:244dcb5bd64c98d0c624b0f8951be872b6aa43a6587da6cbb5c7f30c2bd89e58'
 
 fail() {
-  echo "AWS-CI-FIX-01 static verification 실패: $*" >&2
+  echo "AWS-CI-FIX-02 static verification 실패: $*" >&2
   exit 1
 }
 
@@ -66,7 +66,7 @@ ruby -ryaml -e 'YAML.load_file(ARGV.fetch(0)); puts "JCasC=PASS"' "${temp_dir}/j
 kubectl kustomize "${root_dir}/gitops/apps/jenkins" >"${temp_dir}/jenkins.rendered.yaml"
 
 # allowlist, account guard, partial backend와 immutable state key namespace를 텍스트로 고정한다.
-for root in tofu-app-network tofu-app-ecr; do
+for root in tofu-app-network tofu-app-ecr tofu-account-baseline tofu-app-security; do
   rg -F "${root})" "${tofu_runner}" >/dev/null || fail "${root} allowlist가 없다."
 done
 ! rg -n 'tofu-app-(db|eks)' "${pipeline}" "${tofu_runner}" >/dev/null || fail '허용 범위 밖 root가 남아 있다.'
@@ -75,8 +75,8 @@ rg -F 'ec2:DescribeAvailabilityZones' "${plan_read_policy}" >/dev/null || fail '
 rg -F 'dynamodb_table' "${tofu_runner}" >/dev/null || fail 'partial backend lock 설정이 없다.'
 rg -F '/v1/terraform.tfstate' "${tofu_runner}" "${state_policy}" >/dev/null || fail 'state key v1 선언이 없다.'
 
-# backend 없이 두 root의 provider schema와 configuration을 검증한다.
-for root in tofu-app-network tofu-app-ecr; do
+# backend 없이 이번에 연 두 root의 provider schema와 configuration을 검증한다.
+for root in tofu-account-baseline tofu-app-security; do
   work=${temp_dir}/${root}
   cp -a "${root_dir}/infra/aws/${root}" "${work}"
   (
@@ -86,8 +86,8 @@ for root in tofu-app-network tofu-app-ecr; do
   )
 done
 
-# Jenkins와 같은 severity/exit contract로 두 실제 root도 검사한다.
-for root in tofu-app-network tofu-app-ecr; do
+# Jenkins와 같은 severity/exit contract로 이번 두 root만 검사한다.
+for root in tofu-account-baseline tofu-app-security; do
   podman run --rm -v "${root_dir}:/work:ro,Z" "${trivy_image}" config \
     --exit-code 1 --severity HIGH,CRITICAL "/work/infra/aws/${root}" >/dev/null
 done
@@ -120,4 +120,4 @@ fi
 podman run --rm -v "${temp_dir}:/work:ro,Z" "${trivy_image}" config \
   --exit-code 1 --severity HIGH,CRITICAL /work/trivy-negative.yaml >/dev/null
 
-printf 'AWS-CI-FIX-01 Static=PASS roots=2 root-trivy=PASS jenkins-template=PASS tofu-scratch=PASS plan-only=PASS trivy-positive=1 trivy-negative=1 expected-account-literals=0\n'
+printf 'AWS-CI-FIX-02 Static=PASS roots=2 root-trivy=PASS jenkins-template=PASS tofu-scratch=PASS plan-only=PASS trivy-positive=1 trivy-negative=1 expected-account-literals=0\n'
