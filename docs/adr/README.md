@@ -39,6 +39,7 @@ ADR(Architecture Decision Record)은 목표 구조를 선택한 이유, 검토�
 | [ADR-0023](0023-aws-shared-vpn-service-boundary.md) | AWS shared VPN을 단일 selector로 통합하고 service rule로 제한 | `Accepted` | VPC·site·tenant 분리 또는 dual tunnel 요구 |
 | [ADR-0024](0024-warpgate-native-postgresql-sessions.md) | PostgreSQL 운영 세션을 Warpgate native TLS relay로 중계 | `Accepted` | DB 운영 권한·JIT credential·다중 cluster 요구 |
 | [ADR-0025](0025-alertmanager-slack-egress-identity.md) | Alertmanager Slack egress를 전용 source identity와 CONNECT allowlist로 분리 | `Accepted` | 다중 node·Slack hostname·egress gateway 변화 |
+| [ADR-0027](0027-container-registry-hub-and-replica.md) | Harbor를 단일 허브로, ECR을 EKS 전용 복제본으로 분리 | `Accepted` | 고대역폭 전용선 도입·OCI 복제 표준 변화·EKS 완전 온프레미스 통합 |
 
 ## 형식
 
