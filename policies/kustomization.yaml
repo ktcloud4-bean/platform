@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - kyverno-audit.yaml
+  - k3s-image-supply-chain-audit.yaml
   - pol-02-falco-root-sensor.yaml
   - pol-02-awx-migration.yaml
   - pol-02-wazuh-root-manager.yaml

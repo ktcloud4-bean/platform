@@ -20,6 +20,8 @@ spec:
   clusterResourceWhitelist:
     - group: kyverno.io
       kind: ClusterPolicy
+    - group: policies.kyverno.io
+      kind: ImageValidatingPolicy
   namespaceResourceWhitelist:
     - group: kyverno.io
       kind: PolicyException
