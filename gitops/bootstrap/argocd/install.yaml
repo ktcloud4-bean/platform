@@ -32127,6 +32127,10 @@ spec:
           name: argocd-cmd-params-cm
       nodeSelector:
         kubernetes.io/os: linux
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: argocd-applicationset-controller
       volumes:
       - configMap:
@@ -32282,6 +32286,11 @@ spec:
           name: dexconfig
       nodeSelector:
         kubernetes.io/os: linux
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: argocd-dex-server
       volumes:
       - emptyDir: {}
@@ -32886,6 +32895,10 @@ spec:
           name: var-files
       nodeSelector:
         kubernetes.io/os: linux
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: argocd-repo-server
       volumes:
       - configMap:
@@ -33381,6 +33394,10 @@ spec:
           name: argocd-cmd-params-cm
       nodeSelector:
         kubernetes.io/os: linux
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: argocd-server
       volumes:
       - emptyDir: {}
@@ -33837,6 +33854,10 @@ spec:
         workingDir: /home/argocd
       nodeSelector:
         kubernetes.io/os: linux
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: argocd-application-controller
       volumes:
       - emptyDir: {}

@@ -1,76 +1,12 @@
 apiVersion: kyverno.io/v2
 kind: PolicyException
 metadata:
-  name: pol-02-argocd-run-as-non-root
-  namespace: kyverno
-  annotations:
-    pol-02.imcherry5778.xyz/owner: platform-operations
-    pol-02.imcherry5778.xyz/reason: Argo CD upstream workloads need Pod-level securityContext remediation.
-    pol-02.imcherry5778.xyz/expires-at: "2026-09-02T15:00:00Z"
-  labels:
-    app.kubernetes.io/part-of: platform-gitops
-spec:
-  background: false
-  exceptions:
-    - policyName: pol-01-require-pod-run-as-non-root
-      ruleNames:
-        - require-pod-run-as-non-root
-        - autogen-require-pod-run-as-non-root
-  match:
-    any:
-      - resources:
-          kinds:
-            - Pod
-          namespaces:
-            - argocd
-          names:
-            - argocd-application-controller-*
-            - argocd-applicationset-controller-*
-            - argocd-dex-server-*
-            - argocd-repo-server-*
-            - argocd-server-*
-      - resources:
-          kinds:
-            - Deployment
-          namespaces:
-            - argocd
-          names:
-            - argocd-applicationset-controller
-            - argocd-dex-server
-            - argocd-repo-server
-            - argocd-server
-      - resources:
-          kinds:
-            - ReplicaSet
-          namespaces:
-            - argocd
-          names:
-            - argocd-applicationset-controller-*
-            - argocd-dex-server-*
-            - argocd-repo-server-*
-            - argocd-server-*
-      - resources:
-          kinds:
-            - StatefulSet
-          namespaces:
-            - argocd
-          names:
-            - argocd-application-controller
-  conditions:
-    all:
-      - key: "{{ time_before('{{ time_now_utc() }}','2026-09-02T15:00:00Z') }}"
-        operator: Equals
-        value: true
----
-apiVersion: kyverno.io/v2
-kind: PolicyException
-metadata:
   name: pol-02-crowdsec-run-as-non-root
   namespace: kyverno
   annotations:
     pol-02.imcherry5778.xyz/owner: platform-operations
-    pol-02.imcherry5778.xyz/reason: CrowdSec upstream workloads need Pod-level securityContext remediation.
-    pol-02.imcherry5778.xyz/expires-at: "2026-09-02T15:00:00Z"
+    pol-02.imcherry5778.xyz/reason: CrowdSec LAPI and AppSec upstream entrypoint /docker_start.sh requires UID 0 for config prestaging and permission handling.
+    pol-02.imcherry5778.xyz/review-trigger: CrowdSec LAPI/AppSec image digest, Linux capabilities, or ServiceAccount change.
   labels:
     app.kubernetes.io/part-of: platform-gitops
 spec:
@@ -88,7 +24,6 @@ spec:
           namespaces:
             - crowdsec-01
           names:
-            - crowdsec-01-whoami-*
             - crowdsec-appsec-*
             - crowdsec-lapi-*
       - resources:
@@ -97,7 +32,6 @@ spec:
           namespaces:
             - crowdsec-01
           names:
-            - crowdsec-01-whoami
             - crowdsec-appsec
             - crowdsec-lapi
       - resources:
@@ -106,14 +40,8 @@ spec:
           namespaces:
             - crowdsec-01
           names:
-            - crowdsec-01-whoami-*
             - crowdsec-appsec-*
             - crowdsec-lapi-*
-  conditions:
-    all:
-      - key: "{{ time_before('{{ time_now_utc() }}','2026-09-02T15:00:00Z') }}"
-        operator: Equals
-        value: true
 ---
 apiVersion: kyverno.io/v2
 kind: PolicyException
@@ -122,8 +50,8 @@ metadata:
   namespace: kyverno
   annotations:
     pol-02.imcherry5778.xyz/owner: platform-operations
-    pol-02.imcherry5778.xyz/reason: Velero node-agent and pod volume backup hosting pods need Pod-level securityContext remediation.
-    pol-02.imcherry5778.xyz/expires-at: "2026-09-02T15:00:00Z"
+    pol-02.imcherry5778.xyz/reason: Velero node-agent requires hostPath volume access and root capability for host filesystem backup.
+    pol-02.imcherry5778.xyz/review-trigger: Velero node-agent hostPath, privileged capability, or image change.
   labels:
     app.kubernetes.io/part-of: platform-gitops
 spec:
@@ -141,7 +69,7 @@ spec:
           namespaces:
             - velero
           names:
-            - "*"
+            - node-agent-*
       - resources:
           kinds:
             - DaemonSet
@@ -149,12 +77,6 @@ spec:
             - velero
           names:
             - node-agent
-
-  conditions:
-    all:
-      - key: "{{ time_before('{{ time_now_utc() }}','2026-09-02T15:00:00Z') }}"
-        operator: Equals
-        value: true
 ---
 apiVersion: kyverno.io/v2
 kind: PolicyException

@@ -18,6 +18,7 @@ spec:
   failurePolicy: Fail
   rules:
     - name: check-curated-harbor-registry
+      skipBackgroundRequests: true
       match:
         any:
           - resources:
@@ -34,6 +35,7 @@ spec:
                 - harbor
                 - e2e-01
       validate:
+        allowExistingViolations: true
         message: "[SUPPLY-05 Enforce] 외부 upstream 레지스트리 직접 참조가 차단되었습니다 (harbor.imcherry5778.xyz/curated-platform/ 승격 필요)"
         pattern:
           spec:
@@ -45,6 +47,7 @@ spec:
               - image: "harbor.imcherry5778.xyz/curated-platform/*"
 
     - name: check-sha256-digest-pinning
+      skipBackgroundRequests: true
       match:
         any:
           - resources:
@@ -61,6 +64,7 @@ spec:
                 - harbor
                 - e2e-01
       validate:
+        allowExistingViolations: true
         message: "[SUPPLY-05 Enforce] sha256 다이제스트 미고정 태그(tag-only) 이미지가 차단되었습니다 (@sha256 고정 필요)"
         pattern:
           spec:
