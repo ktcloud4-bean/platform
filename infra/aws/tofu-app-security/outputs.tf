@@ -40,3 +40,23 @@ output "demo_saml_role_name" {
   description = "AWS-SEC-04 격리 데모 SAML role 이름"
   value       = aws_iam_role.demo_saml.name
 }
+
+output "asr_stack_id" {
+  description = "ASR admin CloudFormation stack ID"
+  value       = var.enable_asr_remediation ? aws_cloudformation_stack.asr[0].id : "disabled"
+}
+
+output "asr_member_roles_stack_id" {
+  description = "ASR member-roles CloudFormation stack ID"
+  value       = var.enable_asr_remediation ? aws_cloudformation_stack.asr_member_roles[0].id : "disabled"
+}
+
+output "asr_member_stack_id" {
+  description = "ASR member CloudFormation stack ID"
+  value       = var.enable_asr_remediation ? aws_cloudformation_stack.asr_member[0].id : "disabled"
+}
+
+output "asr_demo_target_sg_id" {
+  description = "ASR 시연 전용 더미 보안그룹 ID (인스턴스 미부착)"
+  value       = aws_security_group.asr_demo_target.id
+}

@@ -1272,7 +1272,7 @@ sync를 의도적으로 끈 상태로 남겨뒀다 — 다시 켜면 `jenkins`�
 | `AWS-SEC-03 DONE` | CIEM 조치 계층 이식과 구현 결함 8건 보정 (`infra/aws/tofu-app-security/`) — 미사용 권한 월간 리포트, Slack 인터랙티브 콜백과 API Gateway, 세션 강제 종료(오케스트레이터와 VPC Lambda 분리), 권한 드리프트 탐지, IAM 경계 위반 감시 | `AWS-SEC-02` | `TOFU-STATE` | `AWS-SEC-04`, `AWS-SEC-05`, `AWS-DB-SEC-01` | 오케스트레이터 5개를 VPC 밖에 두고 Keycloak session Lambda만 VPC에 배치했으며 SG egress는 `10.10.20.10/32:443` 단일 규칙이다. Slack signing secret은 Terraform/state에 넣지 않고 callback은 missing/invalid secret `401`, 비허용 사용자 `403`, 승인 action 비동기 enqueue 및 executor 동기 결과 확인을 통과했다. `AttachRolePolicy` EventBridge는 `errorCode exists=false`만 수신하고, `/service/` 경로 사용자 4개·key 4개는 제외하며 최근 사용 key는 후보에서 제외한다. CIEM Lambda Errors alarm 7개, OPNsense IPsec rule 2개, immutable Keycloak route/session 검증과 최종 `tofu plan` 무변경을 확인했다. 상세 증거: [`docs/evidence/aws-sec-03/README.md`](evidence/aws-sec-03/README.md). |
 | `AWS-SEC-04 DONE` | 격리 데모 아이덴티티 신설 — 세션 종료 시나리오 대상 Keycloak 테스트 사용자와 CIEM 축소 시나리오 대상 데모 전용 SAML Role, 그룹·attribute 매핑 (`infra/aws/tofu-app-security/`) | `AWS-SEC-03` | `TOFU-STATE`, `IDENTITY-LIVE` | `AWS-SEC-06` | 데모 Role을 `tofu-app-security`가 소유해 `tofu-identity` 관리 리소스와 소유권 중복 0건, 테스트 사용자가 실제 팀원 계정과 exact 구분되고 어떤 운영 group에도 속하지 않음, 데모 Role의 실제 API 호출 이력으로 Access Analyzer가 축소 정책을 생성함을 확인, 운영 SAML Role 네 개의 정책·membership 변경 0건. 상세 증거: [`docs/evidence/aws-sec-04/README.md`](evidence/aws-sec-04/README.md). |
 | `AWS-DB-SEC-01 READY` | HR Aurora의 IAM DB 인증 활성화와 역할별 마스킹 뷰 적용 (`infra/aws/tofu-app-db/`) | `AWS-SEC-03` | `TOFU-STATE` | `AWS-SEC-06` | 라이브 프로덕션 클러스터 변경이므로 적용 직전 승인과 재시작 필요 여부를 먼저 확인, 변경 전후 기존 HR 애플리케이션 연결 무중단, `aurora_cluster_resource_id` output 추가로 `rds-db:connect` 권한을 정확한 클러스터 리소스로 스코핑, `general_user_readonly`·`security_auditor_readonly`의 원본 테이블 접근 거부와 마스킹 뷰 조회 성공을 같은 시점에 대조하고 salary 필드가 `****`로 반환, rollback 절차 확인 |
-| `AWS-SEC-05 READY` | ASR 자동 원복 배포 (`infra/aws/tofu-app-security/`) — admin·member-roles·member CloudFormation 스택 3개와 오설정 시연 전용 더미 보안그룹 | `AWS-SEC-03` | `TOFU-STATE` | `AWS-SEC-06` | 세 스택 `CREATE_COMPLETE`와 종료 보호 적용, Security Hub Custom Action 등록 확인, 더미 보안그룹이 어떤 인스턴스에도 미부착, 시나리오 스크립트의 오설정 정리를 `trap`으로 보장하고 revoke 실패를 명시적 실패로 처리, 실행 뒤 SSH `0.0.0.0/0` 잔여 규칙 0건 |
+| `AWS-SEC-05 DONE` | ASR 자동 원복 배포 (`infra/aws/tofu-app-security/`) — admin·member-roles·member CloudFormation 스택 3개와 오설정 시연 전용 더미 보안그룹 | `AWS-SEC-03` | `TOFU-STATE` | `AWS-SEC-06` | 세 스택 `CREATE_COMPLETE`와 종료 보호 적용, Security Hub Custom Action(`ASRRemediation`) 등록 확인, 더미 보안그룹이 어떤 인스턴스/ENI에도 미부착, 시나리오 스크립트의 오설정 정리를 `trap`으로 보장하고 revoke 실패를 명시적 실패로 처리, 실행 뒤 SSH `0.0.0.0/0` 잔여 규칙 0건. 상세 증거: [`docs/evidence/aws-sec-05/README.md`](evidence/aws-sec-05/README.md). |
 | `AWS-SEC-06 BLOCKED` | 보안 시나리오 5종 라이브 검증과 운영 문서화 (`infra/aws/tofu-app-security/scripts/`) | `AWS-SEC-04`, `AWS-SEC-05`, `AWS-DB-SEC-01` | `TOFU-STATE`, `IDENTITY-LIVE` | `SUPPLY-06` | PII 마스킹·ASR 원복·세션 종료·권한 드리프트·Grafana SOC 각각 `PASSED`와 재현 절차 기록, 세션 종료는 격리 테스트 계정으로만 실행해 실제 팀원 세션 영향 0건, 권한 드리프트는 데모 Role만 대상으로 하고 운영 SAML Role 정책 불변, `revoke-session-*` 인라인 정책의 24시간 자동 정리 동작 확인, 실행 뒤 임시 자원과 잔여 인라인 정책 제거 |
 | `SUPPLY-01 DONE` | EKS에 Kyverno와 image admission 정책 신설 (`gitops/root/`, `gitops/apps/kyverno/`) | `SUPPLY-DESIGN-01-FIX-01` | `ARGO-ROOT` | `SUPPLY-06` | EKS destination Kyverno Application `Synced/Healthy`와 노드 available 자원이 정지 기준 밖, 신규 정책은 Kyverno 1.18 stable `ImageValidatingPolicy`이고 customer ECR용 Amazon credential helper·전용 read identity가 static registry Secret 없이 동작, Audit inventory 뒤 Enforce에서 허용 밖 registry·tag-only·image signature 또는 signed CycloneDX attestation 없는 customer ECR image를 각각 거부, `kube-system` 전체 제외 0건과 VPC CNI·CoreDNS·kube-proxy의 exact controller/ServiceAccount/리전별 AWS ECR 예외만 확인, 자체 ECR의 AWS Load Balancer Controller와 bootstrap image는 일반 정책을 통과, hr-system 세 Deployment·migration Job·controller·관리형 add-on 정상 기동, webhook `Fail`과 Audit rollback 실증 |
 | `SUPPLY-02 DONE` | k3s Kyverno image 정책을 `e2e-01` 밖으로 Audit 확대하고 재현 가능한 inventory 확보 (`gitops/apps/kyverno/`, `policies/`) | `SUPPLY-DESIGN-01-FIX-01` | `ARGO-ROOT` | `SUPPLY-03` | 기존 `e2e-01` legacy `ClusterPolicy` Enforce 불변과 신규 `ImageValidatingPolicy` Audit `Synced/Healthy`, 같은 추출기로 Git 선언·render·live report에서 `cluster/namespace/controller/container/image/digest/registry/exception` tuple을 산출해 차이와 chart-generated 항목을 설명, registry·tag-only·signature/attestation·system exact 예외별 잔여 목록 확보, 고정된 과거 총계 강제 0건, Enforce 전환 0건과 기존 workload 거부 0건 |
@@ -2694,3 +2694,34 @@ Warpgate는 실행 가능한 후속이 없어 새 ID를 만들지 않았다. 상
    - Kyverno Enforce 모드(`k3s-image-supply-chain-rules`) 통과 확인.
 
 `SUPPLY-04-FIX-01`을 `DONE`으로 닫고, 직접 후속 `AWS-SEC-03`은 계속 `READY`다.
+
+2026-08-15 `AWS-SEC-04`에서 격리 데모 아이덴티티 및 전용 SAML Role을 신설했다.
+
+1. **OpenTofu 데모 SAML Role 및 권한 선언 (`infra/aws/tofu-app-security/demo_identity.tf`)**:
+   - `aws_iam_role.demo_saml` (`platform-saml-demo-role`) 및 `aws_iam_role_policy.demo_saml_permissions` (`AWSSEC04DemoPermissions`) 선언.
+   - `tofu-identity` 관리 리소스와 소유권 중복 0건, CIEM 경계 및 모니터링 통합 완료.
+
+2. **Keycloak 데모 계정 및 SAML Client 격리 프로비저닝 (`provision-keycloak-demo-identity.sh`)**:
+   - 테스트 사용자 `test-session-revoke-demo`, 데모 전용 그룹 `/aws-console-demo-users`, SAML client role `aws-console-demo-operator`, 프로토콜 매퍼 `aws-demo-role-name` 프로비저닝.
+   - 운영 그룹 오염 0건(`operational_membership_polluted=0`), 운영 SAML Role 4개 정책/membership 불변(`operational_roles_unchanged=4`) 검증.
+
+3. **Access Analyzer 축소 정책 실측 생성 확인 (`verify-demo-identity-access-analyzer.sh`)**:
+   - 데모 Role AssumeRole 세션으로 EC2/STS API만 호출 -> `start_policy_generation` -> Job `SUCCEEDED` -> 미호출 서비스(S3, RDS, Logs, CloudWatch)가 제외되고 실제 호출된 EC2/STS 권한만 포함된 정밀 축소 정책 생성 확인.
+   - 상세 증거: [`docs/evidence/aws-sec-04/README.md`](evidence/aws-sec-04/README.md).
+
+`AWS-SEC-04`를 `DONE`으로 닫는다.
+
+2026-08-15 `AWS-SEC-05`에서 ASR(Automated Security Response on AWS) 자동 원복 프레임워크와 격리 더미 보안그룹을 배포 및 검증했다.
+
+1. **CloudFormation 스택 3개 및 종료 보호 배포 (`infra/aws/tofu-app-security/asr.tf`)**:
+   - `hr-system-prod-asr` (admin orchestrator & Security Hub Custom Action `ASRRemediation`), `hr-system-prod-asr-member-roles` (SSM 실행 IAM Role), `hr-system-prod-asr-member` (SC 표준 런북) 3개 스택 배포 완료.
+   - 계정 기본 Lambda 동시성 제약(10) 하에서 `ReservedConcurrentExecutions` 속성을 제거한 Curated admin 템플릿을 S3에 선언적으로 업로드 및 참조.
+   - Security Hub `CloudFormation.1` 보안 기준선을 준수하여 3개 스택 모두 종료 보호(`EnableTerminationProtection=True`) 적용.
+
+2. **격리 더미 보안그룹 및 자동 원복 실측 검증 (`scripts/verify-asr.sh`, `scripts/verify-asr-remediation.sh`)**:
+   - 더미 SG(`hr-system-prod-asr-demo-target-sg`)에 부착된 ENI 0개(`attached ENIs = 0`)로 실제 워크로드와 완전 격리 확인.
+   - SSH `0.0.0.0/0` 오설정 고의 생성 -> ASR SSM Automation 런북(`AWS-DisablePublicAccessForSecurityGroup`) 실행 -> 상태 `Success` 및 SSH 규칙 자동 제거 실측 검증 완료.
+   - `trap cleanup EXIT INT TERM`으로 비정상 종료 시에도 오설정 정리를 보장하고 revoke 실패 시 명시적 실패 처리, 실행 뒤 잔여 규칙 0건 확인.
+   - 상세 증거: [`docs/evidence/aws-sec-05/README.md`](evidence/aws-sec-05/README.md).
+
+`AWS-SEC-05`를 `DONE`으로 닫는다. (후속 `AWS-SEC-06`은 선행 `AWS-DB-SEC-01` 대기 중으로 `BLOCKED` 유지)

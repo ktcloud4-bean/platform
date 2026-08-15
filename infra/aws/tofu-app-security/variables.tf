@@ -157,3 +157,21 @@ variable "keycloak_connect_ip" {
     error_message = "keycloak_connect_ip는 올바른 IPv4 주소여야 한다."
   }
 }
+
+variable "enable_asr_remediation" {
+  description = "Automated Security Response on AWS (ASR) 배포 활성화 여부"
+  type        = bool
+  default     = true
+}
+
+variable "asr_template_url" {
+  description = "ASR admin CloudFormation 템플릿 S3 URL"
+  type        = string
+  default     = "https://solutions-reference.s3.amazonaws.com/automated-security-response-on-aws/latest/automated-security-response-admin.template"
+}
+
+variable "asr_namespace" {
+  description = "ASR 런북 및 Role 식별용 Namespace (S3 네이밍 제약 3~9자)"
+  type        = string
+  default     = "asrdemo"
+}
