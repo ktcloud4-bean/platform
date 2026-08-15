@@ -116,3 +116,21 @@ gitops/tools/reg-01/verify-live.sh
 
 성능·부하, 재부팅, SeaweedFS versioning/multipart/presigned, PostgreSQL TLS/role 격리는 다시
 시험하지 않는다. 각각 이 작업 밖이거나 `S3-01`·`PG-01`에서 이미 판정한 경계다.
+
+## Upstream Proxy Cache 획득 경계 (SUPPLY-03)
+
+ADR-0028에 따라 Harbor를 7대 exact upstream registry에 대한 Proxy Cache 획득 경계로 운영한다.
+Proxy Cache는 최종 원본이 아니며, upstream 획득 후 `SUPPLY-04`에서 normal curated project로 승격하여 소비한다.
+
+- `proxy-dockerhub`: `https://hub.docker.com`
+- `proxy-quay`: `https://quay.io`
+- `proxy-ghcr`: `https://ghcr.io`
+- `proxy-gitea`: `https://docker.gitea.com`
+- `proxy-kyverno`: `https://ghcr.io` (reg.kyverno.io backend)
+- `proxy-k8s`: `https://registry.k8s.io`
+- `proxy-public-ecr`: `https://public.ecr.aws`
+
+k3s 워크로드는 proxy cache 프로젝트를 직접 참조하지 않고, normal curated project(`@sha256:`)만 참조한다.
+프로비저닝 도구: `gitops/tools/supply-03/provision.py`
+라이브 검증 도구: `gitops/tools/supply-03/verify-live.sh`
+

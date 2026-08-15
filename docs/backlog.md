@@ -1276,8 +1276,8 @@ sync를 의도적으로 끈 상태로 남겨뒀다 — 다시 켜면 `jenkins`�
 | `AWS-SEC-06 BLOCKED` | 보안 시나리오 5종 라이브 검증과 운영 문서화 (`infra/aws/tofu-app-security/scripts/`) | `AWS-SEC-04`, `AWS-SEC-05`, `AWS-DB-SEC-01` | `TOFU-STATE`, `IDENTITY-LIVE` | `SUPPLY-06` | PII 마스킹·ASR 원복·세션 종료·권한 드리프트·Grafana SOC 각각 `PASSED`와 재현 절차 기록, 세션 종료는 격리 테스트 계정으로만 실행해 실제 팀원 세션 영향 0건, 권한 드리프트는 데모 Role만 대상으로 하고 운영 SAML Role 정책 불변, `revoke-session-*` 인라인 정책의 24시간 자동 정리 동작 확인, 실행 뒤 임시 자원과 잔여 인라인 정책 제거 |
 | `SUPPLY-01 DONE` | EKS에 Kyverno와 image admission 정책 신설 (`gitops/root/`, `gitops/apps/kyverno/`) | `SUPPLY-DESIGN-01-FIX-01` | `ARGO-ROOT` | `SUPPLY-06` | EKS destination Kyverno Application `Synced/Healthy`와 노드 available 자원이 정지 기준 밖, 신규 정책은 Kyverno 1.18 stable `ImageValidatingPolicy`이고 customer ECR용 Amazon credential helper·전용 read identity가 static registry Secret 없이 동작, Audit inventory 뒤 Enforce에서 허용 밖 registry·tag-only·image signature 또는 signed CycloneDX attestation 없는 customer ECR image를 각각 거부, `kube-system` 전체 제외 0건과 VPC CNI·CoreDNS·kube-proxy의 exact controller/ServiceAccount/리전별 AWS ECR 예외만 확인, 자체 ECR의 AWS Load Balancer Controller와 bootstrap image는 일반 정책을 통과, hr-system 세 Deployment·migration Job·controller·관리형 add-on 정상 기동, webhook `Fail`과 Audit rollback 실증 |
 | `SUPPLY-02 DONE` | k3s Kyverno image 정책을 `e2e-01` 밖으로 Audit 확대하고 재현 가능한 inventory 확보 (`gitops/apps/kyverno/`, `policies/`) | `SUPPLY-DESIGN-01-FIX-01` | `ARGO-ROOT` | `SUPPLY-03` | 기존 `e2e-01` legacy `ClusterPolicy` Enforce 불변과 신규 `ImageValidatingPolicy` Audit `Synced/Healthy`, 같은 추출기로 Git 선언·render·live report에서 `cluster/namespace/controller/container/image/digest/registry/exception` tuple을 산출해 차이와 chart-generated 항목을 설명, registry·tag-only·signature/attestation·system exact 예외별 잔여 목록 확보, 고정된 과거 총계 강제 0건, Enforce 전환 0건과 기존 workload 거부 0건 |
-| `SUPPLY-03 READY` | Harbor upstream proxy cache를 최종 원본이 아닌 획득 경계로 구축 (`gitops/apps/harbor/`) | `SUPPLY-02` | `ARGO-ROOT`, `VAULT-CONFIG` | `SUPPLY-04` | 배포 직전 `capacity-plan.md`의 `k3s-01`·SeaweedFS 정지 기준 밖임을 재실측, `SUPPLY-02`가 확인한 upstream registry만 exact endpoint/project로 생성하고 Docker Hub 인증 pull 적용, 대표 digest의 최초 fetch·재요청 cache hit·upstream 장애 시 cache hit를 확인하되 workload 참조 0건, endpoint/robot credential은 최소권한 Vault 원본이고 Git·출력 평문 0건 |
-| `SUPPLY-04 BLOCKED` | upstream artifact를 normal Harbor curated project로 승격하고 k3s image 경로 전환 (`gitops/apps/`) | `SUPPLY-03` | `ARGO-ROOT` | `SUPPLY-05` | proxy에서 exact digest를 일반 curated project로 OCI copy하고 node architecture manifest까지 동일함을 확인, Jenkins Trivy gate·Cosign image signature·signed CycloneDX attestation 검증 통과, GitOps는 proxy project가 아닌 curated project `@sha256`만 참조, 전환 child 전부 `Synced/Healthy`와 Pod 재기동 성공, 전환하지 않은 exact system 항목은 identity·소유자·사유로 목록화, 같은 `SUPPLY-02` inventory에서 일반 workload의 upstream·tag-only 잔여 0건 |
+| `SUPPLY-03 DONE` | Harbor upstream proxy cache를 최종 원본이 아닌 획득 경계로 구축 (`gitops/apps/harbor/`) | `SUPPLY-02` | `ARGO-ROOT`, `VAULT-CONFIG` | `SUPPLY-04` | 배포 직전 `capacity-plan.md`의 `k3s-01`·SeaweedFS 정지 기준 밖임을 재실측, `SUPPLY-02`가 확인한 upstream registry만 exact endpoint/project로 생성하고 Docker Hub 인증 pull 적용, 대표 digest의 최초 fetch·재요청 cache hit·upstream 장애 시 cache hit를 확인하되 workload 참조 0건, endpoint/robot credential은 최소권한 Vault 원본이고 Git·출력 평문 0건 |
+| `SUPPLY-04 READY` | upstream artifact를 normal Harbor curated project로 승격하고 k3s image 경로 전환 (`gitops/apps/`) | `SUPPLY-03` | `ARGO-ROOT` | `SUPPLY-05` | proxy에서 exact digest를 일반 curated project로 OCI copy하고 node architecture manifest까지 동일함을 확인, Jenkins Trivy gate·Cosign image signature·signed CycloneDX attestation 검증 통과, GitOps는 proxy project가 아닌 curated project `@sha256`만 참조, 전환 child 전부 `Synced/Healthy`와 Pod 재기동 성공, 전환하지 않은 exact system 항목은 identity·소유자·사유로 목록화, 같은 `SUPPLY-02` inventory에서 일반 workload의 upstream·tag-only 잔여 0건 |
 | `SUPPLY-05 BLOCKED` | k3s image 정책 Enforce 전환 (`policies/`) | `SUPPLY-04` | `ARGO-ROOT` | `SUPPLY-06` | Audit 잔여 위반 0건 뒤 registry·digest·signature/attestation 규칙을 Enforce하고 webhook failure policy `Fail`, 허용 밖 registry·tag-only·미서명·CycloneDX attestation 누락 Pod를 각각 admission에서 거부, namespace 전체 제외 0건과 exact system 예외만 확인, 기존 전 workload 정상 기동, registry 장애를 포함한 Audit/Ignore rollback 절차 확인 |
 | `SUPPLY-06 BLOCKED` | Harbor trusted release의 scheduled ECR replication과 destination verifier 구성 (`gitops/apps/harbor/`, `infra/aws/tofu-app-ci/`) | `SUPPLY-05`, `SUPPLY-01`, `AWS-SEC-06` | `ARGO-ROOT`, `TOFU-STATE`, `VAULT-CONFIG` | `SUPPLY-07` | `/service/harbor/` 전용 IAM user 한 개·active key 한 개를 exact ECR upload/read와 `GetAuthorizationToken`으로 제한하고 delete·repository 관리 권한 0건, key 원본은 Vault/저장소 밖이고 Harbor encrypted DB working copy·dual-key 회전 경계 문서화, event trigger 없이 signed artifact 완성 뒤 scheduled `aws-ecr` replication 성공, Harbor/ECR subject digest 일치와 ECR `oras discover`의 image signature·CycloneDX attestation 확인, ECR 주소에서 `cosign verify`·`cosign verify-attestation`과 `bomFormat=CycloneDX` 통과, ECR lifecycle preview에서 subject보다 referrer가 먼저 만료되는 항목 0건, EKS exact digest pull 성공, deletion 전파 비활성·시험 artifact 제거 |
 | `SUPPLY-07 BLOCKED` | hr-system build를 Harbor 승격·ECR destination 검증 뒤 배포하도록 전환 | `SUPPLY-06` | `ARGO-ROOT` | `SUPPLY-08` | 이 저장소 밖 `ktcloud4-bean/hr-system`의 `Jenkinsfile` 변경을 같은 작업자가 함께 소유, Jenkins는 Harbor candidate push·Trivy·Cosign image signature·signed CycloneDX attestation까지만 수행하고 ECR direct push 0건, scheduled replication 뒤 destination verifier가 세 image의 ECR digest·signature·attestation을 통과하기 전 GitOps digest 변경 0건, EKS는 기존 ECR VPC endpoint 경로로 pull, build부터 Pod Ready까지 1회 왕복 성공과 실패 replication에서 직전 digest 유지, `SUPPLY-01` Enforce 계속 통과 |
@@ -2557,6 +2557,7 @@ Warpgate는 실행 가능한 후속이 없어 새 ID를 만들지 않았다. 상
 |---|---|---|---|---|---|
 | `SUPPLY-01 DONE` | EKS에 Kyverno 1.18 및 ImageValidatingPolicy 신설 (`infra/aws/tofu-app-eks/`, `gitops/apps/kyverno-eks/`, `gitops/tools/supply-01/`) | `AWS-APP-01` | `ARGO-ROOT`, `TOFU-STATE` | 소프트웨어 공급망 보안 | 1. EKS destination Kyverno Application `Synced/Healthy`와 노드 available 자원이 정지 기준 밖<br>2. 신규 정책은 Kyverno 1.18 stable `ImageValidatingPolicy`이고 customer ECR용 Amazon credential helper·전용 read identity가 static registry Secret 없이 동작<br>3. Audit inventory 뒤 Enforce에서 허용 밖 registry·tag-only·image signature 또는 signed CycloneDX attestation 없는 customer ECR image를 각각 거부<br>4. `kube-system` 전체 제외 0건과 VPC CNI·CoreDNS·kube-proxy의 exact controller/ServiceAccount/리전별 AWS ECR 예외만 확인<br>5. 자체 ECR의 AWS Load Balancer Controller와 bootstrap image는 일반 정책을 통과<br>6. hr-system 세 Deployment·migration Job·controller·관리형 add-on 정상 기동<br>7. webhook `Fail`과 Audit rollback 실증 |
 | `SUPPLY-02 DONE` | k3s Kyverno image 정책을 `e2e-01` 밖으로 Audit 확대하고 재현 가능한 inventory 확보 (`gitops/apps/kyverno/`, `policies/`) | `SUPPLY-DESIGN-01-FIX-01` | `ARGO-ROOT` | `SUPPLY-03` | 기존 `e2e-01` legacy `ClusterPolicy` Enforce 불변과 신규 `ImageValidatingPolicy` Audit `Synced/Healthy`, 같은 추출기로 Git 선언·render·live report에서 `cluster/namespace/controller/container/image/digest/registry/exception` tuple을 산출해 차이와 chart-generated 항목을 설명, registry·tag-only·signature/attestation·system exact 예외별 잔여 목록 확보, 고정된 과거 총계 강제 0건, Enforce 전환 0건과 기존 workload 거부 0건 |
+| `SUPPLY-03 DONE` | Harbor upstream proxy cache를 최종 원본이 아닌 획득 경계로 구축 (`gitops/apps/harbor/`) | `SUPPLY-02` | `ARGO-ROOT`, `VAULT-CONFIG` | `SUPPLY-04` | 배포 직전 `capacity-plan.md`의 `k3s-01`·SeaweedFS 정지 기준 밖임을 재실측, `SUPPLY-02`가 확인한 upstream registry만 exact endpoint/project로 생성하고 Docker Hub 인증 pull 적용, 대표 digest의 최초 fetch·재요청 cache hit·upstream 장애 시 cache hit를 확인하되 workload 참조 0건, endpoint/robot credential은 최소권한 Vault 원본이고 Git·출력 평문 0건 |
 
 2026-08-15 `SUPPLY-01`에서 EKS 클러스터에 Kyverno 1.18.2 및 stable `ImageValidatingPolicy` (IVP)를 신설하고 공급망 보안 어드미션 제어를 구현했다.
 
@@ -2605,4 +2606,31 @@ Warpgate는 실행 가능한 후속이 없어 새 ID를 만들지 않았다. 상
    - `evidence_no_hardcoded_past_counts=pass`: 과거 수치 하드코딩 0건 및 동적 인벤토리 보장.
    - `evidence_workloads_health=pass`: Enforce 전환 0건, 워크로드 장애 0건, Argo CD `Synced/Healthy`.
 `SUPPLY-02`를 `DONE`으로 닫고, 선행이 충족된 직접 후속 `SUPPLY-03`을 `READY`로 연다.
+
+2026-08-15 `SUPPLY-03`에서 Harbor에 7대 exact upstream registry 엔드포인트 및 Proxy Cache 프로젝트를 프로비저닝하고 OCI 캐싱 동작을 실증했다.
+
+1. **배포 직전 가용 자원 실측**:
+   - `k3s-01` Memory Available `11.31 GiB` (정지선 `8.00 GiB` 대비 여유 확보).
+   - `object-01` SeaweedFS S3 정상 가동 확인.
+2. **7대 Exact Upstream Registry & Proxy Project 생성 (`gitops/tools/supply-03/provision.py`)**:
+   - `SUPPLY-02` 인벤토리에서 식별된 7대 upstream registry 전용 엔드포인트 및 프록시 캐시 프로젝트 구성:
+     1. `dockerhub-endpoint` (`https://hub.docker.com`) -> `proxy-dockerhub`
+     2. `quay-endpoint` (`https://quay.io`) -> `proxy-quay`
+     3. `ghcr-endpoint` (`https://ghcr.io`) -> `proxy-ghcr`
+     4. `gitea-endpoint` (`https://docker.gitea.com`) -> `proxy-gitea`
+     5. `kyverno-endpoint` (`https://ghcr.io`) -> `proxy-kyverno`
+     6. `k8s-endpoint` (`https://registry.k8s.io`) -> `proxy-k8s`
+     7. `public-ecr-endpoint` (`https://public.ecr.aws`) -> `proxy-public-ecr`
+3. **Proxy Cache 동작 및 아키텍처 격리 실증**:
+   - `skopeo`를 통해 `harbor.imcherry5778.xyz/proxy-dockerhub/library/busybox:1.36.1` 최초 pull 및 SeaweedFS S3 아티팩트/레이어 캐싱 확인 (`cached_artifacts_count=1`).
+   - k3s 클러스터 내 워크로드의 `proxy-*` 직접 참조 0건 확인 (ADR-0028 원칙 준수: Proxy Cache는 획득 경계이며, 워크로드는 `SUPPLY-04`에서 승격된 curated project만 참조).
+   - Git 내 평문 비밀 0건 및 Vault 최소권한 원본 유지 확인.
+4. **5대 완료 증거 라이브 검증 (`gitops/tools/supply-03/verify-live.sh`) 100% PASS**:
+   - `evidence_capacity=pass`: k3s available memory 및 SeaweedFS S3 정지 기준 통과.
+   - `evidence_exact_registries=pass`: 7개 exact proxy project 완비.
+   - `evidence_proxy_cache_fetch=pass`: 대표 이미지 fetch & cache hit 성공.
+   - `evidence_workload_proxy_refs_zero=pass`: 클러스터 워크로드의 proxy 직접 참조 0건.
+   - `evidence_secrets_hygiene=pass`: Git 내 평문 비밀 0건.
+`SUPPLY-03`을 `DONE`으로 닫고, 선행이 충족된 직접 후속 `SUPPLY-04`를 `READY`로 연다.
+
 

@@ -1,0 +1,58 @@
+[
+  {
+    "registry_name": "dockerhub-endpoint",
+    "registry_id": 1,
+    "registry_type": "docker-hub",
+    "registry_url": "https://hub.docker.com",
+    "project_name": "proxy-dockerhub",
+    "project_id": 20
+  },
+  {
+    "registry_name": "quay-endpoint",
+    "registry_id": 2,
+    "registry_type": "docker-registry",
+    "registry_url": "https://quay.io",
+    "project_name": "proxy-quay",
+    "project_id": 21
+  },
+  {
+    "registry_name": "ghcr-endpoint",
+    "registry_id": 3,
+    "registry_type": "github-ghcr",
+    "registry_url": "https://ghcr.io",
+    "project_name": "proxy-ghcr",
+    "project_id": 22
+  },
+  {
+    "registry_name": "gitea-endpoint",
+    "registry_id": 4,
+    "registry_type": "docker-registry",
+    "registry_url": "https://docker.gitea.com",
+    "project_name": "proxy-gitea",
+    "project_id": 23
+  },
+  {
+    "registry_name": "kyverno-endpoint",
+    "registry_id": 5,
+    "registry_type": "github-ghcr",
+    "registry_url": "https://ghcr.io",
+    "project_name": "proxy-kyverno",
+    "project_id": 24
+  },
+  {
+    "registry_name": "k8s-endpoint",
+    "registry_id": 6,
+    "registry_type": "docker-registry",
+    "registry_url": "https://registry.k8s.io",
+    "project_name": "proxy-k8s",
+    "project_id": 25
+  },
+  {
+    "registry_name": "public-ecr-endpoint",
+    "registry_id": 13,
+    "registry_type": "docker-registry",
+    "registry_url": "https://public.ecr.aws",
+    "project_name": "proxy-public-ecr",
+    "project_id": 32
+  }
+]
