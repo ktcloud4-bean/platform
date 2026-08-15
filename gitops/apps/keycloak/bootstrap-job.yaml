@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: keycloak-bootstrap-v2
+  name: keycloak-bootstrap-v3
   namespace: keycloak
   annotations:
     argocd.argoproj.io/sync-wave: "-1"

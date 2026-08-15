@@ -21,7 +21,7 @@ Kubernetes Secret에는 원문을 두지 않는다.
 |---|---|---|
 | `-3` | Namespace | 전용 경계 생성 |
 | `-2` | SA·ConfigMap·Service | 공개 설정·trust와 최소 identity 준비 |
-| `-1` | `keycloak-bootstrap-v2` Job | realm·MFA·복구 ID 생성, 임시 admin client와 렌더링 파일 제거 |
+| `-1` | `keycloak-bootstrap-v3` Job | realm·MFA·복구 ID 생성, 임시 admin client와 렌더링 파일 제거 |
 | `0` | Deployment | Vault runtime 값으로 Ready |
 | `1` | Ingress | 기존 Traefik을 통한 고정 issuer 제공 |
 
