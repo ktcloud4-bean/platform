@@ -74,7 +74,7 @@ resource "aws_cloudwatch_event_rule" "ciem_attach_role_policy" {
       eventName   = ["AttachRolePolicy"]
       errorCode   = [{ exists = false }]
       requestParameters = {
-        roleName = values(local.saml_role_names)
+        roleName = local.all_saml_role_names
       }
     }
   })

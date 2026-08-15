@@ -30,3 +30,13 @@ output "account_baseline_contract" {
   }
   sensitive = true
 }
+
+output "demo_saml_role_arn" {
+  description = "AWS-SEC-04 격리 데모 SAML role ARN"
+  value       = aws_iam_role.demo_saml.arn
+}
+
+output "demo_saml_role_name" {
+  description = "AWS-SEC-04 격리 데모 SAML role 이름"
+  value       = aws_iam_role.demo_saml.name
+}

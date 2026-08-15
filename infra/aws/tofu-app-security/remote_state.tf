@@ -56,6 +56,12 @@ locals {
     for key, name in local.saml_role_names :
     key => "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${name}"
   }
+  saml_provider_arn     = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:saml-provider/keycloak-platform"
+  aws_console_recipient = "https://${var.aws_region}.signin.aws.amazon.com/saml"
+  demo_saml_role_name   = "platform-saml-demo-role"
+  demo_saml_role_arn    = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.demo_saml_role_name}"
+  all_saml_role_names   = concat(values(local.saml_role_names), [local.demo_saml_role_name])
+  all_saml_role_arns    = concat(values(local.saml_role_arns), [local.demo_saml_role_arn])
   # Security Lake(AWS-SEC-01)가 소유·생성한 Glue database다. 이 root는
   # Lake Formation 권한을 소비할 뿐 database를 resource나 state로 소유하지 않는다.
   security_lake_database_name = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"

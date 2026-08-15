@@ -229,7 +229,7 @@ data "aws_iam_policy_document" "ciem_action_executor" {
   statement {
     effect    = "Allow"
     actions   = ["iam:DeleteAccessKey", "iam:DetachRolePolicy", "iam:PutRolePolicy", "iam:TagUser", "iam:UpdateAccessKey"]
-    resources = concat(["arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:user/*"], values(local.saml_role_arns))
+    resources = concat(["arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:user/*"], local.all_saml_role_arns)
   }
   statement {
     effect    = "Allow"
@@ -278,14 +278,30 @@ data "aws_iam_policy_document" "ciem_access_analyzer_cloudtrail" {
     resources = [local.cloudtrail_bucket_arn, "${local.cloudtrail_bucket_arn}/*"]
   }
   statement {
-    effect    = "Allow"
-    actions   = ["cloudtrail:GetTrail", "cloudtrail:GetTrailStatus"]
-    resources = [local.cloudtrail_arn]
+    effect = "Allow"
+    actions = [
+      "cloudtrail:GetTrail",
+      "cloudtrail:GetTrailStatus",
+      "cloudtrail:ListTrails",
+      "cloudtrail:DescribeTrails"
+    ]
+    resources = ["*"]
   }
   statement {
-    effect    = "Allow"
-    actions   = ["kms:Decrypt"]
-    resources = [data.aws_kms_alias.cloudtrail.target_key_arn]
+    effect = "Allow"
+    actions = [
+      "iam:GenerateServiceLastAccessedDetails",
+      "iam:GetServiceLastAccessedDetails"
+    ]
+    resources = ["*"]
+  }
+  statement {
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt",
+      "kms:DescribeKey"
+    ]
+    resources = ["*"]
   }
 }
 
@@ -304,7 +320,7 @@ data "aws_iam_policy_document" "ciem_permission_drift" {
   statement {
     effect    = "Allow"
     actions   = ["iam:GetRolePolicy", "iam:ListRolePolicies"]
-    resources = values(local.saml_role_arns)
+    resources = local.all_saml_role_arns
   }
   statement {
     effect    = "Allow"
@@ -414,7 +430,7 @@ resource "aws_lambda_function" "ciem_action_executor" {
       KEYCLOAK_SESSION_SECRET_ARN = aws_secretsmanager_secret.ciem_keycloak_session.arn
       KEYCLOAK_SESSION_FUNCTION   = aws_lambda_function.ciem_keycloak_session_revoke.function_name
       SNS_TOPIC_ARN               = local.security_alerts_topic_arn
-      SAML_ROLE_NAMES_JSON        = jsonencode(values(local.saml_role_names))
+      SAML_ROLE_NAMES_JSON        = jsonencode(local.all_saml_role_names)
     }
   }
 

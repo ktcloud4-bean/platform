@@ -10,9 +10,11 @@ metadata:
     app.kubernetes.io/component: ingress
     app.kubernetes.io/part-of: platform-gitops
 spec:
-  # AWS-SEC-03: Keycloak session revoke Lambda ENI가 쓰는 HR private app subnet만
-  # /admin에 도달한다. 기존 내부 전체 경계나 공개 platform realm route는 바꾸지 않는다.
+  # AWS-SEC-03 / AWS-SEC-04: 온프레미스 관리망(10.10.0.0/16), 관리 터널(100.64.0.0/10)과
+  # Keycloak session revoke Lambda ENI가 쓰는 HR private app subnet(10.20.10.0/24, 10.20.20.0/24)이 /admin에 도달한다.
   ipAllowList:
     sourceRange:
+      - 10.10.0.0/16
       - 10.20.10.0/24
       - 10.20.20.0/24
+      - 100.64.0.0/10
