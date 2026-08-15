@@ -50,7 +50,7 @@ jenkins:
             podRetention: "never"
             containers:
               - name: "jnlp"
-                image: "docker.io/jenkins/inbound-agent:3384.v60d89463d9e0-1-alpine-jdk21@sha256:359f763a8f3f337690593d6f20e476d77d07d2a7adf9acf5ebcc57f994e0e19f"
+                image: "harbor.imcherry5778.xyz/curated-platform/inbound-agent@sha256:d5ba7a05a84664c04a88e686d814f6e15a3ce91a15f332e94d699da3c8a90101"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 ttyEnabled: false
@@ -59,7 +59,7 @@ jenkins:
                 resourceLimitCpu: "1"
                 resourceLimitMemory: "1Gi"
               - name: "buildah"
-                image: "quay.io/buildah/stable:v1.43.1@sha256:ca4edbaabf71ca330ec9b2714bf8e06c726a6e85ae215cfb1474d2e2c832aacb"
+                image: "harbor.imcherry5778.xyz/curated-platform/buildah@sha256:7bb110e1d8b761d08e87d004ea4086e295a52319f3ea70ecef65da6dff7ceef0"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"
@@ -85,7 +85,7 @@ jenkins:
               # AWX-04의 collection은 rootless Buildah RUN 대신 실제 AWX EE
               # runtime에서 workspace에 준비해 final image로 COPY한다.
               - name: "awx-ee"
-                image: "quay.io/ansible/awx-ee@sha256:eaab9b09f731e3561ee0d932123a9971c76095555520f71da7ff4f2d433b4c99"
+                image: "harbor.imcherry5778.xyz/curated-platform/awx-ee@sha256:0a62923d808cdcdee491db6a63de07f169a7437a82a218d03182e059cccc93e3"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"
@@ -103,7 +103,7 @@ jenkins:
                       key: "USER"
                       value: "awx"
               - name: "node"
-                image: "docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32"
+                image: "harbor.imcherry5778.xyz/curated-platform/node@sha256:76789712cd1ae89a1225eac9077010d68987a423588042dac30446f502f1858c"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"
@@ -120,7 +120,7 @@ jenkins:
               - name: "python"
                 # AWX-04 EE venv와 runtime base의 Python ABI를 일치시킨다. 이 image는
                 # rootless agent에서 workspace에만 dependency를 준비한다.
-                image: "docker.io/library/python:3.13-alpine@sha256:540c7d91f98ff6880174c40e99067bf5941eb54d818a7a5e094d188b196a934d"
+                image: "harbor.imcherry5778.xyz/curated-platform/python@sha256:285a71327884a4d50efbea30104473b0fa43ecefa499458899670ca30dae76e5"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"
@@ -138,7 +138,7 @@ jenkins:
                       key: "USER"
                       value: "awx"
               - name: "awscli"
-                image: "public.ecr.aws/aws-cli/aws-cli:2.27.18@sha256:244dcb5bd64c98d0c624b0f8951be872b6aa43a6587da6cbb5c7f30c2bd89e58"
+                image: "harbor.imcherry5778.xyz/curated-platform/aws-cli@sha256:244dcb5bd64c98d0c624b0f8951be872b6aa43a6587da6cbb5c7f30c2bd89e58"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"
@@ -168,7 +168,7 @@ jenkins:
                       key: "HOME"
                       value: "/home/trivy"
               - name: "oras"
-                image: "ghcr.io/oras-project/oras:v1.3.3@sha256:a4c54befd87d0366e0ba3ac3a9536a5288c8a3735acd3b635cdace59a2c559c8"
+                image: "harbor.imcherry5778.xyz/curated-platform/oras@sha256:aea86bf69fd62e73e4b303806a191d6ee20afeb6ae15318453081eb790abaf18"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"
@@ -185,7 +185,7 @@ jenkins:
               - name: "cosign"
                 # 공식 dev variant만 shell을 포함한다. release·source·index digest는
                 # release-metadata.env가 소유한다.
-                image: "ghcr.io/sigstore/cosign/cosign:v3.1.2-dev@sha256:3e3b4a13f159ebfb188744622136a16a079c42d52ce502f6221f27575ee86b7e"
+                image: "harbor.imcherry5778.xyz/curated-platform/cosign@sha256:b7d9c9aa643b2ab971ac95d0a011e3c6b79b4624d0ad070a9a5fa27a667d2c79"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "/busybox/sleep"
@@ -200,7 +200,7 @@ jenkins:
                       key: "HOME"
                       value: "/home/cosign"
               - name: "sonar"
-                image: "docker.io/sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1@sha256:23ca0f137965d9dff2198074043fd48d386280bc5d0ccac8c8349cea4cf096a9"
+                image: "harbor.imcherry5778.xyz/curated-platform/sonar-scanner-cli@sha256:23ca0f137965d9dff2198074043fd48d386280bc5d0ccac8c8349cea4cf096a9"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"
@@ -433,7 +433,7 @@ jenkins:
             podRetention: "never"
             containers:
               - name: "jnlp"
-                image: "docker.io/jenkins/inbound-agent:3384.v60d89463d9e0-1-alpine-jdk21@sha256:359f763a8f3f337690593d6f20e476d77d07d2a7adf9acf5ebcc57f994e0e19f"
+                image: "harbor.imcherry5778.xyz/curated-platform/inbound-agent@sha256:d5ba7a05a84664c04a88e686d814f6e15a3ce91a15f332e94d699da3c8a90101"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 ttyEnabled: false
@@ -442,7 +442,7 @@ jenkins:
                 resourceLimitCpu: "1"
                 resourceLimitMemory: "1Gi"
               - name: "opentofu"
-                image: "ghcr.io/opentofu/opentofu:1.12.5@sha256:ba827d1af675c3f522eb78e2b8098cc87daefb9ceb9d3c4b69d0a1bb6d272463"
+                image: "harbor.imcherry5778.xyz/curated-platform/opentofu@sha256:181e070709e9f38cc0acaddc0fa1eb9939976481c76f9aae2657581de7821dc4"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"
@@ -457,7 +457,7 @@ jenkins:
                       key: "HOME"
                       value: "/tmp"
               - name: "awscli"
-                image: "public.ecr.aws/aws-cli/aws-cli:2.27.18@sha256:244dcb5bd64c98d0c624b0f8951be872b6aa43a6587da6cbb5c7f30c2bd89e58"
+                image: "harbor.imcherry5778.xyz/curated-platform/aws-cli@sha256:244dcb5bd64c98d0c624b0f8951be872b6aa43a6587da6cbb5c7f30c2bd89e58"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"
@@ -655,6 +655,12 @@ credentials:
               description: "AWS-HR-01 ECR publish-only credential"
               username: "${hr_system_aws_access_key_id}"
               password: "${hr_system_aws_secret_access_key}"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "harbor-robot-hr-system"
+              description: "SUPPLY-07 HR System Harbor candidate push robot"
+              username: "${hr_system_harbor_robot_name}"
+              password: "${hr_system_harbor_robot_secret}"
 
 security:
   # Gitea SSH host key는 known_hosts 파일이 아니라 선언한 값으로 고정한다.
