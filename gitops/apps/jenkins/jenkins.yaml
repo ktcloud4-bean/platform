@@ -687,6 +687,26 @@ credentials:
               id: "github-hr-system-readonly"
               description: "QUALITY-05 GitHub HR System read-only SHA check token"
               secret: "${hr_system_github_token}"
+          - string:
+              scope: GLOBAL
+              id: "hr-system-e2e-employee-password"
+              description: "QUALITY-06 synthetic employee password"
+              secret: "${hr_system_e2e_employee_password}"
+          - string:
+              scope: GLOBAL
+              id: "hr-system-e2e-employee-totp"
+              description: "QUALITY-06 synthetic employee TOTP seed"
+              secret: "${hr_system_e2e_employee_totp}"
+          - string:
+              scope: GLOBAL
+              id: "hr-system-e2e-hr-password"
+              description: "QUALITY-06 synthetic HR password"
+              secret: "${hr_system_e2e_hr_password}"
+          - string:
+              scope: GLOBAL
+              id: "hr-system-e2e-hr-totp"
+              description: "QUALITY-06 synthetic HR TOTP seed"
+              secret: "${hr_system_e2e_hr_totp}"
           - usernamePassword:
               scope: GLOBAL
               id: "aws-credentials-ci01"
@@ -766,6 +786,31 @@ jobs:
               }
             }
             scriptPath('Jenkinsfile')
+            lightweight(false)
+          }
+        }
+      }
+      pipelineJob('hr-system-e2e') {
+        description('QUALITY-06: 배포된 HR System의 합성 identity read-only Playwright 3흐름')
+        logRotator {
+          numToKeep(20)
+          artifactNumToKeep(5)
+        }
+        parameters {
+          stringParam('DEPLOYED_SOURCE_SHA', '', 'E2E를 실행할 검증 배포의 제품 40자리 source SHA')
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/ktcloud4-bean/hr-system.git')
+                  credentials('gitea-hr-system')
+                }
+                branch('*/main')
+              }
+            }
+            scriptPath('e2e/Jenkinsfile')
             lightweight(false)
           }
         }

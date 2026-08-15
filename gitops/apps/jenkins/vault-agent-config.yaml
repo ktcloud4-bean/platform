@@ -246,6 +246,51 @@ data:
     EOT
     }
 
+    # QUALITY-06: 배포 read-only E2E 전용 합성 identity credential만 읽는다.
+    template {
+      destination          = "/vault/secrets/hr_system_e2e_employee_password"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/hr-system/jenkins" -}}
+    {{ .Data.data.e2e_employee_password }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/hr_system_e2e_employee_totp"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/hr-system/jenkins" -}}
+    {{ .Data.data.e2e_employee_totp }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/hr_system_e2e_hr_password"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/hr-system/jenkins" -}}
+    {{ .Data.data.e2e_hr_password }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
+      destination          = "/vault/secrets/hr_system_e2e_hr_totp"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/hr-system/jenkins" -}}
+    {{ .Data.data.e2e_hr_totp }}
+    {{- end -}}
+    EOT
+    }
+
     template {
       destination          = "/vault/secrets/aws_access_key_id"
       perms                = "0400"

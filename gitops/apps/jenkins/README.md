@@ -38,6 +38,12 @@ deploy key로 checkout한다. 전용 ECR publisher credential은 `frontend`, `em
 `hr-service` repository의 upload/read와 ECR login만 허용한다. Jenkins job에는 Git write,
 Kubernetes/EKS, Aurora, Secrets Manager, IAM 관리 권한이 없다.
 
+`hr-system-e2e`는 같은 read-only mirror의 `e2e/Jenkinsfile`을 별도 job으로 실행한다. 검증
+배포 source SHA를 parameter로 받고 Chromium 한 worker·retry 0의 세 read-only 흐름만 수행한다.
+합성 employee·HR identity의 password/TOTP는 `kv/hr-system/jenkins`에서 Vault Agent가
+memory `emptyDir` 파일로 렌더링하고 job이 임시 mode 0600 파일로만 바인딩한다. E2E job은
+Git write, Kubernetes/EKS, Aurora, Secrets Manager 권한과 POST/PUT/DELETE 테스트를 갖지 않는다.
+
 세 image는 immutable source-SHA/build tag로 push한 manifest digest에 CycloneDX SBOM과 Cosign
 signature를 OCI 1.1 referrer로 붙인다. credential은 `kv/aws-hr-01/jenkins`에서 Vault Agent가
 memory `emptyDir` 파일로만 렌더링하며, 기존 CI-01 AWS plan credential 및 Board credential과
