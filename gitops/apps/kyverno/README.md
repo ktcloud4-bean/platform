@@ -31,6 +31,12 @@ POL-02 라이브 검증에서 정확 범위 예외의 만료 전 허용·만료 
 Cosign verifier는 Cosign v3 bundle 경계를 처리하지 못해, E2E namespace만 정확히 선택하는
 `ImageValidatingPolicy`의 static-key verifier를 사용한다.
 
+`ImageValidatingPolicy`의 current·previous 공개키 회전은 하나의
+`verifyImageSignatures(..., [current, previous])` 호출에 넣지 않는다. 각 키 확인은 Harbor 조회를
+수반하므로, current 단일 확인 성공 시 previous를 실행하지 않는 CEL short-circuit OR로 선언한다.
+이것은 신뢰키·`Deny/Fail`·정확 예외를 줄이지 않으며 30초 admission deadline 안에서 응답하기 위한
+가용성 조건이다.
+
 재생성 입력과 결과 hash는 [`release-metadata.env`](release-metadata.env)가 소유한다.
 
 ```bash

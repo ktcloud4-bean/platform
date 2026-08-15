@@ -49,9 +49,53 @@ spec:
   - glob: '*'
   matchConditions:
   - name: exclude-exact-system-components
-    expression: "!(\n  (\n    object.metadata.namespace == \"kube-system\" &&\n    (\n      object.spec.serviceAccountName in [\"coredns\", \"local-path-provisioner-service-account\", \"metrics-server\", \"traefik\", \"svclb\", \"helm-traefik\", \"helm-traefik-crd\"] ||\n      (has(object.metadata.labels) && \"k8s-app\" in object.metadata.labels && object.metadata.labels[\"k8s-app\"] in [\"kube-dns\", \"local-path-provisioner\", \"metrics-server\", \"traefik\", \"svclb-traefik\"])\n    ) &&\n    images.containers.map(img, img.startsWith(\"rancher/\")).all(e, e) &&\n    images.initContainers.map(img, img.startsWith(\"rancher/\")).all(e, e) &&\n    images.ephemeralContainers.map(img, img.startsWith(\"rancher/\")).all(e, e)\n  ) ||\n  (\n    object.metadata.namespace == \"kyverno\" &&\n    object.spec.serviceAccountName in [\"kyverno-admission-controller\", \"kyverno-reports-controller\"] &&\n    images.containers.map(img, img.startsWith(\"reg.kyverno.io/kyverno/\")).all(e, e) &&\n    images.initContainers.map(img,\
-      \ img.startsWith(\"reg.kyverno.io/kyverno/\")).all(e, e) &&\n    images.ephemeralContainers.map(img, img.startsWith(\"reg.kyverno.io/kyverno/\")).all(e, e)\n  ) ||\n  (\n    object.metadata.namespace == \"falco\" &&\n    object.spec.serviceAccountName == \"falco\" &&\n    images.containers.map(img, img.startsWith(\"docker.io/falcosecurity/falco\")).all(e, e) &&\n    images.initContainers.map(img, img.startsWith(\"docker.io/falcosecurity/falco\")).all(e, e) &&\n    images.ephemeralContainers.map(img, img.startsWith(\"docker.io/falcosecurity/falco\")).all(e, e)\n  ) ||\n  (\n    object.metadata.namespace == \"wazuh\" &&\n    object.spec.serviceAccountName in [\"wazuh-manager\", \"wazuh-indexer\", \"wazuh-dashboard\", \"wazuh-06-notifier\", \"wazuh-bootstrap\"] &&\n    images.containers.map(img, img.startsWith(\"docker.io/wazuh/\") || img.startsWith(\"docker.io/library/python:\")).all(e, e) &&\n    images.initContainers.map(img, img.startsWith(\"docker.io/wazuh/\") || img.startsWith(\"\
-      docker.io/library/python:\")).all(e, e) &&\n    images.ephemeralContainers.map(img, img.startsWith(\"docker.io/wazuh/\") || img.startsWith(\"docker.io/library/python:\")).all(e, e)\n  ) ||\n  (\n    object.metadata.namespace == \"harbor\" &&\n    object.spec.serviceAccountName in [\"harbor\", \"default\"] &&\n    images.containers.map(img, img.startsWith(\"docker.io/goharbor/\")).all(e, e) &&\n    images.initContainers.map(img, img.startsWith(\"docker.io/goharbor/\")).all(e, e) &&\n    images.ephemeralContainers.map(img, img.startsWith(\"docker.io/goharbor/\")).all(e, e)\n  ) ||\n  (\n    object.metadata.namespace == \"e2e-01\" &&\n    images.containers.map(img, img.startsWith(\"harbor.imcherry5778.xyz/ci01-evidence/\")).all(e, e) &&\n    images.initContainers.map(img, img.startsWith(\"harbor.imcherry5778.xyz/ci01-evidence/\")).all(e, e) &&\n    images.ephemeralContainers.map(img, img.startsWith(\"harbor.imcherry5778.xyz/ci01-evidence/\")).all(e, e)\n  )\n)"
+    expression: |-
+      !(
+        (
+          object.metadata.namespace == "kube-system" &&
+          (
+            object.spec.serviceAccountName in ["coredns", "local-path-provisioner-service-account", "metrics-server", "traefik", "svclb", "helm-traefik", "helm-traefik-crd"] ||
+            (has(object.metadata.labels) && "k8s-app" in object.metadata.labels && object.metadata.labels["k8s-app"] in ["kube-dns", "local-path-provisioner", "metrics-server", "traefik", "svclb-traefik"])
+          ) &&
+          object.spec.?containers.orValue([]).map(img, img.image.startsWith("rancher/")).all(e, e) &&
+          object.spec.?initContainers.orValue([]).map(img, img.image.startsWith("rancher/")).all(e, e) &&
+          object.spec.?ephemeralContainers.orValue([]).map(img, img.image.startsWith("rancher/")).all(e, e)
+        ) ||
+        (
+          object.metadata.namespace == "kyverno" &&
+          object.spec.serviceAccountName in ["kyverno-admission-controller", "kyverno-reports-controller"] &&
+          object.spec.?containers.orValue([]).map(img, img.image.startsWith("reg.kyverno.io/kyverno/")).all(e, e) &&
+          object.spec.?initContainers.orValue([]).map(img, img.image.startsWith("reg.kyverno.io/kyverno/")).all(e, e) &&
+          object.spec.?ephemeralContainers.orValue([]).map(img, img.image.startsWith("reg.kyverno.io/kyverno/")).all(e, e)
+        ) ||
+        (
+          object.metadata.namespace == "falco" &&
+          object.spec.serviceAccountName == "falco" &&
+          object.spec.?containers.orValue([]).map(img, img.image.startsWith("docker.io/falcosecurity/falco")).all(e, e) &&
+          object.spec.?initContainers.orValue([]).map(img, img.image.startsWith("docker.io/falcosecurity/falco")).all(e, e) &&
+          object.spec.?ephemeralContainers.orValue([]).map(img, img.image.startsWith("docker.io/falcosecurity/falco")).all(e, e)
+        ) ||
+        (
+          object.metadata.namespace == "wazuh" &&
+          object.spec.serviceAccountName in ["wazuh-manager", "wazuh-indexer", "wazuh-dashboard", "wazuh-06-notifier", "wazuh-bootstrap"] &&
+          object.spec.?containers.orValue([]).map(img, img.image.startsWith("docker.io/wazuh/") || img.image.startsWith("docker.io/library/python:")).all(e, e) &&
+          object.spec.?initContainers.orValue([]).map(img, img.image.startsWith("docker.io/wazuh/") || img.image.startsWith("docker.io/library/python:")).all(e, e) &&
+          object.spec.?ephemeralContainers.orValue([]).map(img, img.image.startsWith("docker.io/wazuh/") || img.image.startsWith("docker.io/library/python:")).all(e, e)
+        ) ||
+        (
+          object.metadata.namespace == "harbor" &&
+          object.spec.serviceAccountName in ["harbor", "default"] &&
+          object.spec.?containers.orValue([]).map(img, img.image.startsWith("docker.io/goharbor/")).all(e, e) &&
+          object.spec.?initContainers.orValue([]).map(img, img.image.startsWith("docker.io/goharbor/")).all(e, e) &&
+          object.spec.?ephemeralContainers.orValue([]).map(img, img.image.startsWith("docker.io/goharbor/")).all(e, e)
+        ) ||
+        (
+          object.metadata.namespace == "e2e-01" &&
+          object.spec.?containers.orValue([]).map(img, img.image.startsWith("harbor.imcherry5778.xyz/ci01-evidence/")).all(e, e) &&
+          object.spec.?initContainers.orValue([]).map(img, img.image.startsWith("harbor.imcherry5778.xyz/ci01-evidence/")).all(e, e) &&
+          object.spec.?ephemeralContainers.orValue([]).map(img, img.image.startsWith("harbor.imcherry5778.xyz/ci01-evidence/")).all(e, e)
+        )
+      )
   attestors:
   - name: current
     cosign:
@@ -98,9 +142,11 @@ spec:
 
       images.ephemeralContainers.map(img, img.contains("@sha256:")).all(e, e)'
     message: "[SUPPLY-05 Enforce] sha256 \uB2E4\uC774\uC81C\uC2A4\uD2B8 \uBBF8\uACE0\uC815 \uD0DC\uADF8(tag-only) \uC774\uBBF8\uC9C0\uAC00 \uCC28\uB2E8\uB418\uC5C8\uC2B5\uB2C8\uB2E4 (@sha256 \uACE0\uC815 \uD544\uC694)"
-  - expression: 'images.containers.map(image, verifyImageSignatures(image, [attestors.current, attestors.previous])).all(e, e > 0) &&
+  # verifyImageSignatures는 전달받은 모든 attestor를 순차 확인한다. 키 회전은 현재 키가
+  # 검증되면 이전 키를 조회하지 않는 CEL short-circuit OR로 표현해야 admission 30초를 넘지 않는다.
+  - expression: 'images.containers.map(image, verifyImageSignatures(image, [attestors.current]) > 0 || verifyImageSignatures(image, [attestors.previous]) > 0).all(e, e) &&
 
-      images.initContainers.map(image, verifyImageSignatures(image, [attestors.current, attestors.previous])).all(e, e > 0) &&
+      images.initContainers.map(image, verifyImageSignatures(image, [attestors.current]) > 0 || verifyImageSignatures(image, [attestors.previous]) > 0).all(e, e) &&
 
-      images.ephemeralContainers.map(image, verifyImageSignatures(image, [attestors.current, attestors.previous])).all(e, e > 0)'
+      images.ephemeralContainers.map(image, verifyImageSignatures(image, [attestors.current]) > 0 || verifyImageSignatures(image, [attestors.previous]) > 0).all(e, e)'
     message: "[SUPPLY-05 Enforce] current \uB610\uB294 previous \uACF5\uAC1C\uD0A4\uB85C Cosign image signature\uB97C \uAC80\uC99D\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4"

@@ -1193,8 +1193,6 @@ spec:
             value: /.sigstore
           - name: HOME
             value: /tmp
-          - name: TUF_ROOT
-            value: /tmp
           - name: COSIGN_OFFLINE
             value: "true"
           - name: SIGSTORE_OFFLINE
