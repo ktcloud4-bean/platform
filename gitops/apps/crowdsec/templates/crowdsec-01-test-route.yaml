@@ -42,7 +42,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: whoami
-          image: docker.io/traefik/whoami:v1.11.0@sha256:200689790a0a0ea48ca45992e0450bc26ccab5307375b41c84dfc4f2475937ab
+          image: harbor.imcherry5778.xyz/curated-platform/whoami@sha256:4f90b33ddca9c4d4f06527070d6e503b16d71016edea036842be2a84e60c91cb
           imagePullPolicy: IfNotPresent
           args:
             - --port=8080

@@ -41,7 +41,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: vault-agent
-          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          image: harbor.imcherry5778.xyz/curated-platform/vault@sha256:18ceda087817a9e0dbed22fb632225fdc079f1b909bc0ff94d00ade4c4990e9f
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-ec"]
           args:
@@ -81,7 +81,7 @@ spec:
               mountPath: /var/run/secrets/vault
               readOnly: true
         - name: gitea-bootstrap
-          image: docker.gitea.com/gitea:1.27.1-rootless@sha256:36cce26be71609091e1236d5b5de2c66a81fb8a7d45756a5fd3b7a28c11733b7
+          image: harbor.imcherry5778.xyz/curated-platform/harbor.imcherry5778.xyz/curated-platform/gitea@sha256:89dc3c214b3992e5bb01e05ad21139d7a8b302d3ea3d8942d3f7e904e92af148
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/bootstrap/bootstrap.sh"]
           env:
@@ -113,7 +113,7 @@ spec:
             - name: gitea-tmp
               mountPath: /tmp
         - name: bootstrap-secret-cleanup
-          image: docker.gitea.com/gitea:1.27.1-rootless@sha256:36cce26be71609091e1236d5b5de2c66a81fb8a7d45756a5fd3b7a28c11733b7
+          image: harbor.imcherry5778.xyz/curated-platform/harbor.imcherry5778.xyz/curated-platform/gitea@sha256:89dc3c214b3992e5bb01e05ad21139d7a8b302d3ea3d8942d3f7e904e92af148
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-ec"]
           args:
@@ -137,7 +137,7 @@ spec:
               mountPath: /gitea/bootstrap
       containers:
         - name: gitea
-          image: docker.gitea.com/gitea:1.27.1-rootless@sha256:36cce26be71609091e1236d5b5de2c66a81fb8a7d45756a5fd3b7a28c11733b7
+          image: harbor.imcherry5778.xyz/curated-platform/harbor.imcherry5778.xyz/curated-platform/gitea@sha256:89dc3c214b3992e5bb01e05ad21139d7a8b302d3ea3d8942d3f7e904e92af148
           imagePullPolicy: IfNotPresent
           # rootless image setup의 in-place env rewrite를 우회하고 Vault가 완성한 config를 그대로 읽는다.
           command: ["/usr/bin/dumb-init", "--", "/usr/local/bin/gitea"]

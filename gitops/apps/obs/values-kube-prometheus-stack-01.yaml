@@ -98,7 +98,7 @@ alertmanager:
         type: RuntimeDefault
     initContainers:
       - name: vault-agent-alertmanager
-        image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+        image: harbor.imcherry5778.xyz/curated-platform/vault@sha256:18ceda087817a9e0dbed22fb632225fdc079f1b909bc0ff94d00ade4c4990e9f
         imagePullPolicy: IfNotPresent
         args:
           - agent
@@ -331,7 +331,7 @@ grafana:
       memory: 384Mi
   extraInitContainers:
     - name: vault-agent
-      image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+      image: harbor.imcherry5778.xyz/curated-platform/vault@sha256:18ceda087817a9e0dbed22fb632225fdc079f1b909bc0ff94d00ade4c4990e9f
       imagePullPolicy: IfNotPresent
       args:
         - agent

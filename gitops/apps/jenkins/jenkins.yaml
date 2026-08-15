@@ -153,7 +153,7 @@ jenkins:
                       key: "HOME"
                       value: "/tmp"
               - name: "trivy"
-                image: "docker.io/aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f"
+                image: "harbor.imcherry5778.xyz/curated-platform/trivy@sha256:c6e969c5662a546ad5de4a73c2a6b7a7c627f86d916903e175aa623af5b97ada"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"
@@ -472,7 +472,7 @@ jenkins:
                       key: "HOME"
                       value: "/tmp"
               - name: "trivy"
-                image: "docker.io/aquasec/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f"
+                image: "harbor.imcherry5778.xyz/curated-platform/trivy@sha256:c6e969c5662a546ad5de4a73c2a6b7a7c627f86d916903e175aa623af5b97ada"
                 alwaysPullImage: false
                 workingDir: "/home/jenkins/agent"
                 command: "sleep"

@@ -55,7 +55,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: vault-agent
-          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          image: harbor.imcherry5778.xyz/curated-platform/vault@sha256:18ceda087817a9e0dbed22fb632225fdc079f1b909bc0ff94d00ade4c4990e9f
           imagePullPolicy: IfNotPresent
           args:
             - agent
@@ -92,7 +92,7 @@ spec:
               readOnly: true
       containers:
         - name: opensearch
-          image: opensearchproject/opensearch:3.2.0@sha256:23297b8d8545e129dd58c254ed08d786dc552410ba772983ad2af31048d2f04b
+          image: harbor.imcherry5778.xyz/curated-platform/opensearch@sha256:23297b8d8545e129dd58c254ed08d786dc552410ba772983ad2af31048d2f04b
           imagePullPolicy: IfNotPresent
           workingDir: /usr/share/opensearch
           command: [/bin/bash, -ec]

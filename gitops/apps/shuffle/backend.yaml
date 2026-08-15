@@ -82,7 +82,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: vault-agent
-          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          image: harbor.imcherry5778.xyz/curated-platform/vault@sha256:18ceda087817a9e0dbed22fb632225fdc079f1b909bc0ff94d00ade4c4990e9f
           imagePullPolicy: IfNotPresent
           args:
             - agent
@@ -119,7 +119,7 @@ spec:
               readOnly: true
       containers:
         - name: shuffle-backend
-          image: ghcr.io/shuffle/shuffle-backend:2.2.1@sha256:0cc1775e48b7d94b7f16d0be713aa274ced52be24ad521beaaf58c67023fd2e5
+          image: harbor.imcherry5778.xyz/curated-platform/shuffle-backend@sha256:0cc1775e48b7d94b7f16d0be713aa274ced52be24ad521beaaf58c67023fd2e5
           imagePullPolicy: IfNotPresent
           workingDir: /app
           command: [/bin/sh, -ec]

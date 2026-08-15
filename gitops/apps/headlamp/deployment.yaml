@@ -41,7 +41,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: headlamp
-          image: ghcr.io/headlamp-k8s/headlamp:v0.44.0@sha256:b491653c1a0d380b70b67a4024f1204591f9c84a68ee567778d53d28b1856168
+          image: harbor.imcherry5778.xyz/curated-platform/headlamp@sha256:a3fc96b5e825ba1149216e7731eaf23bc0ed8cf254a9229682dfb17ef8d042d4
           imagePullPolicy: IfNotPresent
           args:
             - -in-cluster

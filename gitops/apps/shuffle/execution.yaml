@@ -134,7 +134,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: shuffle-worker
-          image: ghcr.io/shuffle/shuffle-worker:2.2.1@sha256:9541c1fef2bc8511727610b565adbd0f7c817c53afee2dd9fef6aad8a971ffb1
+          image: harbor.imcherry5778.xyz/curated-platform/shuffle-worker@sha256:9541c1fef2bc8511727610b565adbd0f7c817c53afee2dd9fef6aad8a971ffb1
           imagePullPolicy: IfNotPresent
           env:
             - name: IS_KUBERNETES
@@ -216,7 +216,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: shuffle-orborus
-          image: ghcr.io/shuffle/shuffle-orborus:2.2.1@sha256:3519810b3ca4fe568acefdf15ce6f2deba0ae6f0ff6b84412354d59d663dff31
+          image: harbor.imcherry5778.xyz/curated-platform/shuffle-orborus@sha256:3519810b3ca4fe568acefdf15ce6f2deba0ae6f0ff6b84412354d59d663dff31
           imagePullPolicy: IfNotPresent
           env:
             - name: RUNNING_MODE
@@ -234,7 +234,7 @@ spec:
             - name: SHUFFLE_WORKER_SERVER_URL
               value: http://shuffle-workers.shuffle.svc.cluster.local:33333
             - name: SHUFFLE_WORKER_IMAGE
-              value: ghcr.io/shuffle/shuffle-worker:2.2.1@sha256:9541c1fef2bc8511727610b565adbd0f7c817c53afee2dd9fef6aad8a971ffb1
+              value: harbor.imcherry5778.xyz/curated-platform/shuffle-worker@sha256:9541c1fef2bc8511727610b565adbd0f7c817c53afee2dd9fef6aad8a971ffb1
             - name: SHUFFLE_WORKER_SERVICE_ACCOUNT_NAME
               value: shuffle-worker
             - name: SHUFFLE_ORBORUS_EXECUTION_CONCURRENCY
@@ -326,7 +326,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: patch-user-input-form-url
-          image: docker.io/frikky/shuffle@sha256:b569ed551f2f840dbf4a2483789d639b6fbc642baa504dbab7ca12cc81defd0c
+          image: harbor.imcherry5778.xyz/curated-platform/shuffle@sha256:c219ff382499f9a7d469ff2b0a410484e088c3fa454dbb2adf92e56e26967dd2
           imagePullPolicy: IfNotPresent
           command: [/bin/sh, -ec]
           args:
@@ -363,7 +363,7 @@ spec:
               memory: 64Mi
       containers:
         - name: user-input
-          image: docker.io/frikky/shuffle@sha256:b569ed551f2f840dbf4a2483789d639b6fbc642baa504dbab7ca12cc81defd0c
+          image: harbor.imcherry5778.xyz/curated-platform/shuffle@sha256:c219ff382499f9a7d469ff2b0a410484e088c3fa454dbb2adf92e56e26967dd2
           imagePullPolicy: IfNotPresent
           env:
             - name: TZ

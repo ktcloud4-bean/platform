@@ -23,7 +23,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       initContainers:
         - name: vault-agent
-          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          image: harbor.imcherry5778.xyz/curated-platform/vault@sha256:18ceda087817a9e0dbed22fb632225fdc079f1b909bc0ff94d00ade4c4990e9f
           imagePullPolicy: IfNotPresent
           args: ["agent", "-config=/vault/config/verifier.hcl"]
           securityContext:
@@ -40,7 +40,7 @@ spec:
             - {name: vault-tmp, mountPath: /tmp}
       containers:
         - name: verifier
-          image: docker.io/nginxinc/nginx-unprivileged:1.27.0-alpine@sha256:f9abf2e3f911c05e28d97b2e6826ebe83a2fb26ec5d441522d3b2a8a6f7947ad
+          image: harbor.imcherry5778.xyz/curated-platform/nginx-unprivileged@sha256:2e292e36f1a84785d8cae7cd6bd75a6bb67389aec0a57937b1b6a4036992583c
           imagePullPolicy: IfNotPresent
           ports: [{name: http, containerPort: 8080}]
           readinessProbe:

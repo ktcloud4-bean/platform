@@ -159,7 +159,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: enrichment
-          image: docker.io/library/python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
+          image: harbor.imcherry5778.xyz/curated-platform/python@sha256:285a71327884a4d50efbea30104473b0fa43ecefa499458899670ca30dae76e5
           imagePullPolicy: IfNotPresent
           command: [python, /app/server.py]
           env:

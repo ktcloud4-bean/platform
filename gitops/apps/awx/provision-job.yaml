@@ -27,7 +27,7 @@ spec:
         # ConfigMap projection은 갱신 직후 이전 내용을 잠시 보일 수 있다. AWX-07
         # 선언 표식이 보일 때만 hook을 시작해, 이전 provisioning script의 거짓 성공을 막는다.
         - name: wait-awx07-provision-script
-          image: quay.io/ansible/awx-ee:24.6.1@sha256:89593d2a0268acacdbd1c075d8810ab50d961cf7769e36de19219bb6cb4efcc1
+          image: harbor.imcherry5778.xyz/curated-platform/awx-ee@sha256:d6fca88c8c26e143b1fc71cc60db3b0ee06c43cc46fd395e902dcec3dbc5af9b
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
@@ -49,7 +49,7 @@ spec:
           volumeMounts:
             - {name: script, mountPath: /scripts, readOnly: true}
         - name: vault-agent
-          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          image: harbor.imcherry5778.xyz/curated-platform/vault@sha256:18ceda087817a9e0dbed22fb632225fdc079f1b909bc0ff94d00ade4c4990e9f
           imagePullPolicy: IfNotPresent
           args: ["agent", "-config=/vault/config/provision.hcl"]
           securityContext:
@@ -66,7 +66,7 @@ spec:
             - {name: tmp, mountPath: /tmp}
       containers:
         - name: provision
-          image: quay.io/ansible/awx-ee:24.6.1@sha256:89593d2a0268acacdbd1c075d8810ab50d961cf7769e36de19219bb6cb4efcc1
+          image: harbor.imcherry5778.xyz/curated-platform/awx-ee@sha256:d6fca88c8c26e143b1fc71cc60db3b0ee06c43cc46fd395e902dcec3dbc5af9b
           imagePullPolicy: IfNotPresent
           command: ["python3", "/scripts/provision.py"]
           securityContext:

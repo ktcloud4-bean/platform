@@ -38,7 +38,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: vault-agent
-          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          image: harbor.imcherry5778.xyz/curated-platform/vault@sha256:18ceda087817a9e0dbed22fb632225fdc079f1b909bc0ff94d00ade4c4990e9f
           imagePullPolicy: IfNotPresent
           args:
             - agent
@@ -73,7 +73,7 @@ spec:
               readOnly: true
       containers:
         - name: pomerium
-          image: docker.io/pomerium/pomerium:v0.33.0@sha256:aae6010af6ba4c864bbd3f748cf37843a140b1ddef74d7d2ac1aa87660f8da1f
+          image: harbor.imcherry5778.xyz/curated-platform/pomerium@sha256:9f0ba711a72d9b15d4d8d037e47c88a5b5e2294be53d862c8cfde30f251bc139
           imagePullPolicy: IfNotPresent
           env:
             - name: XDG_CACHE_HOME

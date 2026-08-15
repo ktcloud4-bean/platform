@@ -32091,7 +32091,7 @@ spec:
               key: applicationsetcontroller.status.max.resources.count
               name: argocd-cmd-params-cm
               optional: true
-        image: quay.io/argoproj/argocd:v3.5.0-rc3
+        image: harbor.imcherry5778.xyz/curated-platform/argocd@sha256:75cfed86123c23ba0707504f5e30cfda09d22359c5b77ff5d13a0832397d8c26
         imagePullPolicy: Always
         name: argocd-applicationset-controller
         ports:
@@ -32233,7 +32233,7 @@ spec:
               key: dexserver.connector.failure.continue
               name: argocd-cmd-params-cm
               optional: true
-        image: ghcr.io/dexidp/dex:v2.45.0
+        image: harbor.imcherry5778.xyz/curated-platform/dex@sha256:8a9281c3a115180415b0726ca160e38fc40f9284bc9a2d1032c839a3a934695c
         imagePullPolicy: Always
         name: dex
         ports:
@@ -32263,7 +32263,7 @@ spec:
         - -n
         - /usr/local/bin/argocd
         - /shared/argocd-dex
-        image: quay.io/argoproj/argocd:v3.5.0-rc3
+        image: harbor.imcherry5778.xyz/curated-platform/argocd@sha256:75cfed86123c23ba0707504f5e30cfda09d22359c5b77ff5d13a0832397d8c26
         imagePullPolicy: Always
         name: copyutil
         securityContext:
@@ -32383,7 +32383,7 @@ spec:
               key: notificationscontroller.repo.server.client.cert.key.path
               name: argocd-cmd-params-cm
               optional: true
-        image: quay.io/argoproj/argocd:v3.5.0-rc3
+        image: harbor.imcherry5778.xyz/curated-platform/argocd@sha256:75cfed86123c23ba0707504f5e30cfda09d22359c5b77ff5d13a0832397d8c26
         imagePullPolicy: Always
         livenessProbe:
           tcpSocket:
@@ -32482,7 +32482,7 @@ spec:
             secretKeyRef:
               key: auth
               name: argocd-redis
-        image: public.ecr.aws/docker/library/redis:8.2.3-alpine
+        image: harbor.imcherry5778.xyz/curated-platform/redis@sha256:e499175dfb27569cd40010c2eee346113db95fdd0efc88ab9fd70a9e807f4542
         imagePullPolicy: Always
         name: redis
         ports:
@@ -32498,7 +32498,7 @@ spec:
         - argocd
         - admin
         - redis-initial-password
-        image: quay.io/argoproj/argocd:v3.5.0-rc3
+        image: harbor.imcherry5778.xyz/curated-platform/argocd@sha256:75cfed86123c23ba0707504f5e30cfda09d22359c5b77ff5d13a0832397d8c26
         imagePullPolicy: IfNotPresent
         name: secret-init
         securityContext:
@@ -32813,7 +32813,7 @@ spec:
           value: /helm-working-dir
         - name: HELM_DATA_HOME
           value: /helm-working-dir
-        image: quay.io/argoproj/argocd:v3.5.0-rc3
+        image: harbor.imcherry5778.xyz/curated-platform/argocd@sha256:75cfed86123c23ba0707504f5e30cfda09d22359c5b77ff5d13a0832397d8c26
         imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 3
@@ -32870,7 +32870,7 @@ spec:
         command:
         - sh
         - -c
-        image: quay.io/argoproj/argocd:v3.5.0-rc3
+        image: harbor.imcherry5778.xyz/curated-platform/argocd@sha256:75cfed86123c23ba0707504f5e30cfda09d22359c5b77ff5d13a0832397d8c26
         name: copyutil
         securityContext:
           allowPrivilegeEscalation: false
@@ -33334,7 +33334,7 @@ spec:
               key: server.sync.replace.allowed
               name: argocd-cmd-params-cm
               optional: true
-        image: quay.io/argoproj/argocd:v3.5.0-rc3
+        image: harbor.imcherry5778.xyz/curated-platform/argocd@sha256:75cfed86123c23ba0707504f5e30cfda09d22359c5b77ff5d13a0832397d8c26
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -33803,7 +33803,7 @@ spec:
               optional: true
         - name: KUBECACHEDIR
           value: /tmp/kubecache
-        image: quay.io/argoproj/argocd:v3.5.0-rc3
+        image: harbor.imcherry5778.xyz/curated-platform/argocd@sha256:75cfed86123c23ba0707504f5e30cfda09d22359c5b77ff5d13a0832397d8c26
         imagePullPolicy: Always
         name: argocd-application-controller
         ports:

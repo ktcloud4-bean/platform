@@ -38,7 +38,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: vault-agent
-          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          image: harbor.imcherry5778.xyz/curated-platform/vault@sha256:18ceda087817a9e0dbed22fb632225fdc079f1b909bc0ff94d00ade4c4990e9f
           imagePullPolicy: IfNotPresent
           args:
             - agent
@@ -74,7 +74,7 @@ spec:
               readOnly: true
       containers:
         - name: sonarqube
-          image: docker.io/library/sonarqube:26.7.0.124771-community@sha256:160bd2f6a3485bd09b655ef22dd63c02bd1fa7ba82aa5d9973fd010b8bcca0b3
+          image: harbor.imcherry5778.xyz/curated-platform/sonarqube@sha256:d4899d380ad9d7b63ebaa751e047f5a4f064f8902cdf7c1a3c3c96f7d71600ed
           imagePullPolicy: IfNotPresent
           command:
             - /opt/quality-01/server-entrypoint.sh

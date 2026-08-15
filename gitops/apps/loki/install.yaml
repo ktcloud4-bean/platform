@@ -320,7 +320,7 @@ spec:
         - args:
           - agent
           - -config=/vault/config/vault-agent.hcl
-          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          image: harbor.imcherry5778.xyz/curated-platform/vault@sha256:18ceda087817a9e0dbed22fb632225fdc079f1b909bc0ff94d00ade4c4990e9f
           imagePullPolicy: IfNotPresent
           name: vault-agent
           resources:
@@ -357,7 +357,7 @@ spec:
             readOnly: true
       containers:
         - name: loki
-          image: docker.io/grafana/loki@sha256:44148ad243c07957113baea950ee5ba9b0c8eff8d7e38ff3cc1c0af705790945
+          image: harbor.imcherry5778.xyz/curated-platform/loki@sha256:69fb2ab2ff32db54123cc0587858687e306a877c6aefcf22efb9f72c69e72c81
           imagePullPolicy: IfNotPresent
           args:
             - -config.file=/etc/loki/config/config.yaml
@@ -1166,7 +1166,7 @@ spec:
       serviceAccountName: alloy
       containers:
         - name: alloy
-          image: docker.io/grafana/alloy@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308
+          image: harbor.imcherry5778.xyz/curated-platform/alloy@sha256:eb21f4c0858edffcdd1b385910ddeef26f692fc2c282f61baa724fc09d274a17
           imagePullPolicy: IfNotPresent
           args:
             - run
@@ -1272,7 +1272,7 @@ spec:
             value: "1"
           - name: PYTHONUNBUFFERED
             value: "1"
-          image: docker.io/library/python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844
+          image: harbor.imcherry5778.xyz/curated-platform/python@sha256:527c28b29498575b851ad88e7522ac7201bbd9e920d2c11b00ff2b39b315f5f8
           imagePullPolicy: IfNotPresent
           name: kubernetes-events
           resources:

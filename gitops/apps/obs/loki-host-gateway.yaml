@@ -80,7 +80,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: alloy
-          image: docker.io/grafana/alloy@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308
+          image: harbor.imcherry5778.xyz/curated-platform/alloy@sha256:eb21f4c0858edffcdd1b385910ddeef26f692fc2c282f61baa724fc09d274a17
           imagePullPolicy: IfNotPresent
           args:
             - run

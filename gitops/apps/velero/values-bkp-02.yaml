@@ -6,7 +6,7 @@ image:
 
 initContainers:
   - name: velero-plugin-for-aws
-    image: docker.io/velero/velero-plugin-for-aws@sha256:abe29a7b360231e359f7aaee79668141bd619ab6989c7cc78d041110987f6ca2
+    image: harbor.imcherry5778.xyz/curated-platform/velero-plugin-for-aws@sha256:abe29a7b360231e359f7aaee79668141bd619ab6989c7cc78d041110987f6ca2
     imagePullPolicy: IfNotPresent
     securityContext:
       allowPrivilegeEscalation: false

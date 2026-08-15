@@ -40,7 +40,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: vault-agent
-          image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+          image: harbor.imcherry5778.xyz/curated-platform/vault@sha256:18ceda087817a9e0dbed22fb632225fdc079f1b909bc0ff94d00ade4c4990e9f
           imagePullPolicy: IfNotPresent
           args:
             - agent
@@ -79,7 +79,7 @@ spec:
           # 버전은 plugins.txt가 전이 의존성까지 전부 고정한다. 이미 정확한 PVC
           # cache가 있으면 update-center metadata 재조회로 controller rollout을
           # 지연시키지 않는다. 하나라도 없거나 버전이 다를 때만 download한다.
-          image: docker.io/jenkins/jenkins:2.568.1-lts-jdk21@sha256:f4f65e6cd1405cd889b7f5ac33f9d5cdc2a099de6b87fe8a3933b9c5d53d1d02
+          image: harbor.imcherry5778.xyz/curated-platform/jenkins@sha256:8279be0a0ed95ad3b67c8677b9e03ff322f61338d39244234a907e9039ac3683
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
@@ -129,7 +129,7 @@ spec:
               mountPath: /tmp
       containers:
         - name: jenkins
-          image: docker.io/jenkins/jenkins:2.568.1-lts-jdk21@sha256:f4f65e6cd1405cd889b7f5ac33f9d5cdc2a099de6b87fe8a3933b9c5d53d1d02
+          image: harbor.imcherry5778.xyz/curated-platform/jenkins@sha256:8279be0a0ed95ad3b67c8677b9e03ff322f61338d39244234a907e9039ac3683
           imagePullPolicy: IfNotPresent
           env:
             - name: JENKINS_SLAVE_AGENT_PORT

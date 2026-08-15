@@ -8,32 +8,31 @@
 
 | 지표 항목 | 실측값 | 설명 |
 |---|---|---|
-| **총 Live 컨테이너 튜플 수** | `140` | k3s 클러스터에서 실제 가동 중인 Pod 컨테이너 인스턴스 총합 |
-| **고유 이미지 참조 수 (Unique Images)** | `65` | 레지스트리/저장소/태그/다이제스트 기준 고유 이미지 수 |
-| **sha256 다이제스트 고정 이미지 수** | `119` | `@sha256:` 불변 다이제스트로 고정된 컨테이너 수 |
-| **Tag-only 미고정 이미지 수** | `21` | sha256 고정 없이 mutable tag로 선언된 컨테이너 수 (`SUPPLY-04` 전환 대상) |
-| **Harbor 내부 승격 이미지 수** | `0` | 내부 Harbor(`harbor.imcherry5778.xyz`)에서 소비 중인 이미지 수 |
-| **외부 Upstream 직접 참조 수** | `140` | 외부 public registry를 직접 pull 중인 수 (`SUPPLY-03`~`04` Proxy/Curated 대상) |
-| **시스템 예외 대상 (System Exceptions)** | `33` | `kube-system`, `kyverno`, `falco`, `wazuh` 등 시스템 컴포넌트 |
-| **일반 워크로드 대상 (User Workloads)** | `107` | 플랫폼 사용자 및 애플리케이션 서비스 컴포넌트 |
+| **총 Live 컨테이너 튜플 수** | `143` | k3s 클러스터에서 실제 가동 중인 Pod 컨테이너 인스턴스 총합 |
+| **고유 이미지 참조 수 (Unique Images)** | `69` | 레지스트리/저장소/태그/다이제스트 기준 고유 이미지 수 |
+| **sha256 다이제스트 고정 이미지 수** | `130` | `@sha256:` 불변 다이제스트로 고정된 컨테이너 수 |
+| **Tag-only 미고정 이미지 수** | `13` | sha256 고정 없이 mutable tag로 선언된 컨테이너 수 (`SUPPLY-04` 전환 대상) |
+| **Harbor 내부 승격 이미지 수** | `35` | 내부 Harbor(`harbor.imcherry5778.xyz`)에서 소비 중인 이미지 수 |
+| **외부 Upstream 직접 참조 수** | `108` | 외부 public registry를 직접 pull 중인 수 (`SUPPLY-03`~`04` Proxy/Curated 대상) |
+| **시스템 예외 대상 (System Exceptions)** | `35` | `kube-system`, `kyverno`, `falco`, `wazuh` 등 시스템 컴포넌트 |
+| **일반 워크로드 대상 (User Workloads)** | `108` | 플랫폼 사용자 및 애플리케이션 서비스 컴포넌트 |
 
 ## 2. 레지스트리별 분포 현황 (Registry Distribution)
 
 | 레지스트리 도메인 | 컨테이너 튜플 수 | 비중 (%) | 분류 |
 |---|---|---|---|
-| `docker.io` | 90 | 64.3% | 외부 Upstream (Proxy Cache 대상) |
-| `quay.io` | 34 | 24.3% | 외부 Upstream (Proxy Cache 대상) |
-| `ghcr.io` | 8 | 5.7% | 외부 Upstream (Proxy Cache 대상) |
+| `docker.io` | 75 | 52.4% | 외부 Upstream (Proxy Cache 대상) |
+| `harbor.imcherry5778.xyz` | 35 | 24.5% | 내부 레지스트리 |
+| `quay.io` | 20 | 14.0% | 외부 Upstream (Proxy Cache 대상) |
+| `ghcr.io` | 7 | 4.9% | 외부 Upstream (Proxy Cache 대상) |
 | `docker.gitea.com` | 3 | 2.1% | 외부 Upstream (Proxy Cache 대상) |
 | `reg.kyverno.io` | 3 | 2.1% | 외부 Upstream (Proxy Cache 대상) |
-| `public.ecr.aws` | 1 | 0.7% | 외부 Upstream (Proxy Cache 대상) |
-| `registry.k8s.io` | 1 | 0.7% | 외부 Upstream (Proxy Cache 대상) |
 
 ## 3. 소스별 튜플 비교 및 차이점 분석 (Git vs Render vs Live)
 
 - **Git 선언 튜플 수**: `89`
 - **Render 렌더링 튜플 수**: `82`
-- **Live 실행 튜플 수**: `140`
+- **Live 실행 튜플 수**: `143`
 
 ### 차이점 발생 원인 분석:
 1. **Helm Chart-Generated 컴포넌트**: Vault agent-injector, Cert-Manager webhook, Harbor exporter 등 Helm 릴리스가 런타임에 주입하는 sidecar/initContainer로 인해 Live 튜플 수가 순수 Git 선언 튜플보다 많음.
@@ -44,23 +43,15 @@
 
 | 네임스페이스 | 컨트롤러 | 컨테이너 | 이미지 주소 | 비고 |
 |---|---|---|---|---|
-| `argocd` | `ReplicaSet/argocd-applicationset-controller-54c748fccd` | `standard:argocd-applicationset-controller` | `quay.io/argoproj/argocd:v3.5.0-rc3` | `none` |
-| `argocd` | `ReplicaSet/argocd-dex-server-5fbb99cc85` | `standard:dex` | `ghcr.io/dexidp/dex:v2.45.0` | `none` |
-| `argocd` | `ReplicaSet/argocd-dex-server-5fbb99cc85` | `init:copyutil` | `quay.io/argoproj/argocd:v3.5.0-rc3` | `none` |
-| `argocd` | `ReplicaSet/argocd-notifications-controller-56f9f45f85` | `standard:argocd-notifications-controller` | `quay.io/argoproj/argocd:v3.5.0-rc3` | `none` |
-| `argocd` | `ReplicaSet/argocd-redis-69c8cbd569` | `standard:redis` | `public.ecr.aws/docker/library/redis:8.2.3-alpine` | `none` |
-| `argocd` | `ReplicaSet/argocd-redis-69c8cbd569` | `init:secret-init` | `quay.io/argoproj/argocd:v3.5.0-rc3` | `none` |
-| `argocd` | `ReplicaSet/argocd-repo-server-f54bdc84b` | `standard:argocd-repo-server` | `quay.io/argoproj/argocd:v3.5.0-rc3` | `none` |
-| `argocd` | `ReplicaSet/argocd-repo-server-f54bdc84b` | `init:copyutil` | `quay.io/argoproj/argocd:v3.5.0-rc3` | `none` |
-| `argocd` | `ReplicaSet/argocd-server-6bc7687ccc` | `standard:argocd-server` | `quay.io/argoproj/argocd:v3.5.0-rc3` | `none` |
-| `argocd` | `StatefulSet/argocd-application-controller` | `standard:argocd-application-controller` | `quay.io/argoproj/argocd:v3.5.0-rc3` | `none` |
 | `kube-system` | `DaemonSet/svclb-obs-loki-host-gateway-8cb5125c` | `standard:lb-tcp-3100` | `rancher/klipper-lb:v0.4.17` | `system-namespace-kube-system` |
 | `kube-system` | `DaemonSet/svclb-traefik-0507a580` | `standard:lb-tcp-80` | `rancher/klipper-lb:v0.4.17` | `system-namespace-kube-system` |
 | `kube-system` | `DaemonSet/svclb-traefik-0507a580` | `standard:lb-tcp-443` | `rancher/klipper-lb:v0.4.17` | `system-namespace-kube-system` |
 | `kube-system` | `Job/helm-install-traefik` | `standard:helm` | `rancher/klipper-helm:v0.11.1-build20260615` | `system-namespace-kube-system` |
 | `kube-system` | `Job/helm-install-traefik-crd` | `standard:helm` | `rancher/klipper-helm:v0.11.1-build20260615` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-3847f34d-abbe-4a55-98e1-0cbbc4ccd6f4` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-7061170c-89fc-4d2c-8859-eddd938d63a0` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
+| `kube-system` | `Pod/helper-pod-delete-pvc-2761db19-b95a-47c5-85d9-b89030630ce0` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
+| `kube-system` | `Pod/helper-pod-delete-pvc-7c6ded10-7d83-4aa0-8c80-2653fb11f990` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
+| `kube-system` | `Pod/helper-pod-delete-pvc-de8e8112-e7ce-41ab-ba65-d90b1709a800` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
+| `kube-system` | `Pod/helper-pod-delete-pvc-fb8ffc57-1373-4f87-9727-f2e3405eea5e` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/coredns-7d8645499d` | `standard:coredns` | `rancher/mirrored-coredns-coredns:1.14.4` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/local-path-provisioner-5fc8cb77c8` | `standard:local-path-provisioner` | `rancher/local-path-provisioner:v0.0.36` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/metrics-server-7c86f97b8d` | `standard:metrics-server` | `rancher/mirrored-metrics-server:v0.8.1` | `system-namespace-kube-system` |
@@ -77,8 +68,10 @@
 | `kube-system` | `DaemonSet/svclb-traefik-0507a580` | `standard:lb-tcp-443` | `rancher/klipper-lb:v0.4.17` | `system-namespace-kube-system` |
 | `kube-system` | `Job/helm-install-traefik` | `standard:helm` | `rancher/klipper-helm:v0.11.1-build20260615` | `system-namespace-kube-system` |
 | `kube-system` | `Job/helm-install-traefik-crd` | `standard:helm` | `rancher/klipper-helm:v0.11.1-build20260615` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-3847f34d-abbe-4a55-98e1-0cbbc4ccd6f4` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-7061170c-89fc-4d2c-8859-eddd938d63a0` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
+| `kube-system` | `Pod/helper-pod-delete-pvc-2761db19-b95a-47c5-85d9-b89030630ce0` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
+| `kube-system` | `Pod/helper-pod-delete-pvc-7c6ded10-7d83-4aa0-8c80-2653fb11f990` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
+| `kube-system` | `Pod/helper-pod-delete-pvc-de8e8112-e7ce-41ab-ba65-d90b1709a800` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
+| `kube-system` | `Pod/helper-pod-delete-pvc-fb8ffc57-1373-4f87-9727-f2e3405eea5e` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/coredns-7d8645499d` | `standard:coredns` | `rancher/mirrored-coredns-coredns:1.14.4` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/local-path-provisioner-5fc8cb77c8` | `standard:local-path-provisioner` | `rancher/local-path-provisioner:v0.0.36` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/metrics-server-7c86f97b8d` | `standard:metrics-server` | `rancher/mirrored-metrics-server:v0.8.1` | `system-namespace-kube-system` |
