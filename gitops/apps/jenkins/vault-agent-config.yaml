@@ -236,6 +236,17 @@ data:
     }
 
     template {
+      destination          = "/vault/secrets/hr_system_github_token"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/hr-system/jenkins" -}}
+    {{ .Data.data.github_token }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
       destination          = "/vault/secrets/aws_access_key_id"
       perms                = "0400"
       error_on_missing_key = false

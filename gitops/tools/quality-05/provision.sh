@@ -13,6 +13,7 @@ readonly repo_root=$(git rev-parse --show-toplevel)
 readonly sonar_url=${SONAR_URL:-http://127.0.0.1:39005}
 readonly secret_root=${KTC_SECRET_ROOT:-/home/imcherry/secrets/ktcloud4-bean}
 readonly sonar_env=${SONAR_ENV_FILE:-${secret_root}/sonarqube/env}
+readonly github_mirror_env=${GITHUB_MIRROR_ENV_FILE:-${secret_root}/gitea-github-mirror.env}
 readonly vault_root_token_file=${VAULT_ROOT_TOKEN_FILE:-${secret_root}/vault-root.token}
 readonly kubeconfig=${KUBECONFIG:-/home/imcherry/.kube/k3s-01-admin.yaml}
 readonly kubectl_bin=${KUBECTL_BIN:-kubectl}
@@ -20,6 +21,11 @@ readonly policy_file=${repo_root}/infra/vault/scripts/policies/hr-system-jenkins
 
 [[ -f ${sonar_env} && ! -L ${sonar_env} && $(stat -c %a "${sonar_env}") == 600 ]] || {
   echo "SonarQube env는 regular mode 0600이어야 한다: ${sonar_env}" >&2
+  exit 1
+}
+[[ -f ${github_mirror_env} && ! -L ${github_mirror_env} && \
+   $(stat -c %a "${github_mirror_env}") == 600 ]] || {
+  echo "GitHub mirror token 입력은 regular mode 0600이어야 한다: ${github_mirror_env}" >&2
   exit 1
 }
 [[ -f ${vault_root_token_file} && ! -L ${vault_root_token_file} && \
@@ -54,6 +60,19 @@ readonly SONARQUBE_ADMIN_PASSWORD
   exit 1
 }
 
+GITHUB_MIRROR_TOKEN=
+while IFS='=' read -r key value; do
+  case ${key} in
+    GITHUB_MIRROR_TOKEN) GITHUB_MIRROR_TOKEN=${value} ;;
+    '') ;;
+    *) echo "지원하지 않는 GitHub mirror env key: ${key}" >&2; exit 1 ;;
+  esac
+done <"${github_mirror_env}"
+[[ -n ${GITHUB_MIRROR_TOKEN} ]] || {
+  echo "GitHub mirror token이 없다." >&2
+  exit 1
+}
+
 umask 077
 temp_dir=$(mktemp -d)
 readonly temp_dir
@@ -66,6 +85,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 readonly netrc_file=${temp_dir}/netrc
 readonly sonar_response=${temp_dir}/sonar-response.json
+readonly github_response=${temp_dir}/github-response.json
 readonly role_file=${temp_dir}/jenkins-role.json
 readonly vault_secret_file=${temp_dir}/sonar-token.json
 readonly vault_metadata_file=${temp_dir}/vault-metadata.json
@@ -81,6 +101,16 @@ sonar_post() {
 }
 sonar_get "${sonar_url}/api/system/status" | jq -e '.status == "UP"' >/dev/null
 sonar_get "${sonar_url}/api/authentication/validate" | jq -e '.valid == true' >/dev/null
+
+github_status=$(curl --silent --show-error --output "${github_response}" --write-out '%{http_code}' \
+  --header "Authorization: Bearer ${GITHUB_MIRROR_TOKEN}" \
+  --header 'Accept: application/vnd.github+json' \
+  "https://api.github.com/repos/ktcloud4-bean/hr-system")
+[[ ${github_status} == 200 ]] || {
+  echo "GitHub hr-system read credential HTTP ${github_status}" >&2
+  exit 1
+}
+jq -e '.full_name == "ktcloud4-bean/hr-system" and .private == true' "${github_response}" >/dev/null
 
 vault_exec() {
   {
@@ -136,6 +166,11 @@ if jq -e '.data.data.sonar_token | type == "string" and length > 0' \
   "${vault_metadata_file}" >/dev/null 2>&1; then
   vault_present=true
 fi
+github_vault_match=false
+if jq -e --arg expected "${GITHUB_MIRROR_TOKEN}" \
+  '.data.data.github_token == $expected' "${vault_metadata_file}" >/dev/null 2>&1; then
+  github_vault_match=true
+fi
 
 if [[ ${mode} == --check ]]; then
   [[ ${project_count} -eq 1 ]] || { echo "QUALITY-05 Sonar project: absent"; exit 1; }
@@ -145,7 +180,7 @@ if [[ ${mode} == --check ]]; then
     echo "QUALITY-05 project quality gate: ${project_gate:-absent}" >&2
     exit 1
   }
-  [[ ${token_count} -eq 1 && ${vault_present} == true ]] || {
+  [[ ${token_count} -eq 1 && ${vault_present} == true && ${github_vault_match} == true ]] || {
     echo "QUALITY-05 Sonar/Vault token boundary: incomplete" >&2
     exit 1
   }
@@ -179,16 +214,22 @@ if [[ ${token_count} -eq 0 ]]; then
     --data-urlencode projectKey=hr-system \
     "${sonar_url}/api/user_tokens/generate" >"${sonar_response}"
   jq -e '.token | type == "string" and length > 0' "${sonar_response}" >/dev/null
-  jq -r '.token' "${sonar_response}" >"${temp_dir}/sonar-token"
-  jq -n --rawfile token "${temp_dir}/sonar-token" \
-    '{sonar_token:($token | rtrimstr("\n"))}' >"${vault_secret_file}"
+  sonar_token_value=$(jq -r '.token' "${sonar_response}")
   vault_present=true
+else
+  sonar_token_value=$(jq -r '.data.data.sonar_token // empty' "${vault_metadata_file}")
 fi
 
 if [[ ${vault_present} != true ]]; then
   echo "Sonar token은 존재하지만 Vault secret이 없어 자동으로 복구할 수 없다." >&2
   exit 1
 fi
+[[ -n ${sonar_token_value} ]] || {
+  echo "Sonar token 원문을 구성하지 못했다." >&2
+  exit 1
+}
+jq -n --arg sonar_token "${sonar_token_value}" --arg github_token "${GITHUB_MIRROR_TOKEN}" \
+  '{sonar_token:$sonar_token, github_token:$github_token}' >"${vault_secret_file}"
 
 {
   printf "cat >/tmp/hr-system-jenkins.hcl <<'QUALITY05POLICY'\n"

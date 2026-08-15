@@ -682,6 +682,11 @@ credentials:
               id: "sonar-token-hr-system"
               description: "QUALITY-05 HR System project-scoped analysis token"
               secret: "${hr_system_sonar_token}"
+          - string:
+              scope: GLOBAL
+              id: "github-hr-system-readonly"
+              description: "QUALITY-05 GitHub HR System read-only SHA check token"
+              secret: "${hr_system_github_token}"
           - usernamePassword:
               scope: GLOBAL
               id: "aws-credentials-ci01"
