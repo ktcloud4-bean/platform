@@ -67,7 +67,7 @@ data:
     EOT
     }
 
-    # AWS-HR-01은 Gitea source key와 ECR publisher key를 별도 Vault path에서 읽는다.
+    # SUPPLY-07/08: Gitea source key와 Harbor robot 자격증명만 Vault에서 읽는다.
     template {
       destination          = "/vault/secrets/hr_system_gitea_ssh_private_key"
       perms                = "0400"
@@ -75,28 +75,6 @@ data:
       contents             = <<EOT
     {{- with secret "kv/data/aws-hr-01/jenkins" -}}
     {{ .Data.data.gitea_ssh_private_key }}
-    {{- end -}}
-    EOT
-    }
-
-    template {
-      destination          = "/vault/secrets/hr_system_aws_access_key_id"
-      perms                = "0400"
-      error_on_missing_key = true
-      contents             = <<EOT
-    {{- with secret "kv/data/aws-hr-01/jenkins" -}}
-    {{ .Data.data.aws_access_key_id }}
-    {{- end -}}
-    EOT
-    }
-
-    template {
-      destination          = "/vault/secrets/hr_system_aws_secret_access_key"
-      perms                = "0400"
-      error_on_missing_key = true
-      contents             = <<EOT
-    {{- with secret "kv/data/aws-hr-01/jenkins" -}}
-    {{ .Data.data.aws_secret_access_key }}
     {{- end -}}
     EOT
     }

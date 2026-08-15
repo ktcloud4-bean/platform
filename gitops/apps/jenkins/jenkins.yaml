@@ -651,12 +651,6 @@ credentials:
               password: "${aws_secret_access_key}"
           - usernamePassword:
               scope: GLOBAL
-              id: "aws-hr-ecr-publisher"
-              description: "AWS-HR-01 ECR publish-only credential"
-              username: "${hr_system_aws_access_key_id}"
-              password: "${hr_system_aws_secret_access_key}"
-          - usernamePassword:
-              scope: GLOBAL
               id: "harbor-robot-hr-system"
               description: "SUPPLY-07 HR System Harbor candidate push robot"
               username: "${hr_system_harbor_robot_name}"
