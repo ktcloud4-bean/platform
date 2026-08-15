@@ -2753,6 +2753,25 @@ Warpgate는 실행 가능한 후속이 없어 새 ID를 만들지 않았다. 상
 
 `AWS-SEC-06`을 `DONE`으로 닫는다.
 
+2026-08-15 `AWS-SEC-07`에서 `/service/` IAM access key 네 건의 read-only 수명 관찰과
+서비스별 dual-key 회전 경계를 확정했다.
+
+1. **서비스 key inventory 및 누락 경보 (`infra/aws/tofu-app-security/`)**:
+   - `ciem-service-key-inventory` Lambda가 네 user·네 key를 계수하고 `Owner` tag,
+     생성일, `GetAccessKeyLastUsed`, 90일 회전기한을 보안 SNS에 표시한다.
+   - live 실행은 `expected_users=4`, `observed_service_users=4`, `observed_service_keys=4`를
+     반환했고 현재 Owner tag 누락 4건을 `ALERT`로 판정했다. 자동 disable/delete는 0건이다.
+   - Lambda role은 IAM read-only API·SNS publish만 가지며 `UpdateAccessKey`·`DeleteAccessKey`
+     권한이 없다. schedule은 월 1일 UTC 00:15에 활성화됐다.
+
+2. **회전·rollback runbook (`docs/runbook/aws-service-access-key-rotation.md`)**:
+   - 두 번째 key 생성 → Vault/consumer 갱신 → 서비스별 canary → 이전 key 비활성화·삭제 순서와
+     backup, Vault KMS, Argo EKS, Harbor ECR consumer별 rollback을 문서화했다.
+   - key ID·secret은 Lambda 반환값·로그·SNS·Git에 남기지 않으며, 최종 OpenTofu plan은
+     무변경이다.
+
+`AWS-SEC-07`을 `DONE`으로 닫는다.
+
 2026-08-15 `SUPPLY-06`에서 Harbor trusted release의 scheduled AWS ECR replication 및 destination verifier 구성을 완료했다.
 
 1. **`/service/harbor/` 전용 Replicator IAM 사용자 프로비저닝 (`infra/aws/tofu-app-ci/`)**:
@@ -2784,7 +2803,7 @@ Warpgate는 실행 가능한 후속이 없어 새 ID를 만들지 않았다. 상
 | `SUPPLY-05-FIX-02 BLOCKED` | ADR-0028 계약대로 k3s 일반 workload에 Harbor registry·digest와 별도로 플랫폼 Cosign image signature 및 signed CycloneDX attestation을 검증하는 Kyverno 1.18 stable `ImageValidatingPolicy`를 적용하고 namespace 전체 제외를 exact controller·ServiceAccount·repository 예외로 축소 (`policies/`, `gitops/apps/kyverno/`) | `SUPPLY-05-FIX-01` | `ARGO-ROOT`, `VAULT-CONFIG` | 공급망 admission 신뢰 경계 | current·previous 공개키만 읽는 최소권한, curated 정상 artifact 허용, 미서명 image·signature 불일치·attestation 누락·`bomFormat` 불일치를 각각 admission에서 거부, `kube-system`·`kyverno`를 포함한 namespace 전체 제외 0건, registry 오류 시 Enforce/Fail 동작과 Audit/Ignore rollback, 기존 workload 순차 재생성 및 `Synced/Healthy`. |
 | `OBS-20 BLOCKED` | 기존 Prometheus·Alertmanager·`#platform-alerts` 경로에 Argo child 비정상, Velero controller target 부재, 마지막 성공 정기 backup freshness 경보만 추가 (`gitops/apps/obs/`) | `SECOPS-AUDIT-01`, `SUPPLY-05-FIX-01`, `CI-01-FIX-01`, `OBS-18` | `ARGO-ROOT` | GitOps·백업 장애의 외부 인지 | 정상 baseline firing 0건, `argocd_app_info`의 non-`Synced` 또는 non-`Healthy` 지속 상태, Velero target `up=0`, 마지막 성공 backup 36시간 초과를 각각 한 규칙으로 판정. 승인된 test label 경보만 firing·Slack 수신·resolved 각 1회 확인하고 서비스 중단·실패 backup 생성·신규 exporter 0건, 기존 receiver payload allowlist 유지. |
 | `POL-03 READY` | 2026-09-02 만료 예정 Argo CD·CrowdSec·Velero `runAsNonRoot` 예외를 제거하거나 최소화하고 Velero namespace의 `Pod/*` wildcard를 node-agent·PodVolumeBackup hosting Pod의 증명 가능한 exact 경계로 교체 (`policies/`, 관련 `gitops/apps/`) | `SECOPS-AUDIT-01`, `POL-02` | `ARGO-ROOT` | 2026-09-02 이후 배포·백업 지속성 | Argo CD·CrowdSec는 가능한 Pod-level `runAsNonRoot` 보정 뒤 예외 제거, root가 구조적으로 필요한 Velero 항목은 exact kind/name/label·image·capability·ServiceAccount 보상 정책으로 제한. 만료 조건 제거 후 각 대상 순차 재생성, 정상 admission과 대표 범위 밖 root Pod 거부, Velero backup `Completed`, 관련 child `Synced/Healthy`. |
-| `AWS-SEC-07 READY` | 자동 삭제 대상에서 제외된 `/service/` IAM access key 네 건의 owner·생성일·마지막 사용·회전 기한을 read-only로 가시화하고 서비스별 dual-key 순차 회전 runbook을 확정 (`infra/aws/tofu-app-security/`, `docs/runbook/`) | `SECOPS-AUDIT-01`, `AWS-SEC-03`, `SUPPLY-08` | `TOFU-STATE` | standing AWS credential 수명 관리 | `backup`·`vault_auto_unseal`·`argocd_credential_issuer`·`harbor_ecr_replicator` 네 identity/key를 모두 계수하되 key ID·secret 원문은 출력·상태·알림에 남기지 않는다. age·last-used·owner 누락을 경보하고 자동 disable/delete 0건, 두 번째 key→consumer canary→이전 key 폐기 순서와 서비스별 rollback을 문서화하며 최종 plan 무변경. |
+| `AWS-SEC-07 DONE` | 자동 삭제 대상에서 제외된 `/service/` IAM access key 네 건의 owner·생성일·마지막 사용·회전 기한을 read-only로 가시화하고 서비스별 dual-key 순차 회전 runbook을 확정 (`infra/aws/tofu-app-security/`, `docs/runbook/`) | `SECOPS-AUDIT-01`, `AWS-SEC-03`, `SUPPLY-08` | `TOFU-STATE` | standing AWS credential 수명 관리 | `backup`·`vault_auto_unseal`·`argocd_credential_issuer`·`harbor_ecr_replicator` 네 identity/key를 모두 계수하되 key ID·secret 원문은 출력·상태·알림에 남기지 않는다. age·last-used·owner 누락을 경보하고 자동 disable/delete 0건, 두 번째 key→consumer canary→이전 key 폐기 순서와 서비스별 rollback을 문서화하며 최종 plan 무변경. 상세 증거: [`docs/evidence/aws-sec-07/README.md`](evidence/aws-sec-07/README.md). |
 | `UPDATE-02 BLOCKED` | smoke repository 한 곳만 보는 Renovate를 실제 권위 저장소에 최소 manager·PR-only로 채택할지 폐기할지 결정하고 선택한 한 경로만 실행 (`gitops/apps/renovate/`, credential 원본) | `SECOPS-AUDIT-01`, `UPDATE-01`, `SUPPLY-05-FIX-01` | `ARGO-ROOT`, `VAULT-CONFIG` | 실제 의존성 업데이트 또는 불필요 자동화 제거 | 채택 시 exact repository·manager allowlist, onboarding·autodiscover·script·automerge 비활성, 동시 PR 1개와 실제 dependency PR canary 1회. 폐기 시 CronJob·SA·Vault role/policy·runtime credential 파생·NetworkPolicy 잔여 0건을 확인하되 다른 SCM 계정은 변경하지 않는다. 두 경로 모두 `platform-smoke`만 성공한 사실을 운영 사용 증거로 재사용하지 않는다. |
 | `QUALITY-02 READY` | SonarQube가 실제 애플리케이션 source와 release gate에 쓰이는지 저장소·CI 양쪽에서 판정하고, 실사용이면 최소 한 제품 pipeline을 연결하며 아니면 별도 폐기 작업의 데이터 보존·승인 조건을 확정 (`gitops/apps/sonarqube/`, 실제 source CI) | `SECOPS-AUDIT-01`, `QUALITY-01` | 없음 | 품질 gate 실사용 또는 30 GiB PVC 회수 결정 | 합성 `quality01-pass`와 실제 제품 project를 구분해 최근 분석·pipeline gate·owner를 확인. 실사용이면 실제 source 1개가 pass/fail gate를 재현하고, 미사용이면 즉시 PVC를 삭제하지 않고 backup 보존·DB/PVC 삭제 승인·credential 회수·후속 ID를 문서화한다. |
 | `OPS-DRIFT-01 BLOCKED` | 기존 도구를 재사용해 Argo Application, OPNsense 마스킹 snapshot, AWS·Proxmox OpenTofu의 read-only 정기 drift 판정과 통지를 구성하되 자동 apply·snapshot update를 금지 (`gitops/apps/jenkins/`, 기존 drift·plan 도구) | `SECOPS-AUDIT-01`, `CI-01-FIX-01`, `OPN-DRIFT-01`, `AWS-CI-FIX-02`, `IAC-01` | `ARGO-ROOT`, `OPNSENSE-LIVE`, `PVE-LIVE`, `TOFU-STATE` | 선언과 라이브 불일치의 조기 발견 | 유지보수·공유 잠금 중에는 skip하고 normal state에서 drift 0건. 비밀 없는 fixture로 Argo·OPNsense·OpenTofu drift를 각각 1회 검출·통지하며 실제 live 변경, `--update`, `apply`, 민감 plan 출력 0건. 같은 drift를 두 수집기로 중복 통지하지 않는다. |

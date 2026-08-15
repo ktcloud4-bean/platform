@@ -111,6 +111,44 @@ variable "ciem_drift_lookback_days" {
   }
 }
 
+variable "ciem_service_key_rotation_days" {
+  description = "AWS-SEC-07 /service/ IAM access key 회전 기준 일수"
+  type        = number
+  default     = 90
+
+  validation {
+    condition     = var.ciem_service_key_rotation_days > 0 && var.ciem_service_key_rotation_days <= 90
+    error_message = "서비스 access key 회전 기준은 1~90일이어야 한다."
+  }
+}
+
+variable "ciem_service_key_identities" {
+  description = "AWS-SEC-07이 읽기 전용으로 관찰할 /service/ IAM user의 논리 역할과 이름"
+  type        = map(string)
+  default = {
+    backup                   = "seaweedfs-offsite-backup"
+    vault_auto_unseal        = "vault-auto-unseal"
+    argocd_credential_issuer = "hr-system-prod-argocd-eks-credential-issuer"
+    harbor_ecr_replicator    = "hr-system-prod-harbor-ecr-replicator"
+  }
+
+  validation {
+    condition = (
+      length(var.ciem_service_key_identities) == 4 &&
+      length(setsubtract(
+        toset(["backup", "vault_auto_unseal", "argocd_credential_issuer", "harbor_ecr_replicator"]),
+        toset(keys(var.ciem_service_key_identities))
+      )) == 0 &&
+      length(setsubtract(
+        toset(keys(var.ciem_service_key_identities)),
+        toset(["backup", "vault_auto_unseal", "argocd_credential_issuer", "harbor_ecr_replicator"])
+      )) == 0 &&
+      length(distinct(values(var.ciem_service_key_identities))) == 4
+    )
+    error_message = "AWS-SEC-07 서비스 identity는 지정된 네 역할과 서로 다른 네 user여야 한다."
+  }
+}
+
 variable "slack_channel_id" {
   description = "CIEM 알림을 수신할 Slack channel ID. 비어 있으면 알림 Lambda는 fail closed한다."
   type        = string

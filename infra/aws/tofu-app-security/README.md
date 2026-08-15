@@ -123,6 +123,19 @@ ack와 `response_url` 최종 결과, 동일 버튼 idempotency, `/service/` IAM 
 alarm, Keycloak VPC Lambda의 exact HTTPS egress만 한 번씩 판정한다. 테스트용 access key·policy
 attachment·session은 만든 즉시 제거하고 최종 plan이 무변경인지 확인한다.
 
+## AWS-SEC-07 서비스 key inventory
+
+`ciem-service-key-inventory`는 `/service/` IAM user 네 개의 user path, key 수·상태, `Owner` tag,
+생성일, `GetAccessKeyLastUsed` 결과와 생성일 기준 90일 회전기한만 읽어 보안 SNS에 보낸다.
+access key ID와 secret은 Lambda 반환값·CloudWatch log·SNS 본문에 넣지 않는다. 이 Lambda의
+IAM policy에는 `iam:UpdateAccessKey`·`iam:DeleteAccessKey`가 없고 자동 disable/delete는 하지
+않는다. owner·생성일·마지막 사용 누락, 회전기한 도달, 예상 user/key 수 불일치는 `ALERT`로
+발행한다.
+
+월간 실행과 서비스별 두 번째 key → consumer canary → 이전 key 폐기 순서는
+[`AWS 서비스 access key 회전 runbook`](../../../docs/runbook/aws-service-access-key-rotation.md)이
+소유한다. 실제 key 발급·Vault/consumer 갱신·이전 key 폐기는 그 runbook의 사람 승인 경계다.
+
 ## 보존·rollback 경계
 
 WORM bucket의 새 객체는 4일 동안 삭제할 수 없다. 검증 marker를 만들면 그 한 객체는
