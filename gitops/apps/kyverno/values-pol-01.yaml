@@ -10,6 +10,31 @@ features:
   policyExceptions:
     enabled: true
     namespace: kyverno
+  logging:
+    format: text
+    verbosity: 6
+
+config:
+  webhooks:
+    - namespaceSelector:
+        matchExpressions: []
+  resourceFilters:
+    - '[Event,*,*]'
+    - '[*/*,kube-public,*]'
+    - '[*/*,kube-node-lease,*]'
+    - '[Node,*,*]'
+    - '[Node/?*,*,*]'
+    - '[APIService,*,*]'
+    - '[APIService/?*,*,*]'
+    - '[TokenReview,*,*]'
+    - '[SubjectAccessReview,*,*]'
+    - '[SelfSubjectAccessReview,*,*]'
+    - '[Binding,*,*]'
+    - '[Pod/binding,*,*]'
+    - '[ReplicaSet,*,*]'
+    - '[ReplicaSet/?*,*,*]'
+    - '[EphemeralReport,*,*]'
+    - '[ClusterEphemeralReport,*,*]'
 
 # Helm pre-delete hook은 원시 Kustomize manifest에서 수명 주기를 보장할 수 없다.
 # 동적 webhook은 README의 순서가 있는 rollback 절차로 제거한다.
@@ -25,6 +50,23 @@ admissionController:
   container:
     image:
       tag: "v1.18.2@sha256:0a540e2ddf74d0d2d3d45f9ef248d7dbc96576accdbcc6a2dd7eaff9fea56504"
+    extraArgs:
+      allowInsecureRegistry: "true"
+    extraEnvVars:
+      - name: HOME
+        value: /tmp
+      - name: TUF_ROOT
+        value: /tmp
+      - name: COSIGN_OFFLINE
+        value: "true"
+      - name: SIGSTORE_OFFLINE
+        value: "true"
+      - name: SIGSTORE_TUF_NO_REMOTE
+        value: "true"
+      - name: SIGSTORE_NO_CACHE
+        value: "true"
+      - name: COSIGN_EXPERIMENTAL
+        value: "0"
 
 # generate·mutate-existing은 POL-01 범위가 아니다.
 backgroundController:
