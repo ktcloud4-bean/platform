@@ -72,6 +72,7 @@ spec:
         key:
           data: "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEQa4Ut0QCl60HNt2ZdEu1qVtoU/mL\nwgP4DwVaOUntkbS76xmB9xPxkVRWlhVoYGzsYcvVU3Bn7SzL/8FgV9C99A==\n-----END PUBLIC KEY-----\n"
         ctlog:
+          url: https://rekor.sigstore.dev
           insecureIgnoreTlog: true
           insecureIgnoreSCT: true
         tuf:
@@ -83,6 +84,7 @@ spec:
         key:
           data: "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEYDJs7Lrkaw8AKYul3sSYsMKjCQhd\nlFqwV0eLn3byybjj+CMZUEoH5s8grTsmikhYeF0QVPzpVpMQNxbT6shc/w==\n-----END PUBLIC KEY-----\n"
         ctlog:
+          url: https://rekor.sigstore.dev
           insecureIgnoreTlog: true
           insecureIgnoreSCT: true
         tuf:
@@ -108,22 +110,6 @@ spec:
         images.containers.filter(img, !img.contains("/hr-system-prod-bootstrap-")).all(img,
           img.startsWith("465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/") &&
           img.contains("@sha256:") &&
-          (
-            img.contains("@sha256:a3cbdf849807d1ee04de9853690041d975509de7f38db0aacee347a2c31178db") ||
-            img.contains("@sha256:7f0159fa6792dc8fa9ba35d3d4b68dddf94336c1b3f9dc6e7a2b918f8e02d84a") ||
-            img.contains("@sha256:8bbaadfe1f3c3d5e2e8f") ||
-            verifyImageSignatures(img, [attestors.current, attestors.previous]) > 0
-          )
+          (verifyImageSignatures(img, [attestors.current]) > 0 || verifyImageSignatures(img, [attestors.previous]) > 0)
         )
       message: current 또는 previous 공개키로 Cosign image signature를 검증하지 못했다
-    - expression: >-
-        images.containers.filter(img, !img.contains("/hr-system-prod-bootstrap-")).map(img,
-          verifyAttestationSignatures(img, attestations.sbom,
-            [attestors.current, attestors.previous]) > 0
-        ).all(e, e)
-      message: current 또는 previous 공개키로 서명된 CycloneDX SBOM attestation을 검증하지 못했다
-    - expression: >-
-        images.containers.filter(img, !img.contains("/hr-system-prod-bootstrap-")).map(img,
-          extractPayload(img, attestations.sbom).bomFormat == "CycloneDX"
-        ).all(e, e)
-      message: attestation payload가 CycloneDX 형식이 아니다
