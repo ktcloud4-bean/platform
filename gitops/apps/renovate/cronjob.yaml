@@ -24,7 +24,7 @@ spec:
       template:
         metadata:
           annotations:
-            update.imcherry5778.xyz/runtime-config-sha256: 74f01fcc3314bf84b15fbb25af35d8414b185fe161fb2229215b957a337586f0
+            update.imcherry5778.xyz/runtime-config-sha256: 78b9ef9d2baed9fc10d7a1e745df6ba84cf0d2148247e4c5b6793d0ddbfeb35c
           labels:
             app.kubernetes.io/name: renovate
             app.kubernetes.io/component: dependency-update

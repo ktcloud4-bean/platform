@@ -35,9 +35,9 @@ Vault API의 상태이므로 Argo의 대상이 아니다. 그렇다고 이 값�
 | audit device `stdout/` | 감사 이벤트를 Pod 로그로 |
 | `auth/oidc` | Vault UI 사람 로그인(VAULT-03). Keycloak `platform` realm confidential client `vault` |
 
-`UPDATE-01`의 `renovate` policy와 Kubernetes auth role은 `renovate` namespace의 동명
-ServiceAccount만 `audience=vault`로 허용하고 `kv/renovate/runtime` 한 경로만 읽힌다. PAT와
-SSH private key는 `gitops/tools/update-01/provision.sh`가 임시 파일에서 KV로 직접 옮기며,
+`UPDATE-02`의 `renovate` policy와 Kubernetes auth role은 `renovate` namespace의 동명
+ServiceAccount만 `audience=vault`로 허용하고 `kv/renovate/runtime` 한 경로만 읽힌다. GitHub
+token은 `gitops/tools/update-02/provision.sh`가 KV로 직접 옮기며,
 상시 container에는 Vault ServiceAccount token을 주지 않는다.
 
 policy는 앱 하나당 하나씩 두고 자기 경로만 연다. 명시하지 않은 경로는 Vault 기본 deny다.

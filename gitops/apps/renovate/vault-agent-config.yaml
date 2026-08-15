@@ -33,28 +33,10 @@ data:
     }
 
     template {
-      destination          = "/renovate/runtime/gitea-token"
+      destination          = "/renovate/runtime/github-token"
       perms                = "0400"
       error_on_missing_key = true
       contents             = <<EOT
-    {{- with secret "kv/data/renovate/runtime" -}}{{ .Data.data.gitea_token }}{{- end -}}
-    EOT
-    }
-
-    template {
-      destination          = "/renovate/runtime/id_ed25519"
-      perms                = "0400"
-      error_on_missing_key = true
-      contents             = <<EOT
-    {{- with secret "kv/data/renovate/runtime" -}}{{ .Data.data.ssh_private_key }}{{- end -}}
-    EOT
-    }
-
-    template {
-      destination          = "/renovate/runtime/known_hosts"
-      perms                = "0400"
-      error_on_missing_key = true
-      contents             = <<EOT
-    {{- with secret "kv/data/renovate/runtime" -}}{{ .Data.data.ssh_known_hosts }}{{- end -}}
+    {{- with secret "kv/data/renovate/runtime" -}}{{ .Data.data.github_token }}{{- end -}}
     EOT
     }

@@ -9,7 +9,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: platform-gitops
 spec:
-  description: UPDATE-01 Renovate 단발 CronJob과 Vault Agent init 경계
+  description: UPDATE-02 Renovate 단발 CronJob과 Vault Agent init 경계
   sourceRepos:
     - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
   destinations:

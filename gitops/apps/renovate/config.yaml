@@ -13,20 +13,59 @@ data:
   config.js: |
     const fs = require('node:fs');
 
+    // Patch GithubHttp for fine-grained PAT compatibility (Issues scope isolation)
+    try {
+      const githubHttp = require('/usr/local/renovate/dist/util/http/github.js');
+      if (githubHttp && githubHttp.GithubHttp && githubHttp.GithubHttp.prototype.postJson) {
+        const origPostJson = githubHttp.GithubHttp.prototype.postJson;
+        githubHttp.GithubHttp.prototype.postJson = async function(url, options) {
+          if (url === 'graphql' && options && options.body && typeof options.body.query === 'string') {
+            const q = options.body.query;
+            if (q.includes('autoMergeAllowed') && q.includes('issues(')) {
+              options.body.query = q
+                .replace(/,\s*\$user:\s*String/, '')
+                .replace(/issues\s*\([^)]*\)\s*\{[\s\S]*?\}\s*\}/g, '');
+              if (options.body.variables && 'user' in options.body.variables) {
+                delete options.body.variables.user;
+              }
+            } else if (q.includes('$count: Int') && q.includes('issues(')) {
+              return {
+                statusCode: 200,
+                body: {
+                  data: {
+                    repository: {
+                      issues: {
+                        pageInfo: {
+                          endCursor: null,
+                          hasNextPage: false,
+                        },
+                        nodes: [],
+                      },
+                    },
+                  },
+                },
+              };
+            }
+          }
+          return await origPostJson.call(this, url, options);
+        };
+      }
+    } catch (e) {
+      // ignore
+    }
+
     const runtimeValue = (name) =>
       fs.readFileSync(`/renovate/runtime/${name}`, 'utf8').trim();
 
     module.exports = {
-      platform: 'gitea',
-      endpoint: 'http://gitea-http.gitea.svc.cluster.local:3000/api/v1/',
-      token: runtimeValue('gitea-token'),
-      gitUrl: 'ssh',
+      platform: 'github',
+      token: runtimeValue('github-token'),
       gitAuthor: 'Renovate Bot <renovate-bot@imcherry5778.xyz>',
-      repositories: ['scm-recovery/platform-smoke'],
+      repositories: ['ktcloud4-bean/hr-system'],
       autodiscover: false,
       onboarding: false,
       requireConfig: 'ignored',
-      enabledManagers: ['npm'],
+      enabledManagers: ['npm', 'pip_requirements'],
       dependencyDashboard: false,
       baseBranchPatterns: ['main'],
       prCreation: 'immediate',
@@ -39,33 +78,11 @@ data:
       allowScripts: false,
       baseDir: '/tmp/renovate/repos',
       cacheDir: '/tmp/renovate/cache',
-      customEnvVariables: {
-        GIT_SSH_COMMAND: 'ssh -F /renovate/config/ssh_config',
-        GIT_CONFIG_COUNT: '1',
-        GIT_CONFIG_KEY_0:
-          'url.ssh://git@gitea-ssh.gitea.svc.cluster.local:2222/.insteadOf',
-        GIT_CONFIG_VALUE_0: 'ssh://git@git.imcherry5778.xyz:30022/',
-      },
       packageRules: [
         {
-          matchManagers: ['npm'],
+          matchManagers: ['npm', 'pip_requirements'],
           automerge: false,
           platformAutomerge: false,
         },
-        {
-          matchDepNames: ['update01-lodash-smoke'],
-          recreateWhen: 'always',
-        },
       ],
     };
-  ssh_config: |
-    Host gitea-ssh.gitea.svc.cluster.local
-      User git
-      Port 2222
-      IdentityFile /renovate/runtime/id_ed25519
-      IdentitiesOnly yes
-      PasswordAuthentication no
-      KbdInteractiveAuthentication no
-      StrictHostKeyChecking yes
-      UserKnownHostsFile /renovate/runtime/known_hosts
-      HostKeyAlias gitea-internal-update-01
