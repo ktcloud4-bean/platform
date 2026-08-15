@@ -413,9 +413,7 @@ jenkins:
                         type: RuntimeDefault
                       capabilities:
                         drop: ["ALL"]
-                    volumeMounts:
-                      - name: quality05-postgres-data
-                        mountPath: /var/lib/postgresql/data
+                    volumeMounts: []
                 volumes:
                   - name: buildah-home
                     emptyDir:
@@ -458,9 +456,6 @@ jenkins:
                   - name: sonar-tmp
                     emptyDir:
                       sizeLimit: 1Gi
-                  - name: quality05-postgres-data
-                    emptyDir:
-                      sizeLimit: 2Gi
           - name: "aws-opentofu"
             label: "aws-opentofu"
             namespace: "jenkins"
