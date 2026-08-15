@@ -11,3 +11,5 @@ resources:
   - ingress.yaml
   - ingress-restricted.yaml
   - middleware-internal-only.yaml
+  - ingress-ciem-vpc-admin.yaml
+  - middleware-ciem-vpc-admin.yaml

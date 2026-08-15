@@ -1,0 +1,21 @@
+{
+  "clientId": "aws-ciem-session-revoke",
+  "name": "AWS-SEC-03 CIEM Keycloak session revoke",
+  "description": "AWS-SEC-03 service account for one Keycloak user-session logout path",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "clientAuthenticatorType": "client-secret",
+  "standardFlowEnabled": false,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": true,
+  "authorizationServicesEnabled": false,
+  "consentRequired": false,
+  "fullScopeAllowed": false,
+  "redirectUris": [],
+  "webOrigins": [],
+  "defaultClientScopes": [],
+  "optionalClientScopes": [],
+  "attributes": {}
+}

@@ -30,6 +30,14 @@ data "aws_rds_cluster" "hr" {
   cluster_identifier = "${local.name_prefix}-aurora"
 }
 
+data "aws_kms_alias" "cloudtrail" {
+  name = "alias/${local.name_prefix}-cloudtrail"
+}
+
+data "aws_kms_alias" "security_alerts" {
+  name = "alias/${local.name_prefix}-security-alerts"
+}
+
 locals {
   name_prefix                 = "${var.project_name}-${var.environment}"
   aurora_postgresql_log_group = "/aws/rds/cluster/${data.aws_rds_cluster.hr.cluster_identifier}/postgresql"
@@ -37,6 +45,17 @@ locals {
   cloudtrail_arn              = data.terraform_remote_state.account_baseline.outputs.cloudtrail_arn
   cloudtrail_log_group_name   = data.terraform_remote_state.account_baseline.outputs.cloudtrail_log_group_name
   access_analyzer_arn         = data.terraform_remote_state.account_baseline.outputs.access_analyzer_arn
+  cloudtrail_bucket_arn       = "arn:${data.aws_partition.current.partition}:s3:::${local.name_prefix}-cloudtrail-logs-${data.aws_caller_identity.current.account_id}"
+  saml_role_names = {
+    observer             = "platform-saml-observer"
+    observability_reader = "platform-saml-observability-reader"
+    security_reader      = "platform-saml-security-reader"
+    identity_reader      = "platform-saml-identity-reader"
+  }
+  saml_role_arns = {
+    for key, name in local.saml_role_names :
+    key => "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${name}"
+  }
   # Security Lake(AWS-SEC-01)가 소유·생성한 Glue database다. 이 root는
   # Lake Formation 권한을 소비할 뿐 database를 resource나 state로 소유하지 않는다.
   security_lake_database_name = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"

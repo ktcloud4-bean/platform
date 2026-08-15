@@ -1,0 +1,18 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sso-ciem-vpc-admin
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  # AWS-SEC-03: Keycloak session revoke Lambda ENI가 쓰는 HR private app subnet만
+  # /admin에 도달한다. 기존 내부 전체 경계나 공개 platform realm route는 바꾸지 않는다.
+  ipAllowList:
+    sourceRange:
+      - 10.20.10.0/24
+      - 10.20.20.0/24

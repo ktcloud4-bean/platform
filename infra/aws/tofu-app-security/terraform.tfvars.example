@@ -7,3 +7,10 @@ keycloak_saml_metadata_file = "/home/<operator>/secrets/ktcloud4-bean/aws-sec-02
 # Keycloak SAML group mapper는 full.path=false로 값만 보낸다.
 grafana_admin_role_values  = ["platform-privileged"]
 grafana_editor_role_values = ["grafana-amg-editors"]
+
+# AWS-SEC-03: Slack 값과 Keycloak service client 비밀은 이 파일이 아니라 apply 뒤
+# 생성되는 Secrets Manager 객체에 mode 0600 JSON 파일로 수동 주입한다.
+# slack_channel_id      = "C0123456789"
+# slack_allowed_user_ids = ["U0123456789"]
+# slack_app_secret_name = "hr-system-prod-ciem-slack-app"
+# keycloak_session_secret_name = "hr-system-prod-ciem-keycloak-session"

@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak-ciem-vpc-admin
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt-production
+    traefik.ingress.kubernetes.io/router.middlewares: keycloak-sso-ciem-vpc-admin@kubernetescrd
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  ingressClassName: traefik
+  rules:
+    # /admin prefix는 ingress-restricted.yaml의 /보다 구체적이라 이 CIEM source
+    # allowlist가 먼저 판정된다. /realms/platform과 /resources 공개 경로는 불변이다.
+    - host: sso.imcherry5778.xyz
+      http:
+        paths:
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - sso.imcherry5778.xyz

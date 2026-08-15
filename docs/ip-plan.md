@@ -166,8 +166,11 @@ endpoint 주소는 재생성 때마다 바뀌므로 이 문서에 고정값으�
 현재 서비스 소비자가 없어 2026-08-03 `NET-04`에서 제거했다. IPsec connection과
 traffic selector는 유지하지만 새 DATA→VPC 연결은 기본 차단한다.
 
-역방향(AWS에서 온프레미스로 신규 연결)은 허용하지 않는다. OPNsense는 IPsec 터널에
-`pass out on enc0 ... keep state`만 두므로 온프레미스가 개시한 흐름과 그 응답만 지난다.
+역방향(AWS에서 온프레미스로 신규 연결)은 기본 허용하지 않는다. 단, `AWS-SEC-03`의
+CIEM Keycloak 세션 종료만 예외다. OPNsense IPsec inbound에서 HR application subnet 두
+개 각각을 source로 하여 `k3s-01` TCP 443만 허용하며, 다른 AWS subnet·목적지·port와
+`0.0.0.0/0` egress는 계속 차단한다. 이 rule의 적용·readback·rollback은
+`infra/aws/tofu-app-security/scripts/ciem_opnsense_keycloak_path.py`가 소유한다.
 
 오프사이트 백업 전송은 이 VPN을 쓰지 않고 계속 공인 AWS API endpoint로 나간다.
 

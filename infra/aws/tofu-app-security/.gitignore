@@ -2,6 +2,7 @@
 .terraform.lock.hcl
 *.tfstate
 *.tfstate.*
+scripts/*.zip
 *.tfplan
 *.tfvars
 *.tfvars.json
