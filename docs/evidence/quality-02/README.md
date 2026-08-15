@@ -47,3 +47,13 @@ DB·Vault/Jenkins credential도 삭제하지 않는다. 보존 후 폐기는 `QU
    Jenkins credential 정리를 수행한다. 이번 작업에서는 이 작업을 수행하지 않는다.
 
 후속 작업은 `QUALITY-03 READY`로 열었다.
+
+## 2026-08-15 후속 결정
+
+위 결론은 `QUALITY-02` 검증 시점에 제품 연결이 없었다는 snapshot으로 유효하다. 이후 제품
+소유자가 SonarQube를 유지하고 권위 GitHub `ktcloud4-bean/hr-system`에 실제 테스트와 80%
+coverage gate를 도입하기로 결정했다. 이에 따라 폐기 범위였던 `QUALITY-03`은
+[ADR-0029](../../adr/0029-hr-system-testing-and-sonarqube-release-gate.md)의 채택 설계 작업으로
+대체했고, 구현을 `QUALITY-04`~`06`으로 분리했다. 이 후속 결정으로 SonarQube·DB·PVC·credential
+삭제 조건은 활성 작업이 아니며 기존 자원을 그대로 보존한다. 당시 read-only 판정 증거와
+라이브 수치는 소급 변경하지 않는다.

@@ -114,6 +114,23 @@ Git에는 PVC 선언만 저장하고 PVC 데이터나 노드 디렉터리명을 
 
 NetBox는 채택하지 않았다. 물리 장비 증가, 포트·케이블 관리, API IP 할당 또는 공통 인벤토리 수요가 생길 때만 조건부 PoC를 한다. 채택 전까지 `ip-plan.md`가 주소의 단일 원본이다.
 
+## HR System 소스·테스트·품질 경계
+
+HR System source의 단일 원본은 private GitHub `ktcloud4-bean/hr-system`이며 Gitea 동명
+저장소는 내부 Jenkins가 읽는 pull-mirror다. Jenkins는 GitHub와 mirror의 `main` SHA가 같은
+source만 실행하고, 테스트·coverage·Sonar gate를 통과하기 전에는 image를 build·승격하지 않는다.
+
+FastAPI 두 service는 pytest 단위·API test와 임시 실제 PostgreSQL integration test를, React
+frontend는 Vitest·React Testing Library component test를 모든 제품 main build에서 실행한다.
+80% coverage floor는 세 컴포넌트 각각에 적용하며 배포 E2E 결과를 합산하지 않는다. Community
+Build인 SonarQube는 PR 분석이 아니라 main release gate로 사용하고 Python Cobertura XML과
+frontend LCOV를 한 제품 project에 모은다.
+
+Jenkins JUnit은 test 성공·실패·시간·추세를, SonarQube는 coverage·issue·hotspot·duplication을
+각각 소유한다. 배포 E2E는 전용 합성 identity와 데이터의 read-only 핵심 흐름만 별도 실행한다.
+세부 도구·순서·재검토 조건은
+[ADR-0029](adr/0029-hr-system-testing-and-sonarqube-release-gate.md)을 따른다.
+
 ## 컨테이너 공급망
 
 Jenkins가 build 또는 upstream artifact의 exact digest를 대상으로 Trivy gate, Cosign image
