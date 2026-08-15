@@ -2773,3 +2773,48 @@ Warpgate는 실행 가능한 후속이 없어 새 ID를 만들지 않았다. 상
    - 상세 증거: [`docs/evidence/supply-06/README.md`](evidence/supply-06/README.md).
 
 `SUPPLY-06`을 `DONE`으로 닫고, 모든 선행(`SUPPLY-06`)이 충족된 직접 후속 `SUPPLY-07`을 `READY`로 연다.
+
+## 12. 보안·운영 정합성 보완
+
+| ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
+|---|---|---|---|---|---|
+| `SECOPS-AUDIT-01 DONE` | 최신 Git 선언과 k3s·Argo 라이브를 대조해 보안·운영 정합성, 설치 후 제한적으로만 쓰는 기능, 누락된 탐지 경계를 보수적으로 분류하고 후속 작업·병렬 순서를 확정 (`docs/backlog.md`) | `SUPPLY-08`, `AWX-07`, `OBS-18` | 없음 | 이 절의 모든 후속 | `origin/main` `a3bf9b2d9d2f19eeb33bdf2bef9f6b83b0ee2bb9` 기준으로 `awx`·`hr-system`·`jenkins`·`policy-baseline`·`velero`의 비정상 상태를 재확인하고, AWX·Velero Pod 생성이 `k3s-image-supply-chain-rules`의 upstream registry 거부에서 실패함을 이벤트로 특정했다. `SUPPLY-05` 완료 선언과 실제 registry·digest 전용 정책의 차이, Job·CronJob·CR이 빠진 inventory 경계, Velero controller 부재와 backup freshness·Argo child 경보 누락, 2026-09-02 만료 예외, service IAM key의 CIEM 제외, Renovate smoke-only 사용, SonarQube 실제 애플리케이션 사용 증거 부재, 백로그 중복 ID·누락 선행을 각각 선언에서 확인했다. 라이브 변경·Secret 출력·신규 설치 0건이며 후속 ID 10개의 상태·선행·잠금이 계산됐다. |
+| `SUPPLY-05-FIX-01 READY` | k3s 공급망 Enforce 뒤 재생성이 막힌 AWX operator·AWX CR, CrowdSec, Velero controller/node-agent, Renovate CronJob을 Harbor curated digest 선언으로 수렴하고 inventory·검증 범위를 Deployment·StatefulSet·DaemonSet뿐 아니라 Job·CronJob·지원 CR의 Pod template까지 확대 (`gitops/apps/`, `gitops/tools/supply-02/`, `gitops/tools/supply-04/`, `gitops/tools/supply-05/`) | `SECOPS-AUDIT-01`, `SUPPLY-08` | `ARGO-ROOT` | `SUPPLY-05-FIX-02`, `OBS-20`, `UPDATE-02` | 정책을 Audit/Ignore로 완화하거나 namespace 예외를 늘리지 않고 비시스템 선언·render·live controller의 upstream 직접 참조 0건, tag-only 0건. immutable root/child SHA에서 Velero controller·node-agent 재생성 및 즉시 backup `Completed`, AWX operator·web·task 순차 재생성, CrowdSec 세 Deployment 순차 재생성, Renovate CronJob의 server-side Job 생성 허용과 1회 성공, 관련 child 모두 `Synced/Healthy`. rollback은 각 앱의 직전 curated digest와 main SHA이며 기존 백업·AWX DB·CrowdSec 상태를 삭제하지 않는다. |
+| `CI-01-FIX-01 READY` | Jenkins의 immutable `trivy-db-bootstrap` Job 교체 실패를 versioned 또는 상시 Application 밖 수동 bootstrap 경계로 보정하고 stale JCasC 리소스를 최신 선언으로 수렴 (`gitops/apps/jenkins/`) | `SECOPS-AUDIT-01`, `CI-01`, `SUPPLY-08` | `ARGO-ROOT` | `OBS-20`, `OPS-DRIFT-01` | 기존 완료 Job 강제 재실행·PVC 변경 0건, 새 경계의 check-first/no-op 확인, `trivy-db-update` 1회 성공과 Jenkins 기존 pipeline 1회 성공, immutable root/child SHA 및 복원한 최신 main에서 `jenkins` `Synced/Healthy`. |
+| `SUPPLY-05-FIX-02 BLOCKED` | ADR-0028 계약대로 k3s 일반 workload에 Harbor registry·digest와 별도로 플랫폼 Cosign image signature 및 signed CycloneDX attestation을 검증하는 Kyverno 1.18 stable `ImageValidatingPolicy`를 적용하고 namespace 전체 제외를 exact controller·ServiceAccount·repository 예외로 축소 (`policies/`, `gitops/apps/kyverno/`) | `SUPPLY-05-FIX-01` | `ARGO-ROOT`, `VAULT-CONFIG` | 공급망 admission 신뢰 경계 | current·previous 공개키만 읽는 최소권한, curated 정상 artifact 허용, 미서명 image·signature 불일치·attestation 누락·`bomFormat` 불일치를 각각 admission에서 거부, `kube-system`·`kyverno`를 포함한 namespace 전체 제외 0건, registry 오류 시 Enforce/Fail 동작과 Audit/Ignore rollback, 기존 workload 순차 재생성 및 `Synced/Healthy`. |
+| `OBS-20 BLOCKED` | 기존 Prometheus·Alertmanager·`#platform-alerts` 경로에 Argo child 비정상, Velero controller target 부재, 마지막 성공 정기 backup freshness 경보만 추가 (`gitops/apps/obs/`) | `SECOPS-AUDIT-01`, `SUPPLY-05-FIX-01`, `CI-01-FIX-01`, `OBS-18` | `ARGO-ROOT` | GitOps·백업 장애의 외부 인지 | 정상 baseline firing 0건, `argocd_app_info`의 non-`Synced` 또는 non-`Healthy` 지속 상태, Velero target `up=0`, 마지막 성공 backup 36시간 초과를 각각 한 규칙으로 판정. 승인된 test label 경보만 firing·Slack 수신·resolved 각 1회 확인하고 서비스 중단·실패 backup 생성·신규 exporter 0건, 기존 receiver payload allowlist 유지. |
+| `POL-03 READY` | 2026-09-02 만료 예정 Argo CD·CrowdSec·Velero `runAsNonRoot` 예외를 제거하거나 최소화하고 Velero namespace의 `Pod/*` wildcard를 node-agent·PodVolumeBackup hosting Pod의 증명 가능한 exact 경계로 교체 (`policies/`, 관련 `gitops/apps/`) | `SECOPS-AUDIT-01`, `POL-02` | `ARGO-ROOT` | 2026-09-02 이후 배포·백업 지속성 | Argo CD·CrowdSec는 가능한 Pod-level `runAsNonRoot` 보정 뒤 예외 제거, root가 구조적으로 필요한 Velero 항목은 exact kind/name/label·image·capability·ServiceAccount 보상 정책으로 제한. 만료 조건 제거 후 각 대상 순차 재생성, 정상 admission과 대표 범위 밖 root Pod 거부, Velero backup `Completed`, 관련 child `Synced/Healthy`. |
+| `AWS-SEC-07 READY` | 자동 삭제 대상에서 제외된 `/service/` IAM access key 네 건의 owner·생성일·마지막 사용·회전 기한을 read-only로 가시화하고 서비스별 dual-key 순차 회전 runbook을 확정 (`infra/aws/tofu-app-security/`, `docs/runbook/`) | `SECOPS-AUDIT-01`, `AWS-SEC-03`, `SUPPLY-08` | `TOFU-STATE` | standing AWS credential 수명 관리 | `backup`·`vault_auto_unseal`·`argocd_credential_issuer`·`harbor_ecr_replicator` 네 identity/key를 모두 계수하되 key ID·secret 원문은 출력·상태·알림에 남기지 않는다. age·last-used·owner 누락을 경보하고 자동 disable/delete 0건, 두 번째 key→consumer canary→이전 key 폐기 순서와 서비스별 rollback을 문서화하며 최종 plan 무변경. |
+| `UPDATE-02 BLOCKED` | smoke repository 한 곳만 보는 Renovate를 실제 권위 저장소에 최소 manager·PR-only로 채택할지 폐기할지 결정하고 선택한 한 경로만 실행 (`gitops/apps/renovate/`, credential 원본) | `SECOPS-AUDIT-01`, `UPDATE-01`, `SUPPLY-05-FIX-01` | `ARGO-ROOT`, `VAULT-CONFIG` | 실제 의존성 업데이트 또는 불필요 자동화 제거 | 채택 시 exact repository·manager allowlist, onboarding·autodiscover·script·automerge 비활성, 동시 PR 1개와 실제 dependency PR canary 1회. 폐기 시 CronJob·SA·Vault role/policy·runtime credential 파생·NetworkPolicy 잔여 0건을 확인하되 다른 SCM 계정은 변경하지 않는다. 두 경로 모두 `platform-smoke`만 성공한 사실을 운영 사용 증거로 재사용하지 않는다. |
+| `QUALITY-02 READY` | SonarQube가 실제 애플리케이션 source와 release gate에 쓰이는지 저장소·CI 양쪽에서 판정하고, 실사용이면 최소 한 제품 pipeline을 연결하며 아니면 별도 폐기 작업의 데이터 보존·승인 조건을 확정 (`gitops/apps/sonarqube/`, 실제 source CI) | `SECOPS-AUDIT-01`, `QUALITY-01` | 없음 | 품질 gate 실사용 또는 30 GiB PVC 회수 결정 | 합성 `quality01-pass`와 실제 제품 project를 구분해 최근 분석·pipeline gate·owner를 확인. 실사용이면 실제 source 1개가 pass/fail gate를 재현하고, 미사용이면 즉시 PVC를 삭제하지 않고 backup 보존·DB/PVC 삭제 승인·credential 회수·후속 ID를 문서화한다. |
+| `OPS-DRIFT-01 BLOCKED` | 기존 도구를 재사용해 Argo Application, OPNsense 마스킹 snapshot, AWS·Proxmox OpenTofu의 read-only 정기 drift 판정과 통지를 구성하되 자동 apply·snapshot update를 금지 (`gitops/apps/jenkins/`, 기존 drift·plan 도구) | `SECOPS-AUDIT-01`, `CI-01-FIX-01`, `OPN-DRIFT-01`, `AWS-CI-FIX-02`, `IAC-01` | `ARGO-ROOT`, `OPNSENSE-LIVE`, `PVE-LIVE`, `TOFU-STATE` | 선언과 라이브 불일치의 조기 발견 | 유지보수·공유 잠금 중에는 skip하고 normal state에서 drift 0건. 비밀 없는 fixture로 Argo·OPNsense·OpenTofu drift를 각각 1회 검출·통지하며 실제 live 변경, `--update`, `apply`, 민감 plan 출력 0건. 같은 drift를 두 수집기로 중복 통지하지 않는다. |
+| `BACKLOG-FIX-01 READY` | 백로그 표의 ID 유일성, 선행 ID 존재, 허용 상태, DONE이 아닌 선행을 가진 READY 금지를 검사하는 정적 linter를 추가하고 기존 `SUPPLY-01`·`SUPPLY-02` 중복 및 `AWS-APP-01` 누락 선행을 단일 원본으로 정리 (`docs/backlog.md`, 정적 검사) | `SECOPS-AUDIT-01` | 없음 | 백로그 작업 배정 정확성 | 현재 중복 두 ID와 존재하지 않는 선행을 보정한 뒤 전체 문서 PASS, duplicate ID·missing predecessor·invalid status·premature READY fixture가 각각 명시적으로 실패, 실제 shell array와 `set -euo pipefail` 사용, 저장소 문서 외 라이브 변경 0건. |
+
+### 병렬 실행 lane과 통합 순서
+
+병렬화는 **브랜치 개발·정적 검증**과 **서로 다른 공유 잠금의 라이브 검증**까지만 허용한다.
+`main` squash merge와 같은 `ARGO-ROOT` 작업의 immutable SHA 검증은 항상 한 번에 하나다. 우선순위가
+낮은 브랜치가 먼저 끝나도 아래 P0 통합을 앞질러 main을 바꾸지 않으며, 대기한 브랜치는 자기
+통합 직전에 최신 `origin/main`으로 rebase하고 완료 증거를 다시 확인한다.
+
+| lane | 지금 병렬 착수 가능한 작업 | lane 내부 순서 | 다른 lane과 병렬 가능한 경계 |
+|---|---|---|---|
+| A — k3s/Argo 복구 | `SUPPLY-05-FIX-01`, `CI-01-FIX-01`, `POL-03` | `SUPPLY-05-FIX-01` → `CI-01-FIX-01` → `OBS-20` → `POL-03` → `SUPPLY-05-FIX-02` → `UPDATE-02` → `OPS-DRIFT-01` | 개발은 병렬 가능하지만 `ARGO-ROOT` 획득·라이브 검증·merge는 이 순서로 직렬화 |
+| B — AWS credential | `AWS-SEC-07` | 단독 | lane A가 `TOFU-STATE`를 쓰지 않는 동안 plan·검증 병렬 가능; main merge만 직렬화 |
+| C — 사용성 판정 | `QUALITY-02` | 단독 | 문서·read-only 조사는 lane A/B와 병렬 가능; PVC·DB 삭제는 이 작업 범위가 아니며 후속 승인 필요 |
+| D — 백로그 무결성 | `BACKLOG-FIX-01` | 단독 | live 잠금 없이 lane A/B/C와 병렬 가능; urgent P0 뒤 통합 |
+
+권장 main 통합 우선순위는 `SUPPLY-05-FIX-01` → `CI-01-FIX-01` → `OBS-20` → `POL-03` →
+`SUPPLY-05-FIX-02`다. 이 다섯 작업으로 현재 backup·AWX·Jenkins 수렴을 먼저 복구하고 같은 유형의
+무인지 장애를 알린 뒤, 2026-09-02 예외 만료와 실제 signature/attestation 경계를 닫는다. lane B~D는
+동시에 준비하되 P0 rebase를 유발하지 않도록 첫 두 작업의 main 통합 뒤 완료 순서대로 한 작업씩
+squash merge한다. `UPDATE-02`는 공급망 보정 뒤, `OPS-DRIFT-01`은 Jenkins 수렴과 `OBS-20` 뒤에만
+착수한다.
+
+2026-08-15 감사 시점의 라이브 차이는 백로그 등록 자체로 정상화된 것으로 보지 않는다.
+`platform-root`가 `main` `Synced/Healthy`여도 child 상태는 `awx OutOfSync/Progressing`,
+`jenkins OutOfSync/Healthy`, `policy-baseline OutOfSync/Healthy`, `velero Synced/Degraded`,
+`hr-system OutOfSync/Healthy`였다. 앞 네 항목은 위 보정 범위에서 다루며, `hr-system`은
+`hr-db-migrate` PreSync가 기다리는 원인을 로그에서 특정하기 전 FIX ID를 추측해 만들지 않는다.
+기존 `REC-02`·`NIPS-01`·`NETBOX-*`·`OBS-19`·`SOAR-02`의 재검토 조건은 충족되지 않았고,
+AWX fleet·schedule 확대도 반복 운영 수요가 없으므로 새 작업으로 열지 않는다.
