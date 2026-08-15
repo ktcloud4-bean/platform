@@ -1,0 +1,89 @@
+---
+- name: SUPPLY-01-FIX-01 TUF egress 주소 계약 확인
+  ansible.builtin.assert:
+    that:
+      - supply_01_tuf_egress_interface == 'eth0'
+      - supply_01_tuf_egress_primary_address == '10.10.20.10/24'
+      - supply_01_tuf_egress_address == '10.10.20.12/24'
+    fail_msg: SUPPLY-01-FIX-01 TUF egress IP 또는 interface가 승인된 k3s-01 계약과 다르다.
+
+- name: 활성 NetworkManager connection 조회
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - GENERAL.CONNECTION
+      - device
+      - show
+      - "{{ supply_01_tuf_egress_interface }}"
+  register: supply_01_tuf_egress_connection
+  changed_when: false
+  check_mode: false
+
+- name: NetworkManager connection이 유효한지 확인
+  ansible.builtin.assert:
+    that:
+      - supply_01_tuf_egress_connection.stdout | length > 0
+      - supply_01_tuf_egress_connection.stdout != '--'
+    fail_msg: SUPPLY-01-FIX-01 TUF egress IP를 붙일 활성 NetworkManager connection이 없다.
+
+- name: 현재 IPv4 주소 조회
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - ipv4.addresses
+      - connection
+      - show
+      - "{{ supply_01_tuf_egress_connection.stdout }}"
+  register: supply_01_tuf_egress_current_addresses
+  changed_when: false
+  check_mode: false
+
+- name: k3s-01 primary address 보존 확인
+  ansible.builtin.assert:
+    that:
+      - supply_01_tuf_egress_primary_address in supply_01_tuf_egress_current_addresses.stdout
+    fail_msg: k3s-01 primary address가 예상과 달라 SUPPLY-01-FIX-01 변경을 중단한다.
+
+- name: SUPPLY-01-FIX-01 TUF egress address 영속 추가
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - modify
+      - "{{ supply_01_tuf_egress_connection.stdout }}"
+      - +ipv4.addresses
+      - "{{ supply_01_tuf_egress_address }}"
+  when: supply_01_tuf_egress_address not in supply_01_tuf_egress_current_addresses.stdout
+  register: supply_01_tuf_egress_add
+
+- name: 새 address를 link 재연결 없이 적용
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - device
+      - reapply
+      - "{{ supply_01_tuf_egress_interface }}"
+  when: supply_01_tuf_egress_add.changed | default(false)
+
+- name: 적용된 IPv4 주소 조회
+  ansible.builtin.command:
+    argv:
+      - ip
+      - -4
+      - -o
+      - address
+      - show
+      - dev
+      - "{{ supply_01_tuf_egress_interface }}"
+  register: supply_01_tuf_egress_live_addresses
+  changed_when: false
+  check_mode: false
+
+- name: SUPPLY-01-FIX-01 TUF egress address 적용 확인
+  ansible.builtin.assert:
+    that:
+      - supply_01_tuf_egress_primary_address in supply_01_tuf_egress_live_addresses.stdout
+      - supply_01_tuf_egress_address in supply_01_tuf_egress_live_addresses.stdout
+    fail_msg: SUPPLY-01-FIX-01 TUF egress address가 primary address를 보존한 채 적용되지 않았다.

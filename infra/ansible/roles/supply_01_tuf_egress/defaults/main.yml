@@ -1,0 +1,5 @@
+---
+# SUPPLY-01-FIX-01: EKS Kyverno TUF proxy 전용 source identity.
+supply_01_tuf_egress_interface: eth0
+supply_01_tuf_egress_primary_address: 10.10.20.10/24
+supply_01_tuf_egress_address: 10.10.20.12/24

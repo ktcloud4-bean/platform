@@ -1,0 +1,7 @@
+---
+- name: SUPPLY-01-FIX-01 Kyverno TUF egress source address
+  hosts: k3s_servers
+  become: true
+  gather_facts: false
+  roles:
+    - role: supply_01_tuf_egress

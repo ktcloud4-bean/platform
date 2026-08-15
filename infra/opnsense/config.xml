@@ -462,7 +462,7 @@
   </ntpd>
   <OPNsense>
     <Firewall>
-      <Filter version="1.0.5" persisted_at="1786756220.36" description="Firewall rules (new)">
+      <Filter version="1.0.5" persisted_at="1786801214.67" description="Firewall rules (new)">
         <general />
         <rules>
           <rule uuid="19f78d71-f4e5-4192-aee3-35212344d2da">
@@ -3657,6 +3657,174 @@
             <shaper2 />
             <description>AWS-SEC-03: AWS CIEM Keycloak Admin HTTPS 10.20.20.0/24 to k3s-01 TCP 443 only</description>
           </rule>
+          <rule uuid="5fadf702-6f3a-47be-8545-c6845dc27f4d">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>1181</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>opt2</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.10.20.12</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>SUPPLY01_TUF_CDN_HOST</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>443</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>SUPPLY-01-FIX-01: TUF proxy source에서 sigstore TUF CDN TCP 443만 허용</description>
+          </rule>
+          <rule uuid="196187d7-a2cf-4dea-a761-3b0607779db5">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>2581</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>enc0</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.20.10.0/24</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.20.12</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>8445</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>SUPPLY-01-FIX-01: EKS app subnet 10.20.10.0/24에서 TUF proxy TCP 8445만 허용</description>
+          </rule>
+          <rule uuid="776dd0dd-857d-4aa6-b17c-8bdd5316b08c">
+            <enabled>1</enabled>
+            <statetype>keep</statetype>
+            <state-policy />
+            <sequence>2681</sequence>
+            <action>pass</action>
+            <quick>1</quick>
+            <interfacenot>0</interfacenot>
+            <interface>enc0</interface>
+            <direction>in</direction>
+            <ipprotocol>inet</ipprotocol>
+            <protocol>TCP</protocol>
+            <icmptype />
+            <icmp6type />
+            <source_net>10.20.20.0/24</source_net>
+            <source_not>0</source_not>
+            <source_port />
+            <destination_net>10.10.20.12</destination_net>
+            <destination_not>0</destination_not>
+            <destination_port>8445</destination_port>
+            <divert-to />
+            <gateway />
+            <replyto />
+            <disablereplyto>0</disablereplyto>
+            <log>1</log>
+            <allowopts>0</allowopts>
+            <nosync>0</nosync>
+            <nopfsync>0</nopfsync>
+            <statetimeout />
+            <udp-first />
+            <udp-multiple />
+            <udp-single />
+            <max-src-nodes />
+            <max-src-states />
+            <max-src-conn />
+            <max />
+            <max-src-conn-rate />
+            <max-src-conn-rates />
+            <overload />
+            <adaptivestart />
+            <adaptiveend />
+            <prio />
+            <set-prio />
+            <set-prio-low />
+            <tag />
+            <tagged />
+            <tcpflags1 />
+            <tcpflags2 />
+            <tcpflags_any>0</tcpflags_any>
+            <categories />
+            <sched />
+            <tos />
+            <shaper1 />
+            <shaper2 />
+            <description>SUPPLY-01-FIX-01: EKS app subnet 10.20.20.0/24에서 TUF proxy TCP 8445만 허용</description>
+          </rule>
         </rules>
         <snatrules />
         <npt />
@@ -3665,7 +3833,7 @@
       <Lvtemplate version="0.0.1" persisted_at="1785198671.19" description="Firewall Live View filter templates">
         <templates />
       </Lvtemplate>
-      <Alias version="1.0.1" persisted_at="1786619027.45" description="Firewall aliases">
+      <Alias version="1.0.1" persisted_at="1786801211.12" description="Firewall aliases">
         <geoip>
           <url />
         </geoip>
@@ -3863,6 +4031,23 @@ EDGE02_CF_IPV6</content>
             <expire />
             <categories />
             <description>OBS-18: Alertmanager Slack Incoming Webhook FQDN</description>
+          </alias>
+          <alias uuid="d834afd1-e065-44c2-97c6-3e47a89e1464">
+            <enabled>1</enabled>
+            <name>SUPPLY01_TUF_CDN_HOST</name>
+            <type>host</type>
+            <path_expression />
+            <proto />
+            <interface />
+            <counters>0</counters>
+            <updatefreq />
+            <content>tuf-repo-cdn.sigstore.dev</content>
+            <password />
+            <username />
+            <authtype />
+            <expire />
+            <categories />
+            <description>SUPPLY-01-FIX-01: Kyverno TUF CDN FQDN</description>
           </alias>
         </aliases>
       </Alias>

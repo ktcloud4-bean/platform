@@ -9,7 +9,10 @@ IGW, NAT Gateway, public subnet, `0.0.0.0/0` route와 internet-facing ELB는 선
 Node/Pod egress는 CoreDNS가 있는 private application subnet의 DNS TCP/UDP 53, ECR API/DKR,
 S3, STS, RDS, EC2, Elastic Load Balancing, Secrets Manager의 VPC endpoint와 Aurora PostgreSQL로
 한정한다. migration Job의 Aurora managed master secret discovery는 RDS API endpoint를 쓴다.
-새로운 AWS API가 필요하면 public egress가 아니라 정확한 endpoint·SG rule을 별도 검토한다.
+공급망 admission의 TUF metadata는 EKS root가 선언한 node SG exact rule을 통해 기존 S2S VPN과
+`10.10.20.12:8445` 전용 CONNECT proxy로 전달한다. proxy는 `tuf-repo-cdn.sigstore.dev:443`만
+허용하며 다른 public egress나 default route는 만들지 않는다. 새로운 AWS API가 필요하면
+public egress가 아니라 정확한 endpoint·SG rule을 별도 검토한다.
 
 Route 53 Resolver inbound endpoint 두 개는 OPNsense Unbound가 EKS private API의 AWS DNS zone만
 조건부 전달하는 용도다. endpoint IP는 OpenTofu output으로만 소비하며, EKS endpoint IP를

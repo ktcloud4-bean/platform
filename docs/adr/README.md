@@ -43,6 +43,7 @@ ADR(Architecture Decision Record)은 목표 구조를 선택한 이유, 검토�
 | [ADR-0027](0027-container-registry-hub-and-replica.md) | Harbor를 단일 허브로, ECR을 EKS 전용 복제본으로 분리 | `Superseded` | ADR-0028에서 승격·소비 gate를 재설계 |
 | [ADR-0028](0028-container-supply-chain-promotion.md) | Harbor 승격 원본과 ECR 소비 복제본의 검증 gate | `Accepted` | OCI referrer 복제·AWS credential·registry lifecycle 변화 |
 | [ADR-0029](0029-hr-system-testing-and-sonarqube-release-gate.md) | HR System 테스트 계층과 SonarQube main release gate | `Accepted` | PR 분석 의무·독립 release·폐기 가능한 E2E 환경 확보 |
+| [ADR-0030](0030-eks-kyverno-tuf-egress-proxy.md) | EKS Kyverno TUF metadata의 사설 CONNECT 경로 | `Accepted` | TUF CDN 변경·VPN 장애 도메인·EKS 다중 AZ·private mirror 준비 |
 
 ## 형식
 

@@ -66,6 +66,7 @@ VLAN 번호는 보안 등급 순서가 아니라 역할 식별자다. 실제 신
 | `10.10.20.1` | OPNsense `PLATFORM` gateway | `LIVE` |
 | `10.10.20.10` | `k3s-01` | `LIVE`; VMID 120 |
 | `10.10.20.11` | `k3s-01` OBS-18 Slack egress source | `LIVE`; node의 전용 outbound source identity |
+| `10.10.20.12` | `k3s-01` SUPPLY-01 Kyverno TUF egress source | `LIVE`; node의 TUF 전용 outbound source identity |
 | `10.10.30.1` | OPNsense `ACCESS` gateway | `LIVE` |
 | `10.10.30.10` | `warpgate-01` | `LIVE`; VMID 130 |
 | `10.10.40.1` | OPNsense `DMZ` gateway | `LIVE` |

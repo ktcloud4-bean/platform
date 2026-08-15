@@ -63,3 +63,25 @@ variable "admin_principal_arns" {
   type        = set(string)
   default     = []
 }
+
+variable "tuf_egress_proxy_ip" {
+  description = "Kyverno TUF proxy의 docs/ip-plan.md 고정 주소"
+  type        = string
+  default     = "10.10.20.12"
+
+  validation {
+    condition     = can(cidrhost("${var.tuf_egress_proxy_ip}/32", 0))
+    error_message = "tuf_egress_proxy_ip는 올바른 IPv4 주소여야 한다."
+  }
+}
+
+variable "tuf_egress_proxy_port" {
+  description = "Kyverno TUF proxy TCP port"
+  type        = number
+  default     = 8445
+
+  validation {
+    condition     = var.tuf_egress_proxy_port >= 1024 && var.tuf_egress_proxy_port <= 65535
+    error_message = "tuf_egress_proxy_port는 비특권 TCP port여야 한다."
+  }
+}

@@ -254,3 +254,13 @@ resource "aws_security_group_rule" "nodes_to_cluster" {
   security_group_id        = data.terraform_remote_state.app_network.outputs.eks_nodes_security_group_id
   source_security_group_id = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
 }
+
+resource "aws_security_group_rule" "nodes_to_tuf_proxy" {
+  type              = "egress"
+  description       = "Allow EKS nodes to reach the dedicated on-premises Kyverno TUF CONNECT proxy"
+  from_port         = var.tuf_egress_proxy_port
+  to_port           = var.tuf_egress_proxy_port
+  protocol          = "tcp"
+  security_group_id = data.terraform_remote_state.app_network.outputs.eks_nodes_security_group_id
+  cidr_blocks       = ["${var.tuf_egress_proxy_ip}/32"]
+}

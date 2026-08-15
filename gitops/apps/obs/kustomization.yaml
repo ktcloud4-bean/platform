@@ -7,6 +7,7 @@ resources:
   - alerting-rules.yaml
   - alerting-receiver.yaml
   - slack-egress-proxy.yaml
+  - supply-01-tuf-egress-proxy.yaml
   - network-policies.yaml
   - loki-host-gateway.yaml
   - dashboard.yaml
@@ -32,5 +33,9 @@ configMapGenerator:
     namespace: obs
     files:
       - obs-18-slack-egress-proxy.py=files/obs-18-slack-egress-proxy.py
+  - name: supply-01-tuf-egress-proxy
+    namespace: obs
+    files:
+      - supply-01-tuf-egress-proxy.py=files/supply-01-tuf-egress-proxy.py
 generatorOptions:
   disableNameSuffixHash: true

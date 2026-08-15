@@ -1,0 +1,68 @@
+---
+- name: SUPPLY-01-FIX-01 TUF egress rollback 전 활성 connection 조회
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - GENERAL.CONNECTION
+      - device
+      - show
+      - "{{ supply_01_tuf_egress_interface }}"
+  register: supply_01_tuf_egress_connection
+  changed_when: false
+  check_mode: false
+
+- name: SUPPLY-01-FIX-01 TUF egress rollback 전 IPv4 주소 조회
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - ipv4.addresses
+      - connection
+      - show
+      - "{{ supply_01_tuf_egress_connection.stdout }}"
+  register: supply_01_tuf_egress_current_addresses
+  changed_when: false
+  check_mode: false
+
+- name: SUPPLY-01-FIX-01 TUF egress address 영속 제거
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - modify
+      - "{{ supply_01_tuf_egress_connection.stdout }}"
+      - -ipv4.addresses
+      - "{{ supply_01_tuf_egress_address }}"
+  when: supply_01_tuf_egress_address in supply_01_tuf_egress_current_addresses.stdout
+  register: supply_01_tuf_egress_remove
+
+- name: 제거한 address를 link 재연결 없이 적용
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - device
+      - reapply
+      - "{{ supply_01_tuf_egress_interface }}"
+  when: supply_01_tuf_egress_remove.changed | default(false)
+
+- name: rollback 뒤 IPv4 주소 조회
+  ansible.builtin.command:
+    argv:
+      - ip
+      - -4
+      - -o
+      - address
+      - show
+      - dev
+      - "{{ supply_01_tuf_egress_interface }}"
+  register: supply_01_tuf_egress_live_addresses
+  changed_when: false
+  check_mode: false
+
+- name: TUF egress rollback 결과 확인
+  ansible.builtin.assert:
+    that:
+      - supply_01_tuf_egress_primary_address in supply_01_tuf_egress_live_addresses.stdout
+      - supply_01_tuf_egress_address not in supply_01_tuf_egress_live_addresses.stdout
+    fail_msg: SUPPLY-01-FIX-01 TUF egress address rollback 결과가 예상과 다르다.

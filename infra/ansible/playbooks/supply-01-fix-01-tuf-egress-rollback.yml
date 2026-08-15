@@ -1,0 +1,13 @@
+---
+- name: SUPPLY-01-FIX-01 Kyverno TUF egress source address rollback
+  hosts: k3s_servers
+  become: true
+  gather_facts: false
+  tasks:
+    - name: SUPPLY-01-FIX-01 TUF egress role defaults load
+      ansible.builtin.include_vars:
+        file: ../roles/supply_01_tuf_egress/defaults/main.yml
+
+    - name: SUPPLY-01-FIX-01 TUF egress rollback tasks
+      ansible.builtin.include_tasks:
+        file: ../roles/supply_01_tuf_egress/tasks/rollback.yml

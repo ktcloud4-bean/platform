@@ -31,6 +31,7 @@ NetBird client → k3s Traefik → Pomerium
 k3s Argo → EKS private API :443
 ClusterFirst Pod → CoreDNS private-zone forward → k3s-01:1053
 OPNsense Unbound → k3s-01:1053 → Route 53 Resolver endpoint :53
+Kyverno admission → S2S VPN → k3s-01:10.10.20.12:8445 → tuf-repo-cdn.sigstore.dev:443
 ```
 
 단일 VPN selector는 허용 rule이 아니다. OPNsense에서 `k3s-01`만 Resolver DNS TCP/UDP 53,
@@ -38,6 +39,11 @@ EKS API TCP 443, internal ALB TCP 80을 개시할 수 있다. application namesp
 NetworkPolicy default-deny를 쓰고 CoreDNS DNS, AWS HTTPS/DB egress만 별도로 허용한다. EKS
 node security group도 VPC resolver뿐 아니라 CoreDNS Pod가 있는 private application subnet의
 DNS TCP/UDP 53을 허용해야 ClusterFirst Pod DNS가 동작한다.
+
+Kyverno admission의 TUF CDN 경로는 별도 source identity와 exact OPNsense rule을 사용한다.
+EKS node SG는 `10.10.20.12:8445`만 추가로 허용하며, Kyverno의 AWS·cluster private endpoint는
+`NO_PROXY`로 proxy를 타지 않는다. 상세 결정과 rollback은 [ADR-0030](../adr/0030-eks-kyverno-tuf-egress-proxy.md)과
+`SUPPLY-01-FIX-01` 증거가 소유한다.
 
 ## 배포 순서
 

@@ -291,6 +291,11 @@ process는 client source, CONNECT method, `hooks.slack.com:443`을 다시 고정
 공용 HTTPS egress는 바꾸지 않는다. Alertmanager NetworkPolicy는 Vault TCP 8200과
 node-local proxy TCP 8444만 추가한다. 선택 이유와 대안은 ADR-0025가 소유한다.
 
+`SUPPLY-01-FIX-01`의 TUF proxy는 Slack proxy와 process·source identity를 공유하지 않는다.
+`10.10.20.12:8445`에서 EKS app subnet 두 개만 받고, CONNECT authority를
+`tuf-repo-cdn.sigstore.dev:443`으로 고정한다. OPNsense의 VPN inbound와 public CDN egress도
+각각 exact rule로 분리한다.
+
 `infra/ansible/playbooks/obs-18-slack-egress.yml`은 node의 전용 source identity만
 추가하고, rollback playbook은 그 identity만 제거한다. `gitops/tools/obs-18/provision.sh`은
 저장소 밖 mode `0600` webhook 입력을 전용 Vault policy·role·KV field로 반영하며, rollback은
@@ -546,5 +551,4 @@ alert가 필요 없다.
 `BKP-12`에서 `k3s_datastore_backup.py`가 성공 시 `last-success.epoch`를 원자적으로 기록하도록 보정하고, 36시간 freshness를 검증하는 `k3s-datastore-backup-health.service` 및 매일 04:30 KST 정기 검사 timer(`k3s-datastore-backup-health.timer`)를 신설했다.
 
 Prometheus alert `K3sDatastoreBackupHealthStale`(`10.10.20.10:9101`, `state="failed"==1`)을 추가하고 `obs-13-receiver` 및 `obs-18-platform-slack` matcher에 등록하여 k3s datastore 백업 지연 시 즉시 경보가 전달되도록 연동했다.
-
 

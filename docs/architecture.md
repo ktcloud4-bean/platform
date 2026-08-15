@@ -152,6 +152,12 @@ kube-proxy만 workload identity와 AWS가 게시한 리전별 공식 ECR을 함�
 통과한다. 세부 승격 상태, credential과 rollback 경계는
 [ADR-0028](adr/0028-container-supply-chain-promotion.md)을 따른다.
 
+EKS private subnet의 Kyverno admission만 Sigstore TUF metadata를 위해 기존 S2S VPN을 통해
+k3s-01의 `10.10.20.12:8445` 전용 CONNECT proxy를 사용한다. proxy는
+`tuf-repo-cdn.sigstore.dev:443`만 허용하고 AWS·cluster private endpoint는 Kyverno의
+`NO_PROXY`로 직접 접근한다. NAT·Internet Gateway·기본 인터넷 route는 만들지 않으며, 선택
+이유와 재검토 조건은 [ADR-0030](adr/0030-eks-kyverno-tuf-egress-proxy.md)이 소유한다.
+
 ## HTTP 요청 경로
 
 ```text
