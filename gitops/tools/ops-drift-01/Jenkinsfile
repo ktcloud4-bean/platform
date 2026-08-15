@@ -1,0 +1,37 @@
+// OPS-DRIFT-01: Read-only periodic platform drift check pipeline
+def targetLayer = params.TARGET_LAYER ?: 'all'
+def fixtureDrift = params.FIXTURE_DRIFT ?: 'none'
+def skipIfLocked = params.SKIP_IF_LOCKED ? 'true' : 'false'
+def gitRevision = params.GIT_REVISION ?: 'main'
+
+node('ci01-buildah') {
+  try {
+    timeout(time: 15, unit: 'MINUTES') {
+      stage('Checkout revision') {
+        deleteDir()
+        checkout([
+          $class: 'GitSCM',
+          branches: [[name: gitRevision]],
+          doGenerateSubmoduleConfigurations: false,
+          extensions: [],
+          userRemoteConfigs: [[
+            credentialsId: 'github-platform-readonly-aws-ci-fix-01',
+            url: 'ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git'
+          ]]
+        ])
+        sh 'git rev-parse --verify HEAD >/dev/null'
+      }
+
+      stage('Run Platform Drift Check') {
+        sh """
+          bash gitops/tools/ops-drift-01/run-drift-check.sh \
+            --target-layer "${targetLayer}" \
+            --fixture-drift "${fixtureDrift}" \
+            --skip-if-locked "${skipIfLocked}"
+        """
+      }
+    }
+  } finally {
+    deleteDir()
+  }
+}

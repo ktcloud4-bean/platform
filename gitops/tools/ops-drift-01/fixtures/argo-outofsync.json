@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "metadata": {
+        "name": "fixture-app-demo",
+        "namespace": "argocd"
+      },
+      "status": {
+        "sync": {
+          "status": "OutOfSync",
+          "comparedTo": {
+            "source": {
+              "repoURL": "ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git",
+              "targetRevision": "main",
+              "path": "gitops/apps/fixture-demo"
+            },
+            "destination": {
+              "server": "https://kubernetes.default.svc",
+              "namespace": "fixture-demo"
+            }
+          }
+        },
+        "health": {
+          "status": "Healthy"
+        }
+      }
+    }
+  ]
+}

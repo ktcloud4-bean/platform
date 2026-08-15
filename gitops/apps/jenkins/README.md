@@ -498,7 +498,22 @@ gitops/tools/sign-01/verify-live.sh
 - **Argo와 rollback**: 완료 판정 시 root `ac14432edbf21c546351b04e8307cce057475665`와
   Jenkins 설정 `b1c332df4f52e0f18eda2615a80708b3a3f09b85`가 `Synced/Healthy`였다. 시작 main
   `a3870b2858db269ee28ad3e1c5502ae4820a8979`로 rollback한 뒤 root·Jenkins를 mutable `main`의
-  `Synced/Healthy`로 복구했고 최종 child 선언도 `main`이다.
+
+## OPS-DRIFT-01 platform drift check pipeline
+
+`ops-drift-check`는 플랫폼 4대 인프라 계층(Argo CD Application, OPNsense config XML, AWS OpenTofu, Proxmox OpenTofu)에 대한 정기 Read-only drift 판정을 수행한다.
+
+1. **실행 주기와 파라미터**:
+   - `triggers { cron('H 4 * * *') }`: 매일 정기 실행.
+   - `TARGET_LAYER`: `all`, `argo`, `opnsense`, `aws-tofu`, `pve-tofu` (기본값 `all`).
+   - `FIXTURE_DRIFT`: `none`, `argo`, `opnsense`, `aws-tofu`, `pve-tofu` (기본값 `none`).
+   - `SKIP_IF_LOCKED`: 공유 잠금 또는 유지보수 중일 때 실행 skip 여부 (기본값 `false`).
+2. **보안 및 Read-only 보장**:
+   - OPNsense: `--update` 절대 미호출 및 마스킹된 read-only diff 비교만 수행.
+   - OpenTofu: `tofu apply` 절대 미호출 및 `-detailed-exitcode` 기반 plan diff 판정.
+   - Argo CD: Application sync status read-only 조회.
+   - 비밀 출력 0건, 단일 종합 알림 취합을 통한 중복 경보 방지.
+   - 상세 도구 및 검증 스크립트는 [`../../tools/ops-drift-01/README.md`](../../tools/ops-drift-01/README.md)가 소유한다.
 
 ## rollback
 

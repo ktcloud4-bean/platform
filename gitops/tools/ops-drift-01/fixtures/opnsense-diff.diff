@@ -1,0 +1,15 @@
+--- /committed/config.xml
++++ /live/config.xml
+@@ -100,6 +100,12 @@
+     <rule>
+       <type>pass</type>
+       <interface>lan</interface>
++      <descr>FIXTURE TEST DRIFT RULE</descr>
++      <source>
++        <network>lan</network>
++      </source>
++      <destination>
++        <any>1</any>
++      </destination>
+     </rule>
+   </filter>

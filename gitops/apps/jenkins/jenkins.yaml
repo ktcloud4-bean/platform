@@ -866,3 +866,35 @@ jobs:
           }
         }
       }
+      pipelineJob('ops-drift-check') {
+        description('OPS-DRIFT-01: Argo, OPNsense, OpenTofu 정기 read-only drift 감지 및 종합 보고 파이프라인')
+        logRotator {
+          numToKeep(20)
+          artifactNumToKeep(0)
+        }
+        triggers {
+          cron('H 4 * * *')
+        }
+        parameters {
+          choiceParam('TARGET_LAYER', ['all', 'argo', 'opnsense', 'aws-tofu', 'pve-tofu'], '검사할 drift 대상 계층')
+          choiceParam('FIXTURE_DRIFT', ['none', 'argo', 'opnsense', 'aws-tofu', 'pve-tofu'], '의도적 fixture drift 검증 주입 (기본값 none)')
+          booleanParam('SKIP_IF_LOCKED', false, '공유 잠금 또는 유지보수 중일 때 실행 skip 여부')
+          stringParam('GIT_REVISION', 'main', '일반 실행은 main, immutable 검증은 승인된 commit SHA만 사용합니다.')
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git')
+                  credentials('github-platform-readonly-aws-ci-fix-01')
+                }
+                branch('${GIT_REVISION}')
+              }
+            }
+            scriptPath('gitops/tools/ops-drift-01/Jenkinsfile')
+            lightweight(false)
+          }
+        }
+      }
+

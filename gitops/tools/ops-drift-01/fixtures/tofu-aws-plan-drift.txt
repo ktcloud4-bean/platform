@@ -1,0 +1,17 @@
+OpenTofu used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+  ~ update in-place
+
+OpenTofu will perform the following actions:
+
+  # aws_security_group_rule.fixture_drift will be created
+  + resource "aws_security_group_rule" "fixture_drift" {
+      + from_port         = 8443
+      + protocol          = "tcp"
+      + security_group_id = "sg-0123456789abcdef0"
+      + to_port           = 8443
+      + type              = "ingress"
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.
