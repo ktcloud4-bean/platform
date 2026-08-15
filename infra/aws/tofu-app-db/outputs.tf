@@ -32,3 +32,8 @@ output "bootstrap_hr_admin_secret_arn" {
   description = "초기 HR 관리자 이메일 secret ARN. migration Job만 읽는다."
   value       = aws_secretsmanager_secret.bootstrap_hr_admin.arn
 }
+
+output "aurora_cluster_resource_id" {
+  description = "Aurora 클러스터 리소스 ID (IAM rds-db:connect 권한 스코핑용)"
+  value       = aws_rds_cluster.main.cluster_resource_id
+}

@@ -28,14 +28,15 @@ resource "aws_rds_cluster" "main" {
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [data.terraform_remote_state.network.outputs.rds_security_group_id]
 
-  enabled_cloudwatch_logs_exports = ["postgresql"]
-  storage_encrypted               = true
-  backup_retention_period         = var.backup_retention_days
-  copy_tags_to_snapshot           = true
-  deletion_protection             = true
-  skip_final_snapshot             = false
-  final_snapshot_identifier       = var.final_snapshot_identifier
-  apply_immediately               = false
+  enabled_cloudwatch_logs_exports     = ["postgresql"]
+  storage_encrypted                   = true
+  backup_retention_period             = var.backup_retention_days
+  copy_tags_to_snapshot               = true
+  deletion_protection                 = true
+  skip_final_snapshot                 = false
+  final_snapshot_identifier           = var.final_snapshot_identifier
+  apply_immediately                   = true
+  iam_database_authentication_enabled = true
 
   serverlessv2_scaling_configuration {
     min_capacity = var.aurora_min_acu
