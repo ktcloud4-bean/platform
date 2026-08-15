@@ -167,3 +167,30 @@ spec:
             severity: critical
           annotations:
             summary: "k3s-datastore-backup-health.service가 실패해 k3s datastore 백업이 최신 기준(36시간)을 충족하지 못했다."
+    # OBS-20: Argo child 비정상, Velero target 부재, 마지막 성공 정기 backup freshness 경보
+    - name: obs-20-gitops-backup
+      rules:
+        - alert: ArgoCDApplicationDegraded
+          expr: >-
+            (argocd_app_info{sync_status!="Synced"} == 1) or (argocd_app_info{health_status!="Healthy"} == 1)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Argo CD application {{ $labels.name }}가 5분 이상 Synced/Healthy가 아니다."
+        - alert: VeleroTargetDown
+          expr: up{job="velero"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Velero controller metrics target이 5분 이상 응답하지 않는다."
+        - alert: VeleroBackupFreshnessStale
+          expr: >-
+            (time() - velero_backup_last_successful_timestamp{job="velero",schedule=~".+"}) > 36 * 3600
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Velero 정기 백업({{ $labels.schedule }})의 마지막 성공 시각이 36시간을 초과했다."
+
