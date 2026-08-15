@@ -13,7 +13,7 @@ spec:
   project: jenkins
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: "c90b153"
+    targetRevision: "c1d7936"
     path: gitops/apps/jenkins
   destination:
     server: https://kubernetes.default.svc
