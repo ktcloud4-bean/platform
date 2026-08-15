@@ -217,7 +217,7 @@ jenkins:
               - name: "postgres"
                 image: "harbor.imcherry5778.xyz/curated-platform/postgres@sha256:9a70e4d1c03a5066080292db2dd95ee3965d3651316e21989fa0935afb8ce8ca"
                 alwaysPullImage: false
-                workingDir: "/"
+                workingDir: "/home/jenkins/agent"
                 command: "docker-entrypoint.sh"
                 args: "postgres"
                 ttyEnabled: false
