@@ -751,6 +751,9 @@ jobs:
           numToKeep(20)
           artifactNumToKeep(0)
         }
+        parameters {
+          choiceParam('QUALITY05_CASE', ['pass', 'test-fail'], 'QUALITY-05 양성 또는 의도적 fixture 실패 검증')
+        }
         definition {
           cpsScm {
             scm {
