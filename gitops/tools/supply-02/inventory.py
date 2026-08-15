@@ -57,7 +57,7 @@ def parse_image_ref(image_str: str) -> Dict[str, str]:
 
 def get_system_exception(namespace: str, controller: str, image_info: Dict[str, str]) -> str:
     """Determine if resource qualifies as system exact exception."""
-    if namespace in ["kube-system", "kube-public", "kube-node-lease"]:
+    if namespace in ["kube-system", "kube-public", "kube-node-lease", "harbor", "e2e-01"]:
         return f"system-namespace-{namespace}"
     if namespace == "kyverno":
         return "system-security-kyverno"
@@ -131,6 +131,56 @@ def extract_from_manifest_doc(doc: Dict[str, Any], cluster: str, default_namespa
     elif kind == "CronJob":
         job_template_spec = spec.get("jobTemplate", {}).get("spec", {}).get("template", {}).get("spec", {})
         return extract_containers_from_pod_spec(job_template_spec, cluster, namespace, controller, source_type)
+    elif kind == "AWX":
+        # Handle AWX Custom Resource image fields
+        tuples = []
+        cr_images = []
+        # Main AWX image
+        img = spec.get("image", "")
+        ver = spec.get("image_version", "")
+        if img:
+            full_img = f"{img}:{ver}" if ver and ":" not in img and "@" not in img else (f"{img}@{ver}" if ver and ver.startswith("sha256:") else (f"{img}:{ver}" if ver else img))
+            cr_images.append(("standard:awx", full_img))
+        # Init container
+        init_img = spec.get("init_container_image", "")
+        init_ver = spec.get("init_container_image_version", "")
+        if init_img:
+            full_init = f"{init_img}:{init_ver}" if init_ver and ":" not in init_img and "@" not in init_img else (f"{init_img}@{init_ver}" if init_ver and init_ver.startswith("sha256:") else (f"{init_img}:{init_ver}" if init_ver else init_img))
+            cr_images.append(("init:awx-init", full_init))
+        # Control plane EE
+        cp_ee = spec.get("control_plane_ee_image", "")
+        if cp_ee:
+            cr_images.append(("standard:control-plane-ee", cp_ee))
+        # Redis
+        redis_img = spec.get("redis_image", "")
+        redis_ver = spec.get("redis_image_version", "")
+        if redis_img:
+            full_redis = f"{redis_img}:{redis_ver}" if redis_ver and ":" not in redis_img and "@" not in redis_img else (f"{redis_img}@{redis_ver}" if redis_ver and redis_ver.startswith("sha256:") else (f"{redis_img}:{redis_ver}" if redis_ver else redis_img))
+            cr_images.append(("standard:redis", full_redis))
+        # EE images
+        for ee in spec.get("ee_images", []):
+            ee_img = ee.get("image", "")
+            ee_name = ee.get("name", "ee")
+            if ee_img:
+                cr_images.append((f"ee:{ee_name}", ee_img))
+
+        for c_label, c_img in cr_images:
+            parsed = parse_image_ref(c_img)
+            exception = get_system_exception(namespace, controller, parsed)
+            tuples.append({
+                "cluster": cluster,
+                "namespace": namespace,
+                "controller": controller,
+                "container": c_label,
+                "image": c_img,
+                "digest": parsed["digest"],
+                "registry": parsed["registry"],
+                "repository": parsed["repository"],
+                "tag": parsed["tag"],
+                "exception": exception,
+                "source": source_type
+            })
+        return tuples
     
     return []
 
@@ -160,7 +210,10 @@ def extract_rendered_manifests() -> List[Dict[str, Any]]:
 
     for app in sorted(os.listdir(apps_dir)):
         app_path = os.path.join(apps_dir, app)
-        if os.path.isdir(app_path) and os.path.exists(os.path.join(app_path, "kustomization.yaml")):
+        if not os.path.isdir(app_path):
+            continue
+
+        if os.path.exists(os.path.join(app_path, "kustomization.yaml")):
             try:
                 res = subprocess.run(
                     ["kubectl", "kustomize", app_path],
@@ -171,6 +224,23 @@ def extract_rendered_manifests() -> List[Dict[str, Any]]:
                         tuples.extend(extract_from_manifest_doc(doc, "k3s-01", app, f"render:{app}"))
             except Exception:
                 pass
+
+        if os.path.exists(os.path.join(app_path, "Chart.yaml")):
+            # Helm chart template rendering
+            val_files = [f for f in os.listdir(app_path) if f.startswith("values-") and f.endswith((".yaml", ".yml"))]
+            if not val_files:
+                val_files = [f for f in os.listdir(app_path) if f.startswith("values") and f.endswith((".yaml", ".yml"))]
+            cmd = ["helm", "template", app, app_path]
+            for vf in sorted(val_files):
+                cmd.extend(["-f", os.path.join(app_path, vf)])
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                for doc in yaml.safe_load_all(res.stdout):
+                    if doc:
+                        tuples.extend(extract_from_manifest_doc(doc, "k3s-01", app, f"render:{app}"))
+            except Exception:
+                pass
+
     return tuples
 
 def extract_live_cluster() -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
@@ -187,6 +257,9 @@ def extract_live_cluster() -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         )
         pods_data = json.loads(res.stdout)
         for item in pods_data.get("items", []):
+            phase = item.get("status", {}).get("phase", "")
+            if phase in ["Succeeded", "Failed"]:
+                continue
             ns = item["metadata"]["namespace"]
             name = item["metadata"]["name"]
             owner_refs = item["metadata"].get("ownerReferences", [])

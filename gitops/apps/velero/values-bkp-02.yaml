@@ -1,5 +1,5 @@
 image:
-  repository: docker.io/velero/velero
+  repository: harbor.imcherry5778.xyz/curated-platform/velero
   tag: v1.18.2
   digest: sha256:a77d493b80f622e0bed1b9a19fea40a48d427de24e82be3f64824528b1ab7ecb
   pullPolicy: IfNotPresent

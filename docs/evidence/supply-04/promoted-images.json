@@ -635,5 +635,18 @@
     "digest": "sha256:7661da8c99b733d43117e4cba12bd9865d335e5777191d0af3d789807aded9f4",
     "signature_verified": true,
     "attestation_verified": true
+  },
+  "docker.io/renovate/renovate:44.6.0@sha256:82c8dbd86d8c96c44e0064e2dc5966848a4ffb497fce0e96b2a360f507b85778": {
+    "source_image": "docker.io/renovate/renovate:44.6.0@sha256:82c8dbd86d8c96c44e0064e2dc5966848a4ffb497fce0e96b2a360f507b85778",
+    "registry": "docker.io",
+    "repository": "renovate/renovate",
+    "tag": "44.6.0",
+    "curated_repo": "harbor.imcherry5778.xyz/curated-platform/renovate",
+    "curated_tag": "harbor.imcherry5778.xyz/curated-platform/renovate:44.6.0",
+    "curated_image_pinned": "harbor.imcherry5778.xyz/curated-platform/renovate:44.6.0@sha256:6a5cebec637d64eca7e7d4072a311016f8189f1a95cb349cf2c18750ef2fa775",
+    "curated_exact_ref": "harbor.imcherry5778.xyz/curated-platform/renovate@sha256:6a5cebec637d64eca7e7d4072a311016f8189f1a95cb349cf2c18750ef2fa775",
+    "digest": "sha256:6a5cebec637d64eca7e7d4072a311016f8189f1a95cb349cf2c18750ef2fa775",
+    "signature_verified": true,
+    "attestation_verified": true
   }
 }

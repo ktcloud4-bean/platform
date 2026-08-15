@@ -8,31 +8,28 @@
 
 | 지표 항목 | 실측값 | 설명 |
 |---|---|---|
-| **총 Live 컨테이너 튜플 수** | `143` | k3s 클러스터에서 실제 가동 중인 Pod 컨테이너 인스턴스 총합 |
-| **고유 이미지 참조 수 (Unique Images)** | `69` | 레지스트리/저장소/태그/다이제스트 기준 고유 이미지 수 |
-| **sha256 다이제스트 고정 이미지 수** | `130` | `@sha256:` 불변 다이제스트로 고정된 컨테이너 수 |
-| **Tag-only 미고정 이미지 수** | `13` | sha256 고정 없이 mutable tag로 선언된 컨테이너 수 (`SUPPLY-04` 전환 대상) |
-| **Harbor 내부 승격 이미지 수** | `35` | 내부 Harbor(`harbor.imcherry5778.xyz`)에서 소비 중인 이미지 수 |
-| **외부 Upstream 직접 참조 수** | `108` | 외부 public registry를 직접 pull 중인 수 (`SUPPLY-03`~`04` Proxy/Curated 대상) |
-| **시스템 예외 대상 (System Exceptions)** | `35` | `kube-system`, `kyverno`, `falco`, `wazuh` 등 시스템 컴포넌트 |
-| **일반 워크로드 대상 (User Workloads)** | `108` | 플랫폼 사용자 및 애플리케이션 서비스 컴포넌트 |
+| **총 Live 컨테이너 튜플 수** | `125` | k3s 클러스터에서 실제 가동 중인 Pod 컨테이너 인스턴스 총합 |
+| **고유 이미지 참조 수 (Unique Images)** | `65` | 레지스트리/저장소/태그/다이제스트 기준 고유 이미지 수 |
+| **sha256 다이제스트 고정 이미지 수** | `118` | `@sha256:` 불변 다이제스트로 고정된 컨테이너 수 |
+| **Tag-only 미고정 이미지 수** | `7` | sha256 고정 없이 mutable tag로 선언된 컨테이너 수 (`SUPPLY-04` 전환 대상) |
+| **Harbor 내부 승격 이미지 수** | `92` | 내부 Harbor(`harbor.imcherry5778.xyz`)에서 소비 중인 이미지 수 |
+| **외부 Upstream 직접 참조 수** | `33` | 외부 public registry를 직접 pull 중인 수 (`SUPPLY-03`~`04` Proxy/Curated 대상) |
+| **시스템 예외 대상 (System Exceptions)** | `33` | `kube-system`, `kyverno`, `falco`, `wazuh` 등 시스템 컴포넌트 |
+| **일반 워크로드 대상 (User Workloads)** | `92` | 플랫폼 사용자 및 애플리케이션 서비스 컴포넌트 |
 
 ## 2. 레지스트리별 분포 현황 (Registry Distribution)
 
 | 레지스트리 도메인 | 컨테이너 튜플 수 | 비중 (%) | 분류 |
 |---|---|---|---|
-| `docker.io` | 75 | 52.4% | 외부 Upstream (Proxy Cache 대상) |
-| `harbor.imcherry5778.xyz` | 35 | 24.5% | 내부 레지스트리 |
-| `quay.io` | 20 | 14.0% | 외부 Upstream (Proxy Cache 대상) |
-| `ghcr.io` | 7 | 4.9% | 외부 Upstream (Proxy Cache 대상) |
-| `docker.gitea.com` | 3 | 2.1% | 외부 Upstream (Proxy Cache 대상) |
-| `reg.kyverno.io` | 3 | 2.1% | 외부 Upstream (Proxy Cache 대상) |
+| `harbor.imcherry5778.xyz` | 92 | 73.6% | 내부 레지스트리 |
+| `docker.io` | 30 | 24.0% | 외부 Upstream (Proxy Cache 대상) |
+| `reg.kyverno.io` | 3 | 2.4% | 외부 Upstream (Proxy Cache 대상) |
 
 ## 3. 소스별 튜플 비교 및 차이점 분석 (Git vs Render vs Live)
 
-- **Git 선언 튜플 수**: `89`
-- **Render 렌더링 튜플 수**: `82`
-- **Live 실행 튜플 수**: `143`
+- **Git 선언 튜플 수**: `95`
+- **Render 렌더링 튜플 수**: `113`
+- **Live 실행 튜플 수**: `125`
 
 ### 차이점 발생 원인 분석:
 1. **Helm Chart-Generated 컴포넌트**: Vault agent-injector, Cert-Manager webhook, Harbor exporter 등 Helm 릴리스가 런타임에 주입하는 sidecar/initContainer로 인해 Live 튜플 수가 순수 Git 선언 튜플보다 많음.
@@ -46,12 +43,6 @@
 | `kube-system` | `DaemonSet/svclb-obs-loki-host-gateway-8cb5125c` | `standard:lb-tcp-3100` | `rancher/klipper-lb:v0.4.17` | `system-namespace-kube-system` |
 | `kube-system` | `DaemonSet/svclb-traefik-0507a580` | `standard:lb-tcp-80` | `rancher/klipper-lb:v0.4.17` | `system-namespace-kube-system` |
 | `kube-system` | `DaemonSet/svclb-traefik-0507a580` | `standard:lb-tcp-443` | `rancher/klipper-lb:v0.4.17` | `system-namespace-kube-system` |
-| `kube-system` | `Job/helm-install-traefik` | `standard:helm` | `rancher/klipper-helm:v0.11.1-build20260615` | `system-namespace-kube-system` |
-| `kube-system` | `Job/helm-install-traefik-crd` | `standard:helm` | `rancher/klipper-helm:v0.11.1-build20260615` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-2761db19-b95a-47c5-85d9-b89030630ce0` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-7c6ded10-7d83-4aa0-8c80-2653fb11f990` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-de8e8112-e7ce-41ab-ba65-d90b1709a800` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-fb8ffc57-1373-4f87-9727-f2e3405eea5e` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/coredns-7d8645499d` | `standard:coredns` | `rancher/mirrored-coredns-coredns:1.14.4` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/local-path-provisioner-5fc8cb77c8` | `standard:local-path-provisioner` | `rancher/local-path-provisioner:v0.0.36` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/metrics-server-7c86f97b8d` | `standard:metrics-server` | `rancher/mirrored-metrics-server:v0.8.1` | `system-namespace-kube-system` |
@@ -63,15 +54,19 @@
 |---|---|---|---|---|
 | `falco` | `DaemonSet/falco` | `standard:falco` | `docker.io/falcosecurity/falco:0.44.1@sha256:d0cfe422d6ac0e0f20857798f46c7d7273210e1b064b22821e4e6e7f843cde6b` | `system-security-falco` |
 | `falco` | `DaemonSet/falco` | `init:falcoctl-artifact-install` | `docker.io/falcosecurity/falcoctl:0.13.0@sha256:0eeb79adc580ae6a5abfdefd7f8f0fed9151fcb545f015c84e8f1d7b2d8a6b02` | `system-security-falco` |
+| `harbor` | `ReplicaSet/harbor-core-69f487b854` | `standard:core` | `docker.io/goharbor/harbor-core:v2.15.1@sha256:887a85b8ea98b76bfc9f715f1a0785bb99f9a1034241513902dd6e95be922a83` | `system-namespace-harbor` |
+| `harbor` | `ReplicaSet/harbor-core-69f487b854` | `init:vault-agent` | `hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54` | `system-namespace-harbor` |
+| `harbor` | `ReplicaSet/harbor-jobservice-7c867dfb9d` | `standard:jobservice` | `docker.io/goharbor/harbor-jobservice:v2.15.1@sha256:0de4fd2ce3a02d3e6591b439e4674ea085885ddf43652b44004cc67eb19dba12` | `system-namespace-harbor` |
+| `harbor` | `ReplicaSet/harbor-jobservice-7c867dfb9d` | `init:vault-agent` | `hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54` | `system-namespace-harbor` |
+| `harbor` | `ReplicaSet/harbor-nginx-6b9cb94d89` | `standard:nginx` | `docker.io/goharbor/nginx-photon:v2.15.1@sha256:1f9d06d040f2478f6cf7f6da0091877bf987a641810f4bfaadb2a87d73dbf4fb` | `system-namespace-harbor` |
+| `harbor` | `ReplicaSet/harbor-portal-775cfd6ff` | `standard:portal` | `docker.io/goharbor/harbor-portal:v2.15.1@sha256:ac55161c57a8351807adf8f8def264bdd52667c371d0436beefebdac4341c9e2` | `system-namespace-harbor` |
+| `harbor` | `ReplicaSet/harbor-registry-65bd9445cf` | `standard:registry` | `docker.io/goharbor/registry-photon:v2.15.1@sha256:ebf0325c2661729dbb317cbf839608eb8b15cfa158911a94976f2c21563c466e` | `system-namespace-harbor` |
+| `harbor` | `ReplicaSet/harbor-registry-65bd9445cf` | `standard:registryctl` | `docker.io/goharbor/harbor-registryctl:v2.15.1@sha256:554147a956989175f63f8d41573d716c6ddf6052acd1749c88c0f99ce6ee2bff` | `system-namespace-harbor` |
+| `harbor` | `ReplicaSet/harbor-registry-65bd9445cf` | `init:vault-agent` | `hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54` | `system-namespace-harbor` |
+| `harbor` | `StatefulSet/harbor-redis` | `standard:redis` | `docker.io/goharbor/redis-photon:v2.15.1@sha256:5669d4828805d9ed0bbfc18c101c6ec82d26a13cb9242b48f6348a3e3b2e4cca` | `system-namespace-harbor` |
 | `kube-system` | `DaemonSet/svclb-obs-loki-host-gateway-8cb5125c` | `standard:lb-tcp-3100` | `rancher/klipper-lb:v0.4.17` | `system-namespace-kube-system` |
 | `kube-system` | `DaemonSet/svclb-traefik-0507a580` | `standard:lb-tcp-80` | `rancher/klipper-lb:v0.4.17` | `system-namespace-kube-system` |
 | `kube-system` | `DaemonSet/svclb-traefik-0507a580` | `standard:lb-tcp-443` | `rancher/klipper-lb:v0.4.17` | `system-namespace-kube-system` |
-| `kube-system` | `Job/helm-install-traefik` | `standard:helm` | `rancher/klipper-helm:v0.11.1-build20260615` | `system-namespace-kube-system` |
-| `kube-system` | `Job/helm-install-traefik-crd` | `standard:helm` | `rancher/klipper-helm:v0.11.1-build20260615` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-2761db19-b95a-47c5-85d9-b89030630ce0` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-7c6ded10-7d83-4aa0-8c80-2653fb11f990` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-de8e8112-e7ce-41ab-ba65-d90b1709a800` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
-| `kube-system` | `Pod/helper-pod-delete-pvc-fb8ffc57-1373-4f87-9727-f2e3405eea5e` | `standard:helper-pod` | `rancher/mirrored-library-busybox:1.37.0` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/coredns-7d8645499d` | `standard:coredns` | `rancher/mirrored-coredns-coredns:1.14.4` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/local-path-provisioner-5fc8cb77c8` | `standard:local-path-provisioner` | `rancher/local-path-provisioner:v0.0.36` | `system-namespace-kube-system` |
 | `kube-system` | `ReplicaSet/metrics-server-7c86f97b8d` | `standard:metrics-server` | `rancher/mirrored-metrics-server:v0.8.1` | `system-namespace-kube-system` |
@@ -79,12 +74,6 @@
 | `kyverno` | `ReplicaSet/kyverno-admission-controller-b744d498b` | `standard:kyverno` | `reg.kyverno.io/kyverno/kyverno:v1.18.2@sha256:0a540e2ddf74d0d2d3d45f9ef248d7dbc96576accdbcc6a2dd7eaff9fea56504` | `system-security-kyverno` |
 | `kyverno` | `ReplicaSet/kyverno-admission-controller-b744d498b` | `init:kyverno-pre` | `reg.kyverno.io/kyverno/kyvernopre:v1.18.2@sha256:cd8cb4a31d25b3992734fb8f24a90ef691c90ce49338c89bea96792160eacb98` | `system-security-kyverno` |
 | `kyverno` | `ReplicaSet/kyverno-reports-controller-799f4f6995` | `standard:controller` | `reg.kyverno.io/kyverno/reports-controller:v1.18.2@sha256:f09cf305170014e191b94e1c54f5be73163d8824eefad49349675c4efe43159a` | `system-security-kyverno` |
-| `wazuh` | `Job/wazuh-oidc-security-sync-v2` | `standard:renderer` | `docker.io/library/python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844` | `system-security-wazuh` |
-| `wazuh` | `Job/wazuh-oidc-security-sync-v2` | `standard:securityadmin` | `docker.io/wazuh/wazuh-indexer:4.14.7@sha256:853230e332b3b171ee9c30db91186830d5d66461e8ee0173abb57ede5c4b5d37` | `system-security-wazuh` |
-| `wazuh` | `Job/wazuh-oidc-security-sync-v2` | `standard:role-mapping` | `docker.io/library/python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844` | `system-security-wazuh` |
-| `wazuh` | `Job/wazuh-oidc-security-sync-v2` | `init:vault-agent` | `hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54` | `system-security-wazuh` |
-| `wazuh` | `Job/wazuh-retention-bootstrap` | `standard:retention` | `docker.io/library/python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844` | `system-security-wazuh` |
-| `wazuh` | `Job/wazuh-retention-bootstrap` | `init:vault-agent` | `hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54` | `system-security-wazuh` |
 | `wazuh` | `ReplicaSet/wazuh-04-relay-6b76b558f` | `standard:wazuh-04-relay` | `docker.io/library/python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844` | `system-security-wazuh` |
 | `wazuh` | `ReplicaSet/wazuh-04-relay-6b76b558f` | `standard:wazuh-04-relay-agent` | `docker.io/wazuh/wazuh-agent:4.14.7@sha256:460758c8de2a6227818d5e415c514199e77179f5bbaec77aca5c246c99932ed2` | `system-security-wazuh` |
 | `wazuh` | `ReplicaSet/wazuh-04-relay-6b76b558f` | `init:vault-agent` | `hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54` | `system-security-wazuh` |

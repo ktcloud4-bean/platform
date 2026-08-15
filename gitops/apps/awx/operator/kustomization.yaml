@@ -17,8 +17,8 @@ resources:
   - vendor/manager/manager.yaml
 images:
   - name: controller
-    newName: quay.io/ansible/awx-operator
-    newTag: 2.19.1@sha256:7302e0c8e5a79c11275848b36c63c61d8e7487840164c109b7cda9aa93456901
+    newName: harbor.imcherry5778.xyz/curated-platform/awx-operator
+    newTag: 2.19.1@sha256:53ac69ccc5d8f492f92daa9bfee894797a3aa091bc9291c80b333ebc04779a33
 patches:
   - path: manager-patch.yaml
   - path: namespace-patch.yaml

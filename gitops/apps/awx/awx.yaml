@@ -55,18 +55,18 @@ spec:
       value: >-
         '{"GIT_SSH_COMMAND":"ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/awx-scm/known_hosts -o GlobalKnownHostsFile=/dev/null"}'
 
-  image: quay.io/ansible/awx
-  image_version: 24.6.1@sha256:5d47e132014ae4c6a026a2e8f19ce7b3cf3c8f313d59e44fdfa95cd9f3669209
+  image: harbor.imcherry5778.xyz/curated-platform/awx
+  image_version: 24.6.1@sha256:07f20882f1f163c0071945e03544a165c2a4e275164c1bf5f0111cd0821fa736
   control_plane_ee_image: harbor.imcherry5778.xyz/curated-platform/awx-ee@sha256:d6fca88c8c26e143b1fc71cc60db3b0ee06c43cc46fd395e902dcec3dbc5af9b
-  init_container_image: quay.io/ansible/awx-ee
-  init_container_image_version: 24.6.1@sha256:89593d2a0268acacdbd1c075d8810ab50d961cf7769e36de19219bb6cb4efcc1
+  init_container_image: harbor.imcherry5778.xyz/curated-platform/awx-ee
+  init_container_image_version: 24.6.1@sha256:d6fca88c8c26e143b1fc71cc60db3b0ee06c43cc46fd395e902dcec3dbc5af9b
   ee_images:
     - name: AWX EE 24.6.1
       image: harbor.imcherry5778.xyz/curated-platform/awx-ee@sha256:d6fca88c8c26e143b1fc71cc60db3b0ee06c43cc46fd395e902dcec3dbc5af9b
     - name: AWX-04 platform EE
       image: harbor.imcherry5778.xyz/awx-ee/platform-ee@sha256:0a35dcb1933fd6439730dd2a57e325be1bd175852c29dd0e2894728b16137bb9
-  redis_image: docker.io/library/redis
-  redis_image_version: 7.2.5@sha256:3aaec283e6e593bde528077d60280ac1589887067a39273348860837c9346d7e
+  redis_image: harbor.imcherry5778.xyz/curated-platform/redis
+  redis_image_version: 7.2.5@sha256:301f993bbc91d0b50b0737a97962905657d9f595e9935282b7db16a563b53d1b
   image_pull_policy: IfNotPresent
 
   extra_volumes: |

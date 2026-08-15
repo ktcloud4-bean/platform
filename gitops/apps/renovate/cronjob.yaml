@@ -79,7 +79,7 @@ spec:
                   readOnly: true
           containers:
             - name: renovate
-              image: docker.io/renovate/renovate:44.6.0@sha256:82c8dbd86d8c96c44e0064e2dc5966848a4ffb497fce0e96b2a360f507b85778
+              image: harbor.imcherry5778.xyz/curated-platform/renovate:44.6.0@sha256:6a5cebec637d64eca7e7d4072a311016f8189f1a95cb349cf2c18750ef2fa775
               imagePullPolicy: IfNotPresent
               env:
                 - name: RENOVATE_CONFIG_FILE

@@ -26,7 +26,7 @@ namespace:
 # Details of the container image to use in the Velero deployment & daemonset (if
 # enabling node-agent). Required.
 image:
-  repository: docker.io/velero/velero
+  repository: harbor.imcherry5778.xyz/curated-platform/velero
   tag: v1.18.1
   # Digest value example: sha256:73266e6bd7e2fe3f65fb20677d36c4a8df76d417d9ba76bd9932e0d983a776ec.
   # If used, it will take precedence over the image.tag.

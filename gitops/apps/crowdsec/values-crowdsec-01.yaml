@@ -1,8 +1,8 @@
 container_runtime: containerd
 
 image:
-  repository: docker.io/crowdsecurity/crowdsec
-  tag: v1.7.8@sha256:2f527c9bb8b367120eb08b82890aa912ce96bfa1ada93dda0721700e4b4e0dde
+  repository: harbor.imcherry5778.xyz/curated-platform/crowdsec
+  tag: v1.7.8@sha256:95a25d0f0fb92d96204e74fd48a5c4bd2c949b1b2a31769fa3487ad4769314e1
   pullPolicy: IfNotPresent
   pullSecrets: []
 
@@ -108,8 +108,8 @@ agent:
         type: syslog
   wait_for_lapi:
     image:
-      repository: docker.io/crowdsecurity/crowdsec
-      tag: v1.7.8@sha256:2f527c9bb8b367120eb08b82890aa912ce96bfa1ada93dda0721700e4b4e0dde
+      repository: harbor.imcherry5778.xyz/curated-platform/crowdsec
+      tag: v1.7.8@sha256:95a25d0f0fb92d96204e74fd48a5c4bd2c949b1b2a31769fa3487ad4769314e1
       pullPolicy: IfNotPresent
     securityContext:
       allowPrivilegeEscalation: false
