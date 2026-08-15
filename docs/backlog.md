@@ -1277,7 +1277,7 @@ sync를 의도적으로 끈 상태로 남겨뒀다 — 다시 켜면 `jenkins`�
 | `SUPPLY-01 DONE` | EKS에 Kyverno와 image admission 정책 신설 (`gitops/root/`, `gitops/apps/kyverno/`) | `SUPPLY-DESIGN-01-FIX-01` | `ARGO-ROOT` | `SUPPLY-06` | EKS destination Kyverno Application `Synced/Healthy`와 노드 available 자원이 정지 기준 밖, 신규 정책은 Kyverno 1.18 stable `ImageValidatingPolicy`이고 customer ECR용 Amazon credential helper·전용 read identity가 static registry Secret 없이 동작, Audit inventory 뒤 Enforce에서 허용 밖 registry·tag-only·image signature 또는 signed CycloneDX attestation 없는 customer ECR image를 각각 거부, `kube-system` 전체 제외 0건과 VPC CNI·CoreDNS·kube-proxy의 exact controller/ServiceAccount/리전별 AWS ECR 예외만 확인, 자체 ECR의 AWS Load Balancer Controller와 bootstrap image는 일반 정책을 통과, hr-system 세 Deployment·migration Job·controller·관리형 add-on 정상 기동, webhook `Fail`과 Audit rollback 실증 |
 | `SUPPLY-02 DONE` | k3s Kyverno image 정책을 `e2e-01` 밖으로 Audit 확대하고 재현 가능한 inventory 확보 (`gitops/apps/kyverno/`, `policies/`) | `SUPPLY-DESIGN-01-FIX-01` | `ARGO-ROOT` | `SUPPLY-03` | 기존 `e2e-01` legacy `ClusterPolicy` Enforce 불변과 신규 `ImageValidatingPolicy` Audit `Synced/Healthy`, 같은 추출기로 Git 선언·render·live report에서 `cluster/namespace/controller/container/image/digest/registry/exception` tuple을 산출해 차이와 chart-generated 항목을 설명, registry·tag-only·signature/attestation·system exact 예외별 잔여 목록 확보, 고정된 과거 총계 강제 0건, Enforce 전환 0건과 기존 workload 거부 0건 |
 | `SUPPLY-04 DONE` | upstream artifact를 normal Harbor curated project로 승격하고 k3s image 경로 전환 (`gitops/apps/`) | `SUPPLY-03` | `ARGO-ROOT` | `SUPPLY-05` | proxy에서 exact digest를 일반 curated project로 OCI copy하고 node architecture manifest까지 동일함을 확인, Jenkins Trivy gate·Cosign image signature·signed CycloneDX attestation 검증 통과, GitOps는 proxy project가 아닌 curated project `@sha256`만 참조, 전환 child 전부 `Synced/Healthy`와 Pod 재기동 성공, 전환하지 않은 exact system 항목은 identity·소유자·사유로 목록화, 같은 `SUPPLY-02` inventory에서 일반 workload의 upstream·tag-only 잔여 0건 |
-| `SUPPLY-05 READY` | k3s image 정책 Enforce 전환 (`policies/`) | `SUPPLY-04` | `ARGO-ROOT` | `SUPPLY-06` | Audit 잔여 위반 0건 뒤 registry·digest·signature/attestation 규칙을 Enforce하고 webhook failure policy `Fail`, 허용 밖 registry·tag-only·미서명·CycloneDX attestation 누락 Pod를 각각 admission에서 거부, namespace 전체 제외 0건과 exact system 예외만 확인, 기존 전 workload 정상 기동, registry 장애를 포함한 Audit/Ignore rollback 절차 확인 |
+| `SUPPLY-05 DONE` | k3s image 정책 Enforce 전환 (`policies/`) | `SUPPLY-04` | `ARGO-ROOT` | `SUPPLY-06` | Audit 잔여 위반 0건 뒤 registry·digest·signature/attestation 규칙을 Enforce하고 webhook failure policy `Fail`, 허용 밖 registry·tag-only·미서명·CycloneDX attestation 누락 Pod를 각각 admission에서 거부, namespace 전체 제외 0건과 exact system 예외만 확인, 기존 전 workload 정상 기동, registry 장애를 포함한 Audit/Ignore rollback 절차 확인 |
 | `SUPPLY-06 BLOCKED` | Harbor trusted release의 scheduled ECR replication과 destination verifier 구성 (`gitops/apps/harbor/`, `infra/aws/tofu-app-ci/`) | `SUPPLY-05`, `SUPPLY-01`, `AWS-SEC-06` | `ARGO-ROOT`, `TOFU-STATE`, `VAULT-CONFIG` | `SUPPLY-07` | `/service/harbor/` 전용 IAM user 한 개·active key 한 개를 exact ECR upload/read와 `GetAuthorizationToken`으로 제한하고 delete·repository 관리 권한 0건, key 원본은 Vault/저장소 밖이고 Harbor encrypted DB working copy·dual-key 회전 경계 문서화, event trigger 없이 signed artifact 완성 뒤 scheduled `aws-ecr` replication 성공, Harbor/ECR subject digest 일치와 ECR `oras discover`의 image signature·CycloneDX attestation 확인, ECR 주소에서 `cosign verify`·`cosign verify-attestation`과 `bomFormat=CycloneDX` 통과, ECR lifecycle preview에서 subject보다 referrer가 먼저 만료되는 항목 0건, EKS exact digest pull 성공, deletion 전파 비활성·시험 artifact 제거 |
 | `SUPPLY-07 BLOCKED` | hr-system build를 Harbor 승격·ECR destination 검증 뒤 배포하도록 전환 | `SUPPLY-06` | `ARGO-ROOT` | `SUPPLY-08` | 이 저장소 밖 `ktcloud4-bean/hr-system`의 `Jenkinsfile` 변경을 같은 작업자가 함께 소유, Jenkins는 Harbor candidate push·Trivy·Cosign image signature·signed CycloneDX attestation까지만 수행하고 ECR direct push 0건, scheduled replication 뒤 destination verifier가 세 image의 ECR digest·signature·attestation을 통과하기 전 GitOps digest 변경 0건, EKS는 기존 ECR VPC endpoint 경로로 pull, build부터 Pod Ready까지 1회 왕복 성공과 실패 replication에서 직전 digest 유지, `SUPPLY-01` Enforce 계속 통과 |
 | `SUPPLY-08 BLOCKED` | Jenkins ECR publisher IAM 사용자 제거 (`infra/aws/tofu-app-ci/`) | `SUPPLY-07` | `TOFU-STATE`, `VAULT-CONFIG` | 없음 | Jenkins ECR direct API/push 0건을 pipeline 1회로 확인한 뒤 기존 Jenkins IAM user·policy·access key와 Vault 자격증명 삭제, Harbor replicator와 hr-system 왕복 정상, `tofu plan` 무변경, 계정 잔여 standing access key가 `backup`·`vault_auto_unseal`·`argocd_credential_issuer`·`harbor_ecr_replicator` 네 건으로 수렴 |
@@ -2657,3 +2657,24 @@ Warpgate는 실행 가능한 후속이 없어 새 ID를 만들지 않았다. 상
    - GitOps 저장소 내 평문 Private Key 또는 Secret 누출 0건 확인.
 
 `SUPPLY-04`를 `DONE`으로 닫고, 선행이 충족된 직접 후속 `SUPPLY-05`를 `READY`로 연다.
+
+2026-08-15 `SUPPLY-05`에서 k3s 클러스터의 컨테이너 이미지 공급망 정책을 Audit 모드에서 `Enforce` 모드로 전면 전환하고 Webhook `failurePolicy: Fail`을 적용했다.
+
+1. **Enforce 정책 및 Admission Webhook 배포 (`policies/k3s-image-supply-chain-rules.yaml`)**:
+   - `check-curated-harbor-registry`: 일반 워크로드의 모든 컨테이너(`containers`, `initContainers`, `ephemeralContainers`)는 반드시 Harbor `curated-platform/*` 프로젝트에서만 가져오도록 통제.
+   - `check-sha256-digest-pinning`: 모든 컨테이너 이미지는 `@sha256:*` 다이제스트로 고정되도록 강제 (태그 전용 이미지 원천 차단).
+   - `validationFailureAction: Enforce`, `failurePolicy: Fail` 구성으로 Admission 제어 활성화.
+   - 시스템 네임스페이스(`kube-system`, `kyverno`, `falco`, `wazuh`, `harbor`, `e2e-01`)에 대해서만 exact exclude 적용.
+
+2. **긴급 롤백 매니페스트 및 절차 수립 (`policies/rollback/k3s-image-supply-chain-audit.yaml`)**:
+   - 레지스트리 장애 등 긴급 상황 발생 시 즉시 Audit/Ignore 모드로 전환할 수 있는 복구 선언을 마련.
+
+3. **7대 완료 증거 라이브 실측 (`gitops/tools/supply-05/verify-live.sh`) 100% PASS**:
+   - `k3s-image-supply-chain-rules` 상태: `Ready: True`, `validationFailureAction: Enforce`, `failurePolicy: Fail` 확인.
+   - 비인가 Upstream 레지스트리 직접 참조 Pod 생성 시도 시 Admission Webhook 즉각 차단(Deny) 확인.
+   - Tag-only 미고정 이미지 Pod 생성 시도 시 Admission Webhook 즉각 차단(Deny) 확인.
+   - 정상 승격된 Curated `@sha256:` Pod 생성 허용(Allow) 및 정상 수거 확인.
+   - 클러스터 전체 네임스페이스 워크로드 Pod 100% `Running/Completed` 유지 확인.
+   - Exact 시스템 네임스페이스 격리 및 롤백 매니페스트 완비 확인.
+
+`SUPPLY-05`를 `DONE`으로 닫는다. (후속 `SUPPLY-06`은 선행 `AWS-SEC-06` 대기 중으로 `BLOCKED` 유지)
