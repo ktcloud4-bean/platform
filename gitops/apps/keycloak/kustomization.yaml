@@ -6,7 +6,6 @@ resources:
   - trust-bundles.yaml
   - vault-agent-config.yaml
   - bootstrap-script.yaml
-  - bootstrap-job.yaml
   - service.yaml
   - deployment.yaml
   - ingress.yaml
