@@ -214,6 +214,27 @@ jenkins:
                   - envVar:
                       key: "HOME"
                       value: "/opt/sonar-scanner/.sonar"
+              - name: "postgres"
+                image: "harbor.imcherry5778.xyz/curated-platform/postgres@sha256:9a70e4d1c03a5066080292db2dd95ee3965d3651316e21989fa0935afb8ce8ca"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                command: "docker-entrypoint.sh"
+                args: "postgres"
+                ttyEnabled: false
+                resourceRequestCpu: "100m"
+                resourceRequestMemory: "256Mi"
+                resourceLimitCpu: "1"
+                resourceLimitMemory: "1Gi"
+                envVars:
+                  - envVar:
+                      key: "POSTGRES_DB"
+                      value: "quality04"
+                  - envVar:
+                      key: "POSTGRES_USER"
+                      value: "postgres"
+                  - envVar:
+                      key: "POSTGRES_HOST_AUTH_METHOD"
+                      value: "trust"
             # ContainerTemplate이 표현하지 못하는 보안 경계는 raw Pod spec으로 덮는다.
             # root·privileged·Docker socket·hostPath는 어느 계층에도 없다.
             yamlMergeStrategy: "merge"
@@ -380,6 +401,19 @@ jenkins:
                         mountPath: /opt/sonar-scanner/.sonar
                       - name: sonar-tmp
                         mountPath: /tmp
+                  - name: postgres
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 999
+                      runAsGroup: 999
+                      allowPrivilegeEscalation: false
+                      privileged: false
+                      readOnlyRootFilesystem: false
+                      seccompProfile:
+                        type: RuntimeDefault
+                      capabilities:
+                        drop: ["ALL"]
+                    volumeMounts: []
                 volumes:
                   - name: buildah-home
                     emptyDir:
@@ -643,6 +677,16 @@ credentials:
               id: "sonar-token-e2e01"
               description: "E2E-01 SonarQube project-scoped analysis token"
               secret: "${e2e01_sonar_token}"
+          - string:
+              scope: GLOBAL
+              id: "sonar-token-hr-system"
+              description: "QUALITY-05 HR System project-scoped analysis token"
+              secret: "${hr_system_sonar_token}"
+          - string:
+              scope: GLOBAL
+              id: "github-hr-system-readonly"
+              description: "QUALITY-05 GitHub HR System read-only SHA check token"
+              secret: "${hr_system_github_token}"
           - usernamePassword:
               scope: GLOBAL
               id: "aws-credentials-ci01"
@@ -706,6 +750,9 @@ jobs:
         logRotator {
           numToKeep(20)
           artifactNumToKeep(0)
+        }
+        parameters {
+          choiceParam('QUALITY05_CASE', ['pass', 'test-fail'], 'QUALITY-05 양성 또는 의도적 fixture 실패 검증')
         }
         definition {
           cpsScm {
