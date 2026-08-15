@@ -77,6 +77,18 @@ spec:
         ) ||
         (
           object.metadata.namespace == "wazuh" &&
+          object.metadata.name == "wazuh-manager-master-0" &&
+          object.spec.serviceAccountName == "wazuh-manager" &&
+          object.spec.?containers.orValue([]).size() == 1 &&
+          object.spec.containers[0].name == "wazuh-manager" &&
+          object.spec.containers[0].image == "docker.io/wazuh/wazuh-manager:4.14.7@sha256:a65dcdb61e48b7064bd7250c5cbd6aceeb9b8043a1a413931a8868793146f06d" &&
+          object.spec.?initContainers.orValue([]).size() == 1 &&
+          object.spec.initContainers[0].name == "vault-agent" &&
+          object.spec.initContainers[0].image == "hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54" &&
+          object.spec.?ephemeralContainers.orValue([]).size() == 0
+        ) ||
+        (
+          object.metadata.namespace == "wazuh" &&
           object.spec.serviceAccountName in ["wazuh-manager", "wazuh-indexer", "wazuh-dashboard", "wazuh-06-notifier", "wazuh-bootstrap"] &&
           object.spec.?containers.orValue([]).map(img, img.image.startsWith("docker.io/wazuh/") || img.image.startsWith("docker.io/library/python:")).all(e, e) &&
           object.spec.?initContainers.orValue([]).map(img, img.image.startsWith("docker.io/wazuh/") || img.image.startsWith("docker.io/library/python:")).all(e, e) &&

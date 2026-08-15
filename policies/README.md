@@ -44,6 +44,23 @@ hostPath 또는 ServiceAccount를 바꾸면 예외와 보상 정책을 같은 �
 NetworkPolicy는 k3s 내장 kube-router가 실제 강제하므로 새 namespace에 기계적으로 복제하지
 않고, 통신표와 대표 경로가 확인된 namespace만 별도 검증 뒤 추가한다.
 
+## Wazuh manager 공급망 예외
+
+`SUPPLY-05-FIX-04`는 기존 Wazuh system 예외가 `docker.io/wazuh/*` 또는
+`docker.io/library/python:*` init container만 허용해, 실제 `wazuh-manager-master-0`의
+고정 `hashicorp/vault` init image를 재생성 때 거부하던 결함을 보정한다. 범용 Wazuh prefix에
+Vault를 추가하지 않고 다음 값을 모두 고정한 별도 조건만 둔다.
+
+- namespace·Pod: `wazuh` / `wazuh-manager-master-0`
+- ServiceAccount: `wazuh-manager`
+- main container 한 개: 선언된 Wazuh manager exact digest
+- init container 한 개: 선언된 Vault exact digest
+- ephemeral container: 0개
+
+Pod 이름·ServiceAccount·두 digest·container 수 중 하나라도 다르면 이 예외를 통과하지 않는다.
+현재 Enforce/Fail 정책과 rollback Audit/Ignore 정책은 같은 exact 예외를 가져, 장애 전환 때
+system lifecycle 판정이 달라지지 않게 한다.
+
 `REG-01`은 기존 `pomerium` egress allowlist에 Harbor nginx Pod TCP 8080 한 경로만
 추가한다. Harbor namespace의 새 default-deny를 함께 만들지는 않는다.
 
