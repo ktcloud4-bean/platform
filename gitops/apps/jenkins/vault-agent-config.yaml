@@ -225,6 +225,17 @@ data:
     }
 
     template {
+      destination          = "/vault/secrets/hr_system_sonar_token"
+      perms                = "0400"
+      error_on_missing_key = true
+      contents             = <<EOT
+    {{- with secret "kv/data/hr-system/jenkins" -}}
+    {{ .Data.data.sonar_token }}
+    {{- end -}}
+    EOT
+    }
+
+    template {
       destination          = "/vault/secrets/aws_access_key_id"
       perms                = "0400"
       error_on_missing_key = false

@@ -43,6 +43,20 @@ signature를 OCI 1.1 referrer로 붙인다. credential은 `kv/aws-hr-01/jenkins`
 memory `emptyDir` 파일로만 렌더링하며, 기존 CI-01 AWS plan credential 및 Board credential과
 공유하지 않는다.
 
+## QUALITY-05 HR System test/Sonar gate
+
+hr-system-image-build는 기존 ci01-buildah agent의 test → report publish → SonarQube gate →
+image build 순서를 사용한다. Python service는 각 Cobertura XML과 JUnit XML을, frontend는
+LCOV와 JUnit XML을 만든다. 실패 시 finally report publish만 수행하고 image build·Harbor
+push·release handoff에는 진입하지 않는다. GitHub canonical main과 Gitea mirror의 exact SHA를
+대조하며, release-version.txt의 안정 버전과 hr-system project 전용 Sonar token을 사용한다.
+
+테스트용 PostgreSQL은 PVC가 없는 agent sidecar다. Harbor curated digest
+9a70e4d1c03a5066080292db2dd95ee3965d3651316e21989fa0935afb8ce8ca를 사용하고, emptyDir
+데이터만 보존한다. Vault policy hr-system-jenkins는 kv/hr-system/jenkins의 Sonar token
+read만 허용하며 기존 Jenkins role policy를 유지한 채 이 policy만 추가한다. sidecar는
+postgres UID 999·non-root·capability drop·RuntimeDefault 경계에 있다.
+
 ## SCAN-01 결정과 근거
 
 ### Trivy와 ORAS는 같은 동적 agent의 별도 container
