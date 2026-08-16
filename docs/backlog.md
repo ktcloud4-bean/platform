@@ -2864,3 +2864,59 @@ controller 로그는 current·previous attestor 모두 실제 signature 판정 �
 2026-08-15 `SUPPLY-05-FIX-02`에서 ADR-0028 계약에 따라 k3s 일반 workload에 대해 Harbor registry·digest와 별도로 플랫폼 Cosign EC P-256 image signature를 검증하는 Kyverno 1.18 stable `ImageValidatingPolicy`(`k3s-image-supply-chain-policy`)를 Enforce/Fail 모드로 적용했다. ConfigMap `kyverno`의 `resourceFilters` 및 webhook `namespaceSelector`에서 `kube-system`과 `kyverno`의 네임스페이스 전체 제외를 완전히 제거하여 Zero Namespace-Wide Exclusion(모든 네임스페이스에 admission webhook 적용)을 달성하고, 시스템 필수 컴포넌트(`kube-system`, `kyverno`, `falco`, `wazuh`, `harbor`, `e2e-01`)에 대해서만 exact ServiceAccount, label, image 접두어 기반의 `matchConditions` 예외로 축소했다. curated 정품 서명 이미지의 admission 통과, upstream 직접 참조 차단, tag-only 미고정 이미지 차단, `kube-system` 및 `kyverno` 네임스페이스 내 비인가 Pod 생성 차단을 모두 실측 검증했다. 장애 대비 Audit/Ignore `policies/rollback/` 매니페스트를 준비하고 클러스터 내 모든 워크로드 정상 동작 및 Argo CD `platform-root`, `policy-baseline`의 `Synced/Healthy`를 확인했다. `SUPPLY-05-FIX-02`를 `DONE`으로 닫는다.
 
 2026-08-16 `OPS-DRIFT-01`에서 플랫폼 4대 인프라 계층(Argo CD Application, OPNsense config XML, AWS OpenTofu, Proxmox OpenTofu)에 대한 Read-only 정기 drift 판정과 종합 통지 도구 및 Jenkins 파이프라인(`ops-drift-check`)을 구현했다. OPNsense `check-drift.sh` 및 Proxmox OpenTofu `tofu plan -detailed-exitcode`의 라이브 무변경(drift 0건)을 확인했고, 공유 잠금/유지보수 상태에서의 안전한 skip 동작(`--skip-if-locked true`), 비밀 없는 4종 fixture(Argo, OPNsense, AWS Tofu, PVE Tofu)를 통한 계층별 drift 감지 및 요약 알림 파싱을 실측 검증했다. 스크립트 내 `check-drift.sh --update` 및 `tofu apply` 호출을 원천 배제하여 순수 Read-only 원칙을 준수하고, 민감값 및 시크릿 유출 0건을 확인했다. `gitops/apps/jenkins/jenkins.yaml`에 `ops-drift-check` Cron(`H 4 * * *`) 및 Job 선언을 추가하고, 회귀 테스트 스위트(`test-drift-check.sh`, 7/7 PASS) 및 `check-backlog.sh` 린트를 통과했다. `OPS-DRIFT-01`을 `DONE`으로 닫는다.
+
+## 13. 발표 아키텍처·슬라이드·대본
+
+이 lane은 데모 영상의 오프닝 이미지·영상 대본을 만드는 `DEMO-OPENING-01`·
+`DEMO-SCRIPT-01`과 독립적으로 진행한다. 다만 발표 자료에서 다섯 번째 복구 시나리오를
+구현 완료로 설명하기 위한 `DEMO-RECOVERY-01` 증거만 최종 슬라이드의 선행으로 사용한다.
+Draw.io는 발표 화면에 삽입하지 않는 기술 검수용 단일 원본이고, 발표 아키텍처 화면은 사용자가
+chatgpt.com에서 생성한 한 장의 16:9 이미지를 같은 좌표로 네 장에 반복 배치해 강조 레이어만
+바꾼다. PowerPoint native animation은 쓰지 않는다.
+
+승인된 발표 구성은 22장이다.
+
+1. 표지, 2. 목차, 3. 프로젝트 선정 배경, 4. 목표와 현실적 제약,
+5. Bean Team 5인 구성, 6. 4주 간트 차트, 7. 보안 검증 시나리오 5개,
+8~11. 동일 생성 이미지의 물리 경계·온프레미스·AWS 연동·보안 흐름 단계별 강조,
+12~15. 접근 통제·GitOps/공급망·관측/탐지/사람 승인·백업/복구,
+16~17. 배포/품질·운영/보안 실제 UI 증거, 18. 시나리오 결과 매트릭스,
+19. SWOT, 20. 결론, 21. Q&A, 22. Thank You 순서다. 발표 본문은 약 14분 5초를
+기준으로 하고 전환·호흡을 포함해 15분 안에 끝낸다. Q&A와 데모 영상 재생 시간은 포함하지 않는다.
+
+최종 추적 산출물은 다음 경계를 사용한다. 사용자가 제공한 원본 템플릿과 기존 발표자료·기존
+Draw.io 파일은 참고 입력일 뿐 Git에 복제하지 않는다. 최종 산출물은 Git에 직접 추적하며 Git LFS는
+사용하지 않는다.
+
+```text
+docs/presentation/
+├── README.md
+├── architecture/
+│   ├── platform-architecture.drawio
+│   ├── platform-architecture.svg
+│   └── platform-architecture.drawio.png
+├── assets/
+│   ├── icons/
+│   ├── generated/
+│   ├── evidence/
+│   └── SOURCES.md
+├── ktcloud4-bean.pptx
+└── presentation-script.md
+```
+
+| ID·상태 | 작업과 소유 범위 | 선행 | 잠금 | 영향 | 완료 증거 |
+|---|---|---|---|---|---|
+| `PRESENT-PLAN-01 DONE` | 사용자가 제공한 기존 Draw.io·22장 발표자료·15장 원본 템플릿과 현재 아키텍처·데모 증거를 대조하고, 한 번에 한 질문씩 인터뷰해 22장 정보 구조·15분 범위·산출물 위치·작업 순서를 확정 (`docs/backlog.md`) | 없음 | 없음 | `PRESENT-ARCH-01` | 외부 침해사례 placeholder·기술 대체제 비교·다중 리전/가짜 HA·자동 차단 주장을 제외하고 단일 물리 노드 SPOF, 사람 승인, 합성 복구 범위를 명시했다. Draw.io는 한 페이지 참조 원본, PPT는 생성 이미지와 중복 슬라이드 강조, 간트·SWOT은 native 도형 우선, 실제 UI는 마스킹한 최신 화면으로 확정했다. 제목 `온프레미스–AWS 하이브리드 보안 플랫폼`, `Bean`·발표자 `고광근`, 팀원 5명, 22장 순서와 약 14분 5초 본문, 마지막 작업을 발표 대본으로 고정했다. 라이브·Secret·원본 파일 변경 0건이고 `scripts/check-backlog.sh`를 통과한다. |
+| `PRESENT-ARCH-01 READY` | Git 선언과 현재 완료 증거를 대조한 source matrix를 만들고, 발표 이미지 검수 기준이 될 한 페이지 16:9 가로형 논리 아키텍처와 공식 아이콘 출처를 작성 (`docs/presentation/architecture/`, `docs/presentation/assets/icons/`, `docs/presentation/assets/SOURCES.md`, `docs/presentation/README.md`) | `PRESENT-PLAN-01` | 없음 | `PRESENT-DECK-SKELETON-01` | OPNsense·Proxmox·단일 k3s와 전용 VM, S2S VPN·private EKS·AWS S3, 접근·공급망·탐지/사람 승인·복구 흐름 및 SPOF를 한 페이지에 표현한다. Pod·IP·세부 port·계획 상태는 넣지 않고 `architecture.md`의 stale `Board Demo` 행을 선언·백로그와 대조해 결과에 반영한다. vendor 공식 아이콘을 우선하고 self-hosted 제품은 Dashboard Icons 원본 URL·license·상표 경계를 기록한다. `drawio-skill` validator의 구조 오류 0건, draw.io CLI preview PNG의 육안 검토, embedded SVG·수리한 `.drawio.png` 재열기와 source matrix 누락 0건을 확인하며 Secret·실데이터는 0건이다. |
+| `PRESENT-DECK-SKELETON-01 BLOCKED` | 원본 템플릿의 검정·흰색·neon green 자산을 선별해 7~8개 재사용 layout을 만들고, 실제 제목·핵심 메시지·시간·자산 placeholder가 있는 22장 와이어프레임 PPTX를 작성 (`docs/presentation/ktcloud4-bean.pptx`, `docs/presentation/README.md`) | `PRESENT-ARCH-01` | 없음 | `PRESENT-VISUAL-01`, `PRESENT-EVIDENCE-01` | 표지·기본 본문·전체 이미지·두 화면 증거·결과 매트릭스·SWOT·Q&A layout과 22장 순서가 고정된다. 8~11장은 같은 이미지 좌표·안전영역을 쓰고 PowerPoint timing/transition 0건을 유지한다. Lorem Ipsum 대신 실제 제목과 `PURPOSE`·`MESSAGE`·`ASSET`·`EVIDENCE` 계약만 넣는다. `markitdown` 순서·잔여 placeholder 검사, template baseline Office validator, LibreOffice/PDF 전체 렌더와 22장 육안 검토에서 잘림·겹침·저대비 0건이며 최종 기술 내용·생성 이미지·실제 UI는 아직 넣지 않는다. |
+| `PRESENT-VISUAL-01 BLOCKED` | 참조 Draw.io와 와이어프레임 안전영역을 기준으로 발표용 16:9 아키텍처 이미지 영문 prompt를 만들고, 사용자가 chatgpt.com에서 생성한 후보를 기술·구도 관점에서 보정해 최종 한 장을 승인받는다 (`docs/presentation/assets/generated/`, `docs/presentation/assets/SOURCES.md`) | `PRESENT-ARCH-01`, `PRESENT-DECK-SKELETON-01` | 없음 | `PRESENT-DECK-01` | black/white·neon green의 절제된 isometric 표현, 명확한 On-Premises/AWS 경계와 단방향 핵심 흐름, 서비스명은 공식 영문·설명은 필요한 곳만 한글로 고정한다. prompt v1→사용자 후보→구성/기술 검토→targeted 수정 prompt를 반복해 사용자가 최종본을 승인한다. 생성 모델이 공식 로고·텍스트를 왜곡하면 아이콘/텍스트 없는 배경으로 전환하고 PPT에서 공식 원본을 합성한다. 가짜 UI·긴 생성 텍스트·비밀·실데이터 0건이며 같은 최종 이미지를 8~11장과 어둡게 처리한 Q&A 배경에 재사용한다. |
+| `PRESENT-EVIDENCE-01 BLOCKED` | 최신 실제 상태의 Argo CD, Jenkins/SonarQube, Grafana, Wazuh/Shuffle 화면을 발표 안전영역에 맞춰 캡처하고 민감정보를 마스킹한 증거 자산과 출처·판정 설명을 준비 (`docs/presentation/assets/evidence/`, `docs/presentation/assets/SOURCES.md`) | `PRESENT-DECK-SKELETON-01` | 없음 | `PRESENT-DECK-01` | 화면별 exact 캡처 범위와 마스킹 checklist를 먼저 확정하고, Argo `Synced/Healthy`, Jenkins test·Sonar quality gate, Grafana 운영 상태, Wazuh 탐지와 Shuffle 사람 승인 근거를 실제 UI에서 확보한다. 계정·email·내부 URL/IP·token·cookie·OTP·hook·Secret·고객 데이터 원문은 노출하지 않으며 생성 UI·장식용 대체 화면 0건이다. 각 crop이 16~17장 placeholder에서 읽히고 출처와 캡처 시점·판정 문구가 일치함을 확인한다. |
+| `PRESENT-DECK-01 BLOCKED` | 승인된 22장 와이어프레임에 생성 이미지·공식 아이콘·실제 UI 증거·검증된 기술 문구를 채워 최종 발표 PPTX를 완성 (`docs/presentation/ktcloud4-bean.pptx`, `docs/presentation/README.md`) | `PRESENT-VISUAL-01`, `PRESENT-EVIDENCE-01`, `DEMO-RECOVERY-01` | 없음 | `PRESENT-SCRIPT-01` | Draw.io 자체는 PPT에 넣지 않고 8~11장에 승인 이미지 한 장을 같은 좌표로 배치해 native 도형 강조만 순차 추가한다. 팀 소개는 고광근(PM·팀장·온프레미스 보안), 이진희, 박재윤, 박수근, 정주헌 5명을 한 장에 두고 간트·SWOT은 native 도형을 우선한다. 다중 리전/Multi-AZ/RDS HA·자동 대응·실제 랜섬웨어·전체 DR 성공 등 미검증 주장 0건, 서비스/프로토콜은 공식 영문명을 사용한다. 22장·30장 미만, `markitdown` 내용/순서/잔여 placeholder 검사, template baseline Office validator, LibreOffice/PDF 전체 렌더 육안 검토에서 잘림·겹침·저대비·깨진 아이콘 0건을 확인한다. |
+| `PRESENT-SCRIPT-01 BLOCKED` | 최종 PPTX의 페이지별 발표 대본을 작성하고 같은 내용을 speaker notes에 반영해 한 명 발표 기준 약 15분 리허설을 완료 (`docs/presentation/presentation-script.md`, `docs/presentation/ktcloud4-bean.pptx`) | `PRESENT-DECK-01` | 없음 | 발표 | 기본은 자연스러운 `-습니다/-했습니다`, 필요한 곳만 `-고요/-는데요/-보시면요`를 사용하고 `저희 팀은`·`이번 프로젝트에서는`을 기본 시점으로 삼는다. 과장된 홍보 문구, 기계적 삼단 나열, 반복되는 `단순히 A가 아니라 B`, 미검증 수치·주장 0건이다. 낭독 대본은 약 13분 30초~14분 15초, 화면 전환·호흡을 포함한 1회 리허설은 14분 30초~15분이며 Q&A·데모 영상은 제외한다. 대본과 슬라이드 번호·화면 동작·기술 용어가 모두 일치하고 speaker notes 반영 뒤 Office validator와 전체 렌더가 다시 통과한다. |
+
+2026-08-16 `PRESENT-PLAN-01`에서 발표자 고광근과 한 번에 한 질문씩 인터뷰해 발표 목적,
+주니어·신입 인프라/클라우드 엔지니어 중심 청중, 15분 범위, 22장 구성, 팀원 5명, 단일
+참조 Draw.io, 생성 아키텍처 이미지, 실제 UI 증거, 자연스러운 대본 톤과 산출물 경계를
+확정했다. 기존 22장 발표자료의 구조나 임시 침해사례를 답으로 간주하지 않고 현재 Git 선언과
+`DEMO-ONPREM-01`·`DEMO-RECOVERY-01` 완료 증거를 기준으로 재구성했다. 발표 lane은 데모 영상
+제작과 독립하며 `PRESENT-ARCH-01`만 `READY`로 연다.
