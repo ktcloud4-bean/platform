@@ -144,6 +144,20 @@ EKS는 Pod 아이콘 대신 Kubernetes 로고와 `Amazon EKS · private endpoint
 
 ## evidence/ — 실제 UI 증거
 
-`PRESENT-EVIDENCE-01`이 소유한다. 화면별 캡처 범위, 캡처 시점, 마스킹한 항목과 판정 문구를
-이 문서에 함께 기록한다. 계정·email·내부 URL/IP·token·cookie·OTP·Secret·고객 데이터 원문은
-캡처에 남기지 않는다.
+`PRESENT-EVIDENCE-01`이 소유한다. 모두 실제 화면을 찍은 것이고 생성 UI·목업은 0건이다.
+캡처 범위와 마스킹 기준은 [`evidence/CAPTURE-CHECKLIST.md`](evidence/CAPTURE-CHECKLIST.md)가 소유한다.
+
+| 슬롯 | 파일 | 대상 | 캡처 시점 | 마스킹 | 판정 문구 |
+|---|---|---|---|---|---|
+| 16a | `16a-argo.png` | Argo CD `hr-system` 요약 + 서비스 3종 트리 | 2026-08-16 | 커밋 Author email 2곳 | 선언과 라이브가 같다 |
+| 16b | `16b-jenkins-pass.png` | `hr-system-image-build #41` — 11단계 전부 통과 | 2026-08-16 | 없음 | gate를 통과한 빌드만 승격된다 |
+| 16b | `16b-jenkins-fail.png` | 같은 job `#42` — test gate에서 중단 | 2026-08-16 | 없음 | 실패하면 이미지가 만들어지지 않는다 |
+| 17a | `17a-kyverno.png` | `demo.sh prove` 터미널 5줄 | 2026-08-16 | 없음 | 미서명은 거부, 서명된 digest만 허용 |
+| 17b | `17b-wazuh.png` | Wazuh Threat Hunting — 24시간 218,300건 | 2026-08-16 | Wazuh API id | 실제 인프라에서 이벤트를 받고 있다 |
+| 17b | `17b-shuffle.png` | Shuffle 승인 대기 화면 | 2026-08-16 | 없음 | 탐지가 사람 승인으로 이어진다 |
+
+마스킹은 모두 불투명 사각형으로 덮었다. 블러는 복원 가능성이 있어 쓰지 않았다.
+
+Wazuh 화면의 agent 이름(`opnsense-01`·`proxmox-01`·`netbird-01`)은 발표 아키텍처에 이미 나오는
+별칭이고 IP가 아니므로 가리지 않았다. Jenkins agent Pod 이름(`ci01-buildah-*`)도 임의 접미사가
+붙어 재사용할 수 없으므로 남겼다.
