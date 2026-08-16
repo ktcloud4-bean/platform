@@ -16,6 +16,9 @@ spec:
       labels:
         app.kubernetes.io/name: demo-onprem-portal
         app.kubernetes.io/part-of: demo-onprem-01
+      annotations:
+        # Velero opt-in values are Pod volume names, not PVC claim names.
+        backup.velero.io/backup-volumes: recovery-data
     spec:
       serviceAccountName: demo-onprem
       automountServiceAccountToken: false
@@ -26,6 +29,29 @@ spec:
         fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: recovery-seed
+          image: harbor.imcherry5778.xyz/curated-platform/python@sha256:527c28b29498575b851ad88e7522ac7201bbd9e920d2c11b00ff2b39b315f5f8
+          imagePullPolicy: IfNotPresent
+          command: [python3, /app/recovery_seed.py]
+          env:
+            - name: DEMO_RECOVERY_FILE
+              value: /var/lib/demo-recovery/customer-marker.json
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          resources:
+            requests: {cpu: 5m, memory: 12Mi}
+            limits: {cpu: 50m, memory: 32Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+            - name: recovery-data
+              mountPath: /var/lib/demo-recovery
       containers:
         - name: portal
           image: harbor.imcherry5778.xyz/curated-platform/python@sha256:527c28b29498575b851ad88e7522ac7201bbd9e920d2c11b00ff2b39b315f5f8
@@ -34,6 +60,8 @@ spec:
           env:
             - name: DEMO_MODE
               value: portal
+            - name: DEMO_RECOVERY_FILE
+              value: /var/lib/demo-recovery/customer-marker.json
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
           ports:
@@ -60,6 +88,8 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            - name: recovery-data
+              mountPath: /var/lib/demo-recovery
       volumes:
         - name: app
           configMap:
@@ -67,6 +97,9 @@ spec:
             defaultMode: 0555
         - name: tmp
           emptyDir: {medium: Memory, sizeLimit: 8Mi}
+        - name: recovery-data
+          persistentVolumeClaim:
+            claimName: demo-recovery-data
 ---
 apiVersion: v1
 kind: Service

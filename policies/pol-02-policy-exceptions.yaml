@@ -131,6 +131,56 @@ spec:
 apiVersion: kyverno.io/v2
 kind: PolicyException
 metadata:
+  name: pol-03-velero-pvr-hosting-run-as-non-root
+  namespace: kyverno
+  annotations:
+    pol-02.imcherry5778.xyz/owner: platform-operations
+    pol-02.imcherry5778.xyz/reason: >-
+      Velero v1.18.2 PodVolumeRestore controller creates a transient root hosting Pod for
+      filesystem restore. The exception is limited to the controller's PodVolumeRestore
+      label/name relation, owner reference, and velero-server ServiceAccount request.
+    pol-02.imcherry5778.xyz/review-trigger: Velero PodVolumeRestore hosting Pod label, owner reference, ServiceAccount, or image change.
+  labels:
+    app.kubernetes.io/part-of: platform-gitops
+spec:
+  background: false
+  exceptions:
+    - policyName: pol-01-require-pod-run-as-non-root
+      ruleNames:
+        - require-pod-run-as-non-root
+  match:
+    any:
+      - resources:
+          kinds:
+            - Pod
+          namespaces:
+            - velero
+          selector:
+            matchExpressions:
+              - key: velero.io/pod-volume-restore
+                operator: Exists
+        subjects:
+          - kind: ServiceAccount
+            name: velero-server
+            namespace: velero
+  conditions:
+    all:
+      - key: '{{ request.object.metadata.labels."velero.io/pod-volume-restore" || '''' }}'
+        operator: Equals
+        value: '{{ request.object.metadata.name }}'
+      - key: '{{ request.object.spec.serviceAccountName || '''' }}'
+        operator: Equals
+        value: velero-server
+      - key: '{{ request.object.metadata.ownerReferences[?kind==''PodVolumeRestore'' && controller==`true`].apiVersion | [0] || '''' }}'
+        operator: Equals
+        value: velero.io/v1
+      - key: '{{ request.object.metadata.ownerReferences[?kind==''PodVolumeRestore'' && controller==`true`].name | [0] || '''' }}'
+        operator: Equals
+        value: '{{ request.object.metadata.name }}'
+---
+apiVersion: kyverno.io/v2
+kind: PolicyException
+metadata:
   name: pol-02-falco-pod-run-as-non-root
   namespace: kyverno
   annotations:

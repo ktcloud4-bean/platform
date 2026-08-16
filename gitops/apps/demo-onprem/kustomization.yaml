@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - serviceaccount.yaml
+  - recovery-pvc.yaml
   - workloads.yaml
   - network-policies.yaml
   - routes.yaml
@@ -11,6 +12,7 @@ configMapGenerator:
     namespace: demo-onprem
     files:
       - server.py=server.py
+      - recovery_seed.py=recovery_seed.py
     options:
       labels:
         app.kubernetes.io/part-of: demo-onprem-01

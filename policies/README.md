@@ -13,10 +13,11 @@ annotation이 소유한다. background report에는 예외를 적용하지 않�
 않는다.
 
 `POL-03-FIX-01`은 Velero `node-agent` 예외와 분리해, v1.18.2가 만드는 동적
-`PodVolumeBackup` hosting Pod만 별도 허용한다. `velero.io/pod-volume-backup` 라벨 값과
-Pod 이름의 일치, `velero.io/v1` `PodVolumeBackup` controller ownerRef, 그리고
-`velero-server` ServiceAccount의 요청을 모두 만족해야 한다. 따라서 같은 namespace의
-일반 root Pod 및 라벨만 흉내 낸 Pod는 `POL-01`에서 계속 거부된다.
+`PodVolumeBackup`·`PodVolumeRestore` hosting Pod만 각각 별도 허용한다. 각 Pod는 대응하는
+`velero.io/pod-volume-backup` 또는 `velero.io/pod-volume-restore` 라벨 값과 Pod 이름의 일치,
+`velero.io/v1`의 대응 controller ownerRef, 그리고 `velero-server` ServiceAccount 요청을 모두
+만족해야 한다. 따라서 같은 namespace의 일반 root Pod 및 라벨만 흉내 낸 Pod는 `POL-01`에서
+계속 거부된다.
 
 `AWX-02`는 AWX web/task에 Operator CR의 Pod-level non-root 값을 선언하고 기존 만료형 AWX
 예외를 제거했다. Operator `2.19.1`이 같은 CR 값을 migration Job에는 전달하지 않으므로,

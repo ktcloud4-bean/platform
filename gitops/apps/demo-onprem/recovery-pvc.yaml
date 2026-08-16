@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-recovery-data
+  namespace: demo-onprem
+  labels:
+    app.kubernetes.io/name: demo-recovery-data
+    app.kubernetes.io/part-of: demo-recovery-01
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 512Mi

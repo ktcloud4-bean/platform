@@ -169,6 +169,17 @@ metadata 사용률은 50%에서 경고, 70%에서 정지한다. 최신 실측은
 - 대용량 저장은 k3s 밖으로 뺀다. Harbor registry backend와 Loki chunk는 전용 로컬 S3, 관계형 데이터는 `postgres-01`을 쓴다. 이 선택이 무너지면 120 GiB 예산이 가장 먼저 깨진다.
 - Wazuh indexer는 이 예산에 포함하지 않는다. 배치는 `CAP-02` gate에서 결정한다.
 
+### `DEMO-RECOVERY-01` 용량 재기준화 (2026-08-16)
+
+현재 Bound PVC 요청 합계는 111.125 GiB이며, 데모 전용 `demo-recovery-data` 512 MiB를
+더한 값은 111.625 GiB다. `k3s-01` root는 총 198.86 GiB 중 141.38 GiB(71%)가 남고
+`DiskPressure=False`다. 따라서 이번 소형 PVC는 적용 가능하다.
+
+96 GiB는 120 GiB hard cap의 80%에 해당하는 **재예산 경고선**이다. 이 선을 넘으면
+기존 PVC 요청·보존기간·다음 증설을 다시 계산하지만, hard cap과 root 여유가 정상이면
+그 자체로 배포를 막지 않는다. `local-path`는 하드 쿼터가 아니므로 새 PVC 적용의
+차단 조건은 선언 합계 120 GiB 이상, root 여유 25% 미만, 또는 `DiskPressure=True`다.
+
 ### `K3S-01` 기준선 직후 실측 (2026-07-31)
 
 검증용 PVC와 Pod를 제거한 뒤 측정했다. 주소와 VM 하드웨어 값은
@@ -268,7 +279,7 @@ Node memory가 기존 정지 기준에 접근하면 replica·limit을 늘리지 
 | 호스트 부하 | `uptime` 15분 load | 20 | 30 지속 |
 | `/` 사용률 | `df -h /` | 70% | 80% |
 | `k3s-01` 게스트 여유 | 게스트 `df` | 25% 미만 | 20% 미만 |
-| PVC 선언 합계 | `kubectl get pvc -A` | 96 GiB | 120 GiB |
+| PVC 선언 합계 | `kubectl get pvc -A` | 96 GiB 재예산 | 120 GiB |
 
 정지는 "지금 있는 것을 끄라"가 아니라 "더 늘리지 말고 원인을 줄여라"다. 어떤 지표든 정지 구간에 들어가면 신규 VM, 디스크 확장, `K3S-HEAVY` 배포를 멈추고 회수·보존기간·워크로드 축소를 먼저 한다.
 

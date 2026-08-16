@@ -9,7 +9,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: platform-gitops
 spec:
-  description: DEMO-ONPREM-01 합성 데이터 기반 4개 보안 세션
+  description: DEMO-ONPREM-01 및 DEMO-RECOVERY-01 합성 데이터 기반 5개 보안·복구 세션
   sourceRepos:
     - ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
   destinations:
@@ -21,6 +21,8 @@ spec:
   namespaceResourceWhitelist:
     - group: ""
       kind: ConfigMap
+    - group: ""
+      kind: PersistentVolumeClaim
     - group: ""
       kind: Service
     - group: ""

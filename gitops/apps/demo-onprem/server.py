@@ -2,6 +2,7 @@
 """DEMO-ONPREM-01 전용 합성 portal/내부 API. 입력값은 로그에 남기지 않는다."""
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import hashlib
 import json
 import os
 import sqlite3
@@ -9,6 +10,8 @@ from urllib.parse import parse_qs, urlsplit
 
 
 MODE = os.environ.get("DEMO_MODE", "portal")
+RECOVERY_FILE = os.environ.get("DEMO_RECOVERY_FILE", "/var/lib/demo-recovery/customer-marker.json")
+RECOVERY_NORMAL = b'{"marker":"DEMO-RECOVERY-01-NORMAL","record":"synthetic-only"}\n'
 SYNTHETIC_ROWS = (
     ("SYN-1001", "synthetic.alpha@example.invalid"),
     ("SYN-1002", "synthetic.beta@example.invalid"),
@@ -45,6 +48,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         if MODE != "portal":
             self.send_json(404, {"error": "not_found"})
+            return
+        if parsed.path == "/demo-onprem/recovery/status":
+            try:
+                value = open(RECOVERY_FILE, "rb").read()
+            except OSError:
+                self.send_json(503, {"marker": "DEMO-RECOVERY-STATUS", "state": "missing"})
+                return
+            self.send_json(200, {
+                "marker": "DEMO-RECOVERY-STATUS",
+                "sha256": hashlib.sha256(value).hexdigest(),
+                "state": "normal" if value == RECOVERY_NORMAL else "corrupt",
+            })
             return
         if parsed.path == "/demo-onprem/account/control":
             self.send_json(200, {"marker": "DEMO-ACCOUNT-CONTROL-200"})
