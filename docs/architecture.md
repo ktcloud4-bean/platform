@@ -99,7 +99,6 @@ Git에는 PVC 선언만 저장하고 PVC 데이터나 노드 디렉터리명을 
 | GitOps | Argo CD | k3s |
 | Kubernetes 관리 UI | Headlamp | k3s |
 | SCM·CI·품질·레지스트리 | Gitea · Jenkins · SonarQube · Harbor | k3s |
-| 내부 데모 애플리케이션 | Board Demo | k3s; Pomerium 뒤, PostgreSQL TLS·Vault runtime 분리 |
 | 보안 촬영 fixture | DEMO-ONPREM 합성 portal·내부 API | k3s; 메모리 데이터, Pomerium·CrowdSec·NetworkPolicy·Falco·Wazuh·Shuffle·Kyverno 연결 |
 | HR 애플리케이션 | HR System | `DECLARED`; private EKS, internal ALB, Pomerium·shared S2S VPN 뒤, private Aurora PostgreSQL·서비스별 IRSA·Secrets Manager DB credential |
 | 자동화 | AWX · Renovate | k3s |
