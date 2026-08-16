@@ -123,10 +123,24 @@ AWS 로고 자체는 발표물에 넣지 않고 서비스 아이콘만 쓴다.
 
 EKS는 Pod 아이콘 대신 Kubernetes 로고와 `Amazon EKS · private endpoint` 컨테이너 제목으로 표기한다.
 
-## generated/ — 생성 이미지
+## generated/ — 발표용 아키텍처 이미지
 
-`PRESENT-VISUAL-01`이 소유한다. 생성 이미지를 넣을 때 prompt, 생성 도구, 생성 시점과
-사람이 보정한 범위를 이 문서에 함께 기록한다.
+`PRESENT-VISUAL-01`이 소유한다. 생성 모델 prompt 방식은 폐기했다. chatgpt.com이 prompt를
+이미지 생성이 아니라 자료 검색으로 처리해 통제가 되지 않았고, 이미 확보한 Draw.io 자산과
+공식 아이콘으로 더 정확하게 만들 수 있었다.
+
+| 파일 | 내용 | 만든 방법 |
+|---|---|---|
+| `presentation-architecture.drawio` | 발표용 16:9 아키텍처 원본 | draw.io native 도형 + 이 문서의 공식 아이콘 |
+| `presentation-architecture.png` | 발표 삽입용 (3202×1802, 16:9) | draw.io CLI export |
+
+- 외부 생성 모델을 쓰지 않았다. 모든 도형은 native이고 아이콘은 vendor 공식 원본 그대로다.
+- 검수용 [`architecture/platform-architecture.drawio`](../architecture/platform-architecture.drawio)와
+  구조는 같지만 발표 화면에서 읽히도록 요소를 줄이고 검정 배경·neon green으로 다시 그렸다.
+- 8~11장 placeholder가 2.327:1이므로 핵심 요소를 16:9 캔버스의 중앙 76% 밴드(y 216~1584) 안에
+  두었다. 콘텐츠 실제 범위는 y 236~1574다.
+- 같은 한 장을 8~11장과 어둡게 처리한 Q&A 배경(21장)에 재사용한다.
+- 아이콘 재도안·색상 변경·비율 왜곡 0건, 가짜 UI·비밀·실데이터 0건이다.
 
 ## evidence/ — 실제 UI 증거
 
