@@ -57,6 +57,8 @@ infra/ansible/id_*
 tmp/
 .claude/
 .agent/
+skills-lock.json
+.agents/
 
 # --- 빌드 캐시 ---
 __pycache__/
