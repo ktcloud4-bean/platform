@@ -16,7 +16,7 @@
 | `assets/SOURCES.md` | 자산 출처·license·상표 경계 | `PRESENT-ARCH-01` |
 | `assets/generated/` | 발표용 생성 이미지 | `PRESENT-VISUAL-01` |
 | `assets/evidence/` | 마스킹한 실제 UI 증거 | `PRESENT-EVIDENCE-01` |
-| `ktcloud4-bean.pptx` | 22장 발표자료 | `PRESENT-DECK-SKELETON-01` → `PRESENT-DECK-01` |
+| `ktcloud4-bean.pptx` | 22장 발표자료 | `PRESENT-DECK-01` (뼈대는 `PRESENT-DECK-SKELETON-01`) |
 | `presentation-script.md` | 페이지별 발표 대본 | `PRESENT-SCRIPT-01` |
 
 ## 아키텍처 그림의 계약
@@ -227,10 +227,12 @@ python3 .claude/skills/drawio-skill/scripts/repair_png.py \
 | source matrix 누락 | 0건 (그림의 모든 요소가 위 표에 있다) |
 | Secret·실데이터 | 0건 (IP·계정 ID·ARN·도메인·port·key 패턴 스캔) |
 
-## 22장 와이어프레임 (`ktcloud4-bean.pptx`)
+## 22장 발표자료 (`ktcloud4-bean.pptx`)
 
-`PRESENT-DECK-SKELETON-01`이 소유한다. 실제 제목·핵심 메시지·시간과 자산 계약만 들어 있고
-최종 기술 내용·생성 이미지·실제 UI는 아직 없다.
+`PRESENT-DECK-SKELETON-01`이 layout 8종·색·모티프·시간 배분을 만들었고, `PRESENT-DECK-01`이
+같은 뼈대 위에 최종 문구·승인 아키텍처 이미지·실제 UI 증거를 채웠다. 슬라이드의
+`PURPOSE`·`MESSAGE`·`ASSET`·`EVIDENCE` 칸은 최종 내용으로 대체했고, 계약 자체는 22장 전부의
+speaker notes에 그대로 남겼다.
 
 ### 템플릿에서 가져온 디자인 자산
 
@@ -251,6 +253,40 @@ python3 .claude/skills/drawio-skill/scripts/repair_png.py \
 없어 QA 렌더는 Noto Sans CJK KR로 대체되므로, 최종 슬라이드는 Pretendard가 설치된 PowerPoint에서
 한 번 더 확인한다.
 
+### 타이포 스케일
+
+이 캔버스는 26.667 × 15in로 PowerPoint 표준 와이드(13.33 × 7.5in)의 **정확히 2배**다. 같은 pt 값이
+표준 슬라이드의 절반 크기로 보이므로 pt를 그대로 옮기면 안 된다.
+
+사용자가 제공한 15장 원본 템플릿과 기존 22장 발표자료를 실측한 결과 둘 다 같은 캔버스에서 아래
+스케일을 쓴다. `PRESENT-DECK-01`은 이 값을 기준선으로 삼았다.
+
+| 역할 | 원본 템플릿 실측 | 이 덱 |
+|---|---|---|
+| 섹션 대제목 | 80pt | 84pt (Q&A · Thank you) |
+| 슬라이드 제목 | 48pt | 48pt |
+| 소제목 · 카드 제목 | 33~36pt | 31~38pt |
+| 본문 | 30.7pt (최다 사용) | 24~28pt |
+| 보조 · 캡션 | 25~26.7pt | 19~21pt |
+
+`PRESENT-DECK-SKELETON-01` 와이어프레임은 본문 17pt·제목 40pt였다. 표준 캔버스로 환산하면 본문
+8.5pt에 해당해 발표 화면에서 읽기 어렵다. 이 스케일 교정이 `PRESENT-DECK-01`의 가독성 보완 핵심이다.
+
+### 슬라이드 문구 원칙
+
+슬라이드는 발표자가 말할 문장을 적는 곳이 아니라 청중이 훑는 곳이다. 대본은
+`PRESENT-SCRIPT-01`이 소유하므로 슬라이드에는 짧은 구절만 남긴다.
+
+- 한 카드는 두세 줄까지. 문서 문장을 그대로 옮기지 않는다.
+- 가운뎃점 나열(`A·B·C·D`)은 제품명에만 쓰고 서술에는 `와/과`로 푼다.
+- `판정한다`처럼 백로그 용어를 슬라이드에 반복하지 않는다. `막는다`, `걸러진다`처럼 말하는 대로 쓴다.
+- `0건`, `~뿐이다`, `~까지다` 같은 문서투는 완료 증거에만 남기고 슬라이드에서는 뺀다.
+- 모든 줄이 `-다`로 끝나지 않게 명사형과 서술형을 섞는다.
+- markdown 백틱은 PowerPoint에서 문자 그대로 렌더되므로 슬라이드 본문에 쓰지 않는다.
+
+하단 검정 결론 띠는 3 · 13 · 14 · 15장에만 둔다. 모든 장에 두면 같은 리듬이 반복돼 눈에 안 들어온다.
+나머지 장은 상단 kicker 한 줄이 그 역할을 대신한다.
+
 ### layout 8종
 
 | layout | 쓰는 슬라이드 |
@@ -264,8 +300,35 @@ python3 .claude/skills/drawio-skill/scripts/repair_png.py \
 | `SWOT` 2×2 | 19 |
 | `CLOSE` Q&A · Thank You | 21, 22 |
 
-8~11장은 이미지 placeholder를 `x=1.00, y=2.90, w=24.67, h=10.60`으로 고정하고 강조 레이어만 바꾼다.
-승인 이미지가 나오면 네 장 모두 같은 좌표에 배치한다.
+8~11장은 이미지를 `x=1.00, y=2.90, w=24.67, h=10.60`(EMU `914400, 2651760, 22555505, 9692640`)에
+고정하고 강조 레이어만 바꾼다. `PRESENT-DECK-01`이 승인 이미지를 네 장 모두 이 좌표에 배치했다.
+
+### 8~11장 이미지 crop
+
+승인 이미지는 3202 × 1802 (16:9, 1.777:1)이고 자리는 2.327:1이라 그대로는 들어가지 않는다.
+좌우를 꽉 채우고 위아래를 잘라내는 `cover` crop을 써서 `srcRect t=b=11821`(11.821%)로 넣었다.
+원본 픽셀 기준으로 **y 213~1589**만 보이며, 이는 `PRESENT-VISUAL-01`이 콘텐츠를 넣어 둔
+세이프존 y 216~1584를 그대로 담는다. 잘려나가는 것은 위아래 여백뿐이다.
+
+강조 사각형은 원본 픽셀 좌표를 같은 변환으로 옮겨 그린다.
+
+```text
+slide_x = 1.00 + px_x × (24.667 / 3202)
+slide_y = 2.90 + (px_y − 213) × (24.667 / 3202)
+```
+
+| 장 | 강조한 원본 영역 |
+|---|---|
+| 8 | OPNsense 박스, Proxmox VE 컨테이너 |
+| 9 | k3s-01 컨테이너, 전용 VM 행 |
+| 10 | Amazon EKS 컨테이너, Aurora·ECR·S3 행 |
+| 11 | 접근·인증 묶음, Site-to-Site VPN, Amazon EKS 컨테이너 |
+
+강조는 green 테두리만 쓰고 반투명 채우기는 쓰지 않는다. 큰 영역을 덮으면 그림 자체의
+대비가 떨어져 아이콘과 라벨이 읽히지 않는다.
+
+이미지 아래 여백이 0.64in뿐이라 8~11장은 별도 footer를 두지 않고, 캡션 띠 하나가 캡션과
+쪽 번호를 함께 담는다.
 
 ### 시간 배분
 
@@ -279,10 +342,34 @@ python3 .claude/skills/drawio-skill/scripts/repair_png.py \
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 초 | 50 | 55 | 45 | 45 | 50 | 50 | 50 | 35 | 30 | Q&A | 5 |
 
-### 슬라이드마다 채워야 할 계약
+### 슬라이드 계약
 
-각 장에 `PURPOSE`·`MESSAGE`·`ASSET`·`EVIDENCE` 네 칸이 있고 같은 내용이 speaker notes에도 있다.
-`PRESENT-DECK-01`은 이 계약을 지우지 않고 그 자리에 최종 내용을 채운다.
+각 장의 `PURPOSE`·`MESSAGE`·`ASSET`·`EVIDENCE`는 `PRESENT-DECK-01`이 최종 내용으로 대체했고,
+계약 원문은 22장 speaker notes에 남아 있다. 최종 문구가 어떤 완료 증거에 기대는지는 각 장의
+`EVIDENCE` 줄이 소유한다.
+
+### 실제 UI 증거를 쓴 자리
+
+`PRESENT-EVIDENCE-01`이 확보한 6장을 모두 썼다. 슬라이드 한 칸에 화면 하나씩 두고,
+각 화면 아래에 그 화면이 무엇을 판정하는지 적었다.
+
+| 장 | 자산 | 판정 문구 |
+|---|---|---|
+| 13 | `16b-jenkins-fail.png` | test gate에서 끊기면 이미지가 만들어지지 않는다 |
+| 16 | `16a-argo.png` | 선언과 라이브가 같다 |
+| 16 | `16b-jenkins-pass.png` | gate를 통과한 빌드만 승격된다 |
+| 17 | `17a-kyverno.png` | 미서명은 거부, 서명된 digest만 허용 |
+| 17 | `17b-wazuh.png` | 실제 인프라에서 이벤트를 받고 있다 |
+| 17 | `17b-shuffle.png` | 탐지가 사람 승인으로 이어진다 |
+
+`16b-jenkins-fail.png`는 16장이 아니라 13장에 두었다. 16장 두 칸은 배포(Argo CD)와
+품질(Jenkins `#41`)이 각각 맡고, 실패 fixture는 공급망 흐름을 설명하는 13장에서
+"gate가 실제로 끊는다"를 그림으로 보이는 쪽이 낫다.
+
+`17a-kyverno.png`는 5.24 : 1이라 좌우 2분할 자리에 맞지 않는다.
+[`assets/evidence/CAPTURE-CHECKLIST.md`](assets/evidence/CAPTURE-CHECKLIST.md)의 두 선택지 중
+**상단 전체 폭**을 택하되 폭을 22.0in으로 제한했다. 이 폭에서 터미널 글자는 약 14pt 상당으로
+렌더되고, 남은 세로 공간을 `17b` 두 장이 쓴다.
 
 ### 재생성과 검증
 
@@ -296,9 +383,15 @@ markitdown docs/presentation/ktcloud4-bean.pptx | \
 python3 .claude/skills/pptx/scripts/office/soffice.py --headless --convert-to pdf \
   docs/presentation/ktcloud4-bean.pptx
 pdftoppm -jpeg -r 80 ktcloud4-bean.pdf slide                # 22장 육안 검토
+
+# 이미지 alt text에 로컬 절대 경로가 남지 않았는지 확인한다.
+# pptxgenjs는 addImage에 altText를 주지 않으면 원본 파일 경로를 descr에 그대로 넣는다.
+python3 -c "import sys,zipfile; zipfile.ZipFile(sys.argv[1]).extractall('/tmp/deckchk')" \
+  docs/presentation/ktcloud4-bean.pptx
+grep -rl "/home/" /tmp/deckchk/ || echo "로컬 경로 0건"
 ```
 
-`PRESENT-DECK-SKELETON-01`에서 확인한 결과는 다음과 같다.
+`PRESENT-DECK-01`에서 확인한 결과는 다음과 같다.
 
 | 검증 | 결과 |
 |---|---|
@@ -307,18 +400,32 @@ pdftoppm -jpeg -r 80 ktcloud4-bean.pdf slide                # 22장 육안 검�
 | 잔여 placeholder | 0건 (Lorem Ipsum·xxx·TODO·[insert] 검사) |
 | PowerPoint timing·transition | 각 0건 |
 | speaker notes | 22장 전부 |
-| 8~11장 이미지 좌표 | 네 장 동일 (`914400, 2651760, 22555505, 9692640` EMU) |
+| 8~11장 이미지 좌표 | 네 장 동일 (`914400, 2651760, 22555505, 9692640` EMU, `srcRect t=b=11821`) |
 | 시간 합계 | 845초 = 14분 5초 |
-| LibreOffice/PDF 22장 육안 검토 | 잘림·겹침·저대비 0건 |
-| 최종 기술 내용·생성 이미지·실제 UI | 0건 (계약과 placeholder만) |
+| LibreOffice/PDF 22장 육안 검토 | 잘림·겹침·저대비·깨진 아이콘 0건 |
+| 미검증 주장 | 0건 (다중 리전·Multi-AZ·RDS HA·자동 대응·실제 랜섬웨어·전체 DR 성공 스캔) |
+| Secret·실데이터 | 0건 (IP·CIDR·ARN·account id·도메인·token 패턴 스캔) |
+| 이미지 alt text 로컬 경로 | 0건 |
+| 슬라이드 본문 백틱 | 0건 (speaker notes 1건은 발표자 메모라 그대로 둔다) |
 
 Office validator는 `--original` 없이 돌렸다. 이 PPTX는 템플릿 파일에서 파생한 것이 아니라
 템플릿의 색·모티프·타이포 규칙만 재현해 새로 생성했으므로 baseline으로 삼을 원본이 없다.
 
 ## 후속 작업 경계
 
-- `PRESENT-DECK-SKELETON-01`은 이 그림을 슬라이드에 넣지 않는다. 22장 layout과 자산 placeholder만 만든다.
-- `PRESENT-VISUAL-01`은 이 그림을 생성 이미지 prompt의 구조 기준으로 쓰고, 결과 이미지가
-  경계·흐름·SPOF 표기에서 벗어나면 수정 prompt를 만든다.
-- `PRESENT-DECK-01`은 승인된 생성 이미지 한 장을 8~11장에 같은 좌표로 배치하고, 공식 아이콘이
-  필요하면 `assets/icons/`의 원본을 쓴다.
+- `PRESENT-DECK-SKELETON-01`은 이 그림을 슬라이드에 넣지 않았다. 22장 layout과 자산 placeholder만 만들었다.
+- `PRESENT-VISUAL-01`은 이 그림을 구조 기준으로 삼아 발표용 이미지를 직접 제작했다.
+- `PRESENT-DECK-01`은 승인 이미지 한 장을 8~11장에 같은 좌표로 배치하고, 1장과 21장 배경에는
+  같은 이미지를 어둡게 깔았다. 아이콘은 이미 승인 이미지 안에 들어 있어 `assets/icons/`의
+  원본을 슬라이드에 따로 넣지 않았다.
+- `PRESENT-SCRIPT-01`은 이 PPTX의 speaker notes를 페이지별 대본으로 대체한다. 지금 notes에 있는
+  `PURPOSE`/`MESSAGE`/`ASSET`/`EVIDENCE` 계약은 그때까지 슬라이드 근거를 추적하는 원본이다.
+
+### `PRESENT-SCRIPT-01`에 남기는 것
+
+- 21장 Q&A의 예상 질문 세 가지(단일 노드인데 왜 Kubernetes인가 / 자동 차단을 쓰지 않는 이유 /
+  서명 검증이 실패하면 무엇이 멈추나)는 슬라이드에 적지 않고 21장 speaker notes에 두었다.
+- 6장 간트의 4주차 종료일은 발표 시점인 2026-08-17로 적었다. 사용자 원본 로드맵의
+  `4주차(~8월 14일)`보다 사흘 뒤이며, 그 사이에 발표 자료와 데모 증거 작업이 실제로 있었다.
+- `17b-shuffle.png`의 `\n` 표시 결함은 그대로 두기로 한 결정이라 슬라이드에서 설명하지 않는다.
+  질문이 나오면 Shuffle workflow 메시지의 이스케이프 문제라고 답한다.
