@@ -51,6 +51,28 @@ routes:
           or:
             - claim/groups: /platform-users
 
+  # DEMO-ONPREM-01: 같은 합성 계정과 같은 browser session에서 일반 그룹 200과
+  # privileged 전용 403을 나란히 판정한다. upstream은 동일한 합성 portal이다.
+  - name: demo-onprem-account-control
+    description: DEMO-ONPREM-01 platform-users control route
+    from: https://access.imcherry5778.xyz
+    path: /demo-onprem/account/control
+    to: http://demo-onprem-portal.demo-onprem.svc.cluster.local:8080
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-users
+
+  - name: demo-onprem-account-restricted
+    description: DEMO-ONPREM-01 platform-privileged restricted route
+    from: https://access.imcherry5778.xyz
+    path: /demo-onprem/account/restricted
+    to: http://demo-onprem-portal.demo-onprem.svc.cluster.local:8080
+    policy:
+      - allow:
+          or:
+            - claim/groups: /platform-privileged
+
   # Dashy는 포털 UI만 제공한다. 포털 자체도 Pomerium 뒤에 두고 명시적
   # 그룹이 없는 사용자는 로그인 성공 여부와 무관하게 통과시키지 않는다.
   - name: access-portal

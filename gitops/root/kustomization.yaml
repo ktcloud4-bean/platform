@@ -35,6 +35,8 @@ resources:
   - kyverno-application.yaml
   - policy-baseline-project.yaml
   - policy-baseline-application.yaml
+  - demo-onprem-project.yaml
+  - demo-onprem-application.yaml
   - e2e-01-project.yaml
   - e2e-01-application.yaml
   - aws-load-balancer-controller-project.yaml

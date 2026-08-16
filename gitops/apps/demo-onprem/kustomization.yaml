@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - workloads.yaml
+  - network-policies.yaml
+  - routes.yaml
+configMapGenerator:
+  - name: demo-onprem-app
+    namespace: demo-onprem
+    files:
+      - server.py=server.py
+    options:
+      labels:
+        app.kubernetes.io/part-of: demo-onprem-01
+generatorOptions:
+  disableNameSuffixHash: true

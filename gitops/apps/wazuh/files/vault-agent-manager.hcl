@@ -71,11 +71,13 @@ API_PASSWORD={{ .Data.data.api_password }}
 EOT
 }
 
-# SOAR-01 webhook capability는 Wazuh manager만 읽는다. ossec.conf와 integration
-# argv에는 넣지 않아 Wazuh integrations.log에 URL이 남지 않는다.
+# SOAR-01 webhook capability는 이 memory volume을 유일하게 mount한 Wazuh manager
+# container 안에서만 읽는다. integratord가 UID/GID 999로 내려가므로 Vault Agent
+# UID/GID와 무관하게 읽을 수 있어야 하며, ossec.conf와 integration argv에는 넣지 않아
+# Wazuh integrations.log에 URL이 남지 않는다.
 template {
   destination          = "/vault/secrets/soar01-hook-url"
-  perms                = "0440"
+  perms                = "0444"
   # rollback은 hook key를 지워 integration을 fail-closed로 만든다. 이 template는 빈
   # 값을 렌더해야 manager Pod 자체가 멈추지 않으며, custom-soar01은 빈 값을 URL로
   # 인정하지 않는다.

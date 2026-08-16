@@ -42,4 +42,5 @@ resources:
   - shuffle-egress.yaml
   - hr-system-egress.yaml
   - object-admin-egress.yaml
+  - demo-onprem-egress.yaml
   - ingress.yaml

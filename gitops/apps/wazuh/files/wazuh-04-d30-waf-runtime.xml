@@ -1,7 +1,8 @@
 <!--
   WAZUH-04 사용자 ruleset. Falco·CrowdSec AppSec 2개 소스를 D30으로 분류한다.
-  이 파일이 쓰는 custom rule ID는 `100121`(Falco)·`100122`(CrowdSec)이고, 나머지
-  `100123`~`100129`는 향후 headroom으로 비워 둔다. index 분리 pipeline은
+  이 파일이 쓰는 custom rule ID는 `100121`(Falco)·`100122`(CrowdSec)·
+  `100123`(DEMO-ONPREM-01 Falco 승인 전달)이고, 나머지 `100124`~`100129`는
+  향후 headroom으로 비워 둔다. index 분리 pipeline은
   `100100`~`100109`(A90) 밖의 custom ID를 기본 D30 index로 보낸다
   (`files/3-wazuh-01-index-routing` 참고).
 
@@ -49,6 +50,17 @@
     <decoded_as>aws-eks-authenticator</decoded_as>
     <match>msg="WAF block: </match>
     <description>WAZUH-04 D30: CrowdSec AppSec WAF block</description>
+  </rule>
+
+  <!-- DEMO-ONPREM-01만 SOAR-01의 level>=7 경계로 올린다. CRI prefix가 붙은 Falco
+       줄은 부모 100121까지 매치하지만 JSON_Decoder의 dynamic field 값은 비어 있으므로,
+       원문을 저장하지 않은 채 분석 시점의 raw line에서 exact namespace·Pod marker만
+       PCRE2 lookahead로 판정한다. -->
+  <rule id="100123" level="7">
+    <if_sid>100121</if_sid>
+    <match type="pcre2">(?=.*"k8s\.ns\.name":"demo-onprem")(?=.*"k8s\.pod\.name":"demo-onprem-attacker")</match>
+    <description>DEMO-ONPREM-01 interactive shell detection</description>
+    <options>no_full_log</options>
   </rule>
 
 </group>

@@ -1,0 +1,50 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: demo-onprem-crowdsec-appsec
+  namespace: demo-onprem
+spec:
+  plugin:
+    crowdsec:
+      enabled: true
+      crowdsecMode: appsec
+      crowdsecLapiScheme: http
+      crowdsecLapiHost: crowdsec-service.crowdsec-01.svc.cluster.local:8080
+      crowdsecLapiKeyFile: /run/secrets/crowdsec-01/bouncer-key
+      crowdsecAppsecEnabled: true
+      crowdsecAppsecScheme: http
+      crowdsecAppsecHost: crowdsec-appsec-service.crowdsec-01.svc.cluster.local:7422
+      crowdsecAppsecPath: /
+      crowdsecAppsecKeyFile: /run/secrets/crowdsec-01/bouncer-key
+      crowdsecAppsecFailureBlock: true
+      crowdsecAppsecUnreachableBlock: true
+      crowdsecAppsecUnreadableBodyBlock: true
+      crowdsecAppsecBodyLimit: 1048576
+      remediationStatusCode: 403
+      httpTimeoutSeconds: 2
+      updateIntervalSeconds: 60
+      metricsUpdateIntervalSeconds: 0
+      forwardedHeadersTrustedIps: []
+      clientTrustedIps: []
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: demo-onprem-sqli
+  namespace: demo-onprem
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`k3s-01.imcherry5778.xyz`) && Path(`/demo-onprem/sqli/control`)
+      priority: 220
+      services:
+        - {name: demo-onprem-portal, port: 8080}
+    - kind: Rule
+      match: Host(`k3s-01.imcherry5778.xyz`) && Path(`/demo-onprem/sqli/waf`)
+      priority: 220
+      middlewares:
+        - name: demo-onprem-crowdsec-appsec
+      services:
+        - {name: demo-onprem-portal, port: 8080}
+  tls: {}

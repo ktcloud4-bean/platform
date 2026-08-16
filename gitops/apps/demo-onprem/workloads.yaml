@@ -1,0 +1,161 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-onprem-portal
+  namespace: demo-onprem
+  labels:
+    app.kubernetes.io/name: demo-onprem-portal
+    app.kubernetes.io/part-of: demo-onprem-01
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: demo-onprem-portal
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: demo-onprem-portal
+        app.kubernetes.io/part-of: demo-onprem-01
+    spec:
+      serviceAccountName: demo-onprem
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: portal
+          image: harbor.imcherry5778.xyz/curated-platform/python@sha256:527c28b29498575b851ad88e7522ac7201bbd9e920d2c11b00ff2b39b315f5f8
+          imagePullPolicy: IfNotPresent
+          command: [python3, /app/server.py]
+          env:
+            - name: DEMO_MODE
+              value: portal
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 3
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            requests: {cpu: 10m, memory: 24Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: app
+          configMap:
+            name: demo-onprem-app
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 8Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-onprem-portal
+  namespace: demo-onprem
+spec:
+  selector:
+    app.kubernetes.io/name: demo-onprem-portal
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-onprem-internal-api
+  namespace: demo-onprem
+  labels:
+    app.kubernetes.io/name: demo-onprem-internal-api
+    app.kubernetes.io/part-of: demo-onprem-01
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: demo-onprem-internal-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: demo-onprem-internal-api
+        app.kubernetes.io/part-of: demo-onprem-01
+    spec:
+      serviceAccountName: demo-onprem
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: internal-api
+          image: harbor.imcherry5778.xyz/curated-platform/python@sha256:527c28b29498575b851ad88e7522ac7201bbd9e920d2c11b00ff2b39b315f5f8
+          imagePullPolicy: IfNotPresent
+          command: [python3, /app/server.py]
+          env:
+            - name: DEMO_MODE
+              value: internal
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 3
+            timeoutSeconds: 2
+          resources:
+            requests: {cpu: 10m, memory: 24Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: app
+          configMap:
+            name: demo-onprem-app
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 8Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-onprem-internal-api
+  namespace: demo-onprem
+spec:
+  selector:
+    app.kubernetes.io/name: demo-onprem-internal-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
