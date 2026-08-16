@@ -279,10 +279,11 @@ image layer는 Harbor가 소유하므로 이 PVC로 들어오지 않는다. buil
 
 ### 플러그인은 전이 의존성까지 고정
 
-[`plugins.txt`](plugins.txt)는 최상위 11개(`configuration-as-code`, `kubernetes`,
+[`plugins.txt`](plugins.txt)는 최상위 기능 플러그인(`configuration-as-code`, `kubernetes`,
 `workflow-job`, `workflow-cps`, `workflow-basic-steps`, `workflow-durable-task-step`,
-`workflow-scm-step`, `pipeline-stage-step`, `git`, `credentials-binding`, `job-dsl`)와
-그 전이 의존성을 합쳐 58개 전부를 정확한 버전으로 고정한다. 버전은
+`workflow-scm-step`, `pipeline-stage-step`, `git`, `credentials-binding`, `job-dsl`,
+`pipeline-graph-view`, `pipeline-stage-view`)과 그 전이 의존성을 합쳐 77개 전부를
+정확한 버전으로 고정한다. 버전은
 `https://updates.jenkins.io/stable/update-center.actual.json`의 core `2.568.1` 기준선에서
 해석했고 모든 항목의 `requiredCore`가 2.568.1 이하다. init container가
 `jenkins-plugin-cli --latest=false`로 이 목록만 설치하므로 전이 의존성이 조용히
