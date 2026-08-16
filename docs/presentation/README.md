@@ -227,6 +227,94 @@ python3 .claude/skills/drawio-skill/scripts/repair_png.py \
 | source matrix 누락 | 0건 (그림의 모든 요소가 위 표에 있다) |
 | Secret·실데이터 | 0건 (IP·계정 ID·ARN·도메인·port·key 패턴 스캔) |
 
+## 22장 와이어프레임 (`ktcloud4-bean.pptx`)
+
+`PRESENT-DECK-SKELETON-01`이 소유한다. 실제 제목·핵심 메시지·시간과 자산 계약만 들어 있고
+최종 기술 내용·생성 이미지·실제 UI는 아직 없다.
+
+### 템플릿에서 가져온 디자인 자산
+
+사용자가 제공한 15장 원본 템플릿(Git에 복제하지 않는 참고 입력)에서 아래 값을 뽑아 재현했다.
+원본 슬라이드는 해커톤 주제의 사진 자산 중심이라 그대로 복제하지 않고, 색·모티프·타이포 규칙만 옮겼다.
+
+| 자산 | 값 |
+|---|---|
+| 캔버스 | 26.667in × 15.000in (16:9) |
+| 검정 · 흰색 | `000000` · `FFFFFF` |
+| neon green | `15E954` |
+| 카드 회색 | `F6F6F6` · `EEEEEE` |
+| 보조 텍스트 | `666666` |
+| 폰트 | Pretendard (Bold / Regular) |
+| 모티프 | 검정 헤더 바, 각진 사각형, 좌상단 green 블록, 우측 화살표 반복 |
+
+**폰트 의존성**: 원본 템플릿과 같은 Pretendard를 지정했다. 이 저장소의 렌더 환경에는 Pretendard가
+없어 QA 렌더는 Noto Sans CJK KR로 대체되므로, 최종 슬라이드는 Pretendard가 설치된 PowerPoint에서
+한 번 더 확인한다.
+
+### layout 8종
+
+| layout | 쓰는 슬라이드 |
+|---|---|
+| `COVER` 표지 | 1 |
+| `AGENDA` 목차 | 2 |
+| `BODY` 기본 본문 | 3, 4, 5, 6, 12, 13, 14, 15, 20 |
+| `FULL-IMAGE` 전체 이미지 + 강조 레이어 | 8, 9, 10, 11 |
+| `EVIDENCE-2` 두 화면 증거 | 16, 17 |
+| `MATRIX` 결과 매트릭스 | 7, 18 |
+| `SWOT` 2×2 | 19 |
+| `CLOSE` Q&A · Thank You | 21, 22 |
+
+8~11장은 이미지 placeholder를 `x=1.00, y=2.90, w=24.67, h=10.60`으로 고정하고 강조 레이어만 바꾼다.
+승인 이미지가 나오면 네 장 모두 같은 좌표에 배치한다.
+
+### 시간 배분
+
+본문 845초(14분 5초). Q&A와 데모 영상 재생 시간은 포함하지 않는다.
+
+| 장 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 초 | 15 | 20 | 35 | 45 | 30 | 35 | 55 | 40 | 50 | 55 | 50 |
+
+| 장 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 초 | 50 | 55 | 45 | 45 | 50 | 50 | 50 | 35 | 30 | Q&A | 5 |
+
+### 슬라이드마다 채워야 할 계약
+
+각 장에 `PURPOSE`·`MESSAGE`·`ASSET`·`EVIDENCE` 네 칸이 있고 같은 내용이 speaker notes에도 있다.
+`PRESENT-DECK-01`은 이 계약을 지우지 않고 그 자리에 최종 내용을 채운다.
+
+### 재생성과 검증
+
+```bash
+# 생성 스크립트는 세션 작업물이므로 저장소에 두지 않는다.
+# 편집은 PowerPoint에서 직접 하고, 아래 검증만 다시 돌린다.
+
+python3 .claude/skills/pptx/scripts/office/validate.py docs/presentation/ktcloud4-bean.pptx
+markitdown docs/presentation/ktcloud4-bean.pptx | \
+  grep -iE "\bx{3,}\b|lorem|ipsum|\bTODO|\[insert"        # 잔여 placeholder 0건
+python3 .claude/skills/pptx/scripts/office/soffice.py --headless --convert-to pdf \
+  docs/presentation/ktcloud4-bean.pptx
+pdftoppm -jpeg -r 80 ktcloud4-bean.pdf slide                # 22장 육안 검토
+```
+
+`PRESENT-DECK-SKELETON-01`에서 확인한 결과는 다음과 같다.
+
+| 검증 | 결과 |
+|---|---|
+| Office validator | `All validations PASSED` |
+| `markitdown` 장수·순서 | 22장, 확정 22장 순서와 일치 |
+| 잔여 placeholder | 0건 (Lorem Ipsum·xxx·TODO·[insert] 검사) |
+| PowerPoint timing·transition | 각 0건 |
+| speaker notes | 22장 전부 |
+| 8~11장 이미지 좌표 | 네 장 동일 (`914400, 2651760, 22555505, 9692640` EMU) |
+| 시간 합계 | 845초 = 14분 5초 |
+| LibreOffice/PDF 22장 육안 검토 | 잘림·겹침·저대비 0건 |
+| 최종 기술 내용·생성 이미지·실제 UI | 0건 (계약과 placeholder만) |
+
+Office validator는 `--original` 없이 돌렸다. 이 PPTX는 템플릿 파일에서 파생한 것이 아니라
+템플릿의 색·모티프·타이포 규칙만 재현해 새로 생성했으므로 baseline으로 삼을 원본이 없다.
+
 ## 후속 작업 경계
 
 - `PRESENT-DECK-SKELETON-01`은 이 그림을 슬라이드에 넣지 않는다. 22장 layout과 자산 placeholder만 만든다.
