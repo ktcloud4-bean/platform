@@ -32,7 +32,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: employee-service
-          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-employee-service@sha256:d53ccf25f6ded935d40710bda1c0ec0bb510c50a912dc83e2158faa6e995c572
+          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-employee-service@sha256:2c906f46be6503b453eba9bd7e00c335af575bb42e5b08ddb1acbcb7ef72d404
           imagePullPolicy: IfNotPresent
           env:
             - {name: AWS_REGION, value: ap-northeast-2}
@@ -99,7 +99,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: hr-service
-          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-hr-service@sha256:4f2002043e92e1462c4a52946d5ba7dea10e23d81cb5354689ad4afeea20e753
+          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-hr-service@sha256:33a94048749bba07a1c884704515b860eff35824d1393be82e07bbb746866594
           imagePullPolicy: IfNotPresent
           env:
             - {name: AWS_REGION, value: ap-northeast-2}
@@ -164,7 +164,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: frontend
-          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-frontend@sha256:a3cbdf849807d1ee04de9853690041d975509de7f38db0aacee347a2c31178db
+          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-frontend@sha256:29a29b3811581607fae7354372698d10c5c09b05b68631dce9b4443b7d051b28
           imagePullPolicy: IfNotPresent
           ports: [{name: http, containerPort: 8080, protocol: TCP}]
           readinessProbe:
