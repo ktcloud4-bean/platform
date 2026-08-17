@@ -166,18 +166,25 @@ def replicate():
                     f"docker://{src_repo}@{ref_digest}",
                     f"docker://{dst_repo}@{ref_digest}"
                 ], check=True, env=env)
-                
-                # Copy signature on SBOM if exists
-                sbom_sig = ref_digest.replace(":", "-") + ".sig"
-                try:
+
+                # Referrers can themselves have referrers (e.g. a cosign signature
+                # attached to the CycloneDX SBOM manifest, not to the image). One
+                # level of nested discovery covers this; Kyverno's ImageValidatingPolicy
+                # only ever verifies attestations one hop from the subject image.
+                nested_res = subprocess.run([
+                    "oras", "discover", "--distribution-spec", "v1.1-referrers-api",
+                    "--format", "json", f"{src_repo}@{ref_digest}"
+                ], capture_output=True, text=True, check=True, env=env)
+                nested_manifests = json.loads(nested_res.stdout).get("manifests", [])
+                for nm in nested_manifests:
+                    nested_digest = nm.get("digest")
+                    nested_type = nm.get("artifactType")
+                    print(f"        Copying nested referrer ({nested_type}) @ {nested_digest} -> ECR...")
                     subprocess.run([
                         "skopeo", "copy", "--all", "--src-tls-verify=false",
-                        f"docker://{src_repo}:{sbom_sig}",
-                        f"docker://{dst_repo}:{sbom_sig}"
-                    ], capture_output=True, check=True, env=env)
-                    print(f"      [+] Copied signature for SBOM ({sbom_sig})")
-                except Exception:
-                    pass
+                        f"docker://{src_repo}@{nested_digest}",
+                        f"docker://{dst_repo}@{nested_digest}"
+                    ], check=True, env=env)
                     
             replicated_records[comp] = {
                 "digest": digest,
