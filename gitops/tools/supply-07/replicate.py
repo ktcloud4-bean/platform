@@ -167,25 +167,28 @@ def replicate():
                     f"docker://{dst_repo}@{ref_digest}"
                 ], check=True, env=env)
 
-                # Referrers can themselves have referrers (e.g. a cosign signature
-                # attached to the CycloneDX SBOM manifest, not to the image). One
-                # level of nested discovery covers this; Kyverno's ImageValidatingPolicy
-                # only ever verifies attestations one hop from the subject image.
-                nested_res = subprocess.run([
-                    "oras", "discover", "--distribution-spec", "v1.1-referrers-api",
-                    "--format", "json", f"{src_repo}@{ref_digest}"
-                ], capture_output=True, text=True, check=True, env=env)
-                nested_manifests = json.loads(nested_res.stdout).get("manifests", [])
-                for nm in nested_manifests:
-                    nested_digest = nm.get("digest")
-                    nested_type = nm.get("artifactType")
-                    print(f"        Copying nested referrer ({nested_type}) @ {nested_digest} -> ECR...")
-                    subprocess.run([
-                        "skopeo", "copy", "--all", "--src-tls-verify=false",
-                        f"docker://{src_repo}@{nested_digest}",
-                        f"docker://{dst_repo}@{nested_digest}"
-                    ], check=True, env=env)
-                    
+                # cosign v2.6.3 with --tlog-upload=false signs via the legacy
+                # sha256-<digest>.sig TAG convention, not an OCI 1.1 referrer with
+                # a subject field (confirmed: Harbor's referrers API response for
+                # this manifest is synthesized from the tag, not a real subject
+                # link -- ECR does not do that synthesis, so referrer discovery
+                # alone misses it). Copy the tag explicitly and surface failures;
+                # a referrer that's supposed to be signed (e.g. the CycloneDX
+                # SBOM) but has no such tag is a real replication gap, not
+                # something to swallow silently.
+                ref_sig_tag = ref_digest.replace(":", "-") + ".sig"
+                sig_copy = subprocess.run([
+                    "skopeo", "copy", "--all", "--src-tls-verify=false",
+                    f"docker://{src_repo}:{ref_sig_tag}",
+                    f"docker://{dst_repo}:{ref_sig_tag}"
+                ], capture_output=True, text=True, env=env)
+                if sig_copy.returncode == 0:
+                    print(f"      [+] Copied signature tag ({ref_sig_tag}) -> ECR")
+                elif "manifest unknown" in sig_copy.stderr or "not found" in sig_copy.stderr:
+                    print(f"      [-] No signature tag for this referrer ({ref_sig_tag}); unsigned in Harbor")
+                else:
+                    raise RuntimeError(f"signature tag copy failed for {ref_sig_tag}: {sig_copy.stderr}")
+
             replicated_records[comp] = {
                 "digest": digest,
                 "tag": release_tag,
