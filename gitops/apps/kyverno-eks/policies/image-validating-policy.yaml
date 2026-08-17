@@ -113,3 +113,14 @@ spec:
           (verifyImageSignatures(img, [attestors.current]) > 0 || verifyImageSignatures(img, [attestors.previous]) > 0)
         )
       message: current 또는 previous 공개키로 Cosign image signature를 검증하지 못했다
+    - expression: >-
+        images.containers.filter(img, !img.contains("/hr-system-prod-bootstrap-")).map(img,
+          verifyAttestationSignatures(img, attestations.sbom, [attestors.current]) > 0 ||
+          verifyAttestationSignatures(img, attestations.sbom, [attestors.previous]) > 0
+        ).all(e, e)
+      message: current 또는 previous 공개키로 서명된 CycloneDX SBOM attestation을 검증하지 못했다
+    - expression: >-
+        images.containers.filter(img, !img.contains("/hr-system-prod-bootstrap-")).map(img,
+          extractPayload(img, attestations.sbom).bomFormat == "CycloneDX"
+        ).all(e, e)
+      message: attestation payload가 CycloneDX 형식이 아니다
