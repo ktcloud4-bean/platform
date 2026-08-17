@@ -141,15 +141,26 @@ def replicate():
             
             # 3. Copy Cosign Signature Artifact (.sig)
             sig_tag = digest.replace(":", "-") + ".sig"
-            print(f"    [3/4] Copying Cosign signature '{sig_tag}' -> ECR...")
+            print(f"    [3/5] Copying Cosign signature '{sig_tag}' -> ECR...")
             subprocess.run([
                 "skopeo", "copy", "--all", "--src-tls-verify=false",
                 f"docker://{src_repo}:{sig_tag}",
                 f"docker://{dst_repo}:{sig_tag}"
             ], check=True, env=env)
-            
-            # 4. Discover and copy OCI 1.1 CycloneDX SBOM referrers
-            print(f"    [4/4] Discovering and copying CycloneDX SBOM referrers...")
+
+            # 3b. Copy the signed CycloneDX in-toto attestation (.att). cosign v2.6.3
+            # publishes this as a legacy tag, not an OCI 1.1 referrer -- Kyverno's
+            # ImageValidatingPolicy attestations.sbom.intoto lookup needs it in ECR.
+            att_tag = digest.replace(":", "-") + ".att"
+            print(f"    [4/5] Copying Cosign attestation '{att_tag}' -> ECR...")
+            subprocess.run([
+                "skopeo", "copy", "--all", "--src-tls-verify=false",
+                f"docker://{src_repo}:{att_tag}",
+                f"docker://{dst_repo}:{att_tag}"
+            ], check=True, env=env)
+
+            # 5. Discover and copy OCI 1.1 CycloneDX SBOM referrers
+            print(f"    [5/5] Discovering and copying CycloneDX SBOM referrers...")
             oras_res = subprocess.run([
                 "oras", "discover", "--distribution-spec", "v1.1-referrers-api",
                 "--format", "json", f"{src_repo}@{digest}"
@@ -166,19 +177,29 @@ def replicate():
                     f"docker://{src_repo}@{ref_digest}",
                     f"docker://{dst_repo}@{ref_digest}"
                 ], check=True, env=env)
-                
-                # Copy signature on SBOM if exists
-                sbom_sig = ref_digest.replace(":", "-") + ".sig"
-                try:
-                    subprocess.run([
-                        "skopeo", "copy", "--all", "--src-tls-verify=false",
-                        f"docker://{src_repo}:{sbom_sig}",
-                        f"docker://{dst_repo}:{sbom_sig}"
-                    ], capture_output=True, check=True, env=env)
-                    print(f"      [+] Copied signature for SBOM ({sbom_sig})")
-                except Exception:
-                    pass
-                    
+
+                # cosign v2.6.3 with --tlog-upload=false signs via the legacy
+                # sha256-<digest>.sig TAG convention, not an OCI 1.1 referrer with
+                # a subject field (confirmed: Harbor's referrers API response for
+                # this manifest is synthesized from the tag, not a real subject
+                # link -- ECR does not do that synthesis, so referrer discovery
+                # alone misses it). Copy the tag explicitly and surface failures;
+                # a referrer that's supposed to be signed (e.g. the CycloneDX
+                # SBOM) but has no such tag is a real replication gap, not
+                # something to swallow silently.
+                ref_sig_tag = ref_digest.replace(":", "-") + ".sig"
+                sig_copy = subprocess.run([
+                    "skopeo", "copy", "--all", "--src-tls-verify=false",
+                    f"docker://{src_repo}:{ref_sig_tag}",
+                    f"docker://{dst_repo}:{ref_sig_tag}"
+                ], capture_output=True, text=True, env=env)
+                if sig_copy.returncode == 0:
+                    print(f"      [+] Copied signature tag ({ref_sig_tag}) -> ECR")
+                elif "manifest unknown" in sig_copy.stderr or "not found" in sig_copy.stderr:
+                    print(f"      [-] No signature tag for this referrer ({ref_sig_tag}); unsigned in Harbor")
+                else:
+                    raise RuntimeError(f"signature tag copy failed for {ref_sig_tag}: {sig_copy.stderr}")
+
             replicated_records[comp] = {
                 "digest": digest,
                 "tag": release_tag,
