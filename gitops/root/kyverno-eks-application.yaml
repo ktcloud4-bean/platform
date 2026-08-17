@@ -13,7 +13,7 @@ spec:
   project: kyverno-eks
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: main
+    targetRevision: 3a92fe67339ec66cb51a349a420376cd042afc1a
     path: gitops/apps/kyverno-eks
   destination:
     name: hr-system-prod
