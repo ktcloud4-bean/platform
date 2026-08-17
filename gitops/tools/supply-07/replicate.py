@@ -141,15 +141,26 @@ def replicate():
             
             # 3. Copy Cosign Signature Artifact (.sig)
             sig_tag = digest.replace(":", "-") + ".sig"
-            print(f"    [3/4] Copying Cosign signature '{sig_tag}' -> ECR...")
+            print(f"    [3/5] Copying Cosign signature '{sig_tag}' -> ECR...")
             subprocess.run([
                 "skopeo", "copy", "--all", "--src-tls-verify=false",
                 f"docker://{src_repo}:{sig_tag}",
                 f"docker://{dst_repo}:{sig_tag}"
             ], check=True, env=env)
-            
-            # 4. Discover and copy OCI 1.1 CycloneDX SBOM referrers
-            print(f"    [4/4] Discovering and copying CycloneDX SBOM referrers...")
+
+            # 3b. Copy the signed CycloneDX in-toto attestation (.att). cosign v2.6.3
+            # publishes this as a legacy tag, not an OCI 1.1 referrer -- Kyverno's
+            # ImageValidatingPolicy attestations.sbom.intoto lookup needs it in ECR.
+            att_tag = digest.replace(":", "-") + ".att"
+            print(f"    [4/5] Copying Cosign attestation '{att_tag}' -> ECR...")
+            subprocess.run([
+                "skopeo", "copy", "--all", "--src-tls-verify=false",
+                f"docker://{src_repo}:{att_tag}",
+                f"docker://{dst_repo}:{att_tag}"
+            ], check=True, env=env)
+
+            # 5. Discover and copy OCI 1.1 CycloneDX SBOM referrers
+            print(f"    [5/5] Discovering and copying CycloneDX SBOM referrers...")
             oras_res = subprocess.run([
                 "oras", "discover", "--distribution-spec", "v1.1-referrers-api",
                 "--format", "json", f"{src_repo}@{digest}"

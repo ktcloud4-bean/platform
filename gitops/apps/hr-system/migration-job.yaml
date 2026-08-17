@@ -37,7 +37,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: migrate
-          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-hr-service@sha256:33a94048749bba07a1c884704515b860eff35824d1393be82e07bbb746866594
+          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-hr-service@sha256:1be190697323d63e1a11bdc84e405d0efe2a3f8a6b695c1b2d6304b2292735fb
           imagePullPolicy: IfNotPresent
           command: ["python", "-c", "import sys; print('HR database bootstrap completed'); sys.exit(0)"]
           env:
