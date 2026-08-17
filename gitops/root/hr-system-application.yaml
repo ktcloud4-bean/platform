@@ -12,7 +12,7 @@ spec:
   project: hr-system
   source:
     repoURL: ssh://git@ssh.github.com:443/ktcloud4-bean/platform.git
-    targetRevision: 7915938df2b99419f911f60255fd8ce9a156e258
+    targetRevision: cb0c52b30ff021d2bd9a7fed71ade98237157c44
     path: gitops/apps/hr-system
   destination:
     name: hr-system-prod
