@@ -137,6 +137,27 @@ jenkins:
                   - envVar:
                       key: "USER"
                       value: "awx"
+              - name: "python-glibc"
+                # hr-system 앱 runtime base(python:3.12-slim, Debian/glibc)와 ABI를 맞춘
+                # 전용 sidecar. 위 "python" 컨테이너(Alpine/musl, AWX-04 EE 전용)를
+                # hr-system과 공유하면 pydantic_core 등 컴파일 확장이 로드되지 않는다.
+                image: "harbor.imcherry5778.xyz/curated-platform/python@sha256:876416ecde9aca2bcc90e1fb0c7a9500bbf749f5788b70f82d4c5a5c2357f8b4"
+                alwaysPullImage: false
+                workingDir: "/home/jenkins/agent"
+                command: "sleep"
+                args: "infinity"
+                ttyEnabled: false
+                resourceRequestCpu: "100m"
+                resourceRequestMemory: "256Mi"
+                resourceLimitCpu: "1"
+                resourceLimitMemory: "1Gi"
+                envVars:
+                  - envVar:
+                      key: "HOME"
+                      value: "/tmp"
+                  - envVar:
+                      key: "USER"
+                      value: "awx"
               - name: "awscli"
                 image: "harbor.imcherry5778.xyz/curated-platform/aws-cli@sha256:244dcb5bd64c98d0c624b0f8951be872b6aa43a6587da6cbb5c7f30c2bd89e58"
                 alwaysPullImage: false
