@@ -32,7 +32,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: employee-service
-          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-employee-service@sha256:3fc77838e832d4536c230c11d37149656fd5aa05a64d43fdaf0f43be6ac3f9b4
+          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-employee-service@sha256:2369762d3f25dcc235255b97fe23f3960289f68b54469b05f18e1fc3ab1e9a9f
           imagePullPolicy: IfNotPresent
           env:
             - {name: AWS_REGION, value: ap-northeast-2}
@@ -99,7 +99,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: hr-service
-          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-hr-service@sha256:1be190697323d63e1a11bdc84e405d0efe2a3f8a6b695c1b2d6304b2292735fb
+          image: 465137780685.dkr.ecr.ap-northeast-2.amazonaws.com/hr-system-prod-hr-service@sha256:60a46544daaeea47fd24af53fdd862db523e63f24a9be005860388fa00f2e453
           imagePullPolicy: IfNotPresent
           env:
             - {name: AWS_REGION, value: ap-northeast-2}
