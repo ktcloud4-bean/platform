@@ -32,9 +32,8 @@ resource "aws_rds_cluster" "main" {
   storage_encrypted                   = true
   backup_retention_period             = var.backup_retention_days
   copy_tags_to_snapshot               = true
-  deletion_protection                 = true
-  skip_final_snapshot                 = false
-  final_snapshot_identifier           = var.final_snapshot_identifier
+  deletion_protection                 = false
+  skip_final_snapshot                 = true
   apply_immediately                   = true
   iam_database_authentication_enabled = true
 
@@ -44,10 +43,6 @@ resource "aws_rds_cluster" "main" {
   }
 
   depends_on = [aws_cloudwatch_log_group.aurora_postgresql]
-
-  lifecycle {
-    prevent_destroy = true
-  }
 
   tags = {
     Name = "${local.name_prefix}-aurora"

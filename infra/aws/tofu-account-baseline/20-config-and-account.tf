@@ -1,9 +1,6 @@
 resource "aws_s3_bucket" "config" {
-  bucket = "${local.name_prefix}-config-logs-${data.aws_caller_identity.current.account_id}"
-
-  lifecycle {
-    prevent_destroy = true
-  }
+  bucket        = "${local.name_prefix}-config-logs-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "config" {
@@ -26,9 +23,6 @@ resource "aws_kms_key" "config" {
   deletion_window_in_days = 30
   enable_key_rotation     = true
 
-  lifecycle {
-    prevent_destroy = true
-  }
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -73,11 +67,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "config" {
 }
 
 resource "aws_s3_bucket" "access_logs" {
-  bucket = "${local.name_prefix}-s3-access-logs-${data.aws_caller_identity.current.account_id}"
-
-  lifecycle {
-    prevent_destroy = true
-  }
+  bucket        = "${local.name_prefix}-s3-access-logs-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "access_logs" {

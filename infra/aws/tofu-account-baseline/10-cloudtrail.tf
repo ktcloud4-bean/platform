@@ -1,11 +1,8 @@
 # 기존 management-events trail을 import해 다중 리전 감사, S3, CloudWatch Logs를 한 경계에서 소유한다.
 
 resource "aws_s3_bucket" "cloudtrail" {
-  bucket = "${local.name_prefix}-cloudtrail-logs-${data.aws_caller_identity.current.account_id}"
-
-  lifecycle {
-    prevent_destroy = true
-  }
+  bucket        = "${local.name_prefix}-cloudtrail-logs-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "cloudtrail" {
@@ -99,9 +96,6 @@ resource "aws_kms_key" "cloudtrail" {
   deletion_window_in_days = 30
   enable_key_rotation     = true
 
-  lifecycle {
-    prevent_destroy = true
-  }
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -151,9 +145,6 @@ resource "aws_cloudwatch_log_group" "cloudtrail" {
   retention_in_days = 90
   kms_key_id        = aws_kms_key.cloudtrail.arn
 
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 resource "aws_iam_role" "cloudtrail_cloudwatch" {

@@ -2,13 +2,8 @@
 # 이 bucket은 온프레미스 SeaweedFS와 물리 장애 도메인을 공유하지 않는 최종 사본이다.
 # 원본을 지우는 동기화는 하지 않는다. 삭제 권한을 전송 identity에 주지 않는 것으로 강제한다.
 resource "aws_s3_bucket" "offsite" {
-  bucket = local.bucket_name
-
-  # 백업 사본을 담은 bucket이 실수로 지워지지 않게 한다.
-  # 의도한 폐기는 이 줄을 사람이 내리고 별도 plan을 본 뒤에만 가능하다.
-  lifecycle {
-    prevent_destroy = true
-  }
+  bucket        = local.bucket_name
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "offsite" {

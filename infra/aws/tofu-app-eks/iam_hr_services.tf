@@ -52,7 +52,7 @@ resource "aws_iam_role_policy" "employee_service_database_secret" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["secretsmanager:GetSecretValue"]
-      Resource = data.terraform_remote_state.app_db.outputs.employee_service_database_secret_arn
+      Resource = "arn:aws:secretsmanager:ap-northeast-2:465137780685:secret:decommissioned-employee-service"
     }]
   })
 }
@@ -95,7 +95,7 @@ resource "aws_iam_role_policy" "hr_service_database_secret" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["secretsmanager:GetSecretValue"]
-      Resource = data.terraform_remote_state.app_db.outputs.hr_service_database_secret_arn
+      Resource = "arn:aws:secretsmanager:ap-northeast-2:465137780685:secret:decommissioned-hr-service"
     }]
   })
 }
@@ -141,10 +141,10 @@ resource "aws_iam_role_policy" "db_migrate_database_secrets" {
       Effect = "Allow"
       Action = ["secretsmanager:GetSecretValue"]
       Resource = [
-        data.terraform_remote_state.app_db.outputs.aurora_master_user_secret_arn,
-        data.terraform_remote_state.app_db.outputs.employee_service_database_secret_arn,
-        data.terraform_remote_state.app_db.outputs.hr_service_database_secret_arn,
-        data.terraform_remote_state.app_db.outputs.bootstrap_hr_admin_secret_arn,
+        "arn:aws:secretsmanager:ap-northeast-2:465137780685:secret:decommissioned-master",
+        "arn:aws:secretsmanager:ap-northeast-2:465137780685:secret:decommissioned-employee-service",
+        "arn:aws:secretsmanager:ap-northeast-2:465137780685:secret:decommissioned-hr-service",
+        "arn:aws:secretsmanager:ap-northeast-2:465137780685:secret:decommissioned-bootstrap",
       ]
     }]
   })

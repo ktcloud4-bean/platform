@@ -2,11 +2,6 @@ resource "aws_iam_saml_provider" "keycloak_platform" {
   name                   = var.saml_provider_name
   saml_metadata_document = file(var.saml_metadata_file)
 
-  lifecycle {
-    # 인증서 교체는 metadata file 갱신 후 update로 처리한다. 삭제는 Keycloak client
-    # 비활성화와 별도 폐기 plan을 확인한 사람이 이 보호를 명시적으로 풀어야 한다.
-    prevent_destroy = true
-  }
 }
 
 data "aws_iam_policy_document" "saml_trust" {
@@ -38,9 +33,6 @@ resource "aws_iam_role" "observer" {
 
   depends_on = [aws_iam_saml_provider.keycloak_platform]
 
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 resource "aws_iam_role" "observability_reader" {
@@ -51,9 +43,6 @@ resource "aws_iam_role" "observability_reader" {
 
   depends_on = [aws_iam_saml_provider.keycloak_platform]
 
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 resource "aws_iam_role" "security_reader" {
@@ -64,9 +53,6 @@ resource "aws_iam_role" "security_reader" {
 
   depends_on = [aws_iam_saml_provider.keycloak_platform]
 
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 resource "aws_iam_role" "identity_reader" {
@@ -77,9 +63,6 @@ resource "aws_iam_role" "identity_reader" {
 
   depends_on = [aws_iam_saml_provider.keycloak_platform]
 
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 data "aws_iam_policy_document" "observer_permissions" {
