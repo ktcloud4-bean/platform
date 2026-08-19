@@ -1,9 +1,6 @@
 resource "aws_s3_bucket" "tfstate" {
-  bucket = local.bucket_name
-
-  lifecycle {
-    prevent_destroy = true
-  }
+  bucket        = local.bucket_name
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "tfstate" {

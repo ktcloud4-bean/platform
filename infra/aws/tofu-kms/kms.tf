@@ -22,11 +22,6 @@ resource "aws_kms_key" "vault_auto_unseal" {
   enable_key_rotation      = false
   deletion_window_in_days  = 30
   policy                   = data.aws_iam_policy_document.kms_key.json
-
-  # KMS key 삭제는 Vault의 부팅·Shamir 복귀 경로를 끊는다. 별도 폐기 작업에서만 해제한다.
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 resource "aws_kms_alias" "vault_auto_unseal" {

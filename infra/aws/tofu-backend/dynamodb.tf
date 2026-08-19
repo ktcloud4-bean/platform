@@ -8,10 +8,6 @@ resource "aws_dynamodb_table" "locks" {
     type = "S"
   }
 
-  lifecycle {
-    prevent_destroy = true
-  }
-
   tags = {
     Name = local.dynamodb_table_name
   }
